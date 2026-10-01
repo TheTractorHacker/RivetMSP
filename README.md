@@ -23,11 +23,11 @@
     ·
     <a href="docs/API.md">API Reference</a>
     ·
-    <a href="https://github.com/TheTractorHacker/itflow/releases">Releases</a>
+    <a href="https://github.com/TheTractorHacker/RivetMSP/releases">Releases</a>
     ·
-    <a href="https://github.com/TheTractorHacker/itflow/issues">Report Bug</a>
+    <a href="https://github.com/TheTractorHacker/RivetMSP/issues">Report Bug</a>
     ·
-    <a href="https://github.com/TheTractorHacker/itflow-msp-app">📱 Android App</a>
+    <a href="https://github.com/TheTractorHacker/rivetmsp-mobile">📱 Android App</a>
   </p>
 </div>
 
@@ -44,7 +44,7 @@
 
 This fork adds real-world MSP dispatch and scheduling workflows that go beyond the upstream project, while staying in sync with upstream security patches and improvements.
 
-We also built a **native Android app** from scratch to go alongside this fork — giving technicians full mobile access to tickets, assets, clients, worksheets, and more. Check it out at [TheTractorHacker/itflow-msp-app](https://github.com/TheTractorHacker/itflow-msp-app).
+We also built a **native Android app** from scratch to go alongside this fork — giving technicians full mobile access to tickets, assets, clients, worksheets, and more. Check it out at [TheTractorHacker/rivetmsp-mobile](https://github.com/TheTractorHacker/rivetmsp-mobile).
 
 New to this codebase? [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) covers the admin/agent/client/guest portal structure, auth & permission model, data model, module toggles, and integrations. [docs/API.md](docs/API.md) is the narrative companion to the REST API.
 
@@ -52,7 +52,7 @@ New to this codebase? [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) covers the ad
 
 ## 📱 Android App
 
-A native Android companion app is available at **[TheTractorHacker/itflow-msp-app](https://github.com/TheTractorHacker/itflow-msp-app)**.
+A native Android companion app is available at **[TheTractorHacker/rivetmsp-mobile](https://github.com/TheTractorHacker/rivetmsp-mobile)**.
 
 Built with Kotlin + Jetpack Compose + Material 3. Features include:
 
@@ -108,7 +108,7 @@ Built with Kotlin + Jetpack Compose + Material 3. Features include:
 - Full REST API layer under `/api/v1/` powering the Android app
 - Endpoints: tickets, clients, assets, contacts, locations, credentials, worksheets, charges, appointments, search, reports
 - Token-based auth with rate limiting, token expiry, and payload size limits
-- Full reference: [docs/API.md](docs/API.md) (narrative guide) · [live OpenAPI spec](https://github.com/TheTractorHacker/itflow/blob/Syncro-Beta/api/v1/openapi.yaml) · in-app searchable reference at Settings → API Docs (`/api/v1/docs` on your own instance)
+- Full reference: [docs/API.md](docs/API.md) (narrative guide) · [live OpenAPI spec](https://github.com/TheTractorHacker/RivetMSP/blob/Syncro-Beta/api/v1/openapi.yaml) · in-app searchable reference at Settings → API Docs (`/api/v1/docs` on your own instance)
 
 ### Security Fixes (beyond upstream)
 - Fixed authorization bypass on ticket charge handlers (client access not enforced)
@@ -125,20 +125,59 @@ This fork merges upstream changes periodically:
 ```bash
 git fetch origin        # origin = itflow-org/itflow
 git merge origin/master
-git push fork master    # fork = TheTractorHacker/itflow
+git push fork master    # fork = TheTractorHacker/RivetMSP
 ```
 
 <!-- GETTING STARTED -->
 ## Getting Started
 
-Installation is the same as upstream ITFlow. See the [official docs](https://docs.itflow.org/installation).
+Two supported ways to get a running instance, depending on what you're doing:
+
+### Option 1 — Docker Compose (fastest way to try it)
 
 ```bash
-wget -O itflow_install.sh https://github.com/itflow-org/itflow-install-script/raw/main/itflow_install.sh
-bash itflow_install.sh
+git clone https://github.com/TheTractorHacker/RivetMSP.git
+cd RivetMSP
+cp .env.example .env    # edit DB_PASSWORD/DB_ROOT_PASSWORD, and DOCKER_UID/DOCKER_GID (run `id -u`/`id -g`)
+docker compose up -d --build
 ```
 
-After installing, replace the files with this fork's content or clone this repo directly into your web root.
+Then visit `http://localhost:8080/` (or whatever `APP_PORT` you set in `.env`) — it redirects straight
+to the same browser-based `/setup/` wizard a manual install would use. When it asks for a database host,
+enter `db` and the credentials from your `.env`.
+
+This runs nginx + PHP-FPM + MariaDB + Redis in containers, with the app code bind-mounted from this
+checkout so `config.php`/`uploads/`/`backups/` all persist on the host and `git pull` +
+`docker compose up -d --build` is the update path. It's deliberately not hardened the way
+`deploy/install.sh` is (no fail2ban/ufw equivalent, no TLS termination) — put a real reverse proxy in
+front of it for anything beyond local evaluation.
+
+Standing this container up from an existing `deploy/backup.sh` backup instead of a fresh install: drop
+the backup file and its passphrase file under `./restore/` (bind-mounted read-only into the container),
+set `RESTORE_FROM`/`RESTORE_PASSPHRASE_FILE` in `.env` to point at them, then `docker compose up -d
+--build` — see the comments in `.env.example` and [`deploy/README.md`](deploy/README.md#restoresh).
+
+### Option 2 — bare-metal install (recommended for a production instance)
+
+The deployment tooling in [`deploy/`](deploy/README.md) provisions a whole box from scratch:
+
+```bash
+git clone https://github.com/TheTractorHacker/RivetMSP.git
+cd RivetMSP
+sudo deploy/install.sh --domain=itflow.example.com
+```
+
+It provisions nginx, PHP 8.4, MariaDB, and Redis; sets up TLS; applies security hardening; and runs the
+app's own first-run setup (or, with `--restore-from`/`--restore-passphrase-file`, restores an existing
+`deploy/backup.sh` backup onto the new box instead) — see [`deploy/README.md`](deploy/README.md) for the
+full flag reference, worked examples (including adding a second company's instance to a box that already
+runs one), backups, and updates. If you'd rather install manually or use the upstream one-liner, see the
+[official docs](https://docs.itflow.org/installation) — after installing that way, replace the files
+with this fork's content or clone this repo directly into your web root.
+
+Either way, `deploy/backup.sh` (encrypted, scheduled) is the disaster-recovery path, with
+`deploy/restore.sh` as its counterpart for standing a fresh box back up from one of those backups — see
+[`deploy/README.md`](deploy/README.md#restoresh).
 
 <!-- RELEASES -->
 ## Releases
@@ -152,7 +191,7 @@ After installing, replace the files with this fork's content or clone this repo 
 | v1.2.5-msp | Outlook push sync, per-tech calendar colors, modal bug fixes |
 | v1.2.3-msp | Categories, SLA, contracts, worksheets, inline ticket actions |
 
-See [all releases](https://github.com/TheTractorHacker/itflow/releases) for full changelogs.
+See [all releases](https://github.com/TheTractorHacker/RivetMSP/releases) for full changelogs.
 
 ## License
 
@@ -161,14 +200,14 @@ ITFlow is distributed under the GPL License. This fork inherits the same license
 ## Security
 
 If you find a security issue in the upstream project, report it [here](https://github.com/itflow-org/itflow/security/policy).
-For issues specific to this fork, open an [issue](https://github.com/TheTractorHacker/itflow/issues).
+For issues specific to this fork, open an [issue](https://github.com/TheTractorHacker/RivetMSP/issues).
 
 <!-- MARKDOWN LINKS & IMAGES -->
-[contributors-shield]: https://img.shields.io/github/contributors/TheTractorHacker/itflow.svg?style=for-the-badge
-[contributors-url]: https://github.com/TheTractorHacker/itflow/graphs/contributors
-[stars-shield]: https://img.shields.io/github/stars/TheTractorHacker/itflow.svg?style=for-the-badge
-[stars-url]: https://github.com/TheTractorHacker/itflow/stargazers
-[license-shield]: https://img.shields.io/github/license/TheTractorHacker/itflow.svg?style=for-the-badge
+[contributors-shield]: https://img.shields.io/github/contributors/TheTractorHacker/RivetMSP.svg?style=for-the-badge
+[contributors-url]: https://github.com/TheTractorHacker/RivetMSP/graphs/contributors
+[stars-shield]: https://img.shields.io/github/stars/TheTractorHacker/RivetMSP.svg?style=for-the-badge
+[stars-url]: https://github.com/TheTractorHacker/RivetMSP/stargazers
+[license-shield]: https://img.shields.io/github/license/TheTractorHacker/RivetMSP.svg?style=for-the-badge
 [license-url]: https://github.com/itflow-org/itflow/blob/master/LICENSE
-[commit-shield]: https://img.shields.io/github/last-commit/TheTractorHacker/itflow?style=for-the-badge
-[commit-url]: https://github.com/TheTractorHacker/itflow/commits/master
+[commit-shield]: https://img.shields.io/github/last-commit/TheTractorHacker/RivetMSP?style=for-the-badge
+[commit-url]: https://github.com/TheTractorHacker/RivetMSP/commits/master

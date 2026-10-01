@@ -1,0 +1,275 @@
+#!/usr/bin/env bash
+# RivetMSP deployment tooling — shared helper library.
+#
+# Sourced (never executed directly) by deploy/install.sh and by the other
+# deploy/*.sh scripts in this directory (e.g. deploy/harden.sh,
+# deploy/update.sh, deploy/backup.sh, deploy/restore.sh). Function names/
+# signatures here are a shared interface across those scripts — keep them
+# stable and generic rather than tailoring them to any one script's needs.
+#
+# Usage from a caller:
+#   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+#   # shellcheck source=./lib/common.sh
+#   source "${SCRIPT_DIR}/lib/common.sh"
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Output helpers
+# ---------------------------------------------------------------------------
+# Colored only when stderr is an actual terminal that claims 8+ colors —
+# never emit raw escape codes into a redirected log file (e.g. install.sh's
+# `exec > >(tee -a /var/log/itflow-install.log)`), where they'd just show up
+# as literal "\033[..." noise.
+if [[ -t 2 ]] && command -v tput >/dev/null 2>&1 && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]]; then
+    C_RED=$'\033[0;31m'
+    C_GREEN=$'\033[0;32m'
+    C_YELLOW=$'\033[0;33m'
+    C_BLUE=$'\033[0;34m'
+    C_BOLD=$'\033[1m'
+    C_RESET=$'\033[0m'
+else
+    C_RED=""; C_GREEN=""; C_YELLOW=""; C_BLUE=""; C_BOLD=""; C_RESET=""
+fi
+
+_ts() { date '+%Y-%m-%d %H:%M:%S'; }
+
+# log(): plain, uncolored step marker. Used for routine narration that other
+# tooling (e.g. a CI log scraper) might grep for without ANSI codes in the way.
+log() {
+    printf '%s [%s]\n' "$(_ts)" "$*"
+}
+
+# info()/warn()/error(): colored, leveled output. warn/error go to stderr so
+# a caller can separate them from stdout even when both are also being
+# tee'd to the same logfile.
+info() {
+    printf '%s %s[INFO]%s %s\n' "$(_ts)" "${C_BLUE}" "${C_RESET}" "$*"
+}
+
+success() {
+    printf '%s %s[ OK ]%s %s\n' "$(_ts)" "${C_GREEN}" "${C_RESET}" "$*"
+}
+
+warn() {
+    printf '%s %s[WARN]%s %s\n' "$(_ts)" "${C_YELLOW}" "${C_RESET}" "$*" >&2
+}
+
+error() {
+    printf '%s %s[FAIL]%s %s\n' "$(_ts)" "${C_RED}" "${C_RESET}" "$*" >&2
+}
+
+# die(): print an error and exit non-zero. The one and only way scripts
+# using this library should abort on a fatal condition.
+die() {
+    error "$*"
+    exit 1
+}
+
+# announce(): for invasive/hard-to-reverse steps (service restarts, ufw
+# enable, cert issuance, destructive file writes). Prints what is ABOUT to
+# happen, distinctly from routine info(), before the caller does it.
+announce() {
+    printf '%s %s%s[ACTION]%s %s\n' "$(_ts)" "${C_BOLD}" "${C_YELLOW}" "${C_RESET}" "$*"
+}
+
+# ---------------------------------------------------------------------------
+# Environment / privilege checks
+# ---------------------------------------------------------------------------
+
+# require_root(): dies with a clear, actionable message if not running as
+# EUID 0. Every script in deploy/ that touches system packages, /etc, or
+# service state should call this before doing anything else.
+require_root() {
+    if [[ "${EUID}" -ne 0 ]]; then
+        die "This script must be run as root. Re-run with: sudo $0 $*"
+    fi
+}
+
+# detect_os(): dies cleanly on anything that isn't a Debian/Ubuntu apt-based
+# system — that's the only target this tooling supports in v1. On success,
+# exports OS_ID / OS_VERSION_ID / OS_CODENAME / OS_PRETTY_NAME for callers
+# that want to branch on specifics (e.g. Ubuntu 24.04 "noble").
+detect_os() {
+    if [[ ! -r /etc/os-release ]]; then
+        die "Cannot detect the operating system (/etc/os-release missing). This installer only supports Debian/Ubuntu (apt-based) systems."
+    fi
+
+    # shellcheck disable=SC1091
+    . /etc/os-release
+
+    local id="${ID:-}"
+    local id_like="${ID_LIKE:-}"
+    if [[ "${id}" != "ubuntu" && "${id}" != "debian" && "${id_like}" != *debian* && "${id_like}" != *ubuntu* ]]; then
+        die "Unsupported OS '${PRETTY_NAME:-$id}'. This installer only supports Debian/Ubuntu (apt-based) systems."
+    fi
+
+    if ! command -v apt-get >/dev/null 2>&1; then
+        die "apt-get not found. This installer requires an apt-based system."
+    fi
+
+    OS_ID="${id}"
+    OS_VERSION_ID="${VERSION_ID:-}"
+    OS_CODENAME="${VERSION_CODENAME:-}"
+    OS_PRETTY_NAME="${PRETTY_NAME:-$id}"
+    export OS_ID OS_VERSION_ID OS_CODENAME OS_PRETTY_NAME
+
+    info "Detected OS: ${OS_PRETTY_NAME}"
+}
+
+# ---------------------------------------------------------------------------
+# Secrets
+# ---------------------------------------------------------------------------
+
+# gen_secret([length]): a random secret safe to drop into shell command
+# lines, my.cnf/ini files, or URLs without quoting gymnastics — alphanumeric
+# only, so '/', '+', '=' (base64's non-alnum characters) can never land in
+# it. Loops rather than a single truncated call so the result always has the
+# requested length even after stripping. Default length is 32.
+gen_secret() {
+    local length="${1:-32}"
+    local secret=""
+    while [[ "${#secret}" -lt "${length}" ]]; do
+        secret+="$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9')"
+    done
+    printf '%s' "${secret:0:${length}}"
+}
+
+# ---------------------------------------------------------------------------
+# Package / service state
+# ---------------------------------------------------------------------------
+
+# package_installed(name): true if a .deb package is installed (any state
+# short of fully-installed, e.g. "half-configured", counts as NOT installed
+# so callers re-attempt installation rather than trusting a broken package).
+package_installed() {
+    local status
+    status="$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null || true)"
+    [[ "${status}" == "install ok installed" ]]
+}
+
+# service_is_active(name): true if a systemd unit is currently active.
+service_is_active() {
+    systemctl is-active --quiet "$1" 2>/dev/null
+}
+
+# command_exists(name): thin wrapper kept for readability at call sites.
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# ---------------------------------------------------------------------------
+# Application config (config.php)
+# ---------------------------------------------------------------------------
+
+# read_app_config(app_dir): populates DB_HOST/DB_USER/DB_PASS/DB_NAME/
+# INSTALLATION_ID/SETTINGS_ENC_KEY by shelling out to `php -r` with a small
+# trusted snippet that requires app_dir/config.php and echoes the values it
+# defines. Shared by backup.sh (to capture INSTALLATION_ID/SETTINGS_ENC_KEY
+# into its backup manifest) and restore.sh (to find the target database and
+# re-apply the encryption key). SETTINGS_ENC_KEY is commonly empty here —
+# scripts/setup_cli.php does not currently generate one, so
+# $config_settings_enc_key is simply undefined on most instances, and
+# functions.php's encryptSettingsValue()/decryptSettingsValue() already
+# no-op when it's empty. Still captured/restored defensively in case an
+# instance set one by hand. Deliberately NOT parsed out of config.php with
+# grep/sed (its values go through var_export(), so they can contain escaped
+# quotes, unicode, etc. — a text-munging parse would be fragile) and
+# deliberately NOT eval'd as arbitrary PHP from an untrusted source —
+# config.php is a trusted local file this same install already wrote, so
+# requiring it here carries no more risk than the app's own every-request
+# bootstrap already does.
+read_app_config() {
+    local app_dir="$1"
+    info "Reading configuration from ${app_dir}/config.php..."
+    local raw
+    if ! raw="$(php -r '
+        require $argv[1];
+        echo $dbhost . "\n" . $dbusername . "\n" . $dbpassword . "\n" . $database . "\n";
+        echo ($installation_id ?? "") . "\n";
+        echo ($config_settings_enc_key ?? "") . "\n";
+    ' -- "${app_dir}/config.php")"; then
+        die "Failed to read configuration from ${app_dir}/config.php via 'php -r' (see PHP's error output above). config.php connects to MySQL as a side effect of being require()'d — this usually means the database is unreachable, not just a bad config file."
+    fi
+
+    local -a cfg_lines
+    mapfile -t cfg_lines <<< "${raw}"
+    DB_HOST="${cfg_lines[0]:-}"
+    DB_USER="${cfg_lines[1]:-}"
+    DB_PASS="${cfg_lines[2]:-}"
+    DB_NAME="${cfg_lines[3]:-}"
+    INSTALLATION_ID="${cfg_lines[4]:-}"
+    SETTINGS_ENC_KEY="${cfg_lines[5]:-}"
+
+    if [[ -z "${DB_HOST}" || -z "${DB_USER}" || -z "${DB_NAME}" ]]; then
+        die "config.php did not yield usable database settings (host='${DB_HOST}' user='${DB_USER}' database='${DB_NAME}'). Refusing to proceed with an incomplete target."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Misc
+# ---------------------------------------------------------------------------
+
+# backup_if_exists(path): if `path` already exists, copy it aside to
+# path.bak-<timestamp> before a caller overwrites it. Keeps re-running an
+# install/update idempotent-but-non-destructive of local edits, per this
+# tooling's general rule of never silently clobbering an existing file.
+backup_if_exists() {
+    local target="$1"
+    if [[ -e "${target}" ]]; then
+        local backup
+        backup="${target}.bak-$(date +%Y%m%d%H%M%S)"
+        cp -a "${target}" "${backup}"
+        warn "Existing file backed up: ${target} -> ${backup}"
+    fi
+}
+
+# detect_ssh_port(): best-effort read of the configured sshd port from
+# /etc/ssh/sshd_config AND /etc/ssh/sshd_config.d/*.conf (Ubuntu 24.04's
+# default layout drops a machine-generated port override into the latter,
+# not the former — checking only sshd_config misses it), falling back to
+# the IANA default (22) when no directive is found or nothing is readable.
+# Used before any `ufw enable` so the firewall never locks out the very
+# session running the installer.
+detect_ssh_port() {
+    local port=""
+    port="$( { [[ -f /etc/ssh/sshd_config ]] && grep -E '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config;
+               compgen -G '/etc/ssh/sshd_config.d/*.conf' >/dev/null && grep -hE '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config.d/*.conf; } \
+             2>/dev/null | awk '{print $2; exit}' || true )"
+    printf '%s' "${port:-22}"
+}
+
+# ---------------------------------------------------------------------------
+# Temp-file cleanup (secrets)
+# ---------------------------------------------------------------------------
+# Any script that writes a secret to a temp file (a generated DB password, a
+# `mysql --defaults-extra-file`) OR extracts one into a temp directory (e.g.
+# a decrypted backup archive) should register it here with
+# register_tmpfile() rather than rolling its own trap. This is the ONE EXIT
+# trap for the whole process — bash keeps only a single handler per signal,
+# so a script that later called `trap ... EXIT` again would silently replace
+# this one and skip secret cleanup. Add cleanup work by calling
+# register_tmpfile(), never by setting a second EXIT trap.
+declare -a _ITFLOW_TMPFILES=()
+
+register_tmpfile() {
+    _ITFLOW_TMPFILES+=("$1")
+}
+
+_cleanup_tmpfiles() {
+    local f
+    for f in "${_ITFLOW_TMPFILES[@]:-}"; do
+        [[ -n "${f}" && -e "${f}" ]] || continue
+        if [[ -d "${f}" ]]; then
+            # A registered directory (e.g. restore.sh's decrypted-archive
+            # extraction dir) may hold sensitive files of its own — shred
+            # each one individually before removing the tree, same intent
+            # as the plain-file branch below, just recursive.
+            find "${f}" -type f -exec shred -u {} + 2>/dev/null
+            rm -rf "${f}"
+        else
+            shred -u "${f}" 2>/dev/null || rm -f "${f}"
+        fi
+    done
+}
+trap _cleanup_tmpfiles EXIT

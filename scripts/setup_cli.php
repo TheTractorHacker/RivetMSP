@@ -72,6 +72,19 @@ $longopts = [
 
 $options = getopt($shortopts, $longopts);
 
+// Let the database + admin passwords arrive via environment variables
+// instead of argv, so a wrapper (deploy/install.sh) never has to put a
+// secret directly on THIS script's own command line, where `ps` could show
+// it to another user on the box during the brief window it's running.
+// Only takes effect when the matching --option wasn't already passed, so
+// existing direct-argv usage is unaffected.
+if (getenv('ITFLOW_DB_PASSWORD') !== false && !isset($options['password'])) {
+    $options['password'] = getenv('ITFLOW_DB_PASSWORD');
+}
+if (getenv('ITFLOW_ADMIN_PASSWORD') !== false && !isset($options['user-password'])) {
+    $options['user-password'] = getenv('ITFLOW_ADMIN_PASSWORD');
+}
+
 // If --help is set, print usage and exit
 if (isset($options['help'])) {
     echo "RivetMSP CLI Setup Script\n\n";

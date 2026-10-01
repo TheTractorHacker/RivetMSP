@@ -1,0 +1,95 @@
+# RivetMSP nginx vhost template
+#
+# Consumed by: deploy/install.sh and deploy/harden.sh, via `envsubst`,
+# written to /etc/nginx/sites-available/${DOMAIN}.conf and symlinked into
+# sites-enabled. Deliberately slim — every location/security rule lives in
+# deploy/templates/itflow-locations.conf instead (deployed once per box to
+# /etc/nginx/snippets/itflow-locations.conf and `include`d below), matching
+# the real, already-in-production itflow.foleyit.com vhost structure rather
+# than inlining everything per vhost.
+#
+# Variables install.sh/harden.sh must export before substitution:
+#   DOMAIN            e.g. itflow.example.com  (used verbatim, no scheme/port)
+#   APP_ROOT          absolute path to the app's webroot, e.g. /var/www/itflow.example.com
+#   PHP_SOCK           bare socket path, e.g. /run/php/php8.4-fpm.sock (NOT prefixed with "unix:" -
+#                      this template adds that prefix itself)
+#   SSL_CERT_PATH      e.g. /etc/ssl/certs/itflow.example.com.crt (or a certbot fullchain.pem path)
+#   SSL_CERT_KEY_PATH  e.g. /etc/ssl/private/itflow.example.com.key (or a certbot privkey.pem path)
+#
+# IMPORTANT envsubst gotcha: this file has nginx's own $variables too
+# ($request_uri, $server_name). Do NOT run plain `envsubst < template`,
+# which substitutes every $NAME that happens to match an exported shell
+# variable and could mangle an nginx variable by accident. Always pass an
+# explicit restrict-list of only the placeholders above:
+#   envsubst '${DOMAIN} ${APP_ROOT} ${PHP_SOCK} ${SSL_CERT_PATH} ${SSL_CERT_KEY_PATH}' \
+#       < nginx-vhost.conf.template > /etc/nginx/sites-available/${DOMAIN}.conf
+#
+# PROXY MODE vs DIRECT-TLS MODE — same convention deploy/harden.sh already
+# implements marker-stripping for (this template just needs to keep the
+# marker names identical):
+#   - direct-TLS mode: this box terminates TLS itself (e.g. via certbot).
+#   - proxy mode: an external reverse proxy terminates the public TLS
+#     endpoint and forwards to this box on a backend port (8443) using a
+#     self-signed backend cert.
+# install.sh/harden.sh decide which mode applies and edit the substituted
+# output in place with sed:
+#   - `# __PROXY_MODE_BLOCK__` is a sentinel line: fail loudly if it's
+#     missing before doing the strip below — a safety check that the
+#     template version being consumed still supports it.
+#   - Every line between `# BEGIN PROXY-MODE ONLY` and the next
+#     `# END PROXY-MODE ONLY` (inclusive) is PROXY-MODE-only content: delete
+#     the whole range in direct-TLS mode, keep it (dropping only the two
+#     marker lines) in proxy mode.
+#   - Symmetrically, `# BEGIN DIRECT-TLS ONLY` / `# END DIRECT-TLS ONLY`
+#     delimits direct-TLS-only content (HSTS). Delete the whole range in
+#     proxy mode; keep it (dropping only the marker lines) in direct-TLS mode.
+#   FIRST strip this documentation header (every line up to `server {`),
+#   THEN apply the per-mode sed — sed's /start/,/end/ range does not test the
+#   end pattern against the line that opened the range, so running directly
+#   on the un-stripped file lets a bullet point ABOVE that mentions a marker
+#   string open a range that swallows the real `server {` line. install.sh
+#   and harden.sh both already do the strip; anything rendering this by hand
+#   must too.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN};
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    # __PROXY_MODE_BLOCK__
+    # BEGIN PROXY-MODE ONLY
+    listen 8443 ssl http2;                 # reverse proxy chain connects here
+    listen [::]:8443 ssl http2;
+    # END PROXY-MODE ONLY
+    server_name ${DOMAIN};
+
+    root ${APP_ROOT};
+    index index.php index.html;
+    client_max_body_size 500M;
+
+    # BEGIN PROXY-MODE ONLY
+    absolute_redirect off;
+    port_in_redirect off;
+    server_name_in_redirect off;
+    # END PROXY-MODE ONLY
+
+    ssl_certificate ${SSL_CERT_PATH};
+    ssl_certificate_key ${SSL_CERT_KEY_PATH};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # BEGIN DIRECT-TLS ONLY
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+    # END DIRECT-TLS ONLY
+
+    include snippets/itflow-locations.conf;
+}
