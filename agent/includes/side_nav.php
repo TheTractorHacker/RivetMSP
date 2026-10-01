@@ -48,7 +48,7 @@ foreach ($section_pages as $key => $pages) {
                 <?php if (!empty($session_company_logo)) { ?>
                     <img src="/uploads/settings/<?php echo nullable_htmlentities($session_company_logo); ?>" style="max-height:33px;width:auto;object-fit:contain;" alt="">
                 <?php } else { ?>
-                    <i class="fas fa-building fa-lg"></i>
+                    <img src="<?= nullable_htmlentities(APP_LOGO_MARK_URL) ?>" width="33" height="33" alt="<?= nullable_htmlentities(APP_NAME) ?>">
                 <?php } ?>
                 <span class="text-truncate" title="<?php echo nullable_htmlentities($session_company_name); ?>"><?php echo nullable_htmlentities($session_company_name); ?></span>
             </a>

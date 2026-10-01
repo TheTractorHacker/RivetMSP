@@ -539,7 +539,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                 <table class="table table-sm table-borderless table-hover mb-0">
                     <thead class="text-muted small border-bottom" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;">
                         <tr>
-                            <th class="ps-3">ITFlow Client</th>
+                            <th class="ps-3">RivetMSP Client</th>
                             <th>Comet Username</th>
                         </tr>
                     </thead>
@@ -863,7 +863,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
         <div class="card-body">
             <p class="text-muted small">
                 Syncs UniFi access points/switches to Assets, Wi-Fi SSIDs to Credentials, and networks (VLANs/subnets)
-                to Networks. UniFi sites are matched to ITFlow clients by name (case-insensitive).
+                to Networks. UniFi sites are matched to RivetMSP clients by name (case-insensitive).
             </p>
             <form action="post.php" method="post">
                 <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
@@ -1184,7 +1184,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                             <div class="alert alert-info py-2 mb-3">
                                 <i class="fas fa-cloud me-1"></i>
                                 <strong>UniFi Site Manager</strong> — connects to <code>api.ui.com</code> and syncs devices from
-                                <em>all</em> sites in your account. Each UniFi site is matched to an ITFlow client by name.<br>
+                                <em>all</em> sites in your account. Each UniFi site is matched to an RivetMSP client by name.<br>
                                 <small class="text-muted mt-1 d-block">Devices sync from the cloud API for all sites. Wi-Fi SSIDs/passwords and networks sync via each host's <code>*.id.ui.direct</code> local proxy — works for controllers on the same network as this server or with remote access enabled.</small>
                             </div>
                         </div>
@@ -1244,7 +1244,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small">
-                        By default, each UniFi site is matched to an ITFlow client by name (case-insensitive).
+                        By default, each UniFi site is matched to an RivetMSP client by name (case-insensitive).
                         Use this to override that match, or skip syncing a site entirely.
                     </p>
                     <div id="unifi_siteMappingBody">

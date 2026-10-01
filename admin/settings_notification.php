@@ -423,7 +423,7 @@ require_once "includes/inc_all_admin.php";
                     <?php } else { ?>
                     <div class="p-3 text-muted text-center small" style="border:1px solid var(--color-border,#eee);border-radius:.4rem;">
                         <i class="fas fa-mobile-alt fa-2x mb-2 d-block text-secondary"></i>
-                        No devices have logged into the ITFlow mobile app yet.
+                        No devices have logged into the RivetMSP mobile app yet.
                     </div>
                     <?php } ?>
                 </div>
@@ -503,7 +503,7 @@ require_once "includes/inc_all_admin.php";
                         <div class="font-weight-semibold mb-1">Push notifications are not configured</div>
                         <div class="small text-muted">
                             Connect a Firebase project to send real-time push notifications to staff
-                            on the ITFlow mobile app. Firebase Cloud Messaging (FCM) is free with no per-message cost.
+                            on the RivetMSP mobile app. Firebase Cloud Messaging (FCM) is free with no per-message cost.
                         </div>
                     </div>
                 </div>
@@ -524,7 +524,7 @@ require_once "includes/inc_all_admin.php";
                         <div class="push-step">
                             <div class="push-step-num">2</div>
                             <div class="push-step-body">
-                                Click <strong>Add project</strong>, give it a name (e.g. <em>ITFlow</em>), and complete the wizard.
+                                Click <strong>Add project</strong>, give it a name (e.g. <em>RivetMSP</em>), and complete the wizard.
                                 Google Analytics is not required — you can disable it.
                             </div>
                         </div>
@@ -553,7 +553,7 @@ require_once "includes/inc_all_admin.php";
                         <div class="push-step" style="border-bottom:none;">
                             <div class="push-step-num">6</div>
                             <div class="push-step-body">
-                                Staff log into the <strong>ITFlow mobile app</strong> and their devices register automatically.
+                                Staff log into the <strong>RivetMSP mobile app</strong> and their devices register automatically.
                             </div>
                         </div>
                     </div>

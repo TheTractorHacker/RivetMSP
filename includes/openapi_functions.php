@@ -16,7 +16,7 @@
 function parseOpenApiSpec(string $spec_path): array {
     $raw = is_readable($spec_path) ? file($spec_path, FILE_IGNORE_NEW_LINES) : [];
 
-    $api_title   = 'ITFlow API v1';
+    $api_title   = 'RivetMSP API v1';
     $api_version = '';
     $endpoints   = [];          // [ ['path','method','summary','tag','params','no_auth','has_body'], ... ]
     $tag_order   = [];          // tag names in first-seen order

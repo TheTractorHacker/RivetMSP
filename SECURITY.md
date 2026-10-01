@@ -4,12 +4,12 @@
 
 **We take security seriously**
 
-- Whilst we are confident in the safety of the code, no system is risk-free. Nearly all software has bugs. Use your best judgement before storing highly confidential information in ITFlow.
+- Whilst we are confident in the safety of the code, no system is risk-free. Nearly all software has bugs. Use your best judgement before storing highly confidential information in RivetMSP.
 - We attempt to follow security best practices where possible, including [automated code scanning](https://sonarcloud.io/component_measures?id=itflow-org_itflow&metric=security_rating&view=list).
 - [![Security](https://sonarcloud.io/api/project_badges/measure?project=itflow-org_itflow&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=itflow-org_itflow)
 
 ## Supported Versions
-We operate a rolling release model. Any bug fixes will be released into latest version of ITFlow, so you must stay up-to-date.
+We operate a rolling release model. Any bug fixes will be released into latest version of RivetMSP, so you must stay up-to-date.
 
 | Version | Supported          |
 |---------| ------------------ |

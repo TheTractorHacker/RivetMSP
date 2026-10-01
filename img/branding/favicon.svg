@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="RivetMSP">
+  <rect width="64" height="64" rx="13" fill="#fff"/>
+  <path d="M32 12 55 25Q58 27 55 29L32 42 9 29Q6 27 9 25Z" fill="#08275e"/>
+  <path d="m18 34 13 8v6L18 56 4 48q-3-2 0-4Z" fill="#08275e"/>
+  <path d="m46 34 14 10q3 2 0 4L46 56l-13-8v-6Z" fill="#00b8ef"/>
+  <ellipse cx="32" cy="40" rx="10" ry="5" fill="#dcefff"/>
+  <path d="M24 20h16v18c0 6-16 6-16 0Z" fill="#065cff"/>
+  <ellipse cx="32" cy="20" rx="10" ry="6" fill="#fff"/>
+  <ellipse cx="32" cy="18" rx="9" ry="6" fill="#065cff"/>
+</svg>

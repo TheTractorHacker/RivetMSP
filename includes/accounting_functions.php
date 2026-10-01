@@ -416,7 +416,7 @@ function accountingMakeEnsureItem(mysqli $mysqli, QboClient $qbo, int $acc_id, s
 
         $item_name = trim($name);
         if ($item_name === '') {
-            $item_name = $product_id > 0 ? "Product $product_id" : 'ITFlow Services';
+            $item_name = $product_id > 0 ? "Product $product_id" : 'RivetMSP Services';
         }
 
         $found = $qbo->findItem($item_name);

@@ -116,7 +116,7 @@ header('Content-Type: text/html; charset=utf-8');
   </header>
 
   <p class="lead">
-    Companion REST API for the ITFlow MSP mobile app and integrations. This page is
+    Companion REST API for the RivetMSP mobile app and integrations. This page is
     generated from <a href="openapi">the OpenAPI spec</a> and lists every live endpoint.
     Base path: <code>/api/v1</code>.
   </p>

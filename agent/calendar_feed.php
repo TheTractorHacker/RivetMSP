@@ -87,7 +87,7 @@ $cal_name  = ical_escape($user_name . "'s Schedule");
 
 $ical  = "BEGIN:VCALENDAR\r\n";
 $ical .= "VERSION:2.0\r\n";
-$ical .= "PRODID:-//ITFlow//Ticket Schedule//EN\r\n";
+$ical .= "PRODID:-//RivetMSP//Ticket Schedule//EN\r\n";
 $ical .= "METHOD:PUBLISH\r\n";
 $ical .= "CALSCALE:GREGORIAN\r\n";
 $ical .= "X-WR-CALNAME:" . $cal_name . "\r\n";

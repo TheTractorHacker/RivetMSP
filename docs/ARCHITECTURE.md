@@ -1,8 +1,8 @@
-# ITFlow Architecture
+# RivetMSP Architecture
 
 ## Overview
 
-ITFlow is a single-tenant PHP MSP (managed service provider) platform: one install serves one MSP company, which in turn manages many `clients` (the MSP's own customers). There is no framework — it's hand-written PHP with `mysqli` and raw SQL throughout, organized as a set of top-level directories that map directly to URL paths. One MySQL database backs everything.
+RivetMSP is a single-tenant PHP MSP (managed service provider) platform: one install serves one MSP company, which in turn manages many `clients` (the MSP's own customers). There is no framework — it's hand-written PHP with `mysqli` and raw SQL throughout, organized as a set of top-level directories that map directly to URL paths. One MySQL database backs everything.
 
 The codebase is best understood as four cooperating "portals" sharing a common core:
 
@@ -13,7 +13,7 @@ The codebase is best understood as four cooperating "portals" sharing a common c
 
 Shared infrastructure lives in `includes/` (session/auth chain, permission functions, integration clients, global settings), `functions.php` (a large grab-bag of app-wide helper functions), `cron/` (background jobs), and `api/v1/` (the REST API, separately authenticated from the web portals).
 
-A related, closed-source fork called **ITFlow Internal IT** repurposes this same codebase for internal IT departments (renames Client to Department, disables billing/CRM by default, adds directory-sync and other features); its internals are out of scope for this document.
+A related, closed-source fork called **RivetMSP Internal IT** repurposes this same codebase for internal IT departments (renames Client to Department, disables billing/CRM by default, adds directory-sync and other features); its internals are out of scope for this document.
 
 ---
 
@@ -147,7 +147,7 @@ Client contacts have no modules/roles at all. Visibility inside `client/` is dri
 
 ## Data Model
 
-ITFlow is single-tenant per install — one `companies` row (`company_id = 1`, the MSP's own org profile), entirely separate from `clients` (the MSP's customers, the hub everything else hangs off).
+RivetMSP is single-tenant per install — one `companies` row (`company_id = 1`, the MSP's own org profile), entirely separate from `clients` (the MSP's customers, the hub everything else hangs off).
 
 The dominant relational convention is **naming, not database-enforced foreign keys**: child tables carry an `int NOT NULL DEFAULT 0` column named `<entity>_client_id`, `<entity>_ticket_id`, etc., and the application joins on it in code. Most core tables (`clients`, `contacts`, `locations`, `tickets`, `ticket_replies`, `assets`, `credentials`, `invoices`, `quotes`) declare **no** `FOREIGN KEY` constraint — `contracts` is the one notable exception, with a real FK to `clients`. By contrast, small many-to-many/join/tag tables (`asset_credentials`, `contact_tags`, `client_tags`, `calendar_event_attendees`, etc.) do use real FKs with `ON DELETE CASCADE`. In short: core "belongs-to" relationships are an app-code convention; join/pivot tables are database-enforced.
 
@@ -225,9 +225,9 @@ A discrepancy worth knowing about: `db.sql` (the fresh-install schema dump) is n
 
 ## Integrations
 
-- **RMM (Remote Monitoring & Management)** — a factory/abstraction (`includes/rmm_client_factory.php`) dispatches to one of four provider clients based on `rmm_integrations.type`: Tactical RMM, Level.io, Action1 (OAuth2 patch management), and Sophos Central (OAuth2, scoped to firewall inventory/alerts). `includes/class_rmm_asset_mapper.php` matches RMM agents to ITFlow `assets` (by linked ID, then serial, MAC, hostname) and syncs alerts. Sync runs on every cron cycle from `cron/cron.php`, and can auto-create tickets from severity-gated alerts.
-- **UniFi networking** — a local-controller client and a cloud-controller client, mapped into ITFlow `assets`/`credentials`/`networks` by `includes/class_unifi_sync_mapper.php`. Notably, this sync runs from a standalone script (`scripts/unifi_sync_cli.php`), **not** wired into the main `cron/cron.php` dispatcher — it needs its own separately configured cron entry.
-- **QuickBooks Online (accounting)** — one-way push only (ITFlow → QBO, never back). `includes/class_qbo_client.php` handles OAuth2 token refresh and Customer/Item/Invoice/Payment sync. A queue (`accounting_sync_queue`) is drained by `cron/accounting_sync.php` with exponential backoff and dependency ordering (customer before invoice, invoice before payment), with idempotency guaranteed via an `accounting_entity_map` table.
+- **RMM (Remote Monitoring & Management)** — a factory/abstraction (`includes/rmm_client_factory.php`) dispatches to one of four provider clients based on `rmm_integrations.type`: Tactical RMM, Level.io, Action1 (OAuth2 patch management), and Sophos Central (OAuth2, scoped to firewall inventory/alerts). `includes/class_rmm_asset_mapper.php` matches RMM agents to RivetMSP `assets` (by linked ID, then serial, MAC, hostname) and syncs alerts. Sync runs on every cron cycle from `cron/cron.php`, and can auto-create tickets from severity-gated alerts.
+- **UniFi networking** — a local-controller client and a cloud-controller client, mapped into RivetMSP `assets`/`credentials`/`networks` by `includes/class_unifi_sync_mapper.php`. Notably, this sync runs from a standalone script (`scripts/unifi_sync_cli.php`), **not** wired into the main `cron/cron.php` dispatcher — it needs its own separately configured cron entry.
+- **QuickBooks Online (accounting)** — one-way push only (RivetMSP → QBO, never back). `includes/class_qbo_client.php` handles OAuth2 token refresh and Customer/Item/Invoice/Payment sync. A queue (`accounting_sync_queue`) is drained by `cron/accounting_sync.php` with exponential backoff and dependency ordering (customer before invoice, invoice before payment), with idempotency guaranteed via an `accounting_entity_map` table.
 - **Stripe (payments)** — behind a generic `PaymentProviderInterface`/factory (designed for future additional gateways), currently implemented only by `includes/class_stripe_payment_provider.php`. Used for guest invoice payment, webhooks, client-portal saved cards, and agent-recorded payments.
 - **Microsoft Entra ID (client portal SSO)** — OAuth2 authorization-code flow (`client/login_microsoft.php`) plus a Microsoft Graph `/me` call for profile info at login time. This is login-only — no broader directory sync was found. Microsoft OAuth is used separately for mailbox connections (below); no Odoo integration exists anywhere in the codebase.
 - **Email** — inbound: `cron/ticket_email_parser.php` polls configured mailboxes via IMAP (Webklex library, with OAuth2 support for Microsoft 365/Google Workspace) to create/update tickets from incoming mail. Outbound: `cron/mail_queue.php` drains an app-wide mail queue via PHPMailer (SMTP or OAuth token-based sending); enqueued app-wide via `addToMailQueue()` in `functions.php`.
@@ -256,4 +256,4 @@ All are standalone-runnable PHP CLI scripts, most also `require_once`'d from the
 
 ## Editions
 
-This document covers the shared MSP codebase (the public ITFlow project). A separate, closed-source fork — **ITFlow Internal IT** — reuses this same core (role structure, schema, module system, and integrations) for internal IT departments, with UI relabeling (Client → Department) and different default module/feature settings; its internals are out of scope here.
+This document covers RivetMSP, the MSP platform built on upstream ITFlow. Its sibling **RivetIT** serves internal IT departments, with department terminology and different default modules. RivetIT internals are outside this document’s scope.

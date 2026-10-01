@@ -74,7 +74,7 @@ $options = getopt($shortopts, $longopts);
 
 // If --help is set, print usage and exit
 if (isset($options['help'])) {
-    echo "ITFlow CLI Setup Script\n\n";
+    echo "RivetMSP CLI Setup Script\n\n";
     echo "Usage:\n";
     echo "  php setup_cli.php [options]\n\n";
     echo "Options:\n";
@@ -138,7 +138,7 @@ function getOptionOrPrompt($key, $promptMessage, $required = false, $default = '
 }
 
 // Start setup
-echo "Welcome to the ITFlow CLI Setup.\n";
+echo "Welcome to the RivetMSP CLI Setup.\n";
 
 // If config exists, abort
 if (file_exists('../config.php')) {
@@ -227,7 +227,7 @@ $new_config .= "\$dbusername = " . var_export($username, true) . ";\n";
 $new_config .= "\$dbpassword = " . var_export($password, true) . ";\n";
 $new_config .= "\$database = " . var_export($database, true) . ";\n";
 $new_config .= "\$mysqli = mysqli_connect(\$dbhost, \$dbusername, \$dbpassword, \$database) or die('Database Connection Failed');\n";
-$new_config .= "\$config_app_name = 'ITFlow';\n";
+$new_config .= "\$config_app_name = 'RivetMSP';\n";
 $new_config .= "\$config_base_url = '" . addslashes($base_url) . "';\n";
 $new_config .= "\$config_https_only = TRUE;\n";
 $new_config .= "\$repo_branch = 'master';\n";

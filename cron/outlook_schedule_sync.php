@@ -133,7 +133,7 @@ while ($row = mysqli_fetch_assoc($sql)) {
     }
 
     if ($http_code !== 200 || empty($event['start']['dateTime']) || empty($event['end']['dateTime'])) {
-        error_log("ITFlow: Outlook schedule pull failed for schedule $schedule_id (HTTP $http_code): " . json_encode($event['error'] ?? $raw_response));
+        error_log("RivetMSP: Outlook schedule pull failed for schedule $schedule_id (HTTP $http_code): " . json_encode($event['error'] ?? $raw_response));
         $failed++;
         continue;
     }

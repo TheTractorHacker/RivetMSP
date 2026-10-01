@@ -422,7 +422,7 @@ if (isset($_POST['import_qbo_item'])) {
     }
 
     aim_import_qbo_item($mysqli, $accounting_id, $remote_id, $remote_name, $remote_price, $remote_type, $remote_sync);
-    logAction("Accounting", "Create", "$session_name imported QuickBooks item '$remote_name' into ITFlow");
+    logAction("Accounting", "Create", "$session_name imported QuickBooks item '$remote_name' into RivetMSP");
     flash_alert("Imported \"" . ($remote_name !== '' ? $remote_name : $remote_id) . "\" from QuickBooks.");
     redirect($item_mapping_path);
 }
@@ -859,7 +859,7 @@ function aim_import_qbo_invoice(mysqli $mysqli, int $accounting_id, array $qi, s
         }
 
         setAccountingMap($mysqli, $accounting_id, 'invoice', $invoice_id, $remote_id, $sync_token);
-        accountingLog($mysqli, $accounting_id, 'invoice', $invoice_id, 'mapped', "Imported QBO invoice (Id $remote_id) as a new ITFlow invoice");
+        accountingLog($mysqli, $accounting_id, 'invoice', $invoice_id, 'mapped', "Imported QBO invoice (Id $remote_id) as a new RivetMSP invoice");
 
         mysqli_commit($mysqli);
         return $invoice_id;
@@ -1005,7 +1005,7 @@ function aim_import_qbo_quote(mysqli $mysqli, int $accounting_id, array $qe, str
         }
 
         setAccountingMap($mysqli, $accounting_id, 'quote', $quote_id, $remote_id, $sync_token);
-        accountingLog($mysqli, $accounting_id, 'quote', $quote_id, 'mapped', "Imported QBO estimate (Id $remote_id) as a new ITFlow quote");
+        accountingLog($mysqli, $accounting_id, 'quote', $quote_id, 'mapped', "Imported QBO estimate (Id $remote_id) as a new RivetMSP quote");
 
         mysqli_commit($mysqli);
         return $quote_id;
@@ -1092,7 +1092,7 @@ function aim_import_qbo_payment(mysqli $mysqli, int $accounting_id, array $qp, i
                 }
                 $remote_invoice_id = (string) ($linked['TxnId'] ?? '');
                 if (!isset($remote_to_local_invoice[$remote_invoice_id])) {
-                    continue; // that invoice isn't in ITFlow yet - skip just its share
+                    continue; // that invoice isn't in RivetMSP yet - skip just its share
                 }
                 $invoice_id  = $remote_to_local_invoice[$remote_invoice_id];
                 $line_amount = round(floatval($line['Amount'] ?? 0), 2);
@@ -1116,7 +1116,7 @@ function aim_import_qbo_payment(mysqli $mysqli, int $accounting_id, array $qp, i
                 mysqli_query($mysqli, "UPDATE invoices SET invoice_status = '$new_status_esc' WHERE invoice_id = $invoice_id AND invoice_status NOT IN ('Cancelled','Non-Billable')");
 
                 setAccountingMap($mysqli, $accounting_id, 'payment', $payment_id, $remote_id, $sync_token);
-                accountingLog($mysqli, $accounting_id, 'payment', $payment_id, 'mapped', "Imported QBO payment (Id $remote_id) as a new ITFlow payment");
+                accountingLog($mysqli, $accounting_id, 'payment', $payment_id, 'mapped', "Imported QBO payment (Id $remote_id) as a new RivetMSP payment");
                 $created++;
             }
         }
@@ -1166,12 +1166,12 @@ if (isset($_POST['import_qbo_invoice'])) {
         $remote_to_local_item   = getRemoteToLocalMap($mysqli, $accounting_id, 'item');
         $new_id = aim_import_qbo_invoice($mysqli, $accounting_id, $found, (string) $config_invoice_prefix, (string) $session_company_currency, $remote_to_local_client, $remote_to_local_item, $already_imported);
         if ($new_id > 0) {
-            logAction("Accounting", "Create", "$session_name imported QuickBooks invoice (Id $remote_id) into ITFlow");
+            logAction("Accounting", "Create", "$session_name imported QuickBooks invoice (Id $remote_id) into RivetMSP");
             flash_alert("Imported invoice from QuickBooks.");
         } elseif (isset($already_imported[$remote_id])) {
             flash_alert("That invoice was already imported.", 'warning');
         } else {
-            flash_alert("Could not import - that QuickBooks customer isn't linked to an ITFlow client yet. Map it on the Client Mapping tab first.", 'warning');
+            flash_alert("Could not import - that QuickBooks customer isn't linked to an RivetMSP client yet. Map it on the Client Mapping tab first.", 'warning');
         }
     } catch (Throwable $e) {
         flash_alert("Could not reach QuickBooks: " . $e->getMessage(), 'error');
@@ -1237,12 +1237,12 @@ if (isset($_POST['import_qbo_quote'])) {
         $remote_to_local_item   = getRemoteToLocalMap($mysqli, $accounting_id, 'item');
         $new_id = aim_import_qbo_quote($mysqli, $accounting_id, $found, (string) $config_quote_prefix, (string) $session_company_currency, $remote_to_local_client, $remote_to_local_item, $already_imported);
         if ($new_id > 0) {
-            logAction("Accounting", "Create", "$session_name imported QuickBooks estimate (Id $remote_id) into ITFlow");
+            logAction("Accounting", "Create", "$session_name imported QuickBooks estimate (Id $remote_id) into RivetMSP");
             flash_alert("Imported estimate from QuickBooks.");
         } elseif (isset($already_imported[$remote_id])) {
             flash_alert("That estimate was already imported.", 'warning');
         } else {
-            flash_alert("Could not import - that QuickBooks customer isn't linked to an ITFlow client yet. Map it on the Client Mapping tab first.", 'warning');
+            flash_alert("Could not import - that QuickBooks customer isn't linked to an RivetMSP client yet. Map it on the Client Mapping tab first.", 'warning');
         }
     } catch (Throwable $e) {
         flash_alert("Could not reach QuickBooks: " . $e->getMessage(), 'error');
@@ -1307,12 +1307,12 @@ if (isset($_POST['import_qbo_payment'])) {
         $remote_to_local_invoice = getRemoteToLocalMap($mysqli, $accounting_id, 'invoice');
         $new_id = aim_import_qbo_payment($mysqli, $accounting_id, $found, ass_default_account_id($mysqli), (string) $session_company_currency, $remote_to_local_invoice, $already_imported);
         if ($new_id > 0) {
-            logAction("Accounting", "Create", "$session_name imported QuickBooks payment (Id $remote_id) into ITFlow");
+            logAction("Accounting", "Create", "$session_name imported QuickBooks payment (Id $remote_id) into RivetMSP");
             flash_alert("Imported payment from QuickBooks.");
         } elseif (isset($already_imported[$remote_id])) {
             flash_alert("That payment was already imported.", 'warning');
         } else {
-            flash_alert("Could not import - its linked invoice isn't in ITFlow yet. Import or sync that invoice first.", 'warning');
+            flash_alert("Could not import - its linked invoice isn't in RivetMSP yet. Import or sync that invoice first.", 'warning');
         }
     } catch (Throwable $e) {
         flash_alert("Could not reach QuickBooks: " . $e->getMessage(), 'error');
@@ -1347,7 +1347,7 @@ if (isset($_POST['import_all_qbo_payments'])) {
         redirect($sync_status_path);
     }
     logAction("Accounting", "Create", "$session_name bulk-imported $imported payment(s) from QuickBooks" . ($skipped ? ", $skipped skipped" : "") . ($failed ? ", $failed failed" : ""));
-    flash_alert("Imported $imported payment(s) from QuickBooks" . ($skipped ? ", $skipped skipped (invoice not in ITFlow)" : "") . ($failed ? ", $failed failed" : "") . ".");
+    flash_alert("Imported $imported payment(s) from QuickBooks" . ($skipped ? ", $skipped skipped (invoice not in RivetMSP)" : "") . ($failed ? ", $failed failed" : "") . ".");
     redirect($sync_status_path);
 }
 
@@ -1757,7 +1757,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
                     <i class="fas fa-sync-alt me-1"></i>Sync Status
                 </a>
             <?php else: ?>
-                <p class="text-muted">Save your QuickBooks app credentials below, then connect. One-way sync pushes ITFlow customers, items, invoices and payments to QuickBooks Online.</p>
+                <p class="text-muted">Save your QuickBooks app credentials below, then connect. One-way sync pushes RivetMSP customers, items, invoices and payments to QuickBooks Online.</p>
                 <?php if (!empty($acc_client_id) && $has_secret): ?>
                     <a href="oauth_quickbooks_connect.php" class="btn btn-success">
                         <i class="fas fa-plug me-1"></i>Connect to QuickBooks
@@ -1897,7 +1897,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
             <table class="table table-sm table-hover mb-0 align-middle">
                 <thead class="text-muted small border-bottom" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;">
                     <tr>
-                        <th class="ps-3">ITFlow Client</th>
+                        <th class="ps-3">RivetMSP Client</th>
                         <th>QuickBooks Customer</th>
                         <th class="text-end pe-3">Actions</th>
                     </tr>
@@ -2020,14 +2020,14 @@ $money = static function ($v, $ccy) use ($currency_format) {
     <div class="card mb-3" style="border-top:3px solid #2ca01c;">
         <div class="card-header py-2 d-flex align-items-center">
             <h3 class="card-title me-auto"><i class="fas fa-fw fa-cloud-download-alt me-2"></i>Import from QuickBooks</h3>
-            <span class="badge text-bg-secondary"><?php echo count($qbo_unmapped_items); ?> not yet in ITFlow</span>
+            <span class="badge text-bg-secondary"><?php echo count($qbo_unmapped_items); ?> not yet in RivetMSP</span>
         </div>
         <div class="card-body p-0">
             <?php if ($qbo_pull_error !== ''): ?>
                 <div class="alert alert-danger m-3 mb-0"><i class="fas fa-exclamation-triangle me-1"></i>Could not read items from QuickBooks: <?php echo nullable_htmlentities($qbo_pull_error); ?></div>
             <?php elseif (empty($qbo_unmapped_items)): ?>
                 <div class="text-center text-muted py-4">
-                    <i class="fas fa-check-circle me-1"></i>Every QuickBooks item already has a matching ITFlow product/service.
+                    <i class="fas fa-check-circle me-1"></i>Every QuickBooks item already has a matching RivetMSP product/service.
                 </div>
             <?php else: ?>
                 <div class="d-flex justify-content-end p-2 border-bottom">
@@ -2063,7 +2063,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
                                     <input type="hidden" name="qbo_item_type" value="<?php echo nullable_htmlentities($qi['Type']); ?>">
                                     <input type="hidden" name="qbo_sync_token" value="<?php echo nullable_htmlentities($qi['SyncToken']); ?>">
                                     <button type="submit" name="import_qbo_item" class="btn btn-xs btn-outline-success">
-                                        <i class="fas fa-plus me-1"></i>Add to ITFlow
+                                        <i class="fas fa-plus me-1"></i>Add to RivetMSP
                                     </button>
                                 </form>
                             </td>
@@ -2075,7 +2075,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
             <?php endif; ?>
         </div>
         <div class="card-footer py-2 text-muted small">
-            One-way pull: creates a new ITFlow product/service for each QuickBooks item and links it immediately. Existing ITFlow items are never overwritten.
+            One-way pull: creates a new RivetMSP product/service for each QuickBooks item and links it immediately. Existing RivetMSP items are never overwritten.
         </div>
     </div>
     <?php endif; ?>
@@ -2096,7 +2096,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
             <table class="table table-sm table-hover mb-0 align-middle">
                 <thead class="text-muted small border-bottom" style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;">
                     <tr>
-                        <th class="ps-3">ITFlow Product / Service</th>
+                        <th class="ps-3">RivetMSP Product / Service</th>
                         <th>QuickBooks Item</th>
                         <th class="text-end pe-3">Actions</th>
                     </tr>
@@ -2238,7 +2238,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
             </button>
         </div>
         <div class="card-footer py-2 text-muted small">
-            The worker also runs automatically on the ITFlow cron schedule. "Run now" processes due jobs immediately, one at a time, with live progress below.
+            The worker also runs automatically on the RivetMSP cron schedule. "Run now" processes due jobs immediately, one at a time, with live progress below.
         </div>
         <div id="assProgressWrap" class="card-body border-top py-2" style="display:none;">
             <div class="progress mb-2" style="height: .5rem;">
@@ -2253,14 +2253,14 @@ $money = static function ($v, $ccy) use ($currency_format) {
     <div class="card mb-3" style="border-top:3px solid #2ca01c;">
         <div class="card-header py-2 d-flex align-items-center">
             <h3 class="card-title me-auto"><i class="fas fa-fw fa-cloud-download-alt me-2"></i>Import Invoices from QuickBooks</h3>
-            <span class="badge text-bg-secondary"><?php echo count($qbo_unmapped_invoices); ?> not yet in ITFlow</span>
+            <span class="badge text-bg-secondary"><?php echo count($qbo_unmapped_invoices); ?> not yet in RivetMSP</span>
         </div>
         <div class="card-body p-0">
             <?php if ($qbo_invoice_pull_error !== ''): ?>
                 <div class="alert alert-danger m-3 mb-0"><i class="fas fa-exclamation-triangle me-1"></i>Could not read invoices from QuickBooks: <?php echo nullable_htmlentities($qbo_invoice_pull_error); ?></div>
             <?php elseif (empty($qbo_unmapped_invoices)): ?>
                 <div class="text-center text-muted py-4">
-                    <i class="fas fa-check-circle me-1"></i>Every QuickBooks invoice already has a matching ITFlow invoice.
+                    <i class="fas fa-check-circle me-1"></i>Every QuickBooks invoice already has a matching RivetMSP invoice.
                 </div>
             <?php else: ?>
                 <div class="d-flex justify-content-end p-2 border-bottom">
@@ -2301,7 +2301,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
                                     <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                                     <input type="hidden" name="qbo_invoice_id" value="<?php echo nullable_htmlentities($qi['Id']); ?>">
                                     <button type="submit" name="import_qbo_invoice" class="btn btn-xs btn-outline-success">
-                                        <i class="fas fa-plus me-1"></i>Add to ITFlow
+                                        <i class="fas fa-plus me-1"></i>Add to RivetMSP
                                     </button>
                                 </form>
                                 <?php else: ?>
@@ -2316,7 +2316,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
             <?php endif; ?>
         </div>
         <div class="card-footer py-2 text-muted small">
-            One-way pull: creates a new ITFlow invoice for each QuickBooks invoice (its customer must already be linked) and links it immediately - it will never be pushed back to QuickBooks as a duplicate.
+            One-way pull: creates a new RivetMSP invoice for each QuickBooks invoice (its customer must already be linked) and links it immediately - it will never be pushed back to QuickBooks as a duplicate.
         </div>
     </div>
     <?php endif; ?>
@@ -2396,14 +2396,14 @@ $money = static function ($v, $ccy) use ($currency_format) {
     <div class="card mb-3" style="border-top:3px solid #2ca01c;">
         <div class="card-header py-2 d-flex align-items-center">
             <h3 class="card-title me-auto"><i class="fas fa-fw fa-cloud-download-alt me-2"></i>Import Estimates from QuickBooks</h3>
-            <span class="badge text-bg-secondary"><?php echo count($qbo_unmapped_quotes); ?> not yet in ITFlow</span>
+            <span class="badge text-bg-secondary"><?php echo count($qbo_unmapped_quotes); ?> not yet in RivetMSP</span>
         </div>
         <div class="card-body p-0">
             <?php if ($qbo_quote_pull_error !== ''): ?>
                 <div class="alert alert-danger m-3 mb-0"><i class="fas fa-exclamation-triangle me-1"></i>Could not read estimates from QuickBooks: <?php echo nullable_htmlentities($qbo_quote_pull_error); ?></div>
             <?php elseif (empty($qbo_unmapped_quotes)): ?>
                 <div class="text-center text-muted py-4">
-                    <i class="fas fa-check-circle me-1"></i>Every QuickBooks estimate already has a matching ITFlow quote.
+                    <i class="fas fa-check-circle me-1"></i>Every QuickBooks estimate already has a matching RivetMSP quote.
                 </div>
             <?php else: ?>
                 <div class="d-flex justify-content-end p-2 border-bottom">
@@ -2442,7 +2442,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
                                     <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                                     <input type="hidden" name="qbo_quote_id" value="<?php echo nullable_htmlentities($qe['Id']); ?>">
                                     <button type="submit" name="import_qbo_quote" class="btn btn-xs btn-outline-success">
-                                        <i class="fas fa-plus me-1"></i>Add to ITFlow
+                                        <i class="fas fa-plus me-1"></i>Add to RivetMSP
                                     </button>
                                 </form>
                                 <?php else: ?>
@@ -2457,7 +2457,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
             <?php endif; ?>
         </div>
         <div class="card-footer py-2 text-muted small">
-            One-way pull: creates a new ITFlow quote for each QuickBooks estimate (its customer must already be linked) and links it immediately - it will never be pushed back to QuickBooks as a duplicate.
+            One-way pull: creates a new RivetMSP quote for each QuickBooks estimate (its customer must already be linked) and links it immediately - it will never be pushed back to QuickBooks as a duplicate.
         </div>
     </div>
     <?php endif; ?>
@@ -2537,14 +2537,14 @@ $money = static function ($v, $ccy) use ($currency_format) {
     <div class="card mb-3" style="border-top:3px solid #2ca01c;">
         <div class="card-header py-2 d-flex align-items-center">
             <h3 class="card-title me-auto"><i class="fas fa-fw fa-cloud-download-alt me-2"></i>Import Payments from QuickBooks</h3>
-            <span class="badge text-bg-secondary"><?php echo count($qbo_unmapped_payments); ?> not yet in ITFlow</span>
+            <span class="badge text-bg-secondary"><?php echo count($qbo_unmapped_payments); ?> not yet in RivetMSP</span>
         </div>
         <div class="card-body p-0">
             <?php if ($qbo_payment_pull_error !== ''): ?>
                 <div class="alert alert-danger m-3 mb-0"><i class="fas fa-exclamation-triangle me-1"></i>Could not read payments from QuickBooks: <?php echo nullable_htmlentities($qbo_payment_pull_error); ?></div>
             <?php elseif (empty($qbo_unmapped_payments)): ?>
                 <div class="text-center text-muted py-4">
-                    <i class="fas fa-check-circle me-1"></i>Every QuickBooks payment already has a matching ITFlow payment.
+                    <i class="fas fa-check-circle me-1"></i>Every QuickBooks payment already has a matching RivetMSP payment.
                 </div>
             <?php else: ?>
                 <div class="d-flex justify-content-end p-2 border-bottom">
@@ -2590,11 +2590,11 @@ $money = static function ($v, $ccy) use ($currency_format) {
                                     <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                                     <input type="hidden" name="qbo_payment_id" value="<?php echo nullable_htmlentities($qp['Id']); ?>">
                                     <button type="submit" name="import_qbo_payment" class="btn btn-xs btn-outline-success">
-                                        <i class="fas fa-plus me-1"></i>Add to ITFlow
+                                        <i class="fas fa-plus me-1"></i>Add to RivetMSP
                                     </button>
                                 </form>
                                 <?php else: ?>
-                                    <span class="text-muted small" title="Import or sync its invoice first">Invoice not in ITFlow</span>
+                                    <span class="text-muted small" title="Import or sync its invoice first">Invoice not in RivetMSP</span>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -2605,7 +2605,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
             <?php endif; ?>
         </div>
         <div class="card-footer py-2 text-muted small">
-            One-way pull: creates a new ITFlow payment for each QuickBooks payment (its linked invoice must already be in ITFlow) and links it immediately - it will never be pushed back to QuickBooks as a duplicate.
+            One-way pull: creates a new RivetMSP payment for each QuickBooks payment (its linked invoice must already be in RivetMSP) and links it immediately - it will never be pushed back to QuickBooks as a duplicate.
         </div>
     </div>
     <?php endif; ?>

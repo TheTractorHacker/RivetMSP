@@ -129,7 +129,7 @@ if (isset($body['passkey_response'], $body['challenge_token'])) {
         $raw_token  = bin2hex(random_bytes(32));
         $token_hash = hash('sha256', $raw_token);
         $esc_hash   = mysqli_real_escape_string($mysqli, $token_hash);
-        $esc_device = mysqli_real_escape_string($mysqli, 'ITFlow MSP Android (passkey)');
+        $esc_device = mysqli_real_escape_string($mysqli, 'RivetMSP Android (passkey)');
 
         // Recover master key via passkey bootstrap key if available
         $master_key = null;

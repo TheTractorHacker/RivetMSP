@@ -1,5 +1,8 @@
 <?php
 
+require_once __DIR__ . '/includes/branding.php';
+$config_app_name = appDisplayName($config_app_name ?? null);
+
 require_once __DIR__ . '/includes/redis_functions.php';
 require_once __DIR__ . '/includes/firebase.php';
 require_once __DIR__ . '/includes/notification_categories.php';
@@ -141,8 +144,8 @@ function getIP() {
 
     // Abort if something isn't right
     if (!filter_var($ip, FILTER_VALIDATE_IP)) {
-        error_log("ITFlow - Could not validate remote IP address");
-        error_log("ITFlow - IP was [$ip] using method " . CONST_GET_IP_METHOD);
+        error_log("RivetMSP - Could not validate remote IP address");
+        error_log("RivetMSP - IP was [$ip] using method " . CONST_GET_IP_METHOD);
         exit("Potential Security Violation");
     }
 
@@ -1012,7 +1015,7 @@ function report_render_email_html(mysqli $mysqli, $report_key)
         return null;
     }
     $label = $reports[$report_key];
-    $brand = $company_name ?? ($session_company_name ?? 'ITFlow');
+    $brand = $company_name ?? ($session_company_name ?? 'RivetMSP');
     $ccy   = $session_company_currency ?? $company_currency ?? 'USD';
 
     $money = static function ($v) use ($currency_format, $ccy) {
@@ -2938,7 +2941,7 @@ function getOutlookAccessToken($user_id) {
                 user_outlook_refresh_token = NULL,
                 user_outlook_token_expires = NULL
                 WHERE user_id = $user_id");
-            error_log("ITFlow: Outlook token for user $user_id revoked ({$data['error']}). User must reconnect at /agent/user/user_integrations.php");
+            error_log("RivetMSP: Outlook token for user $user_id revoked ({$data['error']}). User must reconnect at /agent/user/user_integrations.php");
 
             // The refresh token is cleared above, so this only fires once per
             // revocation (the next call short-circuits before reaching Microsoft)
@@ -3110,7 +3113,7 @@ function syncScheduleEntryToOutlook($schedule_id) {
         return 'synced';
     }
 
-    error_log("ITFlow: Outlook event sync failed for schedule $schedule_id: " . json_encode($response['error'] ?? 'no response'));
+    error_log("RivetMSP: Outlook event sync failed for schedule $schedule_id: " . json_encode($response['error'] ?? 'no response'));
     return 'failed';
 }
 
@@ -4021,7 +4024,7 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
             $client_uri = "&client_id=$client_id";
         }
         $email_subject = "$config_app_name - New Ticket - $client_name: $subject";
-        $email_body = "Hello, <br><br>This is a notification that a new ticket has been raised in ITFlow. <br>Client: $client_name<br>Priority: Low (email parsed)<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$id$client_uri <br><br>--------------------------------<br><br><b>$subject</b><br>$message";
+        $email_body = "Hello, <br><br>This is a notification that a new ticket has been raised in RivetMSP. <br>Client: $client_name<br>Priority: Low (email parsed)<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$id$client_uri <br><br>--------------------------------<br><br><b>$subject</b><br>$message";
 
         $data[] = [
             'from' => $from_email,

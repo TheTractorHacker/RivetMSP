@@ -24,7 +24,7 @@
              of its own (p-0) and lets the link fill it (w-100). -->
         <div class="navbar-brand p-0 w-100">
             <a class="section-nav-back" href="/agent/<?php echo $config_start_page ?>">
-                <i class="fas fa-arrow-left"></i> Administration
+                <i class="fas fa-arrow-left"></i> <img src="<?= nullable_htmlentities(appCompanyLogoUrl($session_company_logo ?? null, APP_LOGO_MARK_URL)) ?>" style="max-width:90px;height:28px;object-fit:contain;" alt="<?= nullable_htmlentities($session_company_name ?? APP_NAME) ?>"> Administration
             </a>
         </div>
 

@@ -18,7 +18,7 @@ if (empty($_SESSION['mfa_token'])) {
 $token = $_SESSION['mfa_token'];
 
 // Generate QR Code
-$data = "otpauth://totp/ITFlow:$session_email?secret=$token";
+$data = "otpauth://totp/RivetMSP:$session_email?secret=$token";
 
 ?>
 

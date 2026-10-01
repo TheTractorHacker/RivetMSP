@@ -8,6 +8,20 @@ if (file_exists("../config.php")) {
 include "../functions.php"; // Global Functions
 include "../includes/database_version.php";
 
+$setup_company_name = APP_NAME;
+$setup_company_logo = null;
+if (isset($mysqli) && $mysqli instanceof mysqli) {
+    $company_table = mysqli_query($mysqli, "SHOW TABLES LIKE 'companies'");
+    if ($company_table && mysqli_num_rows($company_table)) {
+        $company_identity = mysqli_query($mysqli, "SELECT company_name, company_logo FROM companies WHERE company_id = 1");
+        if ($company_identity && ($identity = mysqli_fetch_assoc($company_identity))) {
+            $setup_company_name = $identity['company_name'] ?: APP_NAME;
+            $setup_company_logo = $identity['company_logo'];
+        }
+    }
+}
+
+
 if (!isset($config_enable_setup)) {
     $config_enable_setup = 1;
 }
@@ -76,7 +90,7 @@ if (isset($_POST['add_database'])) {
     $new_config .= "\$dbpassword = " . var_export($password, true) . ";\n";
     $new_config .= "\$database = " . var_export($database, true) . ";\n";
     $new_config .= "\$mysqli = mysqli_connect(\$dbhost, \$dbusername, \$dbpassword, \$database) or die('Database Connection Failed');\n";
-    $new_config .= "\$config_app_name = 'ITFlow';\n";
+    $new_config .= "\$config_app_name = 'RivetMSP';\n";
     $new_config .= sprintf("\$config_base_url = '%s';\n", addslashes($config_base_url));
     $new_config .= "\$config_https_only = TRUE;\n";
     $new_config .= "\$repo_branch = 'master';\n";
@@ -736,7 +750,8 @@ if (isset($_POST['add_telemetry'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
 
-    <title>ITFlow Setup</title>
+    <title><?= nullable_htmlentities(APP_NAME) ?> Setup</title>
+    <link rel="icon" href="<?= nullable_htmlentities(appCompanyLogoUrl($setup_company_logo, APP_FAVICON_URL)) ?>">
 
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="/plugins/fontawesome-free/css/all.min.css">
@@ -1268,7 +1283,7 @@ if (isset($_POST['add_telemetry'])) {
                             </div>
                             <div class="card-body">
                                 <form method="post" enctype="multipart/form-data" autocomplete="off">
-                                    <label>Restore ITFlow Backup (.zip)</label>
+                                    <label>Restore RivetMSP Backup (.zip)</label>
                                     <input type="file" name="backup_zip" accept=".zip" required>
                                     <p class="text-muted mt-2 mb-0"><small>Large restores may take several minutes. Do not close this page.</small></p>
                                     <hr>
@@ -1559,7 +1574,7 @@ if (isset($_POST['add_telemetry'])) {
                                 <ul>
                                     <li><a href="https://docs.itflow.org/backups">Setup backups</a></li>
                                     <li><a href="https://docs.itflow.org/cron">Setup cron</a> *If Installing via script cron jobs will be automatically setup for you.</li>
-                                    <li>Star ITFlow on <a href="https://github.com/itflow-org/itflow">Github</a> :)</li>
+                                    <li>Star the upstream ITFlow project on <a href="https://github.com/itflow-org/itflow">Github</a> :)</li>
                                 </ul>
 
                                 <hr>
@@ -1577,10 +1592,13 @@ if (isset($_POST['add_telemetry'])) {
 
                     <div class="card card-dark">
                         <div class="card-header">
-                            <h3 class="card-title"><i class="fas fa-fw fa-cube mr-2"></i>ITFlow Setup</h3>
+                            <h3 class="card-title"><i class="fas fa-fw fa-cube mr-2"></i>RivetMSP Setup</h3>
                         </div>
                         <div class="card-body">
-                            <h2><b>Thank you</b> for choosing to try ITFlow!</h2>
+                            <div class="mb-3" style="background:#fff;border-radius:12px;padding:8px;display:inline-block;">
+                                <img src="<?= nullable_htmlentities(appCompanyLogoUrl($setup_company_logo)) ?>" alt="<?= nullable_htmlentities($setup_company_name) ?>" width="320" style="max-width:100%;height:auto;">
+                            </div>
+                            <h2><b>Thank you</b> for choosing to try <?= nullable_htmlentities(APP_NAME) ?>!</h2>
                             <p>This is the start of your journey towards amazing client management </p>
                             <p>A few tips:</p>
                             <ul>
@@ -1590,7 +1608,7 @@ if (isset($_POST['add_telemetry'])) {
                             </ul>
                             <br><p>A database must be created before proceeding - click on the button below to get started.</p>
                             <br><hr>
-                            <p class="text-muted">ITFlow is <b>free software</b>: you can redistribute and/or modify it under the terms of the <a href="https://www.gnu.org/licenses/gpl-3.0.en.html" target="_blank">GNU General Public License</a>. <br> It is distributed in the hope that it will be useful, but <b>without any warranty</b>; without even the implied warranty of merchantability or fitness for a particular purpose.</p>
+                            <p class="text-muted">RivetMSP is <b>free software</b>: you can redistribute and/or modify it under the terms of the <a href="https://www.gnu.org/licenses/gpl-3.0.en.html" target="_blank">GNU General Public License</a>. <br> It is distributed in the hope that it will be useful, but <b>without any warranty</b>; without even the implied warranty of merchantability or fitness for a particular purpose.</p>
                             <?php
                             // Check that there is access to write to the current directory
                             if (!is_writable('.')) {

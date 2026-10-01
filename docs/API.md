@@ -1,10 +1,10 @@
-# ITFlow API v1 Reference
+# RivetMSP API v1 Reference
 
 ## What this is
 
-ITFlow ships a REST API used by the ITFlow MSP mobile app, ITPanel Pro, RMM automation scripts, and any custom tooling you want to build against your ITFlow instance. It's the same API surface the built-in mobile app runs on — nothing about it is a stripped-down or read-only subset held back from external integrations.
+RivetMSP ships a REST API used by the RivetMSP mobile app, ITPanel Pro, RMM automation scripts, and any custom tooling you want to build against your RivetMSP instance. It's the same API surface the built-in mobile app runs on — nothing about it is a stripped-down or read-only subset held back from external integrations.
 
-**Base path:** all endpoints below are relative to `/api/v1` on your ITFlow install, e.g. `https://your-instance.example.com/api/v1/tickets`.
+**Base path:** all endpoints below are relative to `/api/v1` on your RivetMSP install, e.g. `https://your-instance.example.com/api/v1/tickets`.
 
 **Versioning:** the API is currently unversioned beyond the `/v1` path segment (spec version `1.0.0` in `info.version`). There is no `v2` today; breaking changes would arrive under a new path prefix rather than silently changing `/v1` behavior.
 
@@ -443,3 +443,6 @@ Combined view of RMM and backup alerts, with a shared acknowledge/resolve action
 - **RMM scripts / server-to-server jobs with no specific user:** use a legacy `X-Api-Key`. Scope it to a single client if the integration only ever needs one client's data, and set its Permission to `read` unless the integration genuinely needs to create/update records — a leaked read-only key is a much smaller incident.
 - **Public-facing widgets (e.g. a "customer satisfaction" badge on a marketing site):** `GET /csat` needs no credential at all and is safe to call directly from client-side JavaScript.
 - **Polling vs. streaming:** ticket chat and notifications both support either a plain polling `GET` (with `since_id` on chat for incremental fetches) or an SSE stream (`?stream=1` on chat, `/notifications/stream` for notifications) — pick streaming for a live UI, polling for anything simpler or running somewhere SSE is awkward (e.g. some serverless environments).
+## Public company branding
+
+`GET /api/v1/branding` returns `{ "name": "Example MSP", "logo_path": "/uploads/settings/example.png" }` without authentication. These are the same public identity fields shown on the login screen. `logo_path` is null when no company logo is configured. Uploaded company artwork takes precedence over RivetMSP artwork; resolve the path against the selected server origin. Clients should cache branding per server for offline use and refresh it on resume. No secrets or broader company settings are exposed. The endpoint accepts GET only and is rate limited to 60 requests per minute per IP.

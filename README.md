@@ -8,7 +8,8 @@
 
 <div align="center">
 
-  <h3 align="center">ITFlow — MSP Edition</h3>
+  <img src="img/branding/rivetmsp-logo.png" alt="RivetMSP" width="480">
+  <h3 align="center">RivetMSP</h3>
 
   <p align="center">
     A fork of <a href="https://github.com/itflow-org/itflow">ITFlow</a> with extended MSP workflow features built by <a href="https://foleyit.com">Foley IT</a>.
@@ -39,7 +40,7 @@
 <!-- ABOUT -->
 ## About
 
-**ITFlow MSP Edition** is a hardened, feature-extended build of ITFlow — the free and open-source IT documentation, ticketing, and accounting platform for managed service providers.
+**RivetMSP** is a hardened, feature-extended build of ITFlow — the free and open-source IT documentation, ticketing, and accounting platform for managed service providers.
 
 This fork adds real-world MSP dispatch and scheduling workflows that go beyond the upstream project, while staying in sync with upstream security patches and improvements.
 
@@ -63,7 +64,7 @@ Built with Kotlin + Jetpack Compose + Material 3. Features include:
 - Global search across tickets, clients, and assets
 - Push notifications for new tickets and assignments
 
-> Requires your ITFlow MSP Edition server running **v2.4.12+** with the REST API enabled.
+> Requires your RivetMSP server running **v2.4.12+** with the REST API enabled.
 
 ---
 
@@ -96,7 +97,7 @@ Built with Kotlin + Jetpack Compose + Material 3. Features include:
 ### Calendar & Scheduling
 - **Outlook Calendar push sync** — each technician connects their Microsoft account once; scheduled tickets automatically create, update, and cancel events in their personal Outlook calendar via Microsoft Graph API
 - **iCal subscription feed** — per-user webcal:// URL for subscribing scheduled tickets into Outlook Classic, Apple Calendar, or Google Calendar
-- **Per-tech calendar colors** — each technician picks a color shown on the ITFlow dispatch calendar
+- **Per-tech calendar colors** — each technician picks a color shown on the RivetMSP dispatch calendar
 
 ### Contracts & SLA
 - **SLA tracking on contracts** — define response/resolution hours per priority tier

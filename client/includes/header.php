@@ -89,6 +89,8 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
     <!-- Favicon: If Fav Icon exists, else use the default one -->
     <?php if(file_exists($_SERVER['DOCUMENT_ROOT'] . '/uploads/favicon.ico')) { ?>
         <link rel="icon" href="/uploads/favicon.ico">
+    <?php } else { ?>
+        <link rel="icon" href="<?= nullable_htmlentities(appCompanyLogoUrl($session_company_logo ?? null, APP_FAVICON_URL)) ?>">
     <?php } ?>
 
     <!-- Font Awesome -->
@@ -165,6 +167,8 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
         <a class="navbar-brand d-flex align-items-center" href="index.php">
             <?php if ($session_company_logo) { ?>
                 <img height="28" class="me-2" src="<?php echo "/uploads/settings/$session_company_logo"; ?>" alt="">
+            <?php } else { ?>
+                <img src="<?= nullable_htmlentities(APP_LOGO_MARK_URL) ?>" width="28" height="28" class="me-2" alt="<?= nullable_htmlentities(APP_NAME) ?>">
             <?php } ?>
             <?php echo nullable_htmlentities($session_company_name); ?>
         </a>

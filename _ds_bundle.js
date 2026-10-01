@@ -1852,7 +1852,7 @@ function Login({
       fontSize: 13,
       opacity: .65
     }
-  }, "ITFlow \xB7 MSP Edition")), /*#__PURE__*/React.createElement("div", {
+  }, "RivetMSP")), /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--color-surface)',
       borderRadius: 'var(--card-radius)',

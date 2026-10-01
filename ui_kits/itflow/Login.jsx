@@ -15,7 +15,7 @@ function Login({ onLogin }) {
             <i className="fas fa-bolt" style={{ fontSize: 26, color: '#fff' }}></i>
           </span>
           <div style={{ fontSize: 26, fontWeight: 700, marginTop: 12 }}>{D.company}</div>
-          <div style={{ fontSize: 13, opacity: .65 }}>ITFlow · MSP Edition</div>
+          <div style={{ fontSize: 13, opacity: .65 }}>RivetMSP</div>
         </div>
         <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--card-radius)', boxShadow: 'var(--shadow-hover)', padding: 26 }}>
           <h2 style={{ margin: '0 0 4px', fontSize: 20, color: 'var(--color-text)' }}>Sign in</h2>

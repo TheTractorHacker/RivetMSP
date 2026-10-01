@@ -15,7 +15,7 @@ require_once "includes/inc_all_admin.php";
 
                 <div class="form-group">
                     <label>Telemetry</label>
-                    <p><i>If you can't measure it, you can't improve it. Please consider turning on telemetry data to provide valuable insights on how you're using ITFlow - so we can improve it for everyone. </i></p>
+                    <p><i>Optional telemetry shares usage information from RivetMSP with the upstream ITFlow project. </i></p>
                     <div class="input-group">
                         <div class="input-group-prepend">
                             <span class="input-group-text"><i class="fa fa-fw fa-broadcast-tower"></i></span>
@@ -26,7 +26,7 @@ require_once "includes/inc_all_admin.php";
                             <option <?php if ($config_telemetry == "2") { echo "selected"; } ?> value = "2">Detailed</option>
                         </select>
                     </div>
-                    <small class="form-text">We respect your privacy. <a href="https://docs.itflow.org/telemetry" target="_blank">Click here <i class="fas fa-external-link-alt"></i></a> for additional details regarding the information we gather. </small>
+                    <small class="form-text">Telemetry is handled by the upstream project. <a href="https://docs.itflow.org/telemetry" target="_blank">Click here <i class="fas fa-external-link-alt"></i></a> for additional details regarding the information it gathers. </small>
                 </div>
 
                 <hr>

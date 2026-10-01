@@ -137,6 +137,8 @@ function itflow_nav_icon_class($icon, $fallback = 'fa-link')
     <!-- Favicon -->
     <?php if(file_exists($_SERVER['DOCUMENT_ROOT'] . '/uploads/favicon.ico')) { ?>
         <link rel="icon" type="image/x-icon" href="/uploads/favicon.ico">
+    <?php } else { ?>
+        <link rel="icon" href="<?= nullable_htmlentities(appCompanyLogoUrl($session_company_logo ?? null, APP_FAVICON_URL)) ?>">
     <?php } ?>
 
     <!-- Font Awesome -->
