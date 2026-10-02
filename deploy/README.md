@@ -130,6 +130,12 @@ detects that and skips reinstalling them. It provisions a brand-new app director
 side by side with the first. The shared `ufw`/`fail2ban` state and the shared nginx rate-limit zone
 (`/etc/nginx/conf.d/itflow-rate-limit.conf`) are reused, not duplicated.
 
+When multiple sites share one IP, nginx sends requests addressed to the IP itself to the
+default vhost. Pass `--default-vhost` when installing or re-rendering the intended
+instance (usually production), and omit it for beta or other sites. Only one vhost
+per nginx port can be the default. This also keeps integrations using a private
+server IP from silently creating tickets in another instance.
+
 ### Worked example 3 — a new box from an existing backup (disaster recovery)
 
 ```bash

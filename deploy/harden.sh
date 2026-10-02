@@ -114,6 +114,7 @@ PHP_SOCK_ARG=""
 SSL_CERT_PATH=""
 SSL_CERT_KEY_PATH=""
 PROXY_MODE=false
+DEFAULT_VHOST=false
 EXTRA_PORTS=()
 SKIP_PHP=false
 SKIP_MARIADB=false
@@ -138,6 +139,8 @@ Usage: harden.sh [options]
   --proxy-mode                 Render the vhost for the reverse-proxy-backend
                                pattern (adds :8443, strips HSTS) instead of
                                direct-TLS mode.
+  --default-vhost              Use this instance for requests sent to the
+                               server's IP address (one vhost per nginx port).
   --allow-port PORT[/PROTO]     Extra ufw rule to add (repeatable).
   --skip-php                   Don't touch php-fpm hardening.
   --skip-mariadb                 Don't touch MariaDB hardening.
@@ -159,6 +162,7 @@ while [[ $# -gt 0 ]]; do
         --ssl-cert) SSL_CERT_PATH="${2:?--ssl-cert requires a value}"; shift 2 ;;
         --ssl-cert-key) SSL_CERT_KEY_PATH="${2:?--ssl-cert-key requires a value}"; shift 2 ;;
         --proxy-mode) PROXY_MODE=true; shift ;;
+        --default-vhost) DEFAULT_VHOST=true; shift ;;
         --allow-port) EXTRA_PORTS+=("${2:?--allow-port requires a value}"); shift 2 ;;
         --skip-php) SKIP_PHP=true; shift ;;
         --skip-mariadb) SKIP_MARIADB=true; shift ;;
@@ -584,10 +588,16 @@ EOF
         VHOST_TMP="$(mktemp)"
         register_tmpfile "$VHOST_TMP"
 
+        DEFAULT_SERVER=""
+        if $DEFAULT_VHOST; then
+            DEFAULT_SERVER="default_server"
+        fi
+
         # shellcheck disable=SC2016 # single-quoted on purpose: this is envsubst's own restrict-list argument, not meant to expand here
         DOMAIN="$DOMAIN" APP_ROOT="$APP_ROOT" PHP_SOCK="$PHP_SOCK_FOR_VHOST" \
+            DEFAULT_SERVER="$DEFAULT_SERVER" \
             SSL_CERT_PATH="$SSL_CERT_PATH" SSL_CERT_KEY_PATH="$SSL_CERT_KEY_PATH" \
-            envsubst '${DOMAIN} ${APP_ROOT} ${PHP_SOCK} ${SSL_CERT_PATH} ${SSL_CERT_KEY_PATH}' \
+            envsubst '${DOMAIN} ${APP_ROOT} ${PHP_SOCK} ${SSL_CERT_PATH} ${SSL_CERT_KEY_PATH} ${DEFAULT_SERVER}' \
             < "${TEMPLATES_DIR}/nginx-vhost.conf.template" > "$VHOST_TMP"
 
         grep -q '__PROXY_MODE_BLOCK__' "$VHOST_TMP" \

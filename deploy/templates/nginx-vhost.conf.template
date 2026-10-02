@@ -15,13 +15,14 @@
 #                      this template adds that prefix itself)
 #   SSL_CERT_PATH      e.g. /etc/ssl/certs/itflow.example.com.crt (or a certbot fullchain.pem path)
 #   SSL_CERT_KEY_PATH  e.g. /etc/ssl/private/itflow.example.com.key (or a certbot privkey.pem path)
+#   DEFAULT_SERVER     "default_server" for the intended IP-address fallback vhost, empty otherwise
 #
 # IMPORTANT envsubst gotcha: this file has nginx's own $variables too
 # ($request_uri, $server_name). Do NOT run plain `envsubst < template`,
 # which substitutes every $NAME that happens to match an exported shell
 # variable and could mangle an nginx variable by accident. Always pass an
 # explicit restrict-list of only the placeholders above:
-#   envsubst '${DOMAIN} ${APP_ROOT} ${PHP_SOCK} ${SSL_CERT_PATH} ${SSL_CERT_KEY_PATH}' \
+#   envsubst '${DOMAIN} ${APP_ROOT} ${PHP_SOCK} ${SSL_CERT_PATH} ${SSL_CERT_KEY_PATH} ${DEFAULT_SERVER}' \
 #       < nginx-vhost.conf.template > /etc/nginx/sites-available/${DOMAIN}.conf
 #
 # PROXY MODE vs DIRECT-TLS MODE — same convention deploy/harden.sh already
@@ -52,15 +53,15 @@
 #   must too.
 
 server {
-    listen 80;
-    listen [::]:80;
+    listen 80 ${DEFAULT_SERVER};
+    listen [::]:80 ${DEFAULT_SERVER};
     server_name ${DOMAIN};
     return 301 https://$server_name$request_uri;
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl http2 ${DEFAULT_SERVER};
+    listen [::]:443 ssl http2 ${DEFAULT_SERVER};
     # __PROXY_MODE_BLOCK__
     # BEGIN PROXY-MODE ONLY
     listen 8443 ssl http2;                 # reverse proxy chain connects here

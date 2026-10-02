@@ -53,6 +53,7 @@ DOMAIN=""
 APP_DIR=""
 DB_NAME=""
 PROXY_MODE=0
+DEFAULT_VHOST=0
 SKIP_FIREWALL=0
 SKIP_FAIL2BAN=0
 SKIP_TLS=0
@@ -108,6 +109,8 @@ Deployment options:
                             backend cert instead, and configures the vhost so
                             nginx's own redirects stay relative (no internal
                             hostname/port ever leaks to an end user).
+  --default-vhost           Use this instance for requests sent to the server's
+                            IP address. Set on only one vhost per nginx port.
   --skip-tls                 Skip certbot AND proxy-mode's redirect tweaks —
                             serve a self-signed cert directly and leave real
                             TLS for you to configure later (e.g. no public
@@ -179,6 +182,7 @@ parse_args() {
             --app-dir=*)              APP_DIR="${arg#*=}" ;;
             --db-name=*)               DB_NAME="${arg#*=}" ;;
             --proxy-mode)               PROXY_MODE=1 ;;
+            --default-vhost)            DEFAULT_VHOST=1 ;;
             --skip-tls)                 SKIP_TLS=1 ;;
             --skip-firewall)             SKIP_FIREWALL=1 ;;
             --skip-fail2ban)              SKIP_FAIL2BAN=1 ;;
@@ -478,10 +482,16 @@ EOF
     vhost_tmp="$(mktemp)"
     register_tmpfile "${vhost_tmp}"
 
+    local default_server=""
+    if (( DEFAULT_VHOST )); then
+        default_server="default_server"
+    fi
+
     # shellcheck disable=SC2016
     DOMAIN="${DOMAIN}" APP_ROOT="${APP_DIR}" PHP_SOCK="${PHP_SOCK}" \
+        DEFAULT_SERVER="${default_server}" \
         SSL_CERT_PATH="${SSL_CERT_PATH}" SSL_CERT_KEY_PATH="${SSL_CERT_KEY_PATH}" \
-        envsubst '${DOMAIN} ${APP_ROOT} ${PHP_SOCK} ${SSL_CERT_PATH} ${SSL_CERT_KEY_PATH}' \
+        envsubst '${DOMAIN} ${APP_ROOT} ${PHP_SOCK} ${SSL_CERT_PATH} ${SSL_CERT_KEY_PATH} ${DEFAULT_SERVER}' \
         < "${TEMPLATES_DIR}/nginx-vhost.conf.template" > "${vhost_tmp}"
 
     grep -q '__PROXY_MODE_BLOCK__' "${vhost_tmp}" \
