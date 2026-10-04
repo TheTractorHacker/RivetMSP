@@ -9,16 +9,17 @@ $uid = $api_user_id;
 api_require_module_permission($mysqli, $uid, 'module_support', 2);
 
 // MSP edition: every task belongs to a ticket; its client is the ticket's client.
+// A task with no ticket has no owner to scope against, so it is not reachable here.
 $row = mysqli_fetch_assoc(mysqli_query($mysqli,
     "SELECT tasks.task_id, tasks.task_completed_at, t.ticket_client_id AS owner_client_id
      FROM tasks
-     LEFT JOIN tickets t ON t.ticket_id = tasks.task_ticket_id
+     JOIN tickets t ON t.ticket_id = tasks.task_ticket_id
      WHERE tasks.task_id = $id LIMIT 1"
 ));
 if (!$row) api_error(404, 'Task not found');
 
-$owner_client_id = $row['owner_client_id'] !== null ? intval($row['owner_client_id']) : 0;
-if ($owner_client_id !== 0 && !api_client_scope_ok($owner_client_id)) api_error(403, 'Access denied');
+// Always checked, including client 0: a scoped user/key has no permission for it.
+if (!api_client_scope_ok(intval($row['owner_client_id']))) api_error(403, 'Access denied');
 
 if ($row['task_completed_at'] === null) {
     mysqli_query($mysqli, "UPDATE tasks SET task_completed_at = NOW(), task_completed_by = $uid WHERE task_id = $id");

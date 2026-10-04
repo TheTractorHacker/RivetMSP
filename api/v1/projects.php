@@ -12,7 +12,16 @@ $uid = $api_user_id;
 api_require_module_permission($mysqli, $uid, 'module_support');
 
 // Client-scope restriction, with the project_client_id = 0 (no client) carve-out.
-$project_client_scope_clause = '(' . api_client_scope_sql('p.project_client_id') . ' OR p.project_client_id = 0)';
+// The carve-out never applies to a key locked to one client ($api_key_client_id).
+global $api_key_client_id;
+$project_client_scope_clause = empty($api_key_client_id)
+    ? '(' . api_client_scope_sql('p.project_client_id') . ' OR p.project_client_id = 0)'
+    : api_client_scope_sql('p.project_client_id');
+// Tickets (and their tasks) inside a project are scoped by their own client, so an
+// unrestricted-looking project (client 0) cannot expose tickets of clients the caller lacks.
+$ticket_scope_tt = api_client_scope_sql('tt.ticket_client_id');
+$ticket_scope_t  = api_client_scope_sql('t.ticket_client_id');
+$ticket_scope_plain = api_client_scope_sql('tickets.ticket_client_id');
 
 if ($id !== null) {
     $project_access_check = mysqli_fetch_assoc(mysqli_query($mysqli,
@@ -51,12 +60,12 @@ if ($id === null) {
         "SELECT p.project_id, p.project_prefix, p.project_number, p.project_name,
                 p.project_due, p.project_created_at, p.project_completed_at, p.project_archived_at,
                 c.client_name, u.user_name AS manager_name,
-                (SELECT COUNT(*) FROM tickets WHERE ticket_project_id = p.project_id) AS ticket_count,
-                (SELECT COUNT(*) FROM tickets WHERE ticket_project_id = p.project_id AND ticket_closed_at IS NOT NULL) AS ticket_closed_count,
+                (SELECT COUNT(*) FROM tickets WHERE ticket_project_id = p.project_id AND $ticket_scope_plain) AS ticket_count,
+                (SELECT COUNT(*) FROM tickets WHERE ticket_project_id = p.project_id AND ticket_closed_at IS NOT NULL AND $ticket_scope_plain) AS ticket_closed_count,
                 (SELECT COUNT(*) FROM tasks JOIN tickets tt ON tt.ticket_id = tasks.task_ticket_id
-                    WHERE tt.ticket_project_id = p.project_id) AS task_count,
+                    WHERE tt.ticket_project_id = p.project_id AND $ticket_scope_tt) AS task_count,
                 (SELECT COUNT(*) FROM tasks JOIN tickets tt ON tt.ticket_id = tasks.task_ticket_id
-                    WHERE tt.ticket_project_id = p.project_id AND tasks.task_completed_at IS NOT NULL) AS task_completed_count
+                    WHERE tt.ticket_project_id = p.project_id AND tasks.task_completed_at IS NOT NULL AND $ticket_scope_tt) AS task_completed_count
          FROM projects p
          LEFT JOIN clients c ON c.client_id = p.project_client_id
          LEFT JOIN users u ON u.user_id = p.project_manager
@@ -102,7 +111,7 @@ $sql = mysqli_query($mysqli,
      FROM tasks
      JOIN tickets tt ON tt.ticket_id = tasks.task_ticket_id
      LEFT JOIN users u ON u.user_id = tt.ticket_assigned_to
-     WHERE tt.ticket_project_id = $id
+     WHERE tt.ticket_project_id = $id AND $ticket_scope_tt
      ORDER BY tasks.task_order ASC, tasks.task_created_at ASC"
 );
 while ($t = mysqli_fetch_assoc($sql)) {
@@ -128,7 +137,7 @@ $sql = mysqli_query($mysqli,
      FROM tickets t
      LEFT JOIN ticket_statuses ts ON t.ticket_status = ts.ticket_status_id
      LEFT JOIN users u ON t.ticket_assigned_to = u.user_id
-     WHERE t.ticket_project_id = $id
+     WHERE t.ticket_project_id = $id AND $ticket_scope_t
      ORDER BY t.ticket_created_at DESC"
 );
 while ($t = mysqli_fetch_assoc($sql)) {
