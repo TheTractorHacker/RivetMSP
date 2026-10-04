@@ -109,6 +109,17 @@ if ($resource === 'openapi' || $resource === 'docs') {
     exit;
 }
 
+// Public endpoint: company branding (name + logo path). Same data the public web
+// login page already shows; read-only, per-IP rate limited, fails open without Redis.
+if ($resource === 'branding') {
+    if (!api_rate_limit('branding_ip:' . getIP(), 60, 60)) {
+        header('Retry-After: 60');
+        api_error(429, 'Rate limit exceeded');
+    }
+    require __DIR__ . '/branding.php';
+    exit;
+}
+
 // All other endpoints require Bearer token
 $api_token_row  = null;
 $api_user_id    = null;
@@ -300,6 +311,10 @@ switch ($resource) {
     case 'search':      require __DIR__ . '/search.php';   break;
     case 'reports':     require __DIR__ . '/reports.php';  break;
     case 'kb':          require __DIR__ . '/kb.php';        break;
+    case 'projects':    require __DIR__ . '/projects.php';  break;
+    case 'contracts':   require __DIR__ . '/contracts.php'; break;
+    case 'tasks':       require __DIR__ . '/tasks.php';     break;
+    case 'milestones':  api_error(404, 'Milestones are not supported in this edition'); break;
     case 'ticket-views':
     case 'ticket_views':
         require __DIR__ . '/ticket_views.php';
