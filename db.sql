@@ -791,6 +791,19 @@ CREATE TABLE `compliance_snapshots` (
   KEY `idx_compliance_snapshots_taken` (`taken_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `compliance_shared_report`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compliance_shared_report` (
+  `shared_id` tinyint(4) NOT NULL,
+  `snapshot_id` int(11) NOT NULL,
+  `note` text DEFAULT NULL,
+  `published_by` int(11) DEFAULT NULL,
+  `published_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`shared_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `contact_assets`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -4095,6 +4108,7 @@ INSERT INTO `rivet_core_migrations` VALUES ('0005_webhook_deliveries','2026-10-0
 INSERT INTO `rivet_core_migrations` VALUES ('0006_automation_rules','2026-10-05 02:46:32');
 INSERT INTO `rivet_core_migrations` VALUES ('0007_workflow_tables','2026-10-05 02:46:32');
 INSERT INTO `rivet_core_migrations` VALUES ('0008_compliance','2026-10-05 02:46:32');
+INSERT INTO `rivet_core_migrations` VALUES ('0009_compliance_shared_report','2026-10-05 02:46:32');
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

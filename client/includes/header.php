@@ -184,6 +184,20 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                 <li class="nav-item">
                     <a class="nav-link <?php if (basename($_SERVER['PHP_SELF']) == "tickets.php" || basename($_SERVER['PHP_SELF']) == "ticket_add.php" || basename($_SERVER['PHP_SELF']) == "ticket.php") {echo "active";} ?>" href="/client/tickets.php">Tickets</a>
                 </li>
+                <?php
+                // Shown only while an administrator has published a compliance report (cheap single-row probe; any error hides the link).
+                $portal_compliance_shared = false;
+                try {
+                    $portal_compliance_probe = @mysqli_query($mysqli, "SELECT 1 FROM compliance_shared_report WHERE shared_id = 1 LIMIT 1");
+                    $portal_compliance_shared = (bool) ($portal_compliance_probe && mysqli_num_rows($portal_compliance_probe) > 0);
+                } catch (\Throwable $e) {
+                }
+                if ($portal_compliance_shared) { ?>
+                    <li class="nav-item">
+                        <a class="nav-link <?php if (basename($_SERVER['PHP_SELF']) == "compliance.php") {echo "active";} ?>" href="/client/compliance.php">Security</a>
+                    </li>
+                <?php } ?>
+
                 <?php if ($config_module_enable_kb == 1) { ?>
                     <li class="nav-item">
                         <a class="nav-link <?php if (basename($_SERVER['PHP_SELF']) == "kb_articles.php" || basename($_SERVER['PHP_SELF']) == "kb_article.php") {echo "active";} ?>" href="/client/kb_articles.php">Knowledge Base</a>
