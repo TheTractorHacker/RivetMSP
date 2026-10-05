@@ -4,6 +4,8 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.3] RivetMSP — Core parity: event bus, Redis, Problems & Changes, Workflows, Cron Manager, KB import, Audit trail
+
 ### Problems, Changes and client Onboarding/Offboarding workflows (rivet-core ITSM + Workflow modules)
 
 - **Problems and Changes** (Service Desk): root-cause problems and lightweight change records with their status flows, linking tickets to problems (from the problem page or a new Problem card on the ticket page) and a change to the problem it fixes. Searchable from global search. Audit events: `problem.*`, `change.*`.
