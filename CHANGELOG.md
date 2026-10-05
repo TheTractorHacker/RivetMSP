@@ -7,7 +7,7 @@ This file documents all notable changes made to ITFlow.
 - **Request ids are server-assigned.** The audit trail used to store whatever `X-Request-ID` header a client sent; it now always records a server-generated id.
 - **Log retention.** The nightly-ish `cron/cron.php` now also prunes RivetCore's tables (audit trail, webhook delivery log, finished integration jobs) at the existing "log retention" horizon, and a retention of 0 now means **keep everything**: before this, 0 deleted every log older than today.
 - **A fresh install is now complete.** `db.sql` was a very old snapshot and was missing 39 tables that migrations create, plus their default SLA policy and saved views, so a fresh install lacked mailboxes, push endpoints and more. It is regenerated from a clean install plus every migration, and a fresh import is identical to an upgraded install. Migration 2.6.57 also adds `ticket_schedules` and `ticket_techs` (appointments and Outlook sync used them, but no migration ever created them; they only existed on servers where they had been added by hand, so this is a no-op there).
-- Upgraded to rivet-core 0.7.0.
+- Upgraded to rivet-core 0.7.1, which fixes a crash on a job's fifth failed attempt.
 
 ## Unreleased — RivetCore foundation (off by default)
 
