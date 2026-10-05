@@ -2104,6 +2104,7 @@ return array(
     'RivetCore\\Audit\\Migration\\Migration0001AuditEvents' => $vendorDir . '/rivet/rivet-core/src/Audit/Migration/Migration0001AuditEvents.php',
     'RivetCore\\Automation\\AutomationRuleEvaluator' => $vendorDir . '/rivet/rivet-core/src/Automation/AutomationRuleEvaluator.php',
     'RivetCore\\Automation\\Migration\\Migration0006AutomationRules' => $vendorDir . '/rivet/rivet-core/src/Automation/Migration/Migration0006AutomationRules.php',
+    'RivetCore\\Compliance\\RetentionPolicy' => $vendorDir . '/rivet/rivet-core/src/Compliance/RetentionPolicy.php',
     'RivetCore\\Contracts\\ClockInterface' => $vendorDir . '/rivet/rivet-core/src/Contracts/ClockInterface.php',
     'RivetCore\\Contracts\\RequestContextInterface' => $vendorDir . '/rivet/rivet-core/src/Contracts/RequestContextInterface.php',
     'RivetCore\\Contracts\\SettingsInterface' => $vendorDir . '/rivet/rivet-core/src/Contracts/SettingsInterface.php',

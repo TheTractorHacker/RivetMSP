@@ -39,6 +39,17 @@ if (isset($_POST['edit_security_settings'])) {
     $config_login_remember_me_expire = intval($_POST['config_login_remember_me_expire']);
     $config_login_session_lifetime = max(30, min(43200, intval($_POST['config_login_session_lifetime'] ?? 480)));
     $config_log_retention = intval($_POST['config_log_retention']);
+    // A compliance preset (Settings > Compliance) is a minimum: a shorter retention is raised to it. 0 keeps everything.
+    $security_retention_raised = false;
+    $compliance_row = @mysqli_fetch_assoc(@mysqli_query($mysqli, "SELECT config_compliance_profile FROM settings WHERE company_id = 1"));
+    if ($config_log_retention < 0) {
+        $config_log_retention = 0;
+    }
+    if ($compliance_row && class_exists(\RivetCore\Compliance\RetentionPolicy::class)
+        && \RivetCore\Compliance\RetentionPolicy::isBelowFloor((string) $compliance_row['config_compliance_profile'], $config_log_retention)) {
+        $config_log_retention = \RivetCore\Compliance\RetentionPolicy::floorDays((string) $compliance_row['config_compliance_profile']);
+        $security_retention_raised = true;
+    }
 
     // Disallow turning on login key without a secret
     if (empty($config_login_key_secret)) {
@@ -49,7 +60,7 @@ if (isset($_POST['edit_security_settings'])) {
 
     logAction("Settings", "Edit", "$session_name edited security settings");
 
-    flash_alert("Security settings updated");
+    flash_alert($security_retention_raised ? "Security settings updated. Log retention was raised to " . $config_log_retention . " days, the minimum for your compliance preset." : "Security settings updated", $security_retention_raised ? "warning" : "success");
 
     redirect();
 

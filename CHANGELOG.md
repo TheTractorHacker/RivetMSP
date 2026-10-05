@@ -2,6 +2,13 @@
 
 This file documents all notable changes made to ITFlow.
 
+## Unreleased — Compliance settings
+
+- **Settings > Compliance.** Pick a retention preset (ISO/IEC 27001, SOC 2, PCI DSS or HIPAA) and set how long the audit trail and the activity logs are kept. A preset is a **minimum**: records are never deleted younger than it (365 days, or 6 years for HIPAA), even if a number is set lower, and the hourly cleanup enforces it, not just the form. 0 keeps records forever and is always allowed. A preset helps meet a retention requirement; it does not make an organization compliant on its own.
+- **Audit recording switch.** The page also holds the switch for the audit trail; any preset keeps it on. Saving the page is recorded in the audit trail with the before and after values, including the change that turns auditing off.
+- The audit trail has its own retention, separate from the activity logs, webhook delivery log and finished background jobs (default 365 days, which keeps more than before). Security > Log retention honours a preset's minimum too.
+- Database migration 2.6.58 adds the two settings; a fresh install gets them from `db.sql`. Upgraded to rivet-core 0.8.0.
+
 ## Unreleased — security follow-ups, log retention, complete fresh installs
 
 - **Request ids are server-assigned.** The audit trail used to store whatever `X-Request-ID` header a client sent; it now always records a server-generated id.

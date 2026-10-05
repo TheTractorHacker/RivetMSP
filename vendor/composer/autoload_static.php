@@ -2220,6 +2220,7 @@ class ComposerStaticInit690e04a27fa241bad9da145ee44cf2eb
         'RivetCore\\Audit\\Migration\\Migration0001AuditEvents' => __DIR__ . '/..' . '/rivet/rivet-core/src/Audit/Migration/Migration0001AuditEvents.php',
         'RivetCore\\Automation\\AutomationRuleEvaluator' => __DIR__ . '/..' . '/rivet/rivet-core/src/Automation/AutomationRuleEvaluator.php',
         'RivetCore\\Automation\\Migration\\Migration0006AutomationRules' => __DIR__ . '/..' . '/rivet/rivet-core/src/Automation/Migration/Migration0006AutomationRules.php',
+        'RivetCore\\Compliance\\RetentionPolicy' => __DIR__ . '/..' . '/rivet/rivet-core/src/Compliance/RetentionPolicy.php',
         'RivetCore\\Contracts\\ClockInterface' => __DIR__ . '/..' . '/rivet/rivet-core/src/Contracts/ClockInterface.php',
         'RivetCore\\Contracts\\RequestContextInterface' => __DIR__ . '/..' . '/rivet/rivet-core/src/Contracts/RequestContextInterface.php',
         'RivetCore\\Contracts\\SettingsInterface' => __DIR__ . '/..' . '/rivet/rivet-core/src/Contracts/SettingsInterface.php',

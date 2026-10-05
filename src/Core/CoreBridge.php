@@ -91,6 +91,25 @@ final class CoreBridge
         }
     }
 
+    /**
+     * The audit service for recording other events (for example compliance changes), or null while the audit switch is off.
+     * $force skips the switch: used to record the change that turns auditing off, which must itself be on the record.
+     */
+    public static function audit(bool $force = false): ?AuditService
+    {
+        if ($force) {
+            try {
+                return class_exists(AuditService::class) && self::connection() instanceof \mysqli
+                    ? new AuditService(self::database(), new ServerRequestContext())
+                    : null;
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+
+        return self::service('core.audit.enabled', 'audit', static fn () => new AuditService(self::database(), new ServerRequestContext()));
+    }
+
     // ---- redis (core.redis.enabled)
 
     public static function locks(): ?LockManager
