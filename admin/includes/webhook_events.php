@@ -52,6 +52,8 @@ function webhook_event_groups_static(): array
             'workflow.onboarding_started',
             'workflow.offboarding_started',
             'workflow.cancelled',
+            'workflow.completed',
+            'workflow.task_completed',
             'people.import_approved',
             'problem.created',
             'problem.status_changed',

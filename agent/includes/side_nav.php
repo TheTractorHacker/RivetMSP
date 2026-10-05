@@ -12,9 +12,9 @@ $current_page = basename($_SERVER["PHP_SELF"]);
 $in_reports_section = (strpos($_SERVER["PHP_SELF"], '/agent/reports/') !== false);
 
 $section_pages = [
-    'organization'  => ['clients.php', 'compliance_clients.php'],
+    'organization'  => ['clients.php', 'compliance_clients.php', 'workflow_runs.php', 'workflow_run.php'],
     'crm'           => ['pipeline.php', 'opportunities.php', 'campaigns.php', 'segments.php'],
-    'service_desk'  => ['tickets.php', 'ticket.php', 'recurring_tickets.php', 'csat.php', 'mail_requests.php'],
+    'service_desk'  => ['tickets.php', 'ticket.php', 'recurring_tickets.php', 'csat.php', 'mail_requests.php', 'problems.php', 'problem_details.php', 'changes.php', 'change_details.php'],
     'work'          => ['projects.php', 'project_details.php', 'calendar.php'],
     'billing'       => ['quotes.php', 'quote.php', 'invoices.php', 'invoice.php', 'recurring_invoices.php', 'recurring_invoice.php', 'revenues.php', 'products.php'],
     'finance'       => ['payments.php', 'vendors.php', 'expenses.php', 'recurring_expenses.php', 'accounts.php', 'transfers.php', 'trips.php'],
@@ -98,6 +98,12 @@ foreach ($section_pages as $key => $pages) {
                             <span class="dropdown-item-icon"><i class="fas fa-clipboard-list"></i></span>
                             <span class="text-truncate">Client compliance</span>
                         </a>
+                        <?php if (\RivetMSP\Core\CoreBridge::enabled('core.workflow.enabled')) { ?>
+                        <a href="/agent/workflow_runs.php" class="dropdown-item<?php if ($current_page == "workflow_runs.php" || $current_page == "workflow_run.php") { echo " active"; } ?>">
+                            <span class="dropdown-item-icon"><i class="fas fa-tasks"></i></span>
+                            <span class="text-truncate">Onboarding &amp; Offboarding</span>
+                        </a>
+                        <?php } ?>
                     </div>
                 </li>
                 <?php } ?>
@@ -166,6 +172,16 @@ foreach ($section_pages as $key => $pages) {
                                 <span class="ms-auto badge text-light" data-bs-toggle="tooltip" title="Unknown-sender emails awaiting review"><?php echo $num_mail_requests; ?></span>
                             <?php } ?>
                         </a>
+                        <?php if (\RivetMSP\Core\CoreBridge::enabled('core.itsm.enabled')) { ?>
+                        <a href="/agent/problems.php" class="dropdown-item<?php if ($current_page == "problems.php" || $current_page == "problem_details.php") { echo " active"; } ?>">
+                            <span class="dropdown-item-icon"><i class="fas fa-exclamation-circle"></i></span>
+                            <span class="text-truncate">Problems</span>
+                        </a>
+                        <a href="/agent/changes.php" class="dropdown-item<?php if ($current_page == "changes.php" || $current_page == "change_details.php") { echo " active"; } ?>">
+                            <span class="dropdown-item-icon"><i class="fas fa-exchange-alt"></i></span>
+                            <span class="text-truncate">Changes</span>
+                        </a>
+                        <?php } ?>
                     </div>
                 </li>
                 <?php } ?>

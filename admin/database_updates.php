@@ -6501,3 +6501,14 @@ if (LATEST_DATABASE_VERSION > CURRENT_DATABASE_VERSION) {
             ADD COLUMN IF NOT EXISTS `config_redis_db` int(11) NOT NULL DEFAULT 0");
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.67'");
     }
+
+    if (CURRENT_DATABASE_VERSION == '2.6.67') {
+        // Client onboarding/offboarding workflows: a run can be started for a whole client (contact_id = 0) as well as for
+        // one contact, so runs carry the client they belong to. Backfilled from the contact on existing runs.
+        mysqli_query($mysqli, "ALTER TABLE `workflow_runs`
+            ADD COLUMN IF NOT EXISTS `client_id` int(11) DEFAULT NULL AFTER `workflow_template_id`,
+            ADD INDEX IF NOT EXISTS `idx_workflow_runs_client` (`client_id`)");
+        mysqli_query($mysqli, "UPDATE `workflow_runs` wr INNER JOIN `contacts` c ON c.contact_id = wr.contact_id
+            SET wr.client_id = c.contact_client_id WHERE wr.client_id IS NULL");
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.68'");
+    }

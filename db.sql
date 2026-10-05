@@ -4047,6 +4047,7 @@ DROP TABLE IF EXISTS `workflow_runs`;
 CREATE TABLE `workflow_runs` (
   `run_id` int(11) NOT NULL AUTO_INCREMENT,
   `workflow_template_id` int(11) DEFAULT NULL,
+  `client_id` int(11) DEFAULT NULL,
   `contact_id` int(11) NOT NULL,
   `type` enum('onboarding','offboarding') NOT NULL,
   `status` enum('in_progress','completed_with_exceptions','completed','cancelled') NOT NULL DEFAULT 'in_progress',
@@ -4055,7 +4056,8 @@ CREATE TABLE `workflow_runs` (
   `completed_at` datetime DEFAULT NULL,
   `notes` text DEFAULT NULL,
   PRIMARY KEY (`run_id`),
-  KEY `idx_workflow_runs_contact` (`contact_id`)
+  KEY `idx_workflow_runs_contact` (`contact_id`),
+  KEY `idx_workflow_runs_client` (`client_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `workflow_template_tasks`;

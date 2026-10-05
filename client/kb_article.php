@@ -45,6 +45,8 @@ if ($row) {
     $kb_article_id = intval($row['kb_article_id']);
     $kb_article_title = nullable_htmlentities($row['kb_article_title']);
     $kb_article_content = $purifier->purify($row['kb_article_content']);
+    // Credentials are agent-only; the portal has no reveal modal, so drop [[credential:ID]] tokens rather than show raw text.
+    $kb_article_content = preg_replace('/\[\[credential:\d+\]\]/i', '', $kb_article_content);
     $kb_article_updated_at = $row['kb_article_updated_at'] ?? $row['kb_article_created_at'];
 } else {
     flash_alert("Article not found", "error");

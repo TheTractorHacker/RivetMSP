@@ -92,6 +92,15 @@ if (isset($_GET['query'])) {
         ORDER BY ticket_id DESC LIMIT 5"
     );
 
+    // Problems & Changes (Core ITSM module) - no client link, so only gated by the module switch and Support access
+    $sql_problems = $sql_changes = false;
+    if (lookupUserPermission("module_support") >= 1 && \RivetMSP\Core\CoreBridge::enabled('core.itsm.enabled')) {
+        $sql_problems = mysqli_query($mysqli, "SELECT problem_id, title, status FROM problems
+            WHERE (title LIKE '%$query%' OR description LIKE '%$query%') ORDER BY problem_id DESC LIMIT 5");
+        $sql_changes = mysqli_query($mysqli, "SELECT change_id, title, status, risk FROM changes
+            WHERE (title LIKE '%$query%' OR reason LIKE '%$query%') ORDER BY change_id DESC LIMIT 5");
+    }
+
     $sql_recurring_tickets = mysqli_query($mysqli, "SELECT * FROM recurring_tickets
         LEFT JOIN clients ON recurring_ticket_client_id = client_id
         WHERE (recurring_ticket_subject LIKE '%$query%'
@@ -535,6 +544,59 @@ if (isset($_GET['query'])) {
 
         <?php } ?>
 
+
+        <?php if ($sql_problems && mysqli_num_rows($sql_problems) > 0) { ?>
+
+            <!-- Problems -->
+            <div class="col-sm-6">
+                <div class="card card-dark mb-3">
+                    <div class="card-header">
+                        <h6 class="card-title"><i class="fas fa-fw fa-exclamation-circle me-2"></i>Problems</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-striped table-borderless">
+                            <thead><tr><th>Title</th><th>Status</th></tr></thead>
+                            <tbody>
+                            <?php while ($row = mysqli_fetch_assoc($sql_problems)) { ?>
+                                <tr>
+                                    <td><a href="problem_details.php?id=<?php echo intval($row['problem_id']); ?>"><?php echo nullable_htmlentities($row['title']); ?></a></td>
+                                    <td><?php echo nullable_htmlentities(ucfirst($row['status'])); ?></td>
+                                </tr>
+                            <?php } ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        <?php } ?>
+
+        <?php if ($sql_changes && mysqli_num_rows($sql_changes) > 0) { ?>
+
+            <!-- Changes -->
+            <div class="col-sm-6">
+                <div class="card card-dark mb-3">
+                    <div class="card-header">
+                        <h6 class="card-title"><i class="fas fa-fw fa-exchange-alt me-2"></i>Changes</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-striped table-borderless">
+                            <thead><tr><th>Title</th><th>Status</th><th>Risk</th></tr></thead>
+                            <tbody>
+                            <?php while ($row = mysqli_fetch_assoc($sql_changes)) { ?>
+                                <tr>
+                                    <td><a href="change_details.php?id=<?php echo intval($row['change_id']); ?>"><?php echo nullable_htmlentities($row['title']); ?></a></td>
+                                    <td><?php echo nullable_htmlentities(ucwords(str_replace('_', ' ', $row['status']))); ?></td>
+                                    <td><?php echo nullable_htmlentities(ucfirst($row['risk'])); ?></td>
+                                </tr>
+                            <?php } ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        <?php } ?>
 
         <?php if (mysqli_num_rows($sql_recurring_tickets) > 0) { ?>
 

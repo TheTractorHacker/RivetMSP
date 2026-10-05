@@ -37,6 +37,8 @@ $row = mysqli_fetch_assoc($sql);
 
 $kb_article_title = nullable_htmlentities($row['kb_article_title']);
 $kb_article_content = $purifier->purify($row['kb_article_content']);
+// Credential references: "[[credential:123]]" becomes a "Reveal linked credential" button (permission re-checked in the modal).
+$kb_article_content = (new \RivetMSP\Knowledge\CredentialReferenceRenderer())->render($kb_article_content);
 $kb_article_client_id = intval($row['kb_article_client_id']);
 $kb_article_client_name = nullable_htmlentities($row['client_name']);
 $kb_article_client_visible = intval($row['kb_article_client_visible']);

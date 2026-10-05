@@ -2483,6 +2483,56 @@ if (isset($_GET['ticket_id'])) {
                 <?php } ?>
                 <!-- End project card -->
 
+                <!-- problem card (Problems & Changes module) -->
+                <?php if (lookupUserPermission("module_support") >= 1 && \RivetMSP\Core\CoreBridge::enabled('core.itsm.enabled')) {
+                    $ticket_problem_id = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT ticket_problem_id FROM tickets WHERE ticket_id = $ticket_id"))[0] ?? 0);
+                    $ticket_problem = $ticket_problem_id ? mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT problem_id, title, status FROM problems WHERE problem_id = $ticket_problem_id")) : null;
+                    $ticket_problem_choices = lookupUserPermission("module_support") >= 2 ? mysqli_query($mysqli, "SELECT problem_id, title FROM problems WHERE status IN ('open','investigating') ORDER BY created_at DESC LIMIT 200") : null;
+                ?>
+                    <div class="card ticket-sidebar-compact" style="order:16;">
+                        <div class="card-header px-3 py-2">
+                            <h5 class="card-title mt-1" data-bs-toggle="collapse" data-bs-target="#sidebarBody-problem" aria-expanded="<?= $ticket_problem ? 'true' : 'false' ?>" style="cursor:pointer;"><i class="fas fa-fw fa-exclamation-circle me-2"></i>Problem</h5>
+                            <div class="card-tools">
+                                <button type="button" class="btn btn-tool" data-bs-toggle="collapse" data-bs-target="#sidebarBody-problem" aria-expanded="<?= $ticket_problem ? 'true' : 'false' ?>"><i class="fas fa-chevron-down"></i></button>
+                            </div>
+                        </div>
+                        <div class="collapse<?= $ticket_problem ? ' show' : '' ?>" id="sidebarBody-problem">
+                        <div class="card-body p-3">
+                            <?php if ($ticket_problem) { ?>
+                                <div>
+                                    <i class="fa fa-fw fa-exclamation-circle text-secondary me-2"></i><a href="problem_details.php?id=<?= intval($ticket_problem['problem_id']) ?>"><strong><?= nullable_htmlentities($ticket_problem['title']) ?></strong></a>
+                                    <span class="badge text-bg-secondary ms-1"><?= nullable_htmlentities(ucfirst($ticket_problem['status'])) ?></span>
+                                </div>
+                                <?php if ($ticket_problem_choices) { ?>
+                                <form action="post.php" method="post" class="mt-2">
+                                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                                    <input type="hidden" name="ticket_id" value="<?= $ticket_id ?>">
+                                    <input type="hidden" name="problem_id" value="0">
+                                    <button type="submit" name="set_ticket_problem" class="btn btn-sm btn-outline-danger"><i class="fas fa-unlink me-1"></i>Unlink</button>
+                                </form>
+                                <?php } ?>
+                            <?php } else { ?>
+                                <p class="text-muted small mb-2">Not linked to a problem.</p>
+                                <?php if ($ticket_problem_choices) { ?>
+                                <form action="post.php" method="post">
+                                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                                    <input type="hidden" name="ticket_id" value="<?= $ticket_id ?>">
+                                    <select class="form-control form-control-sm mb-2" name="problem_id" required>
+                                        <option value="">Select problem</option>
+                                        <?php while ($tp = mysqli_fetch_assoc($ticket_problem_choices)) { ?>
+                                            <option value="<?= intval($tp['problem_id']) ?>"><?= nullable_htmlentities($tp['title']) ?></option>
+                                        <?php } ?>
+                                    </select>
+                                    <button type="submit" name="set_ticket_problem" class="btn btn-sm btn-secondary"><i class="fas fa-link me-1"></i>Link to Problem</button>
+                                </form>
+                                <?php } ?>
+                            <?php } ?>
+                        </div>
+                        </div>
+                    </div>
+                <?php } ?>
+                <!-- End problem card -->
+
             </div> <!-- End col-3 -->
 
         </div> <!-- End row -->

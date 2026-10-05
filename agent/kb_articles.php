@@ -84,9 +84,24 @@ if (isset($kb_groups['Uncategorized'])) {
             <button type="button" class="btn btn-secondary ajax-modal" data-modal-url="modals/kb_category/kb_category_manage.php">
                 <i class="fas fa-folder me-2"></i>Categories
             </button>
-            <button type="button" class="btn btn-primary ajax-modal" data-modal-size="lg" data-modal-url="modals/kb_article/kb_article_add.php<?php if (isset($client_id)) { echo "?client_id=$client_id"; } ?>">
-                <i class="fas fa-plus me-2"></i>New Article
-            </button>
+            <div class="dropdown d-inline-block">
+                <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown">
+                    <i class="fas fa-plus me-2"></i>New
+                </button>
+                <div class="dropdown-menu dropdown-menu-end">
+                    <a class="dropdown-item ajax-modal" href="#" data-modal-size="lg" data-modal-url="modals/kb_article/kb_article_add.php<?php if (isset($client_id)) { echo "?client_id=$client_id"; } ?>">
+                        <i class="fas fa-fw fa-plus me-2"></i>Article
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <h6 class="dropdown-header">Import</h6>
+                    <a class="dropdown-item ajax-modal" href="#" data-modal-size="lg" data-modal-url="modals/kb_article/kb_article_import_docx.php<?php if (isset($client_id)) { echo "?client_id=$client_id"; } ?>">
+                        <i class="fas fa-fw fa-file-word me-2"></i>Word Doc
+                    </a>
+                    <a class="dropdown-item ajax-modal" href="#" data-modal-size="lg" data-modal-url="modals/kb_article/kb_article_import_pdf.php<?php if (isset($client_id)) { echo "?client_id=$client_id"; } ?>">
+                        <i class="fas fa-fw fa-file-pdf me-2"></i>PDF
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
     <div class="card-body">

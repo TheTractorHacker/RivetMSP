@@ -4,6 +4,13 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+### Problems, Changes and client Onboarding/Offboarding workflows (rivet-core ITSM + Workflow modules)
+
+- **Problems and Changes** (Service Desk): root-cause problems and lightweight change records with their status flows, linking tickets to problems (from the problem page or a new Problem card on the ticket page) and a change to the problem it fixes. Searchable from global search. Audit events: `problem.*`, `change.*`.
+- **Onboarding & Offboarding workflows** (Organization): templates managed under Administration > Templates > Client Workflows (ordered tasks, optional tasks), runs started for a whole client or for one of its contacts, ticked off / skipped / reopened task by task, with audit events `workflow.onboarding_started`, `workflow.offboarding_started`, `workflow.completed`, `workflow.cancelled` and a `workflow.task_completed` event for webhooks and event rules.
+- Both are behind their Core module switches (`core.itsm.enabled`, `core.workflow.enabled`); with a switch off the pages say so and nothing is touched.
+- Database 2.6.68: `workflow_runs.client_id` (backfilled from the contact on existing runs).
+
 ## [26.10.2] RivetMSP — fix: blank Update page before the database update
 
 Fixes a blank **Administration > Update** page on a server that had pulled 26.10.1 but not yet run **Update Database**: the new release-channel setting did not exist yet and its lookup raised an error. The page now renders, shows the channel from the checked-out branch, and saving the channel before the database update says to run Update Database first. No database change.
