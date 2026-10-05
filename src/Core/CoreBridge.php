@@ -103,6 +103,37 @@ final class CoreBridge
         }
     }
 
+    /** Log types whose entries are security- or configuration-relevant and so also go to the structured audit trail. */
+    private const AUDITED_TYPES = [
+        'Settings', 'User', 'User Account', 'Credential', 'API Key', 'Payment Provider', 'Mailbox',
+        'SLA Policy', 'SLA Calendar', 'Role', 'Identity Provider', 'Backup', 'Integration',
+    ];
+
+    /**
+     * Mirrors the administrative/security entries of the legacy activity log (settings, users, credentials, API keys, SLA,
+     * mailboxes, payment providers...) into the audit trail, e.g. "credential.view", "settings.edit". Logins keep their own names.
+     */
+    public static function recordAction(string $logType, string $logAction, string $description, int $userId, int $entityId = 0, int $clientId = 0): void
+    {
+        if (!in_array($logType, self::AUDITED_TYPES, true) || !self::enabled('core.audit.enabled')) {
+            return;
+        }
+        $slug = static fn (string $v): string => trim((string) preg_replace('/[^a-z0-9]+/', '_', strtolower($v)), '_');
+        try {
+            (new AuditService(self::database(), new ServerRequestContext(), self::auditListener()))->log(
+                $slug($logType) . '.' . $slug($logAction),
+                $userId > 0 ? $userId : null,
+                $slug($logType),
+                $entityId > 0 ? $entityId : null,
+                $slug($logAction),
+                $description,
+                $clientId > 0 ? ['client_id' => $clientId] : []
+            );
+        } catch (\Throwable) {
+            // Auditing must never break the action being logged.
+        }
+    }
+
     /**
      * The audit service for recording other events (for example compliance changes), or null while the audit switch is off.
      * $force skips the switch: used to record the change that turns auditing off, which must itself be on the record.

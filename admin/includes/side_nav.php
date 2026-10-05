@@ -221,7 +221,7 @@
 
                 <?php if ($config_module_enable_itdoc) { ?>
                 <!-- TEMPLATES Section -->
-                <?php $nav_open_templates = in_array(basename($_SERVER['PHP_SELF']), ['contract_template.php', 'contract_template_details.php', 'project_template.php', 'project_template_details.php', 'onboarding_templates.php', 'onboarding_template_details.php', 'ticket_template.php', 'ticket_template_details.php', 'canned_responses.php', 'worksheet_template.php', 'worksheet_template_details.php', 'vendor_template.php', 'software_template.php', 'document_template.php', 'document_template_details.php']); ?>
+                <?php $nav_open_templates = in_array(basename($_SERVER['PHP_SELF']), ['contract_template.php', 'contract_template_details.php', 'project_template.php', 'project_template_details.php', 'onboarding_templates.php', 'onboarding_template_details.php', 'workflow_templates.php', 'workflow_template_details.php', 'ticket_template.php', 'ticket_template_details.php', 'canned_responses.php', 'worksheet_template.php', 'worksheet_template_details.php', 'vendor_template.php', 'software_template.php', 'document_template.php', 'document_template_details.php']); ?>
                 <li class="nav-item dropdown mt-2<?php echo ($nav_open_templates ? ' active' : ''); ?>">
                     <a href="#nav-group-templates" class="nav-link dropdown-toggle<?php echo ($nav_open_templates ? ' show' : ''); ?>" data-if-toggle="submenu" role="button" aria-controls="nav-group-templates" aria-expanded="<?php echo ($nav_open_templates ? 'true' : 'false'); ?>">
                         <span class="nav-link-icon"><i class="fas fa-copy"></i></span>
@@ -242,6 +242,11 @@
                             <span class="dropdown-item-icon"><i class="fas fa-user-plus"></i></span>
                             <span class="text-truncate">Onboarding Templates</span>
                             <span href="#" class="fas fa-plus-circle ms-auto ajax-modal" data-modal-url="/admin/modals/onboarding_template/onboarding_template_add.php"></span>
+                        </a>
+                        <a href="/admin/workflow_templates.php" class="dropdown-item <?php echo (in_array(basename($_SERVER['PHP_SELF']), ['workflow_templates.php', 'workflow_template_details.php']) ? 'active' : ''); ?>">
+                            <span class="dropdown-item-icon"><i class="fas fa-tasks"></i></span>
+                            <span class="text-truncate">Client Workflows</span>
+                            <span href="#" class="fas fa-plus-circle ms-auto ajax-modal" data-modal-url="/admin/modals/workflow_template/workflow_template_add.php"></span>
                         </a>
                         <a href="/admin/ticket_template.php" class="dropdown-item <?php echo (in_array(basename($_SERVER['PHP_SELF']), ['ticket_template.php', 'ticket_template_details.php']) ? 'active' : ''); ?>">
                             <span class="dropdown-item-icon"><i class="fas fa-life-ring"></i></span>
@@ -278,7 +283,7 @@
                 <?php } ?>
 
                 <!-- MAINTENANCE Section -->
-                <?php $nav_open_maintenance = in_array(basename($_SERVER['PHP_SELF']), ['cron.php', 'mail_queue.php', 'email_log.php', 'audit_log.php', 'app_log.php', 'backup.php', 'debug.php', 'update.php', 'credential_restore.php']); ?>
+                <?php $nav_open_maintenance = in_array(basename($_SERVER['PHP_SELF']), ['cron.php', 'mail_queue.php', 'email_log.php', 'audit_log.php', 'audit_trail.php', 'app_log.php', 'backup.php', 'debug.php', 'update.php', 'credential_restore.php']); ?>
                 <li class="nav-item dropdown mt-2<?php echo ($nav_open_maintenance ? ' active' : ''); ?>">
                     <a href="#nav-group-maintenance" class="nav-link dropdown-toggle<?php echo ($nav_open_maintenance ? ' show' : ''); ?>" data-if-toggle="submenu" role="button" aria-controls="nav-group-maintenance" aria-expanded="<?php echo ($nav_open_maintenance ? 'true' : 'false'); ?>">
                         <span class="nav-link-icon"><i class="fas fa-tools"></i></span>
@@ -300,6 +305,10 @@
                         <a href="/admin/audit_log.php" class="dropdown-item <?php echo (basename($_SERVER['PHP_SELF']) == 'audit_log.php' ? 'active' : ''); ?>">
                             <span class="dropdown-item-icon"><i class="fas fa-history"></i></span>
                             <span class="text-truncate">Audit Logs</span>
+                        </a>
+                        <a href="/admin/audit_trail.php" class="dropdown-item <?php echo (basename($_SERVER['PHP_SELF']) == 'audit_trail.php' ? 'active' : ''); ?>">
+                            <span class="dropdown-item-icon"><i class="fas fa-fingerprint"></i></span>
+                            <span class="text-truncate">Audit Trail</span>
                         </a>
                         <a href="/admin/app_log.php" class="dropdown-item <?php echo (basename($_SERVER['PHP_SELF']) == 'app_log.php' ? 'active' : ''); ?>">
                             <span class="dropdown-item-icon"><i class="fas fa-history"></i></span>

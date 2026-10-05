@@ -3629,10 +3629,14 @@ function logAction($type, $action, $description, $client_id = 0, $entity_id = 0)
 
     mysqli_query($mysqli, "INSERT INTO logs SET log_type = '$type', log_action = '$action', log_description = '$description', log_ip = '$session_ip_esc', log_user_agent = '$session_user_agent_esc', log_client_id = $client_id, log_user_id = $session_user_id, log_entity_id = $entity_id");
 
-    // RivetCore audit trail (structured, append-only). Login events only; OFF unless
+    // RivetCore audit trail (structured, append-only). Logins plus administrative/security actions (see CoreBridge::AUDITED_TYPES); OFF unless
     // settings.config_core_audit_enabled = 1, and fail-safe: it can never break a log call or a sign-in.
-    if ($raw_log_type === 'Login' && class_exists(\RivetMSP\Core\CoreBridge::class)) {
-        \RivetMSP\Core\CoreBridge::recordLogin($raw_log_type, $raw_log_action, $raw_log_description, $session_user_id);
+    if (class_exists(\RivetMSP\Core\CoreBridge::class)) {
+        if ($raw_log_type === 'Login') {
+            \RivetMSP\Core\CoreBridge::recordLogin($raw_log_type, $raw_log_action, $raw_log_description, $session_user_id);
+        } else {
+            \RivetMSP\Core\CoreBridge::recordAction($raw_log_type, $raw_log_action, $raw_log_description, $session_user_id, $entity_id, $client_id);
+        }
     }
 }
 
