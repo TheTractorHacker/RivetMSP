@@ -55,6 +55,7 @@ if (isset($_GET['update'])) {
         flash_alert('The update did not run: ' . htmlspecialchars($ensure['message'], ENT_QUOTES), 'error');
         redirect();
     }
+    releaseResetGeneratedFiles(dirname(__DIR__, 2));
     $git_output = [];
     $git_code = 0;
     if (isset($_GET['force_update']) == 1) {
