@@ -6419,3 +6419,16 @@ if (LATEST_DATABASE_VERSION > CURRENT_DATABASE_VERSION) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.61'");
         }
     }
+
+    if (CURRENT_DATABASE_VERSION == '2.6.61') {
+        // RivetCore 0.14 adds compliance_responsibilities (who is responsible for a section of compliance) through its own
+        // migration runner (idempotent). Skipped (version NOT advanced) until the package is present.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Compliance\Migration\Migration0011Responsibilities::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.62'");
+        }
+    }

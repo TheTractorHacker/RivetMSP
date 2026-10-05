@@ -2,6 +2,17 @@
 
 All notable changes to RivetCore. Semantic versioning.
 
+## 0.14.0
+
+### Added
+- `Compliance\ResponsibilityStore`: assign a section of compliance (or a single item) to a managed service provider, for an organization that outsources part of it. No assignment means its own staff. Migration `0011_compliance_responsibilities`.
+- `ComplianceAssessor` takes the assignments and puts `responsible` on every automatic and manual row; `ReportRenderer` adds a "Responsible" column only when something is assigned; `SharedReport::view` includes it.
+
+## 0.13.0
+
+### Added
+- Retention preset `nist171` (NIST SP 800-171 / CMMC): a 365-day minimum. 800-171 requires audit logs to be retained but sets no number, so this is the common organization-defined value, stated as such in the preset's note. Every compliance framework now has a retention preset, and a test enforces that the two lists stay in step.
+
 ## 0.12.0
 
 ### Added

@@ -79,16 +79,20 @@ window.openAjaxModal = function (modalUrl, modalSize, options) {
         return;
       }
 
-      const wrapper = document.createElement('div');
-      wrapper.innerHTML =
-        '<div class="modal fade" id="' + modalId + '" tabindex="-1">' +
-          '<div class="modal-dialog modal-' + modalSize + '">' +
-            '<div class="modal-content border-dark">' +
-              data.content +
-            '</div>' +
-          '</div>' +
-        '</div>';
-      const modalEl = wrapper.firstElementChild;
+      // Build the modal shell with DOM APIs: the id and size come from page data, so they are never parsed as HTML.
+      // data.content is the server-rendered body of the modal (trusted, same-origin response).
+      const safeSize = ['sm', 'md', 'lg', 'xl'].indexOf(modalSize) !== -1 ? modalSize : 'md';
+      const modalEl = document.createElement('div');
+      modalEl.className = 'modal fade';
+      modalEl.id = modalId;
+      modalEl.tabIndex = -1;
+      const dialogEl = document.createElement('div');
+      dialogEl.className = 'modal-dialog modal-' + safeSize;
+      const contentEl = document.createElement('div');
+      contentEl.className = 'modal-content border-dark';
+      contentEl.innerHTML = data.content;
+      dialogEl.appendChild(contentEl);
+      modalEl.appendChild(dialogEl);
       host.appendChild(modalEl);
       executeInjectedScripts(modalEl);
 
