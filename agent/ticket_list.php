@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../includes/sla_functions.php'; // slaDueState() for the SLA badge
 // Pre-load all techs for inline assignment dropdowns
 $_techs_list = [];
 $_sql_techs = mysqli_query($mysqli, "SELECT user_id, user_name FROM users WHERE user_type = 1 AND user_status = 1 AND user_archived_at IS NULL ORDER BY user_name ASC");

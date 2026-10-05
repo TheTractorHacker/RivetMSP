@@ -1,5 +1,6 @@
 <?php
 require_once "includes/inc_all.php";
+require_once "../includes/sla_functions.php"; // slaDueState() for the SLA badge
 
 // Get current year or the selected year
 $year = isset($_GET['year']) ? intval($_GET['year']) : date('Y');
