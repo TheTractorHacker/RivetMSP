@@ -2,6 +2,35 @@
 
 defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 
+// Choose the release channel (Production or Beta). Refuses a channel this server cannot move to without going backwards.
+if (isset($_POST['save_release_channel'])) {
+
+    validateCSRFToken($_POST['csrf_token'] ?? '');
+
+    validateAdminRole(); // Old function
+
+    require_once __DIR__ . '/../../includes/release_channel.php';
+    $new_channel = (string) ($_POST['release_channel'] ?? '');
+    if (!isset(releaseChannels()[$new_channel])) {
+        flash_alert('Choose Production or Beta.', 'error');
+        redirect();
+    }
+    $old_channel = releaseChannelConfigured($mysqli, dirname(__DIR__, 2));
+    if ($new_channel !== $old_channel) {
+        exec("timeout 30 git fetch " . escapeshellarg(RELEASE_REMOTE) . " 2>&1");
+        $status = releaseChannelStatus(dirname(__DIR__, 2), $new_channel);
+        if (!$status['ref_exists'] || !$status['can_switch']) {
+            flash_alert(htmlspecialchars($status['reason'], ENT_QUOTES), 'error');
+            redirect();
+        }
+    }
+    mysqli_query($mysqli, "UPDATE settings SET config_release_channel = '" . mysqli_real_escape_string($mysqli, $new_channel) . "' WHERE company_id = 1");
+    logAction('App', 'Update', "$session_name set the release channel to $new_channel (was $old_channel)");
+    flash_alert('Release channel set to <strong>' . htmlspecialchars(releaseChannels()[$new_channel]['label'], ENT_QUOTES) . '</strong>.' . ($new_channel !== $old_channel ? ' Run <strong>Update App</strong> to move this server onto it.' : ''));
+    redirect();
+
+}
+
 if (isset($_GET['update'])) {
 
     validateCSRFToken($_GET['csrf_token'] ?? '');
@@ -10,11 +39,20 @@ if (isset($_GET['update'])) {
 
     //git fetch downloads the latest from remote without trying to merge or rebase anything. Then the git reset resets the master branch to what you just fetched. The --hard option changes all the files in your working tree to match the files in origin/master
 
+    // Follow the release channel: move onto its branch first (forward only; refused if it would install older code), then update from it.
+    require_once __DIR__ . '/../../includes/release_channel.php';
+    $release_channel = releaseChannelConfigured($mysqli, dirname(__DIR__, 2));
+    $release_branch  = releaseChannelBranch($release_channel);
+    exec("timeout 30 git fetch " . escapeshellarg(RELEASE_REMOTE) . " 2>&1");
+    $ensure = releaseChannelEnsureBranch(dirname(__DIR__, 2), $release_channel);
+    if (!$ensure['ok']) {
+        flash_alert('The update did not run: ' . htmlspecialchars($ensure['message'], ENT_QUOTES), 'error');
+        redirect();
+    }
     if (isset($_GET['force_update']) == 1) {
-        exec("git fetch --all");
-        exec("git reset --hard origin/master");
+        exec("git reset --hard " . escapeshellarg(RELEASE_REMOTE . '/' . $release_branch));
     } else {
-        exec("git pull");
+        exec("git pull " . escapeshellarg(RELEASE_REMOTE) . " " . escapeshellarg($release_branch));
     }
     //header("Location: post.php?update_db");
 

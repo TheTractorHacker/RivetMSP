@@ -3236,16 +3236,21 @@ function getTicketStatusName($ticket_status) {
 
 function fetchUpdates() {
 
-    global $repo_branch;
+    global $repo_branch, $mysqli;
+
+    // Release channel (Administration > Update): Production or Beta decides which branch of the remote this server follows.
+    require_once __DIR__ . '/includes/release_channel.php';
+    $release_channel = releaseChannelConfigured($mysqli ?? null, __DIR__);
+    $repo_branch     = releaseChannelBranch($release_channel);
 
     // Fetch the latest code changes but don't apply them
-    exec("git fetch fork", $output, $result);
-    $latest_version  = exec("git rev-parse fork/$repo_branch");
+    exec("timeout 30 git fetch " . escapeshellarg(RELEASE_REMOTE) . " 2>&1", $output, $result);
+    $latest_version  = exec("git rev-parse " . escapeshellarg(RELEASE_REMOTE . "/$repo_branch"));
     $current_version = exec("git rev-parse HEAD");
 
     // Human-readable tag-based versions (e.g. v2.6.0)
     $current_version_tag = exec("git describe --tags --abbrev=0 HEAD 2>/dev/null") ?: $current_version;
-    $latest_version_tag  = exec("git describe --tags --abbrev=0 fork/$repo_branch 2>/dev/null") ?: $latest_version;
+    $latest_version_tag  = exec("git describe --tags --abbrev=0 " . escapeshellarg(RELEASE_REMOTE . "/$repo_branch") . " 2>/dev/null") ?: $latest_version;
 
     if ($current_version == $latest_version) {
         $update_message = "No Updates available";
@@ -3262,6 +3267,9 @@ function fetchUpdates() {
     $updates->current_version_tag = $current_version_tag;
     $updates->latest_version_tag  = $latest_version_tag;
     $updates->update_message = $update_message;
+    $updates->channel = $release_channel;
+    $updates->branch  = $repo_branch;
+    $updates->channel_status = releaseChannelStatus(__DIR__, $release_channel);
 
 
     return $updates;

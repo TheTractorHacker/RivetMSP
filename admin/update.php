@@ -11,7 +11,10 @@ $current_version_tag = $updates->current_version_tag;
 $latest_version_tag  = $updates->latest_version_tag;
 $result = $updates->result;
 
-$git_log_raw = shell_exec("git log $repo_branch..fork/$repo_branch --pretty=format:'%h|%ar|%s'");
+$repo_branch = $updates->branch;   // the release channel's branch (Production or Beta), not config.php's old fixed value
+$git_log_raw = shell_exec("git log HEAD.." . escapeshellarg(RELEASE_REMOTE . '/' . $repo_branch) . " --pretty=format:'%h|%ar|%s'");
+$channel_status = $updates->channel_status;
+$channels = releaseChannels();
 
 $git_log = '';
 if (!empty($git_log_raw)) {
@@ -25,6 +28,41 @@ if (!empty($git_log_raw)) {
 }
 
 ?>
+
+    <div class="card card-dark mb-3">
+        <div class="card-header py-3">
+            <h3 class="card-title"><i class="fas fa-fw fa-code-branch me-2"></i>Release channel</h3>
+        </div>
+        <div class="card-body">
+            <form action="post.php" method="post" autocomplete="off">
+                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                <div class="row">
+                    <?php foreach ($channels as $ckey => $cdef) { ?>
+                        <div class="col-md-6 mb-3">
+                            <label class="d-block border rounded p-3 h-100 <?= $updates->channel === $ckey ? 'border-primary' : '' ?>">
+                                <input type="radio" name="release_channel" value="<?= htmlspecialchars($ckey) ?>" <?= $updates->channel === $ckey ? 'checked' : '' ?>>
+                                <strong class="ms-1"><?= htmlspecialchars($cdef['label']) ?></strong>
+                                <?php if ($updates->channel === $ckey) { ?><span class="badge bg-primary ms-1">This server</span><?php } ?>
+                                <div class="text-secondary small mt-1"><?= htmlspecialchars($cdef['summary']) ?></div>
+                                <div class="text-secondary small mt-1">Follows <code><?= htmlspecialchars(RELEASE_REMOTE . '/' . $cdef['branch']) ?></code></div>
+                            </label>
+                        </div>
+                    <?php } ?>
+                </div>
+                <button type="submit" name="save_release_channel" class="btn btn-primary"><i class="fas fa-fw fa-check me-2"></i>Save channel</button>
+                <span class="text-secondary small ms-2">
+                    Running branch: <code><?= htmlspecialchars($channel_status['current_branch'] ?: 'unknown') ?></code>
+                    <?php if (!$channel_status['same_branch'] && $channel_status['ref_exists'] && $channel_status['can_switch']) { ?>
+                        &middot; <strong>Update App will switch this server to <code><?= htmlspecialchars($channel_status['branch']) ?></code>.</strong>
+                    <?php } ?>
+                </span>
+                <?php if ($channel_status['reason'] !== '') { ?>
+                    <div class="alert alert-warning mt-3 mb-0"><?= htmlspecialchars($channel_status['reason']) ?></div>
+                <?php } ?>
+                <p class="text-secondary small mt-3 mb-0">Switching channel never installs older code: a switch that would go backwards is refused. Take a backup first.</p>
+            </form>
+        </div>
+    </div>
 
     <div class="card card-dark">
         <div class="card-header py-3">

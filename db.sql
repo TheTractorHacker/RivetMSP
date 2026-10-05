@@ -2978,6 +2978,7 @@ CREATE TABLE `settings` (
   `config_core_automation_enabled` tinyint(1) NOT NULL DEFAULT 0,
   `config_core_health_enabled` tinyint(1) NOT NULL DEFAULT 0,
   `config_compliance_profile` varchar(20) NOT NULL DEFAULT 'none',
+  `config_release_channel` varchar(12) NOT NULL DEFAULT 'production',
   `config_audit_retention_days` int(11) NOT NULL DEFAULT 365,
   PRIMARY KEY (`company_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

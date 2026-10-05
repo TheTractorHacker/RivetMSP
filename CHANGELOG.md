@@ -4,6 +4,13 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+### Release channel: Production or Beta
+
+- **Administration > Update has a Release channel switch.** Production follows the `master` branch (tested releases); Beta follows `beta` (early access, changes more often). Each server chooses its own. The update check, **Update App**, the force update and `scripts/update_cli.php` (and so `deploy/update.sh`) all follow the chosen channel and move the server onto its branch. This replaces the old fixed `$repo_branch` value in `config.php`, which a server could be left pointing at a retired branch.
+- **A server never goes backwards.** Switching to a channel whose latest release is older than the code already running is refused with an explanation, because the database may already be newer than that code can read. A switch that would overwrite hand-edited files is refused and leaves them untouched.
+- Existing servers keep following the branch they are on today (a server on `beta` starts as Beta, everything else as Production), so nothing moves by itself. Database migration 2.6.65 adds the setting; a fresh install gets it from `db.sql`.
+
+
 ## [26.10] RivetMSP — SLA pause, resolution time rules, compliance status, saved-view filters and RivetCore
 
 Consolidates the entries that were listed as Unreleased after 26.05. Apply database migrations with **Update Database**.
