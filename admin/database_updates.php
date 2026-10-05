@@ -6337,3 +6337,35 @@ if (LATEST_DATABASE_VERSION > CURRENT_DATABASE_VERSION) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.56'");
         }
     }
+
+    if (CURRENT_DATABASE_VERSION == '2.6.56') {
+        // ticket_schedules (appointments, Outlook sync) and ticket_techs (extra technicians on a ticket) are used by
+        // eleven files but were never created by any migration or by db.sql: they only existed on servers that had them
+        // added by hand, so a fresh install had no appointments or Outlook sync. IF NOT EXISTS makes this a no-op on those servers.
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `ticket_schedules` (
+            `schedule_id` int(11) NOT NULL AUTO_INCREMENT,
+            `schedule_ticket_id` int(11) NOT NULL,
+            `schedule_start` datetime NOT NULL,
+            `schedule_end` datetime DEFAULT NULL,
+            `schedule_onsite` tinyint(1) DEFAULT 0,
+            `schedule_tech_id` int(11) DEFAULT 0,
+            `schedule_notes` text DEFAULT NULL,
+            `schedule_created_by` int(11) DEFAULT 0,
+            `schedule_created_at` datetime DEFAULT current_timestamp(),
+            `schedule_archived_at` datetime DEFAULT NULL,
+            `schedule_outlook_event_id` varchar(500) DEFAULT NULL,
+            PRIMARY KEY (`schedule_id`),
+            KEY `idx_ticket` (`schedule_ticket_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `ticket_techs` (
+            `tech_id` int(11) NOT NULL AUTO_INCREMENT,
+            `tech_ticket_id` int(11) NOT NULL,
+            `tech_user_id` int(11) NOT NULL,
+            `tech_created_by` int(11) DEFAULT 0,
+            `tech_created_at` datetime DEFAULT current_timestamp(),
+            PRIMARY KEY (`tech_id`),
+            UNIQUE KEY `uq_ticket_user` (`tech_ticket_id`, `tech_user_id`),
+            KEY `idx_ticket` (`tech_ticket_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.57'");
+    }

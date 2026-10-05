@@ -2143,6 +2143,7 @@ return array(
     'RivetCore\\Redis\\RateLimiter' => $vendorDir . '/rivet/rivet-core/src/Redis/RateLimiter.php',
     'RivetCore\\Redis\\RedisAdmin' => $vendorDir . '/rivet/rivet-core/src/Redis/RedisAdmin.php',
     'RivetCore\\Redis\\RedisClientProviderInterface' => $vendorDir . '/rivet/rivet-core/src/Redis/RedisClientProviderInterface.php',
+    'RivetCore\\Retention\\RetentionService' => $vendorDir . '/rivet/rivet-core/src/Retention/RetentionService.php',
     'RivetCore\\Support\\ArraySettings' => $vendorDir . '/rivet/rivet-core/src/Support/ArraySettings.php',
     'RivetCore\\Support\\NullRequestContext' => $vendorDir . '/rivet/rivet-core/src/Support/NullRequestContext.php',
     'RivetCore\\Support\\SystemClock' => $vendorDir . '/rivet/rivet-core/src/Support/SystemClock.php',

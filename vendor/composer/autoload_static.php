@@ -2259,6 +2259,7 @@ class ComposerStaticInit690e04a27fa241bad9da145ee44cf2eb
         'RivetCore\\Redis\\RateLimiter' => __DIR__ . '/..' . '/rivet/rivet-core/src/Redis/RateLimiter.php',
         'RivetCore\\Redis\\RedisAdmin' => __DIR__ . '/..' . '/rivet/rivet-core/src/Redis/RedisAdmin.php',
         'RivetCore\\Redis\\RedisClientProviderInterface' => __DIR__ . '/..' . '/rivet/rivet-core/src/Redis/RedisClientProviderInterface.php',
+        'RivetCore\\Retention\\RetentionService' => __DIR__ . '/..' . '/rivet/rivet-core/src/Retention/RetentionService.php',
         'RivetCore\\Support\\ArraySettings' => __DIR__ . '/..' . '/rivet/rivet-core/src/Support/ArraySettings.php',
         'RivetCore\\Support\\NullRequestContext' => __DIR__ . '/..' . '/rivet/rivet-core/src/Support/NullRequestContext.php',
         'RivetCore\\Support\\SystemClock' => __DIR__ . '/..' . '/rivet/rivet-core/src/Support/SystemClock.php',
