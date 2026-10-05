@@ -6379,3 +6379,16 @@ if (LATEST_DATABASE_VERSION > CURRENT_DATABASE_VERSION) {
             ADD COLUMN IF NOT EXISTS `config_audit_retention_days` int(11) NOT NULL DEFAULT 365");
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.58'");
     }
+
+    if (CURRENT_DATABASE_VERSION == '2.6.58') {
+        // Compliance status (Administration > Compliance status): RivetCore 0.9 adds compliance_attestations and
+        // compliance_snapshots through its own migration runner (idempotent). Skipped (version NOT advanced) until the package is present.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Compliance\Migration\Migration0008Compliance::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.59'");
+        }
+    }

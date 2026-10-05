@@ -758,6 +758,39 @@ CREATE TABLE `companies` (
   PRIMARY KEY (`company_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `compliance_attestations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compliance_attestations` (
+  `attestation_id` int(11) NOT NULL AUTO_INCREMENT,
+  `item_id` varchar(64) NOT NULL,
+  `reviewed_by` int(11) DEFAULT NULL,
+  `reviewer_name` varchar(200) NOT NULL,
+  `reviewed_on` date NOT NULL,
+  `next_due_on` date DEFAULT NULL,
+  `note` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`attestation_id`),
+  KEY `idx_compliance_attest_item` (`item_id`,`attestation_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `compliance_snapshots`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compliance_snapshots` (
+  `snapshot_id` int(11) NOT NULL AUTO_INCREMENT,
+  `taken_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `taken_by` int(11) DEFAULT NULL,
+  `trigger_type` varchar(20) NOT NULL DEFAULT 'manual',
+  `app_version` varchar(40) DEFAULT NULL,
+  `summary_json` longtext DEFAULT NULL,
+  `results_json` longtext DEFAULT NULL,
+  PRIMARY KEY (`snapshot_id`),
+  KEY `idx_compliance_snapshots_taken` (`taken_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `contact_assets`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -4061,6 +4094,7 @@ INSERT INTO `rivet_core_migrations` VALUES ('0004_problems_and_changes','2026-10
 INSERT INTO `rivet_core_migrations` VALUES ('0005_webhook_deliveries','2026-10-05 02:46:32');
 INSERT INTO `rivet_core_migrations` VALUES ('0006_automation_rules','2026-10-05 02:46:32');
 INSERT INTO `rivet_core_migrations` VALUES ('0007_workflow_tables','2026-10-05 02:46:32');
+INSERT INTO `rivet_core_migrations` VALUES ('0008_compliance','2026-10-05 02:46:32');
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
