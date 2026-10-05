@@ -111,6 +111,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const finalUrl = url.pathname + url.search; // url.search is already encoded by the URL object
         // A single leading slash: not protocol-relative (//host), not a scheme (javascript:), no control characters.
         if (!/^\/(?!\/)[^\u0000-\u001f\u007f\\]*$/.test(finalUrl)) return;
+        if (!finalUrl.startsWith('/') || finalUrl.startsWith('//')) return;
 
         if (trigger.hasAttribute('data-modal-url')) {
             trigger.setAttribute('data-modal-url', finalUrl);
