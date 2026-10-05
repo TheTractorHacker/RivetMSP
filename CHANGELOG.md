@@ -4,6 +4,10 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.2] RivetMSP — fix: blank Update page before the database update
+
+Fixes a blank **Administration > Update** page on a server that had pulled 26.10.1 but not yet run **Update Database**: the new release-channel setting did not exist yet and its lookup raised an error. The page now renders, shows the channel from the checked-out branch, and saving the channel before the database update says to run Update Database first. No database change.
+
 ## [26.10.1] RivetMSP — Release channel (Production / Beta), with everything in 26.10
 
 This is the first tagged release since the 26.10 work below. Apply database migrations 2.6.58 to 2.6.65 with **Update Database** (take a backup first); it requires rivet-core 0.14.0 (already bundled in `vendor/`).
