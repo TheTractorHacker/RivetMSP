@@ -2,6 +2,17 @@
 
 All notable changes to RivetCore. Semantic versioning.
 
+## 0.12.0
+
+### Added
+- NIST SP 800-171 Rev 2 / CMMC Level 2 as a fifth compliance framework (`Framework::NIST171`). `Nist171Map` supplies requirement numbers for every existing check and checklist item, so both editions pick them up with no code change; the customer checklist gains CUI scope, SSP/POA&M and CMMC self-assessment items. No schema change. NIST 800-171 has no fixed retention period, so there is no retention preset for it.
+
+## 0.11.0
+
+### Added
+- `Compliance\SubjectCompliance` and `ClientChecklist`: compliance for a subject other than the installation itself (an MSP's customer): chosen frameworks, a 20-item manual checklist with sign-off, snapshots, one shared snapshot (reduced view), and an overview across subjects. Migration `0010_compliance_subjects` adds `subject_id` (0 = the installation) to `compliance_attestations` and `compliance_snapshots` and the `compliance_subjects` table.
+- `AttestationStore` and `SnapshotStore` take an optional `$subjectId` (default 0, unchanged behaviour).
+
 ## 0.10.0
 
 ### Added

@@ -190,6 +190,10 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
                 try {
                     $portal_compliance_probe = @mysqli_query($mysqli, "SELECT 1 FROM compliance_shared_report WHERE shared_id = 1 LIMIT 1");
                     $portal_compliance_shared = (bool) ($portal_compliance_probe && mysqli_num_rows($portal_compliance_probe) > 0);
+                    if (!$portal_compliance_shared) {
+                        $portal_compliance_probe = @mysqli_query($mysqli, "SELECT 1 FROM compliance_subjects WHERE subject_id = " . intval($session_client_id) . " AND shared_snapshot_id IS NOT NULL LIMIT 1");
+                        $portal_compliance_shared = (bool) ($portal_compliance_probe && mysqli_num_rows($portal_compliance_probe) > 0);
+                    }
                 } catch (\Throwable $e) {
                 }
                 if ($portal_compliance_shared) { ?>

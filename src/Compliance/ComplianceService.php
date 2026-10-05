@@ -8,6 +8,7 @@ use RivetCore\Compliance\AttestationStore;
 use RivetCore\Compliance\ComplianceAssessor;
 use RivetCore\Compliance\SharedReport;
 use RivetCore\Compliance\SnapshotStore;
+use RivetCore\Compliance\SubjectCompliance;
 use RivetCore\Support\SystemClock;
 
 /** Wires the Core compliance engine to this installation. Pages and cron use this and nothing else. */
@@ -46,6 +47,22 @@ final class ComplianceService
     public static function shared(\mysqli $db): SharedReport
     {
         return new SharedReport(new MysqliDatabaseAdapter($db));
+    }
+
+    /** Per-customer compliance (subject id = client id). Needs the migration that adds compliance_subjects. */
+    public static function subjectsReady(\mysqli $db): bool
+    {
+        if (!class_exists(SubjectCompliance::class)) {
+            return false;
+        }
+        $res = @mysqli_query($db, "SHOW TABLES LIKE 'compliance_subjects'");
+
+        return (bool) ($res && mysqli_num_rows($res) > 0);
+    }
+
+    public static function subjects(\mysqli $db): SubjectCompliance
+    {
+        return new SubjectCompliance(new MysqliDatabaseAdapter($db), new SystemClock());
     }
 
     public static function catalog(\mysqli $db): ComplianceCatalog

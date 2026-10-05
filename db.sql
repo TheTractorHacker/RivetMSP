@@ -771,8 +771,10 @@ CREATE TABLE `compliance_attestations` (
   `next_due_on` date DEFAULT NULL,
   `note` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `subject_id` int(11) NOT NULL DEFAULT 0,
   PRIMARY KEY (`attestation_id`),
-  KEY `idx_compliance_attest_item` (`item_id`,`attestation_id`)
+  KEY `idx_compliance_attest_item` (`item_id`,`attestation_id`),
+  KEY `idx_compliance_attestations_subject` (`subject_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -787,8 +789,25 @@ CREATE TABLE `compliance_snapshots` (
   `app_version` varchar(40) DEFAULT NULL,
   `summary_json` longtext DEFAULT NULL,
   `results_json` longtext DEFAULT NULL,
+  `subject_id` int(11) NOT NULL DEFAULT 0,
   PRIMARY KEY (`snapshot_id`),
-  KEY `idx_compliance_snapshots_taken` (`taken_at`)
+  KEY `idx_compliance_snapshots_taken` (`taken_at`),
+  KEY `idx_compliance_snapshots_subject` (`subject_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `compliance_subjects`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compliance_subjects` (
+  `subject_id` int(11) NOT NULL,
+  `frameworks` varchar(100) NOT NULL DEFAULT '',
+  `shared_snapshot_id` int(11) DEFAULT NULL,
+  `shared_note` text DEFAULT NULL,
+  `shared_by` int(11) DEFAULT NULL,
+  `shared_at` datetime DEFAULT NULL,
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`subject_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -4109,6 +4128,7 @@ INSERT INTO `rivet_core_migrations` VALUES ('0006_automation_rules','2026-10-05 
 INSERT INTO `rivet_core_migrations` VALUES ('0007_workflow_tables','2026-10-05 02:46:32');
 INSERT INTO `rivet_core_migrations` VALUES ('0008_compliance','2026-10-05 02:46:32');
 INSERT INTO `rivet_core_migrations` VALUES ('0009_compliance_shared_report','2026-10-05 02:46:32');
+INSERT INTO `rivet_core_migrations` VALUES ('0010_compliance_subjects','2026-10-05 02:46:32');
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

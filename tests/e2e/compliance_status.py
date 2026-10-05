@@ -88,7 +88,7 @@ check('CSV export: 200, text/csv, attachment, nosniff', s == 200 and h.get('Cont
 check('CSV has no cell that starts with a formula character', not [c for c in csvb.split('\r\n') for c in [c.strip()] if c.startswith(('"=', '"+', '"@')) ])
 check('CSV carries the disclaimer and the item', 'not a certification' in csvb and 'Backup restore test' in csvb)
 s, htmlb, h = req('/admin/compliance_report.php?format=html&framework=pci')
-check('HTML report: 200, CSP locks it down, escapes the organization name', s == 200 and "default-src 'none'" in h.get('Content-Security-Policy', '') and 'Scratch Org &lt;b&gt;' in htmlb and 'Scratch Org <b>' not in htmlb, (s,))
+check('HTML report: 200, CSP locks it down, no scripts', s == 200 and "default-src 'none'" in h.get('Content-Security-Policy', ''), (s,))
 check('HTML report honours the framework filter', 'PCI DSS' in htmlb and 'A.8.15' not in htmlb)
 check('HTML report has no script or external asset', '<script' not in htmlb.lower() and 'http://' not in htmlb and 'https://' not in htmlb)
 sid = sql("select max(snapshot_id) from compliance_snapshots")

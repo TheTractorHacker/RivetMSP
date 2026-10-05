@@ -59,7 +59,7 @@ st, b, h = login(portal, PORTAL_EMAIL, PORTAL_PW)
 check('portal user signs in', st in (302, 303), (st, h.get('Location')))
 
 st, b, h = portal.req('/client/compliance.php')
-check('portal: nothing published => redirected away, not shown', st in (302, 303) and 'Security and compliance' not in b, st)
+check('portal: nothing published => redirected away, not shown', st in (302, 303) and 'Our security posture' not in b, st)
 st, home, h = portal.req('/client/index.php')
 check('portal menu has no Security link while nothing is published', '/client/compliance.php' not in home)
 
@@ -81,7 +81,7 @@ check('admin publishes the snapshot', st in (302, 303) and sql("select snapshot_
 check('an audit event records publishing', sql("select count(*) from audit_events where event_type='compliance.report_published'") == '1')
 
 st, b, h = portal.req('/client/compliance.php')
-check('portal user now sees the report (200)', st == 200 and 'Security and compliance' in b, st)
+check('portal user now sees the report (200)', st == 200 and 'Our security posture' in b, st)
 check('the note is shown, escaped', 'Hello &lt;b&gt;team&lt;/b&gt;' in b and 'Hello <b>team' not in b)
 check('framework scores and checklist item titles are shown', 'ISO/IEC 27001' in b and 'HIPAA' in b and 'User access review' in b)
 check('the not-a-certification disclaimer is shown', 'not a certification' in b)
@@ -93,7 +93,7 @@ check('portal user cannot reach the admin page or the export', portal.req('/admi
 portal = Sess(); login(portal, PORTAL_EMAIL, PORTAL_PW)
 anon = Sess()
 st, b, h = anon.req('/client/compliance.php')
-check('anonymous visitors are sent to sign in', st in (302, 303) and 'Security and compliance' not in b, st)
+check('anonymous visitors are sent to sign in', st in (302, 303) and 'Our security posture' not in b, st)
 
 # a later snapshot does not change what is shared; unpublish hides it
 admin.req('/admin/post.php', {'csrf_token': csrf(admin.req('/admin/compliance_status.php')[1]), 'take_compliance_snapshot': '1'}, referer='/admin/compliance_status.php')
@@ -101,7 +101,7 @@ check('a newer snapshot does not replace the published one', sql("select snapsho
 admin.req('/admin/post.php', {'csrf_token': csrf(admin.req('/admin/compliance_status.php')[1]), 'unpublish_compliance_report': '1'}, referer='/admin/compliance_status.php')
 check('unpublishing removes it', sql("select count(*) from compliance_shared_report") == '0')
 st, b, h = portal.req('/client/compliance.php')
-check('portal user is redirected away again', st in (302, 303) and 'Security and compliance' not in b)
+check('portal user is redirected away again', st in (302, 303) and 'Our security posture' not in b)
 check('an audit event records unpublishing', sql("select count(*) from audit_events where event_type='compliance.report_unpublished'") == '1')
 print("SUMMARY %d/%d passed" % (sum(1 for r in results if r[1]), len(results)))
 sys.exit(0 if all(r[1] for r in results) else 1)

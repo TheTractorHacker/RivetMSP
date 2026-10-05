@@ -66,6 +66,15 @@ $current_page = basename($_SERVER["PHP_SELF"]);
                     </a>
                 </li>
 
+                <?php if (lookupUserPermission("module_client") >= 1) { ?>
+                <li class="nav-item<?php if ($current_page == "client_compliance.php") { echo " active"; } ?>">
+                    <a href="/agent/client_compliance.php?client_id=<?php echo $client_id; ?>" class="nav-link<?php if ($current_page == "client_compliance.php") { echo " active"; } ?>">
+                        <span class="nav-link-icon"><i class="fas fa-clipboard-list"></i></span>
+                        <span class="nav-link-title">Compliance</span>
+                    </a>
+                </li>
+                <?php } ?>
+
                 <li class="nav-item<?php if ($current_page == "contacts.php" || $current_page == "contact_details.php") { echo " active"; } ?>">
                     <a href="/agent/contacts.php?client_id=<?php echo $client_id; ?>" class="nav-link<?php if ($current_page == "contacts.php" || $current_page == "contact_details.php") { echo " active"; } ?>">
                         <span class="nav-link-icon"><i class="fas fa-address-book"></i></span>
