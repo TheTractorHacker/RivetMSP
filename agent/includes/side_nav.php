@@ -36,7 +36,7 @@ foreach ($section_pages as $key => $pages) {
      is a.nav-link.dropdown-toggle[data-if-toggle="submenu"]; it flips .show on the
      toggle and on its #id-matched .dropdown-menu sibling, .active on the parent
      <li>, and aria-expanded on the toggle. -->
-<aside class="navbar navbar-vertical navbar-expand-lg d-print-none" data-bs-theme="dark">
+<aside class="navbar navbar-vertical navbar-expand-lg d-print-none" data-bs-theme="dark" aria-label="Main navigation">
     <div class="container-fluid">
 
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation">

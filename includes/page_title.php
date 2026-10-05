@@ -12,6 +12,9 @@ $page_title = str_replace('_', ' ', $page_title);
 // Capitize
 $page_title = ucwords($page_title);
 
+// Acronyms keep their capitals ("Sla Policies" -> "SLA Policies"), as in RivetIT.
+$page_title = preg_replace_callback('/\b(Kb|Rmm|Sla|Csat|Api|It|Ai|Mfa|Mrr|Pin)\b/', static function ($m) { return strtoupper($m[1]); }, $page_title);
+
 // Sanitize title for SQL input such as logging
 $page_title_sanitized = sanitizeInput($page_title);
 

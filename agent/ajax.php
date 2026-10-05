@@ -20,6 +20,8 @@ require_once "../plugins/totp/totp.php";
  * intentionally out of scope here (kept cheap, and avoid decrypting credentials on every
  * keystroke); the full, unabridged search remains at global_search.php.
  */
+require_once "../includes/settings_search_index.php";
+
 if (isset($_GET['global_search_live'])) {
     header('Content-Type: application/json');
 
@@ -182,6 +184,11 @@ if (isset($_GET['global_search_live'])) {
         ];
     }
     if ($rows) { $groups['assets'] = $rows; }
+
+    // Settings - not database rows, so matched against a static PHP index instead of SQL
+    // (uses $raw_query, not the SQL-escaped $query). Admin-only (see searchSettingsIndex()).
+    $settings_matches = searchSettingsIndex($raw_query);
+    if ($settings_matches) { $groups['settings'] = $settings_matches; }
 
     echo json_encode(['ok' => true, 'groups' => $groups]);
     exit;

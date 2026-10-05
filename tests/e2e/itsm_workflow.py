@@ -115,8 +115,8 @@ for path, needle in [('/agent/problems.php', 'Problems'), ('/agent/changes.php',
     check('page loads 200, clean, has content: ' + path, s == 200 and needle in pg and clean(pg), s)
 s, pg, h = admin.req('/agent/tickets.php')
 check('side nav carries Problems, Changes and Onboarding & Offboarding entries', '/agent/problems.php' in pg and '/agent/changes.php' in pg and '/agent/workflow_runs.php' in pg)
-s, pg, h = admin.req('/admin/workflow_templates.php')
-check('admin nav carries Client Workflows', '/admin/workflow_templates.php' in pg)
+s, pg, h = admin.req('/admin/template_library.php')
+check('the Templates area carries Client Workflows', 'workflow_templates.php' in pg)
 
 # ================= problems
 admin.post('/agent/problems.php', {'add_problem': '1', 'title': 'E2E Contoso file server crashes', 'description': 'root cause unknown'})

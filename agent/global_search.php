@@ -156,6 +156,11 @@ if (isset($_GET['query'])) {
         ORDER BY ticket_id DESC, ticket_reply_id ASC LIMIT 20"
     );
 
+    // Settings - not database rows, matched against a static PHP index (see
+    // includes/settings_search_index.php), admin-only.
+    require_once "../includes/settings_search_index.php";
+    $settings_matches = searchSettingsIndex($_GET['query']);
+
     $q = nullable_htmlentities($_GET['query']);
 
     ?>
@@ -964,6 +969,36 @@ if (isset($_GET['query'])) {
 
             </div>
         </div>
+
+        <?php } ?>
+
+        <?php if (!empty($settings_matches)) { ?>
+
+            <!-- Settings -->
+
+            <div class="col-sm-6">
+                <div class="card card-dark mb-3">
+                    <div class="card-header">
+                        <h6 class="card-title"><i class="fas fa-fw fa-cog me-2"></i>Settings</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-striped table-borderless">
+                            <thead>
+                            <tr>
+                                <th>Section</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <?php foreach ($settings_matches as $setting_match) { ?>
+                                <tr>
+                                    <td><a href="<?php echo htmlspecialchars($setting_match['url'], ENT_QUOTES); ?>"><?php echo nullable_htmlentities($setting_match['title']); ?></a></td>
+                                </tr>
+                            <?php } ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
 
         <?php } ?>
 

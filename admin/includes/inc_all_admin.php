@@ -14,3 +14,84 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/inc_wrapper.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/inc_alert_feedback.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/filter_header.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/app_version.php';
+
+// A short return path makes the settings directory useful from every detail page.
+// Keep it outside forms so it never changes how an existing settings form submits.
+$admin_settings_page = basename($_SERVER['PHP_SELF']);
+$admin_settings_labels = [
+    'settings_company.php' => 'Company details',
+    'settings_localization.php' => 'Language & region',
+    'settings_theme.php' => 'Theme',
+    'settings_appearance.php' => 'Appearance',
+    'settings_default.php' => 'Defaults',
+    'settings_module.php' => 'Modules',
+    'settings_ticket.php' => 'Ticketing',
+    'settings_project.php' => 'Projects',
+    'settings_invoice.php' => 'Invoices',
+    'settings_quote.php' => 'Quotes',
+    'payroll_settings.php' => 'Payroll',
+    'settings_kb.php' => 'Knowledge Base',
+    'settings_custom_fields.php' => 'Custom fields',
+    'settings_security.php' => 'Security',
+    'settings_compliance.php' => 'Compliance',
+    'compliance_status.php' => 'Compliance status',
+    'event_rules.php' => 'Event rules',
+    'job_queue.php' => 'Job queue',
+    'audit_trail.php' => 'Audit trail',
+    'settings_mail.php' => 'Mail',
+    'settings_notification.php' => 'Notifications',
+    'identity_provider.php' => 'Identity provider',
+    'settings_redis.php' => 'Redis',
+    'settings_integrations.php' => 'Integrations',
+    'settings_calendar_sync.php' => 'Calendar sync',
+    'settings_webhooks.php' => 'Webhooks',
+    'settings_ai.php' => 'AI',
+    'settings_telemetry.php' => 'Telemetry',
+    'settings_accounting.php' => 'Accounting',
+    'accounting_client_mapping.php' => 'Accounting',
+    'accounting_item_mapping.php' => 'Accounting',
+    'accounting_sync_status.php' => 'Accounting',
+    'compliance_report.php' => 'Compliance status',
+    'settings_comet.php' => 'Integrations',
+    'comet_status.php' => 'Integrations',
+    'settings_rmm.php' => 'Integrations',
+    'settings_unifi.php' => 'Integrations',
+];
+// A page that lives under an admin area (Maintenance, Ticketing setup, ...) gets that area's breadcrumb below; showing
+// the Settings one as well stacked two breadcrumb rows (settings_redis.php is in both lists).
+require_once __DIR__ . '/admin_nav_areas.php';
+$admin_page_in_area = false;
+foreach (itflowAdminNavAreas() as $admin_area_check_key => $admin_area_check) {
+    if ($admin_settings_page !== $admin_area_check_key . '.php' && in_array($admin_settings_page, $admin_area_check['pages'], true)) {
+        $admin_page_in_area = true;
+        break;
+    }
+}
+if (isset($admin_settings_labels[$admin_settings_page]) && !$admin_page_in_area) { ?>
+    <nav aria-label="Breadcrumb" class="mb-3 admin-breadcrumb">
+        <a href="/admin/settings.php"><i class="fas fa-fw fa-arrow-left me-1" aria-hidden="true"></i>All settings</a>
+        <span class="text-muted mx-2" aria-hidden="true">/</span>
+        <span aria-current="page"><?php echo nullable_htmlentities($admin_settings_labels[$admin_settings_page]); ?></span>
+    </nav>
+<?php }
+
+require_once __DIR__ . '/admin_nav_areas.php';
+$admin_area_back_labels = [
+    'catalog_setup' => 'Tags & categories',
+    'ticketing_setup' => 'Ticketing setup',
+    'template_library' => 'All templates',
+    'maintenance' => 'Maintenance',
+];
+foreach (itflowAdminNavAreas() as $admin_area_key => $admin_area) {
+    if ($admin_settings_page === $admin_area_key . '.php' || !in_array($admin_settings_page, $admin_area['pages'], true)) {
+        continue;
+    }
+    ?>
+    <nav aria-label="Breadcrumb" class="mb-3 admin-breadcrumb">
+        <a href="/admin/<?php echo nullable_htmlentities($admin_area_key); ?>.php"><i class="fas fa-fw fa-arrow-left me-1" aria-hidden="true"></i><?php echo nullable_htmlentities($admin_area_back_labels[$admin_area_key]); ?></a>
+        <span class="text-muted mx-2" aria-hidden="true">/</span>
+        <span aria-current="page"><?php echo isset($admin_settings_labels[$admin_settings_page]) ? nullable_htmlentities($admin_settings_labels[$admin_settings_page]) : $page_title; ?></span>
+    </nav>
+    <?php
+    break;
+}

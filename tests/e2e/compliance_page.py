@@ -52,7 +52,7 @@ check('compliance page loads (200)', s == 200, s)
 check('page shows the heading, presets, disclaimer and the audit switch', all(x in page for x in ['Compliance', 'ISO/IEC 27001', 'HIPAA', 'does not make an organization compliant', 'Record the audit trail']))
 check('RivetMSP wording, not RivetIT', 'RivetMSP keeps' in page and 'RivetIT' not in page)
 check('page defaults: no preset, audit switch off, 365 days', state() == ['none', '365', '90', '0'] and 'id="audit_recording" name="audit_recording" value="1" >' in page.replace('\n', ' ').replace('  ', ' ') or 'checked' not in page.split('audit_recording')[1][:120], state())
-check('page is in the Settings sidebar', '/admin/settings_compliance.php' in page)
+check('page is listed in the Settings directory and shows the All settings return path', '/admin/settings_compliance.php' in req('/admin/settings.php')[1] and 'All settings' in page)
 # 1. a preset forces the audit switch on and raises short retentions
 save('soc2', 100, 10, False)
 check('SOC 2 raises 100 and 10 to 365 and forces audit recording ON even though the box was unticked', state() == ['soc2', '365', '365', '1'], state())

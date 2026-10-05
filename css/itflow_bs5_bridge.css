@@ -1,5 +1,5 @@
 /* =============================================================================
-   ITFlow — TABLER SHELL GLUE
+   RivetIT — TABLER SHELL GLUE
    (historical filename: "bs5 bridge". Kept because eight PHP files link it by
     name — includes/header.php, client/includes/header.php,
     guest/includes/guest_header.php, guest/outtake_sign.php,
@@ -137,7 +137,7 @@
    same pixel row. */
 :root {
     --if-chrome-bg:     #2b3038;
-    --if-chrome-band:    70px;
+    --if-chrome-band:    60px;
     --if-chrome-border:  rgba(255, 255, 255, .08);
     --if-chrome-ink:     rgba(255, 255, 255, .85);
     --if-chrome-ink-dim: rgba(255, 255, 255, .55);
@@ -169,7 +169,15 @@
     border-color: var(--if-primary, var(--color-accent, #0d9488));
     box-shadow: 0 0 0 .2rem rgba(var(--if-primary-rgb, var(--color-accent-rgb, 13, 148, 136)), .2);
 }
-.ts-dropdown { border-color: var(--if-border, #e3e9ea); }
+/* A floating panel needs more contrast than an input's own resting border -
+   --if-border (#e3e9ea) is nearly invisible against the white card surfaces
+   these dropdowns almost always open over, leaving the option list looking
+   like it has no edge at all. Darker border + a real shadow read clearly as
+   "this is floating above the page" regardless of what's behind it. */
+.ts-dropdown {
+    border-color: var(--if-border-strong, #d3dbdc);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .16);
+}
 .ts-dropdown .active {
     background-color: var(--if-primary-soft, var(--color-accent-soft, #ccfbf1));
     color: var(--if-ink, #16232a);
@@ -334,8 +342,11 @@
    is the richer scoped variant - back link stacked over an identity block with a
    name + avatar, replacing the old cryptic "Back | ABC" abbreviation - and it is
    used by BOTH record rails, so they read as one system at two scopes:
-   client_side_nav.php names the client it is scoped to, and
-   client_overview_side_nav.php names its scope, "Company-wide".
+   client_side_nav.php names the department it is scoped to, and
+   client_overview_side_nav.php names its scope, "Company-wide". (That second
+   file used to wear .section-nav-back and the label "Department Overview" while
+   listing company-wide records, which is what made the app look like it had two
+   different maps of one department.)
 
    Colours are literal white/near-white rather than tokens on purpose: the aside
    is always dark regardless of app theme, and (see the chrome-token note at the
@@ -364,22 +375,6 @@
 .navbar-vertical .navbar-brand {
     min-height: var(--if-chrome-band);
     row-gap: 0;
-    /* The actual root cause of the client-sidebar overlap, not just its
-       symptom: .navbar-brand is a flex item of .container-fluid with the
-       default flex-shrink:1, so it was allowed to compress below its own
-       children's combined content height (measured: box 122.31px vs content
-       134.19px for the two-row client brand) even though .container-fluid
-       had plenty of spare height to give it. overflow:visible let the
-       identity block render past the compressed box's edge, but
-       .collapse.navbar-collapse (the next sibling, holding .navbar-nav)
-       started flowing from the box's actual edge, not from where its
-       content visually finished - landing the first nav row on top of the
-       still-rendering identity block, and burying this box's own
-       border-bottom under the nav list's paint. flex-shrink:0 stops the
-       compression outright, so the box sizes to its content and
-       .navbar-nav's own pt-lg-2 (already present, never the problem) supplies
-       the separation it was always meant to. */
-    flex-shrink: 0;
 }
 .navbar-vertical .navbar-brand:not(:has(.section-nav-back)):not(:has(.client-nav-back)) {
     border-bottom: 1px solid var(--if-chrome-border);
@@ -430,14 +425,7 @@
     width: 100%;
     padding: .85rem 1rem;
     text-decoration: none;
-    /* Deliberately NOT --if-chrome-border (rgba(255,255,255,.08), tuned for
-       continuing the header's own hairline - see .client-nav-back above): at
-       .08 opacity this line all but disappears against the dark sidebar, so
-       the identity block (client name/avatar) read as fused into the nav
-       list right below it - most visible where the first item is also the
-       active one, whose highlight pill then looked like it grew out of the
-       client name instead of sitting in its own row. */
-    border-bottom: 1px solid rgba(255, 255, 255, .16);
+    border-bottom: 1px solid var(--if-chrome-border);
 }
 .client-nav-avatar {
     flex-shrink: 0;
@@ -509,7 +497,7 @@
    Putting the chip back in the flex row lets the ms-auto that is already in the
    markup do the job it was written for. Same measurement after: right edge 236
    for one, two or three digits (20px inside the rail), badge centre == link
-   centre, and a forced 3-digit count on the longest label in the client rail
+   centre, and a forced 3-digit count on the longest label in the department rail
    ("Recurring Tickets") still leaves 37.8px of clear space and clips nothing.
 
    Scope notes:
@@ -524,5 +512,25 @@
 .navbar-vertical:not(.navbar-folded):not(.navbar-folded-hover) .navbar-nav .nav-link > .badge {
     position: static;
     transform: none;
+    flex-shrink: 0;
+}
+
+/* ---- Sidebar brand box must not be compressed by its own flex parent ----
+   .navbar-brand is a flex ITEM of .container-fluid with the default
+   `flex: 0 1 auto`, so it is allowed to shrink. In the department and section
+   rails the brand box holds TWO stacked rows - the back link plus the identity
+   header - and their combined height exceeds what the parent was willing to
+   give it: measured 124.5px of box against 134.2px of content.
+
+   The children do not shrink, so the surplus simply overflowed the bottom of
+   the box, and .navbar-collapse - which starts at the box's edge, not its
+   content's - was laid out 1.7px ABOVE where the header actually ended. The
+   department name therefore sat on top of the first nav row ("Overview"),
+   hiding the header's own bottom border and fusing the two into one block.
+
+   flex-shrink:0 is the whole fix: the box then sizes to its content
+   (134.2 = 134.2) and the existing `pt-lg-2` on .navbar-nav supplies the 8px
+   separation it was always meant to. No new spacing value is invented here. */
+.navbar-vertical .navbar-brand {
     flex-shrink: 0;
 }

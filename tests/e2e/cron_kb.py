@@ -162,8 +162,8 @@ s, body, h = tech.req('/admin/post.php', {'csrf_token': tt, 'run_cron_job': '1',
 check('non-admin cannot run a job through the post handler', not any('u-domain_refresher.log' in f for d in __import__('glob').glob('/tmp/rivetmsp-jobs-*') for f in os.listdir(d)), s)
 
 # side nav entry
-s, html, h = admin.req('/admin/settings_general.php') if False else admin.req('/admin/cron.php')
-check('side nav links to /admin/cron.php', 'href="/admin/cron.php"' in html)
+s, html, h = admin.req('/admin/maintenance.php')
+check('the Maintenance area links to Scheduled jobs (cron.php)', 'cron.php' in html)
 
 # =============================== KB IMPORT ===============================
 KBREF = '/agent/kb_articles.php'

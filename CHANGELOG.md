@@ -4,6 +4,11 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+### Same shell as RivetIT
+
+- Administration now uses RivetIT's layout: consolidated sidebar (Access, Configuration), a Settings directory with search, and Maintenance, Ticketing, Templates and Tags & Categories areas with breadcrumbs. Every existing admin page is still reachable (checked by `tests/nav_coverage.py`).
+- Top bar, footer, page titles, toasts and shell JS/CSS aligned with RivetIT; accessibility labels added.
+
 ## [26.10.3] RivetMSP — Core parity: event bus, Redis, Problems & Changes, Workflows, Cron Manager, KB import, Audit trail
 
 ### Problems, Changes and client Onboarding/Offboarding workflows (rivet-core ITSM + Workflow modules)
