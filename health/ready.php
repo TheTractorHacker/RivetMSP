@@ -11,6 +11,7 @@ header('Cache-Control: no-store');
 mysqli_report(MYSQLI_REPORT_OFF);
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/database_version.php';
+require_once __DIR__ . '/../vendor/autoload.php';  // this endpoint does not load functions.php, which is what normally loads Composer
 
 $checker = (isset($mysqli) && $mysqli instanceof mysqli && @$mysqli->ping())
     ? \RivetMSP\Core\CoreBridge::readiness(static function () use ($mysqli): bool {
