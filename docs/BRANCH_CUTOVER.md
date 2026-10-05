@@ -17,16 +17,17 @@ before the branch is deleted.
 
 ## Rules
 
+- **Do not create git tags on commits the live site runs.** Admin > Update shows `git describe --tags --abbrev=0 HEAD` as the version, so a tag on (or nearer than the real release tags to) the live commit renames the product's version in the UI. Use a **branch** for rollback pointers (`backup/pre-rivetcore` already exists at `b62ed4f27`).
 - Never run `scripts/update_cli.php --force_update` (or the matching Admin button) on this repository: it does `git reset --hard origin/master`, which discards anything not on `master`.
 - Nothing below happens on the live box until the rollback point exists and the test copy has passed.
 
 ## Steps
 
-### 1. Rollback point (live box)
+### 1. Rollback point (live box) - done 2026-10-04: branch `backup/pre-rivetcore`, database dump `rivetmsp-itflow-pre-rivetcore-20261004T204711.sql.gz`
 ```
 cd /var/www/itflow.foleyit.com
 git status --short                      # expect nothing but untracked backups/
-git tag pre-rivetcore b62ed4f27 && git push fork pre-rivetcore
+git push fork b62ed4f27:refs/heads/backup/pre-rivetcore      # a branch, not a tag (see Rules); already done
 mysqldump --single-transaction <live database> | gzip > ~/db_backups/rivetmsp-pre-rivetcore-$(date +%Y%m%dT%H%M%S).sql.gz
 ```
 
@@ -59,11 +60,11 @@ Smoke-test sign-in, tickets, invoices and the RMM pages. Switch on RivetCore mod
 ### 6. Retire `Syncro-Beta`
 Only after step 5 has run clean for a few days:
 ```
-git tag syncro-beta-final b62ed4f27 && git push fork syncro-beta-final     # keeps the name findable
+git push fork b62ed4f27:refs/heads/backup/syncro-beta-final   # a branch, not a tag; keeps the name findable
 git push fork --delete Syncro-Beta
 git branch -d Syncro-Beta                                                 # on each machine that has it locally
 ```
 `Syncro-Beta` appears in some code comments ("(Syncro-Beta)") as a feature label for the RMM work. Those are harmless and need no change.
 
 ## Rolling back
-Before step 4: nothing to undo. After step 5: `git checkout pre-rivetcore` on the live box (or `git reset --hard pre-rivetcore` on `master` if it must be undone for everyone), restore the database dump if migrations must be reversed, and reload PHP-FPM.
+Before step 4: nothing to undo. After step 5: `git checkout backup/pre-rivetcore` on the live box (or `git reset --hard backup/pre-rivetcore` on `master` if it must be undone for everyone), restore the database dump if migrations must be reversed, and reload PHP-FPM.
