@@ -6472,3 +6472,32 @@ if (LATEST_DATABASE_VERSION > CURRENT_DATABASE_VERSION) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.65'");
     }
+
+    if (CURRENT_DATABASE_VERSION == '2.6.65') {
+        // RivetCore modules are on by default: audit, Redis guards, the job queue (queued webhooks and event rules), ITSM,
+        // workflows, automation, webhooks and the health endpoint. The per-module switches stay (Administration) as a safety valve.
+        mysqli_query($mysqli, "ALTER TABLE `settings`
+            MODIFY `config_core_audit_enabled` tinyint(1) NOT NULL DEFAULT 1,
+            MODIFY `config_core_redis_enabled` tinyint(1) NOT NULL DEFAULT 1,
+            MODIFY `config_core_jobs_enabled` tinyint(1) NOT NULL DEFAULT 1,
+            MODIFY `config_core_itsm_enabled` tinyint(1) NOT NULL DEFAULT 1,
+            MODIFY `config_core_webhooks_enabled` tinyint(1) NOT NULL DEFAULT 1,
+            MODIFY `config_core_workflow_enabled` tinyint(1) NOT NULL DEFAULT 1,
+            MODIFY `config_core_automation_enabled` tinyint(1) NOT NULL DEFAULT 1,
+            MODIFY `config_core_health_enabled` tinyint(1) NOT NULL DEFAULT 1");
+        mysqli_query($mysqli, "UPDATE `settings` SET
+            `config_core_audit_enabled` = 1, `config_core_redis_enabled` = 1, `config_core_jobs_enabled` = 1, `config_core_itsm_enabled` = 1,
+            `config_core_webhooks_enabled` = 1, `config_core_workflow_enabled` = 1, `config_core_automation_enabled` = 1, `config_core_health_enabled` = 1");
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.66'");
+    }
+
+    if (CURRENT_DATABASE_VERSION == '2.6.66') {
+        // Redis connection settings can be edited in Administration > Redis (password stored encrypted; port 0 / empty host mean
+        // "use the built-in default", 127.0.0.1:6380). The RIVETMSP_REDIS_* environment variables still override them.
+        mysqli_query($mysqli, "ALTER TABLE `settings`
+            ADD COLUMN IF NOT EXISTS `config_redis_host` varchar(255) NOT NULL DEFAULT '',
+            ADD COLUMN IF NOT EXISTS `config_redis_port` int(11) NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `config_redis_password` varchar(1000) NOT NULL DEFAULT '',
+            ADD COLUMN IF NOT EXISTS `config_redis_db` int(11) NOT NULL DEFAULT 0");
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.67'");
+    }

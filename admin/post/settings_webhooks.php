@@ -2,11 +2,17 @@
 
 defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 
-$ALL_EVENTS = ['ticket.created','ticket.replied','ticket.assigned','ticket.status_changed','ticket.resolved'];
+// Ticket events are the original set (queued/delivered async via
+// queueWebhookEvent()/cron.php). Platform events are AuditService event_type
+// strings (see src/Audit/AuditService.php callers) - subscribing a webhook to
+// one of these only records the subscription; nothing dispatches on them yet
+// (that's WebhookDispatcher's job, once a real trigger point wires it in).
+require_once __DIR__ . '/../includes/webhook_events.php';
+$ALL_EVENTS = all_webhook_event_types();
 
 /**
  * Reject webhook endpoint URLs that would let a saved webhook be used to make the
- * ITFlow server itself request internal/cloud-metadata targets (SSRF) when the
+ * this server itself request internal/cloud-metadata targets (SSRF) when the
  * queued webhook is delivered server-side from cron/cron.php. Only http(s) URLs
  * whose host resolves exclusively to public IP addresses are allowed - loopback,
  * link-local (incl. 169.254.169.254 cloud metadata), and RFC1918 private ranges
@@ -65,13 +71,21 @@ if (isset($_POST['add_webhook'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
-    $webhook_name    = sanitizeInput($_POST['webhook_name']);
+    // These values are bound as prepared-statement parameters below, so they must
+    // NOT be pre-escaped: cleanInput() is sanitizeInput() minus the SQL escape.
+    // Running mysqli_real_escape_string() on a bound value would store the literal
+    // backslashes in the row (and, for the secret, encrypt the wrong plaintext).
+    $webhook_name    = cleanInput($_POST['webhook_name']);
+    // FILTER_SANITIZE_URL is a URL-charset filter, NOT an escaper - both ' and "
+    // survive it - so this value is only ever safe as a bound parameter. It is
+    // also deliberately left unescaped so webhookUrlIsSafe() below parse_url()s
+    // the real URL rather than a backslash-mangled copy of it.
     $webhook_url     = filter_var(trim($_POST['webhook_url']), FILTER_SANITIZE_URL);
-    $webhook_secret  = mysqli_real_escape_string($mysqli, encryptSetting(sanitizeInput($_POST['webhook_secret'] ?? '')));
+    $webhook_secret  = encryptSetting(cleanInput($_POST['webhook_secret'] ?? ''));
     $webhook_enabled = isset($_POST['webhook_enabled']) ? 1 : 0;
     $raw_events      = $_POST['webhook_events'] ?? [];
     $valid_events    = array_intersect($raw_events, $ALL_EVENTS);
-    $webhook_events  = sanitizeInput(implode(',', $valid_events));
+    $webhook_events  = cleanInput(implode(',', $valid_events));
 
     if (empty($webhook_name) || empty($webhook_url) || empty($valid_events)) {
         flash_alert("Name, URL, and at least one event are required.", 'error');
@@ -83,7 +97,15 @@ if (isset($_POST['add_webhook'])) {
         redirect();
     }
 
-    mysqli_query($mysqli, "INSERT INTO webhooks SET webhook_name = '$webhook_name', webhook_url = '$webhook_url', webhook_secret = '$webhook_secret', webhook_events = '$webhook_events', webhook_enabled = $webhook_enabled");
+    $stmt = mysqli_prepare(
+        $mysqli,
+        "INSERT INTO webhooks
+         SET webhook_name = ?, webhook_url = ?, webhook_secret = ?, webhook_events = ?, webhook_enabled = ?"
+    );
+
+    mysqli_stmt_bind_param($stmt, "ssssi", $webhook_name, $webhook_url, $webhook_secret, $webhook_events, $webhook_enabled);
+
+    mysqli_stmt_execute($stmt);
 
     logAction("Settings", "Webhook", "$session_name added webhook $webhook_name");
 
@@ -95,13 +117,14 @@ if (isset($_POST['edit_webhook'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
+    // Same rule as the add branch: everything below is bound, so nothing is pre-escaped.
     $webhook_id      = intval($_POST['webhook_id']);
-    $webhook_name    = sanitizeInput($_POST['webhook_name']);
+    $webhook_name    = cleanInput($_POST['webhook_name']);
     $webhook_url     = filter_var(trim($_POST['webhook_url']), FILTER_SANITIZE_URL);
     $webhook_enabled = isset($_POST['webhook_enabled']) ? 1 : 0;
     $raw_events      = $_POST['webhook_events'] ?? [];
     $valid_events    = array_intersect($raw_events, $ALL_EVENTS);
-    $webhook_events  = sanitizeInput(implode(',', $valid_events));
+    $webhook_events  = cleanInput(implode(',', $valid_events));
 
     if (empty($webhook_name) || empty($webhook_url) || empty($valid_events)) {
         flash_alert("Name, URL, and at least one event are required.", 'error');
@@ -116,11 +139,25 @@ if (isset($_POST['edit_webhook'])) {
     // Rotate secret only if a new one was provided
     $raw_secret = trim($_POST['webhook_secret'] ?? '');
     if (!empty($raw_secret)) {
-        $webhook_secret = mysqli_real_escape_string($mysqli, encryptSetting(sanitizeInput($raw_secret)));
-        mysqli_query($mysqli, "UPDATE webhooks SET webhook_name = '$webhook_name', webhook_url = '$webhook_url', webhook_secret = '$webhook_secret', webhook_events = '$webhook_events', webhook_enabled = $webhook_enabled WHERE webhook_id = $webhook_id");
+        $webhook_secret = encryptSetting(cleanInput($raw_secret));
+        $stmt = mysqli_prepare(
+            $mysqli,
+            "UPDATE webhooks
+             SET webhook_name = ?, webhook_url = ?, webhook_secret = ?, webhook_events = ?, webhook_enabled = ?
+             WHERE webhook_id = ?"
+        );
+        mysqli_stmt_bind_param($stmt, "ssssii", $webhook_name, $webhook_url, $webhook_secret, $webhook_events, $webhook_enabled, $webhook_id);
     } else {
-        mysqli_query($mysqli, "UPDATE webhooks SET webhook_name = '$webhook_name', webhook_url = '$webhook_url', webhook_events = '$webhook_events', webhook_enabled = $webhook_enabled WHERE webhook_id = $webhook_id");
+        $stmt = mysqli_prepare(
+            $mysqli,
+            "UPDATE webhooks
+             SET webhook_name = ?, webhook_url = ?, webhook_events = ?, webhook_enabled = ?
+             WHERE webhook_id = ?"
+        );
+        mysqli_stmt_bind_param($stmt, "sssii", $webhook_name, $webhook_url, $webhook_events, $webhook_enabled, $webhook_id);
     }
+
+    mysqli_stmt_execute($stmt);
 
     logAction("Settings", "Webhook", "$session_name edited webhook $webhook_name");
 

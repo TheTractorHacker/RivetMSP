@@ -31,12 +31,8 @@ function getRedisClient(): ?\Predis\Client {
 
     if ($client === null) {
         try {
-            $client = new \Predis\Client([
-                'scheme'  => 'tcp',
-                'host'    => REDIS_HOST,
-                'port'    => REDIS_PORT,
-                'timeout' => 0.5,
-            ]);
+            // Resolved once per process: environment > saved admin settings (Administration > Redis) > built-in default.
+            $client = \RivetMSP\Redis\RedisSettings::client(\RivetMSP\Redis\RedisSettings::resolve($GLOBALS['mysqli'] ?? null), 0.5);
             $client->connect();
         } catch (\Throwable $e) {
             $failed = true;

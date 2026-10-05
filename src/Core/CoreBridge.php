@@ -64,6 +64,18 @@ final class CoreBridge
 
     // ---- audit (core.audit.enabled)
 
+    /** Every recorded audit event also goes to the event bus: webhooks subscribed to it, and event automation rules. */
+    private static function auditListener(): \Closure
+    {
+        return static function (string $eventType, ?int $actor, ?string $entityType, ?string $entityId, string $action, ?string $summary, array $metadata): void {
+            $file = dirname(__DIR__, 2) . '/includes/event_bus.php';
+            if (is_file($file)) {
+                require_once $file;
+                rivetEmitEvent($eventType, ['actor_user_id' => $actor, 'entity_type' => $entityType, 'entity_id' => $entityId, 'action' => $action, 'summary' => $summary, 'metadata' => $metadata]);
+            }
+        };
+    }
+
     /** Maps the legacy Login log entries onto RivetCore audit events (names match RivetIT). */
     public static function recordLogin(string $logType, string $logAction, string $description, int $userId): void
     {
@@ -78,7 +90,7 @@ final class CoreBridge
             return;
         }
         try {
-            (new AuditService(self::database(), new ServerRequestContext()))->log(
+            (new AuditService(self::database(), new ServerRequestContext(), self::auditListener()))->log(
                 $event,
                 $userId > 0 ? $userId : null,
                 'user',
@@ -100,14 +112,14 @@ final class CoreBridge
         if ($force) {
             try {
                 return class_exists(AuditService::class) && self::connection() instanceof \mysqli
-                    ? new AuditService(self::database(), new ServerRequestContext())
+                    ? new AuditService(self::database(), new ServerRequestContext(), self::auditListener())
                     : null;
             } catch (\Throwable) {
                 return null;
             }
         }
 
-        return self::service('core.audit.enabled', 'audit', static fn () => new AuditService(self::database(), new ServerRequestContext()));
+        return self::service('core.audit.enabled', 'audit', static fn () => new AuditService(self::database(), new ServerRequestContext(), self::auditListener()));
     }
 
     // ---- redis (core.redis.enabled)
