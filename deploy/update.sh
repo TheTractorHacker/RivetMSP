@@ -174,6 +174,11 @@ run_git_pull() {
     local before_hash after_hash
     before_hash="$(sudo -u "${OWNER}" git -C "${APP_DIR}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
+    # vendor/composer/* is build output that this script regenerates below (composer install --optimize-autoloader),
+    # and Composer writes the project's current git commit into installed.php, so it differs after every run.
+    # Restore the tracked copies first so a dirty tree can never block the pull.
+    sudo -u "${OWNER}" git -C "${APP_DIR}" checkout -- vendor/composer 2>/dev/null || true
+
     announce "Running scripts/update_cli.php --update (git pull) as ${OWNER}."
     if ! sudo -u "${OWNER}" php "${APP_DIR}/scripts/update_cli.php" --update; then
         die "scripts/update_cli.php --update failed (see its output above). Database migrations were NOT run."
