@@ -1401,6 +1401,6 @@
             "install-path": "../symfony/polyfill-php82"
         }
     ],
-    "dev": true,
+    "dev": false,
     "dev-package-names": []
 }
