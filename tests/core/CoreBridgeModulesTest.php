@@ -35,7 +35,7 @@ final class CoreBridgeModulesTest extends TestCase
         $this->m = new mysqli(getenv('RIVETCORE_TEST_DB_HOST') ?: 'localhost', getenv('RIVETCORE_TEST_DB_USER') ?: 'root', getenv('RIVETCORE_TEST_DB_PASS') ?: '', $name);
         $this->m->query("SET SESSION sql_mode=''");
         $GLOBALS['mysqli'] = $this->m;
-        foreach (['integration_jobs', 'problems', 'changes', 'webhooks', 'webhook_deliveries', 'automation_rules', 'tickets'] as $t) {
+        foreach (['integration_jobs', 'problems', 'changes', 'webhooks', 'webhook_deliveries', 'automation_rules', 'tickets', 'workflow_run_tasks', 'workflow_runs', 'workflow_template_tasks', 'workflow_templates'] as $t) {
             $this->m->query("DELETE FROM $t");
         }
         $this->setFlags([]);
