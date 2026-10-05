@@ -158,6 +158,7 @@ function automationExecuteAction($mysqli, array $action, array &$context, array 
                 mysqli_query($mysqli, "UPDATE tickets SET ticket_status = 5, ticket_resolved_at = NOW(), ticket_closed_at = NOW() WHERE ticket_id = $tid");
             } else {
                 mysqli_query($mysqli, "UPDATE tickets SET ticket_status = $sid WHERE ticket_id = $tid");
+                require_once __DIR__ . '/sla_functions.php'; slaSyncPause($mysqli, $tid);
             }
             logAction("Automation", "Update", "Rule '$rule_name': set status=$sid on ticket $tid", $client_id, $tid);
             return "set status=$sid on ticket #$tid";
