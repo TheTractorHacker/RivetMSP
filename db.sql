@@ -3644,6 +3644,7 @@ CREATE TABLE `tickets` (
   `ticket_updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
   `ticket_due_at` datetime DEFAULT NULL,
   `ticket_resolved_at` datetime DEFAULT NULL,
+  `ticket_resolution_started_at` datetime DEFAULT NULL,
   `ticket_archived_at` datetime DEFAULT NULL,
   `ticket_first_response_at` datetime DEFAULT NULL,
   `ticket_closed_at` datetime DEFAULT NULL,
