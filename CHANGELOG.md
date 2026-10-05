@@ -4,6 +4,10 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.1] RivetMSP — Release channel (Production / Beta), with everything in 26.10
+
+This is the first tagged release since the 26.10 work below. Apply database migrations 2.6.58 to 2.6.65 with **Update Database** (take a backup first); it requires rivet-core 0.14.0 (already bundled in `vendor/`).
+
 ### Release channel: Production or Beta
 
 - **Administration > Update has a Release channel switch.** Production follows the `master` branch (tested releases); Beta follows `beta` (early access, changes more often). Each server chooses its own. The update check, **Update App**, the force update and `scripts/update_cli.php` (and so `deploy/update.sh`) all follow the chosen channel and move the server onto its branch. This replaces the old fixed `$repo_branch` value in `config.php`, which a server could be left pointing at a retired branch.
