@@ -3607,6 +3607,9 @@ function logAction($type, $action, $description, $client_id = 0, $entity_id = 0)
     // apostrophe) previously broke the INSERT with a SQL syntax fatal. Escaping
     // here, once, covers every caller instead of requiring each of the ~900 to
     // remember to do it themselves.
+    $raw_log_type = (string) $type;
+    $raw_log_action = (string) $action;
+    $raw_log_description = (string) $description;
     $type = mysqli_real_escape_string($mysqli, substr($type, 0, 200));
     $action = mysqli_real_escape_string($mysqli, substr($action, 0, 255));
     $description = mysqli_real_escape_string($mysqli, substr($description, 0, 1000));
@@ -3614,6 +3617,12 @@ function logAction($type, $action, $description, $client_id = 0, $entity_id = 0)
     $session_user_agent_esc = mysqli_real_escape_string($mysqli, (string) $session_user_agent);
 
     mysqli_query($mysqli, "INSERT INTO logs SET log_type = '$type', log_action = '$action', log_description = '$description', log_ip = '$session_ip_esc', log_user_agent = '$session_user_agent_esc', log_client_id = $client_id, log_user_id = $session_user_id, log_entity_id = $entity_id");
+
+    // RivetCore audit trail (structured, append-only). Login events only; OFF unless
+    // settings.config_core_audit_enabled = 1, and fail-safe: it can never break a log call or a sign-in.
+    if ($raw_log_type === 'Login' && class_exists(\RivetMSP\Core\CoreBridge::class)) {
+        \RivetMSP\Core\CoreBridge::recordLogin($raw_log_type, $raw_log_action, $raw_log_description, $session_user_id);
+    }
 }
 
 /**

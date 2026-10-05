@@ -3,7 +3,7 @@
         'name' => '__root__',
         'pretty_version' => 'dev-master',
         'version' => 'dev-master',
-        'reference' => 'd6a48d77ccdc02a1ef47e5d591e93c7e70633045',
+        'reference' => 'b62ed4f275288fc38b7d02297449908708656ccd',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -13,7 +13,7 @@
         '__root__' => array(
             'pretty_version' => 'dev-master',
             'version' => 'dev-master',
-            'reference' => 'd6a48d77ccdc02a1ef47e5d591e93c7e70633045',
+            'reference' => 'b62ed4f275288fc38b7d02297449908708656ccd',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
@@ -126,6 +126,15 @@
             'provided' => array(
                 0 => '2.0',
             ),
+        ),
+        'rivet/rivet-core' => array(
+            'pretty_version' => 'v0.1.0',
+            'version' => '0.1.0.0',
+            'reference' => '3816dcd7e1e7fce523236da7b42bcd85b6d22e66',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../rivet/rivet-core',
+            'aliases' => array(),
+            'dev_requirement' => false,
         ),
         'symfony/deprecation-contracts' => array(
             'pretty_version' => 'v3.7.1',

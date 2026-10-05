@@ -6296,3 +6296,18 @@ if (LATEST_DATABASE_VERSION > CURRENT_DATABASE_VERSION) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.54'");
     }
+
+    if (CURRENT_DATABASE_VERSION == '2.6.54') {
+        // RivetCore (shared package): off-by-default feature flag, and Core's own migration runner. The runner keeps
+        // its state in rivet_core_migrations, independent of this database version, and creates the Core-owned
+        // audit_events table. Skipped (version NOT advanced, so it retries) if rivet/rivet-core is not installed yet.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class)) {
+            mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_core_audit_enabled` tinyint(1) NOT NULL DEFAULT 0");
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.55'");
+        }
+    }

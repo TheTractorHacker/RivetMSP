@@ -2,6 +2,17 @@
 
 This file documents all notable changes made to ITFlow.
 
+## Unreleased — RivetCore foundation (off by default)
+
+RivetMSP now has a `src/` directory with PSR-4 autoloading (`RivetMSP\`) and consumes **RivetCore**
+(`rivet/rivet-core`, a tagged shared package also used by RivetIT). First module: the structured audit trail. Login
+events (success, failed, blocked, MFA failed) can be written to a new append-only `audit_events` table, **only when
+`settings.config_core_audit_enabled = 1`; it defaults to 0**, and a Composer update never turns it on. It cannot break
+sign-in: any failure is swallowed. Database migration 2.6.55 adds the flag and runs RivetCore's own migration runner
+(state in `rivet_core_migrations`, independent of this database version), and is skipped, to retry later, if the package
+is not installed yet. Storage goes through a Core-owned `DatabaseInterface`; RivetMSP's implementation reuses the
+existing mysqli connection. Tests are in `tests/core/`. MySQL/MariaDB is unchanged.
+
 ## [26.05] Stable Release
 ### Bug Fixes
 - Stripe Payment: Fix adding saved cards on client portal.

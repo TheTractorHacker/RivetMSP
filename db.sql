@@ -392,6 +392,33 @@ CREATE TABLE `assets` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `audit_events`
+--
+
+DROP TABLE IF EXISTS `audit_events`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `audit_events` (
+  `audit_id` int(11) NOT NULL AUTO_INCREMENT,
+  `event_type` varchar(100) NOT NULL,
+  `actor_user_id` int(11) DEFAULT NULL,
+  `entity_type` varchar(100) DEFAULT NULL,
+  `entity_id` varchar(64) DEFAULT NULL,
+  `action` varchar(50) NOT NULL,
+  `summary` varchar(500) DEFAULT NULL,
+  `metadata_json` text DEFAULT NULL,
+  `ip_address` varchar(64) DEFAULT NULL,
+  `user_agent` varchar(255) DEFAULT NULL,
+  `request_id` varchar(64) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`audit_id`),
+  KEY `idx_audit_events_type_created` (`event_type`,`created_at`),
+  KEY `idx_audit_events_entity` (`entity_type`,`entity_id`),
+  KEY `idx_audit_events_actor` (`actor_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `auth_logs`
 --
 
@@ -2160,6 +2187,27 @@ CREATE TABLE `remember_tokens` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `rivet_core_migrations`
+--
+
+DROP TABLE IF EXISTS `rivet_core_migrations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rivet_core_migrations` (
+  `migration_id` varchar(100) NOT NULL,
+  `applied_at` datetime NOT NULL,
+  PRIMARY KEY (`migration_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `rivet_core_migrations`
+-- (audit_events is created by this file, so Core migration 0001 is already satisfied)
+--
+
+INSERT INTO `rivet_core_migrations` (`migration_id`, `applied_at`) VALUES ('0001_audit_events', current_timestamp());
+
+--
 -- Table structure for table `revenues`
 --
 
@@ -2642,6 +2690,7 @@ CREATE TABLE `settings` (
   `config_module_enable_live_chat` tinyint(1) NOT NULL DEFAULT 0,
   `config_module_enable_unifi` tinyint(1) NOT NULL DEFAULT 0,
   `config_unifi_default_integration_id` int(11) DEFAULT NULL,
+  `config_core_audit_enabled` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`company_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
