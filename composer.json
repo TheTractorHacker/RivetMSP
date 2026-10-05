@@ -2,15 +2,16 @@
     "require": {
         "predis/predis": "^3.5",
         "aws/aws-sdk-php": "^3.395",
-        "rivet/rivet-core": "^0.1"
+        "rivet/rivet-core": "^0.6"
     },
     "repositories": [
         {
             "name": "rivet-core",
             "type": "vcs",
-            "url": "https://github.com/TheTractorHacker/rivet-core"
+            "url": "https://github.com/TheTractorHacker/rivet-core",
+            "no-api": true
         }
-    ],
+        ],
     "autoload": {
         "psr-4": {
             "RivetMSP\\": "src/"

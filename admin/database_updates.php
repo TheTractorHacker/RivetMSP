@@ -6311,3 +6311,29 @@ if (LATEST_DATABASE_VERSION > CURRENT_DATABASE_VERSION) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.55'");
         }
     }
+
+    if (CURRENT_DATABASE_VERSION == '2.6.55') {
+        // RivetCore modules beyond Audit (Redis, Jobs, ITSM, Webhooks, Workflow, Automation, health): one OFF-by-default
+        // switch per module, the Core-owned tables they use (created by Core's own migration runner), and the
+        // RivetMSP-owned tickets.ticket_problem_id column that links incidents to problems. Nothing here changes
+        // behaviour until an administrator sets a flag to 1. Skipped (version NOT advanced, so it retries) if
+        // rivet/rivet-core is not installed yet.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class)) {
+            mysqli_query($mysqli, "ALTER TABLE `settings`
+                ADD COLUMN IF NOT EXISTS `config_core_redis_enabled` tinyint(1) NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS `config_core_jobs_enabled` tinyint(1) NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS `config_core_itsm_enabled` tinyint(1) NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS `config_core_webhooks_enabled` tinyint(1) NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS `config_core_workflow_enabled` tinyint(1) NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS `config_core_automation_enabled` tinyint(1) NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS `config_core_health_enabled` tinyint(1) NOT NULL DEFAULT 0");
+            mysqli_query($mysqli, "ALTER TABLE `tickets` ADD COLUMN IF NOT EXISTS `ticket_problem_id` int(11) DEFAULT NULL");
+            mysqli_query($mysqli, "ALTER TABLE `tickets` ADD INDEX IF NOT EXISTS `idx_tickets_problem` (`ticket_problem_id`)");
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.56'");
+        }
+    }

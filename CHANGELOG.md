@@ -13,6 +13,14 @@ sign-in: any failure is swallowed. Database migration 2.6.55 adds the flag and r
 is not installed yet. Storage goes through a Core-owned `DatabaseInterface`; RivetMSP's implementation reuses the
 existing mysqli connection. Tests are in `tests/core/`. MySQL/MariaDB is unchanged.
 
+More RivetCore modules are wired, every one **off by default** with its own switch in `settings` (`config_core_<module>_enabled`):
+Redis (locks, rate limiter, cron guard), Jobs (queue), ITSM (problems and changes), Webhooks (synchronous delivery with signed bodies;
+the `X-ITFlow-*` and `X-RivetMSP-*` headers), Workflow, Automation (rule matching) and a health endpoint (`health/live.php` always on,
+`health/ready.php` returns 404 until its switch is on). Nothing calls them yet, and a Composer update never turns one on. Migration 2.6.56
+adds the switches, RivetCore's tables (created by Core's own runner) and one additive nullable column, `tickets.ticket_problem_id`, which links
+incidents to problems. `db.sql` carries the same objects, and a fresh install and an upgraded install were compared table by table and are identical.
+Remote MCP is not wired here: it needs agent single sign-on columns RivetMSP does not have yet.
+
 ## [26.05] Stable Release
 ### Bug Fixes
 - Stripe Payment: Fix adding saved cards on client portal.

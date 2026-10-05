@@ -799,27 +799,84 @@
             "install-path": "../psr/http-message"
         },
         {
-            "name": "rivet/rivet-core",
-            "version": "v0.1.0",
-            "version_normalized": "0.1.0.0",
+            "name": "psr/simple-cache",
+            "version": "3.0.0",
+            "version_normalized": "3.0.0.0",
             "source": {
                 "type": "git",
-                "url": "https://github.com/TheTractorHacker/rivet-core.git",
-                "reference": "3816dcd7e1e7fce523236da7b42bcd85b6d22e66"
+                "url": "https://github.com/php-fig/simple-cache.git",
+                "reference": "764e0b3939f5ca87cb904f570ef9be2d78a07865"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/TheTractorHacker/rivet-core/zipball/3816dcd7e1e7fce523236da7b42bcd85b6d22e66",
-                "reference": "3816dcd7e1e7fce523236da7b42bcd85b6d22e66",
+                "url": "https://api.github.com/repos/php-fig/simple-cache/zipball/764e0b3939f5ca87cb904f570ef9be2d78a07865",
+                "reference": "764e0b3939f5ca87cb904f570ef9be2d78a07865",
                 "shasum": ""
             },
             "require": {
-                "php": ">=8.2"
+                "php": ">=8.0.0"
+            },
+            "time": "2021-10-29T13:26:27+00:00",
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-master": "3.0.x-dev"
+                }
+            },
+            "installation-source": "dist",
+            "autoload": {
+                "psr-4": {
+                    "Psr\\SimpleCache\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "PHP-FIG",
+                    "homepage": "https://www.php-fig.org/"
+                }
+            ],
+            "description": "Common interfaces for simple caching",
+            "keywords": [
+                "cache",
+                "caching",
+                "psr",
+                "psr-16",
+                "simple-cache"
+            ],
+            "support": {
+                "source": "https://github.com/php-fig/simple-cache/tree/3.0.0"
+            },
+            "install-path": "../psr/simple-cache"
+        },
+        {
+            "name": "rivet/rivet-core",
+            "version": "v0.6.0",
+            "version_normalized": "0.6.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/TheTractorHacker/rivet-core",
+                "reference": "a5ced8506026a67cb138d89c945397f7dd206d71"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/TheTractorHacker/rivet-core/zipball/a5ced8506026a67cb138d89c945397f7dd206d71",
+                "reference": "a5ced8506026a67cb138d89c945397f7dd206d71",
+                "shasum": ""
+            },
+            "require": {
+                "guzzlehttp/guzzle": "^7.0 || ^8.0",
+                "php": ">=8.2",
+                "predis/predis": "^3.5",
+                "psr/simple-cache": "^3.0"
             },
             "require-dev": {
                 "phpunit/phpunit": "^11.5"
             },
-            "time": "2026-10-05T00:39:37+00:00",
+            "time": "2026-10-05T01:17:17+00:00",
             "type": "library",
             "installation-source": "dist",
             "autoload": {

@@ -32,6 +32,7 @@ class ComposerStaticInit690e04a27fa241bad9da145ee44cf2eb
         ),
         'P' =>
         array (
+            'Psr\\SimpleCache\\' => 16,
             'Psr\\Http\\Message\\' => 17,
             'Psr\\Http\\Client\\' => 16,
             'Predis\\' => 7,
@@ -80,6 +81,10 @@ class ComposerStaticInit690e04a27fa241bad9da145ee44cf2eb
         'RivetCore\\' =>
         array (
             0 => __DIR__ . '/..' . '/rivet/rivet-core/src',
+        ),
+        'Psr\\SimpleCache\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/psr/simple-cache/src',
         ),
         'Psr\\Http\\Message\\' =>
         array (

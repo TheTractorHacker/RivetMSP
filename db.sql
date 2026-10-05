@@ -392,33 +392,6 @@ CREATE TABLE `assets` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `audit_events`
---
-
-DROP TABLE IF EXISTS `audit_events`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
-CREATE TABLE `audit_events` (
-  `audit_id` int(11) NOT NULL AUTO_INCREMENT,
-  `event_type` varchar(100) NOT NULL,
-  `actor_user_id` int(11) DEFAULT NULL,
-  `entity_type` varchar(100) DEFAULT NULL,
-  `entity_id` varchar(64) DEFAULT NULL,
-  `action` varchar(50) NOT NULL,
-  `summary` varchar(500) DEFAULT NULL,
-  `metadata_json` text DEFAULT NULL,
-  `ip_address` varchar(64) DEFAULT NULL,
-  `user_agent` varchar(255) DEFAULT NULL,
-  `request_id` varchar(64) DEFAULT NULL,
-  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`audit_id`),
-  KEY `idx_audit_events_type_created` (`event_type`,`created_at`),
-  KEY `idx_audit_events_entity` (`entity_type`,`entity_id`),
-  KEY `idx_audit_events_actor` (`actor_user_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
 -- Table structure for table `auth_logs`
 --
 
@@ -2187,8 +2160,219 @@ CREATE TABLE `remember_tokens` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `rivet_core_migrations`
+-- RivetCore-owned tables (created and versioned by rivet/rivet-core's migration runner)
 --
+
+DROP TABLE IF EXISTS `audit_events`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `audit_events` (
+  `audit_id` int(11) NOT NULL AUTO_INCREMENT,
+  `event_type` varchar(100) NOT NULL,
+  `actor_user_id` int(11) DEFAULT NULL,
+  `entity_type` varchar(100) DEFAULT NULL,
+  `entity_id` varchar(64) DEFAULT NULL,
+  `action` varchar(50) NOT NULL,
+  `summary` varchar(500) DEFAULT NULL,
+  `metadata_json` text DEFAULT NULL,
+  `ip_address` varchar(64) DEFAULT NULL,
+  `user_agent` varchar(255) DEFAULT NULL,
+  `request_id` varchar(64) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`audit_id`),
+  KEY `idx_audit_events_type_created` (`event_type`,`created_at`),
+  KEY `idx_audit_events_entity` (`entity_type`,`entity_id`),
+  KEY `idx_audit_events_actor` (`actor_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `integration_jobs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `integration_jobs` (
+  `job_id` int(11) NOT NULL AUTO_INCREMENT,
+  `integration_id` int(11) DEFAULT NULL,
+  `job_type` varchar(100) NOT NULL,
+  `resource_type` varchar(100) DEFAULT NULL,
+  `status` enum('pending','running','completed','failed','dead_letter') NOT NULL DEFAULT 'pending',
+  `priority` int(11) NOT NULL DEFAULT 0,
+  `attempts` int(11) NOT NULL DEFAULT 0,
+  `max_attempts` int(11) NOT NULL DEFAULT 5,
+  `available_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `started_at` datetime DEFAULT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `payload` text DEFAULT NULL,
+  `result` text DEFAULT NULL,
+  `error` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`job_id`),
+  KEY `idx_integration_jobs_status_available` (`status`,`available_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `mcp_unlinked_identities`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `mcp_unlinked_identities` (
+  `mcp_unlinked_id` int(11) NOT NULL AUTO_INCREMENT,
+  `issuer` varchar(255) NOT NULL,
+  `subject` varchar(255) NOT NULL,
+  `email` varchar(200) DEFAULT NULL,
+  `display_name` varchar(200) DEFAULT NULL,
+  `attempts` int(11) NOT NULL DEFAULT 1,
+  `first_seen_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `last_seen_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`mcp_unlinked_id`),
+  UNIQUE KEY `uniq_mcp_identity` (`issuer`,`subject`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `problems`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `problems` (
+  `problem_id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) NOT NULL,
+  `description` text DEFAULT NULL,
+  `status` enum('open','investigating','resolved','closed') NOT NULL DEFAULT 'open',
+  `change_problem_id` int(11) DEFAULT NULL,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `resolved_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`problem_id`),
+  KEY `idx_problems_status` (`status`),
+  KEY `idx_problems_change` (`change_problem_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `changes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `changes` (
+  `change_id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) NOT NULL,
+  `reason` text DEFAULT NULL,
+  `impact` text DEFAULT NULL,
+  `risk` enum('low','medium','high') NOT NULL DEFAULT 'low',
+  `implementation_plan` text DEFAULT NULL,
+  `rollback_plan` text DEFAULT NULL,
+  `scheduled_at` datetime DEFAULT NULL,
+  `status` enum('draft','awaiting_approval','approved','scheduled','in_progress','successful','failed','rolled_back','cancelled') NOT NULL DEFAULT 'draft',
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`change_id`),
+  KEY `idx_changes_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `webhook_deliveries`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `webhook_deliveries` (
+  `delivery_id` int(11) NOT NULL AUTO_INCREMENT,
+  `webhook_id` int(11) NOT NULL,
+  `event_type` varchar(150) NOT NULL,
+  `http_status` smallint(6) DEFAULT NULL,
+  `duration_ms` int(11) NOT NULL DEFAULT 0,
+  `attempt_number` tinyint(3) NOT NULL DEFAULT 1,
+  `request_payload_json` longtext DEFAULT NULL,
+  `response_body_snippet` varchar(1000) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`delivery_id`),
+  KEY `idx_webhook_deliveries_webhook` (`webhook_id`,`created_at`),
+  KEY `idx_webhook_deliveries_event` (`event_type`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `automation_rules`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `automation_rules` (
+  `rule_id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(200) NOT NULL,
+  `trigger_event` varchar(150) NOT NULL,
+  `condition_json` text DEFAULT NULL,
+  `action_type` enum('create_ticket','send_webhook','notify_user') NOT NULL,
+  `action_config_json` text DEFAULT NULL,
+  `is_enabled` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`rule_id`),
+  KEY `idx_automation_rules_trigger` (`trigger_event`,`is_enabled`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `workflow_templates`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `workflow_templates` (
+  `workflow_template_id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(200) NOT NULL,
+  `type` enum('onboarding','offboarding') NOT NULL,
+  `description` text DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
+  `archived_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`workflow_template_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `workflow_template_tasks`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `workflow_template_tasks` (
+  `template_task_id` int(11) NOT NULL AUTO_INCREMENT,
+  `workflow_template_id` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `instructions` text DEFAULT NULL,
+  `category` varchar(100) DEFAULT NULL,
+  `default_owner` varchar(100) DEFAULT NULL,
+  `required` tinyint(1) NOT NULL DEFAULT 1,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`template_task_id`),
+  KEY `idx_template_task_template` (`workflow_template_id`,`sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `workflow_runs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `workflow_runs` (
+  `run_id` int(11) NOT NULL AUTO_INCREMENT,
+  `workflow_template_id` int(11) DEFAULT NULL,
+  `contact_id` int(11) NOT NULL,
+  `type` enum('onboarding','offboarding') NOT NULL,
+  `status` enum('in_progress','completed_with_exceptions','completed','cancelled') NOT NULL DEFAULT 'in_progress',
+  `started_by` int(11) DEFAULT NULL,
+  `started_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `completed_at` datetime DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  PRIMARY KEY (`run_id`),
+  KEY `idx_workflow_runs_contact` (`contact_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `workflow_run_tasks`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `workflow_run_tasks` (
+  `run_task_id` int(11) NOT NULL AUTO_INCREMENT,
+  `run_id` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `instructions` text DEFAULT NULL,
+  `category` varchar(100) DEFAULT NULL,
+  `default_owner` varchar(100) DEFAULT NULL,
+  `required` tinyint(1) NOT NULL DEFAULT 1,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `status` enum('pending','completed','skipped') NOT NULL DEFAULT 'pending',
+  `completed_by` int(11) DEFAULT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `skip_reason` varchar(500) DEFAULT NULL,
+  PRIMARY KEY (`run_task_id`),
+  KEY `idx_run_task_run` (`run_id`,`sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `rivet_core_migrations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -2197,15 +2381,15 @@ CREATE TABLE `rivet_core_migrations` (
   `migration_id` varchar(100) NOT NULL,
   `applied_at` datetime NOT NULL,
   PRIMARY KEY (`migration_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Dumping data for table `rivet_core_migrations`
--- (audit_events is created by this file, so Core migration 0001 is already satisfied)
+-- (every table above is created by this file, so all Core migrations are already satisfied)
 --
 
-INSERT INTO `rivet_core_migrations` (`migration_id`, `applied_at`) VALUES ('0001_audit_events', current_timestamp());
+INSERT INTO `rivet_core_migrations` (`migration_id`, `applied_at`) VALUES ('0001_audit_events', current_timestamp()), ('0002_integration_jobs', current_timestamp()), ('0003_mcp_unlinked_identities', current_timestamp()), ('0004_problems_and_changes', current_timestamp()), ('0005_webhook_deliveries', current_timestamp()), ('0006_automation_rules', current_timestamp()), ('0007_workflow_tables', current_timestamp());
 
 --
 -- Table structure for table `revenues`
@@ -2691,6 +2875,13 @@ CREATE TABLE `settings` (
   `config_module_enable_unifi` tinyint(1) NOT NULL DEFAULT 0,
   `config_unifi_default_integration_id` int(11) DEFAULT NULL,
   `config_core_audit_enabled` tinyint(1) NOT NULL DEFAULT 0,
+  `config_core_redis_enabled` tinyint(1) NOT NULL DEFAULT 0,
+  `config_core_jobs_enabled` tinyint(1) NOT NULL DEFAULT 0,
+  `config_core_itsm_enabled` tinyint(1) NOT NULL DEFAULT 0,
+  `config_core_webhooks_enabled` tinyint(1) NOT NULL DEFAULT 0,
+  `config_core_workflow_enabled` tinyint(1) NOT NULL DEFAULT 0,
+  `config_core_automation_enabled` tinyint(1) NOT NULL DEFAULT 0,
+  `config_core_health_enabled` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`company_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -3456,7 +3647,9 @@ CREATE TABLE `tickets` (
   `ticket_sla_resolution_due` datetime DEFAULT NULL,
   `ticket_outlook_event_id` varchar(255) DEFAULT NULL,
   `ticket_initial_issue_reply_id` int(11) DEFAULT NULL,
-  PRIMARY KEY (`ticket_id`)
+  `ticket_problem_id` int(11) DEFAULT NULL,
+  PRIMARY KEY (`ticket_id`),
+  KEY `idx_tickets_problem` (`ticket_problem_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
