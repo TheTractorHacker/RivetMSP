@@ -2,7 +2,22 @@
 
 This file documents all notable changes made to ITFlow.
 
-## [Unreleased]
+## [26.10.5] RivetMSP — webhook platforms and event picker, internal-network webhooks, shared date-range picker, icon picker, RivetCore 0.21
+
+Database migrations 2.6.70 to 2.6.73 apply with **Update Database**. Requires rivet-core 0.21.0 (already in `vendor/`).
+
+### Date ranges
+
+- **One date-range picker on every filtered page**: grouped presets (Today, Yesterday, Last 7/14/30/90 days, this and last week, month, quarter, year, last 12 months, upcoming) and a two-month calendar for custom ranges. Existing `canned_date` / `dtf` / `dtt` links keep working.
+- **Service Desk:** the date control is in the main filter row of the ticket list and kanban, with a **Date field** choice (Created, Updated, Resolved, Closed, Due, SLA resolution due). Saved ticket views keep rolling presets such as "Last 7 days"; older saved views with fixed dates still work.
+
+### Icon picker
+
+- Saved ticket views, tags and custom links choose their icon from a searchable catalog (621 icons in 14 categories, with a custom-class field) instead of typing a Font Awesome class.
+
+### Webhooks to internal networks
+
+- Administration > Webhooks > **Internal network access**: webhooks may reach private addresses only inside networks an admin lists (loopback, link-local and cloud-metadata addresses are never allowed). "Use this server's network" suggests the server's own subnet. Migration 2.6.72.
 
 ### Webhook platforms (RivetCore 0.21.0, migration 2.6.73)
 
