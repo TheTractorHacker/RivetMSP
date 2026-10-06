@@ -1156,3 +1156,8 @@ body.dark-mode .content-wrapper small.text-muted {
 .er-picker-summary { cursor: pointer; font-size: .85rem; color: var(--color-accent, #0d9488); margin: .5rem 0; }
 .er-picker-wrap[open] > .er-picker-summary { margin-bottom: .5rem; }
 @media (prefers-reduced-motion: reduce) { .er-drawer, .er-switch-track, .er-switch-track::after { transition: none; } .er-rule.er-flash { animation: none; } }
+
+/* Recipe cards are links: keep them free of the global link underline (hover, focus and their text spans too). */
+a.er-recipe, a.er-recipe:hover, a.er-recipe:focus, a.er-recipe:focus-visible, a.er-recipe:active,
+a.er-recipe .er-recipe-title, a.er-recipe .er-recipe-blurb, a.er-recipe .er-recipe-flow,
+a.er-recipe:hover .er-recipe-title, a.er-recipe:hover .er-recipe-blurb, a.er-recipe:hover .er-recipe-flow { text-decoration: none; }
