@@ -14,6 +14,13 @@ if (isset($_POST['add_vendor_contact'])) {
 
     require_once 'vendor_contact_model.php';
 
+    // The client comes from the vendor record, not from POST data
+    $client_id = intval(getFieldById('vendors', $vendor_id, 'vendor_client_id'));
+    // Global (non client-scoped) vendors have no client to check, same as calendar events
+    if ($client_id) {
+        enforceClientAccess();
+    }
+
     mysqli_query($mysqli,"INSERT INTO vendor_contacts SET vendor_contact_name = '$name', vendor_contact_title = '$title', vendor_contact_phone = '$phone', vendor_contact_extension = '$extension', vendor_contact_mobile = '$mobile', vendor_contact_email = '$email', vendor_contact_notes = '$notes', vendor_contact_department = '$department', vendor_contact_vendor_id = $vendor_id");
 
     $vendor_contact_id = mysqli_insert_id($mysqli);
@@ -37,6 +44,17 @@ if (isset($_POST['edit_vendor_contact'])) {
     require_once 'vendor_contact_model.php';
 
     $vendor_contact_id = intval($_POST['vendor_contact_id']);
+
+    // Resolve the client through the contact's vendor (never trust POSTed client_id) and check access
+    $vc_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT vendor_client_id FROM vendor_contacts LEFT JOIN vendors ON vendor_contact_vendor_id = vendor_id WHERE vendor_contact_id = $vendor_contact_id LIMIT 1"));
+    if (!$vc_row) {
+        flash_alert("Vendor contact not found", 'error');
+        redirect();
+    }
+    $client_id = intval($vc_row['vendor_client_id']);
+    if ($client_id) {
+        enforceClientAccess();
+    }
 
     mysqli_query($mysqli,"UPDATE vendor_contacts SET vendor_contact_name = '$name', vendor_contact_title = '$title', vendor_contact_phone = '$phone', vendor_contact_extension = '$extension', vendor_contact_mobile = '$mobile', vendor_contact_email = '$email', contact_pin = '$pin', vendor_contact_notes = '$notes', vendor_contact_department = '$department' WHERE vendor_contact_id = $vendor_contact_id");
 

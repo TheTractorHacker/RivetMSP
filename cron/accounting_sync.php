@@ -16,6 +16,12 @@
  * that already has a remote id is never re-created.
  */
 
+if (php_sapi_name() !== 'cli') {
+    http_response_code(403);
+    exit('This script can only be run from the command line.');
+}
+
+
 if (!isset($mysqli) || !($mysqli instanceof mysqli)) {
     return;
 }

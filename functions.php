@@ -7,6 +7,7 @@ require_once __DIR__ . '/includes/redis_functions.php';
 require_once __DIR__ . '/includes/firebase.php';
 require_once __DIR__ . '/includes/notification_categories.php';
 require_once __DIR__ . '/includes/billing_guards.php';
+require_once __DIR__ . '/includes/net_guards.php';
 
 // Role check failed wording
 DEFINE("WORDING_ROLECHECK_FAILED", "You are not permitted to do that!");
@@ -800,6 +801,14 @@ function getSSL($full_name)
 
     // Only run if we think the domain is valid
     if (!filter_var($name, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME)) {
+        $certificate['expire'] = '';
+        $certificate['issued_by'] = '';
+        $certificate['public_key'] = '';
+        return $certificate;
+    }
+
+    // Refuse hosts that resolve to loopback/private/reserved ranges (this runs server-side for any agent: no port-probing the LAN)
+    if (!hostResolvesOnlyToPublicIps($name)) {
         $certificate['expire'] = '';
         $certificate['issued_by'] = '';
         $certificate['public_key'] = '';
@@ -2492,7 +2501,8 @@ function checkFileUpload($file, $allowed_extensions)
     // Check the size is under 500 MB
     $maxSizeBytes = 500 * 1024 * 1024; // 500 MB
     if ($size > $maxSizeBytes) {
-        return "File size exceeds the limit.";
+        // Treated like any other rejected upload: callers use a truthy return as the stored filename
+        return false;
     }
 
     // Read the file content

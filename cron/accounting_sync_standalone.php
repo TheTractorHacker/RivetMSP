@@ -10,6 +10,11 @@
  * company. See cron/accounting_sync.php for the actual worker logic.
  */
 
+if (php_sapi_name() !== 'cli') {
+    http_response_code(403);
+    exit('This script can only be run from the command line.');
+}
+
 chdir(__DIR__);
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../functions.php';

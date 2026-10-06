@@ -92,8 +92,8 @@ if (isset($_POST['code']) && $_POST['state'] == session_id()) {
 
         if (isset($msgraph_response['error'])) {
             // Something went wrong verifying the token/using the Graph API - quit
-            echo "Error with MS Graph API. Details:";
-            var_dump($msgraph_response['error']);
+            error_log("Portal Microsoft login: Graph API error: " . json_encode($msgraph_response['error']));
+            echo "Error with MS Graph API. Please try again or contact your administrator.";
             exit();
 
         } elseif (isset($msgraph_response['id'])) {

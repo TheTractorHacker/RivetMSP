@@ -78,6 +78,8 @@ if (isset($_POST['add_event'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
+    enforceUserPermission('module_support', 2);
+
     require_once 'event_model.php';
 
     // Don't Enforce Client Access if Calendar event doesn't have a client
@@ -154,6 +156,8 @@ if (isset($_POST['add_event'])) {
 if (isset($_POST['edit_event'])) {
 
     validateCSRFToken($_POST['csrf_token']);
+
+    enforceUserPermission('module_support', 2);
 
     require_once 'event_model.php';
 
@@ -239,6 +243,8 @@ if (isset($_POST['edit_event'])) {
 if (isset($_GET['delete_event'])) {
 
     validateCSRFToken($_GET['csrf_token']);
+
+    enforceUserPermission('module_support', 2);
 
     $event_id = intval($_GET['delete_event']);
 

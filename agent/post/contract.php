@@ -135,8 +135,15 @@ if (isset($_POST['upload_contract_document'])) {
     if (!is_dir($upload_dir)) mkdir($upload_dir, 0750, true);
 
     // Safe stored filename: doc_id will come from insert, use timestamp for now
-    $ext      = pathinfo($file['name'], PATHINFO_EXTENSION);
-    $stored   = time() . '_' . bin2hex(random_bytes(8)) . '.' . preg_replace('/[^a-z0-9]/i', '', $ext);
+    // The stored extension comes from the sniffed MIME type, never from the client-supplied name
+    // (a text/plain polyglot named x.php must not be saved as .php)
+    $ext_by_mime = [
+        'application/pdf' => 'pdf', 'application/msword' => 'doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
+        'image/png' => 'png', 'image/jpeg' => 'jpg', 'text/plain' => 'txt',
+    ];
+    $ext      = $ext_by_mime[$mime];
+    $stored   = time() . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
     $dest     = "$upload_dir/$stored";
 
     if (!move_uploaded_file($file['tmp_name'], $dest)) {
