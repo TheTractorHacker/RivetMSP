@@ -236,20 +236,31 @@ if (!$user || !$password_ok) {
     api_error(401, 'Invalid credentials');
 }
 
-// ── Reset failure counter on success ─────────────────────────────────────────
-$uid = intval($user['user_id']);
-mysqli_query($mysqli, "UPDATE users SET user_failed_login_count = 0 WHERE user_id = $uid");
-
 // ── 2FA (TOTP) ───────────────────────────────────────────────────────────────
+// The failure counter is NOT reset by a correct password alone: with 2FA enabled the
+// second factor must pass first, otherwise the TOTP code could be brute-forced with no
+// counting, logging or lockout.
+$uid = intval($user['user_id']);
 $totp_secret = $user['user_token'] ?? '';
 if (!empty($totp_secret)) {
     if (empty($totp)) {
         api_response(200, ['requires_2fa' => true]);
     }
-    if (!TokenAuth6238::verify($totp_secret, intval($totp))) {
+    // +/-1 time step (30 s either side) instead of the web default of +/-3
+    if (!TokenAuth6238::verify($totp_secret, intval($totp), 1)) {
+        mysqli_query($mysqli,
+            "UPDATE users SET
+                user_failed_login_count = user_failed_login_count + 1,
+                user_failed_login_at = UTC_TIMESTAMP()
+             WHERE user_id = $uid"
+        );
+        logAction('Login', 'Failed', "{$user['user_name']} failed 2FA on mobile API login (MFA Failed)");
         api_error(401, 'Invalid 2FA code');
     }
 }
+
+// ── Reset failure counter on success (password and, when enabled, 2FA both passed) ─────
+mysqli_query($mysqli, "UPDATE users SET user_failed_login_count = 0 WHERE user_id = $uid");
 
 // ── Issue token ───────────────────────────────────────────────────────────────
 $raw_token  = bin2hex(random_bytes(32));
