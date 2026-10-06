@@ -66,7 +66,7 @@ if (isset($_GET['id']) && isset($_GET['key'])) {
     $file_name = sanitizeInput($file_row['file_name']);
     $file_reference_name = sanitizeInput($file_row['file_reference_name']);
     $client_id = intval($file_row['file_client_id']);
-    $file_path = "../uploads/clients/$client_id/$file_reference_name";
+    $file_path = "../uploads/clients/$client_id/" . basename($file_reference_name);
 
     // Display file as download
     $mime_type = mime_content_type($file_path);

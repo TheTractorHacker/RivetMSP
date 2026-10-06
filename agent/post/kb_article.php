@@ -159,7 +159,7 @@ if (isset($_GET['delete_kb_article_attachment'])) {
 
     if ($att) {
         $ref_name = $att['kb_article_attachment_reference_name'];
-        $file_path = $_SERVER['DOCUMENT_ROOT'] . "/uploads/kb/$kb_article_id/$ref_name";
+        $file_path = $_SERVER['DOCUMENT_ROOT'] . "/uploads/kb/$kb_article_id/" . basename($ref_name);
         if (is_file($file_path)) {
             unlink($file_path);
         }
