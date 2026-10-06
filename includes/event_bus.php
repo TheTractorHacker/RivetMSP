@@ -62,7 +62,17 @@ function rivetWebhookDispatcher($mysqli): \RivetCore\Webhooks\WebhookDispatcher
     $db = rivetCoreDb($mysqli);
     $subsClass = rivetCoreAdapterNs() . '\Webhooks\WebhooksTableSubscriptions';
 
-    return new \RivetCore\Webhooks\WebhookDispatcher($db, new $subsClass($db), new \RivetCore\Support\SystemClock(), rivetWebhookHeaderPrefixes());
+    return new \RivetCore\Webhooks\WebhookDispatcher($db, new $subsClass($db), new \RivetCore\Support\SystemClock(), rivetWebhookHeaderPrefixes(), null, \RivetCore\Webhooks\WebhookDispatcher::DEFAULT_TIMEOUT_SECONDS, rivetWebhookUrlPolicy(), true);
+}
+
+/**
+ * The address policy for outgoing webhooks. The Webhooks and Event rules pages already refuse non-public addresses when a URL is saved, so delivery
+ * enforces the same rule (and pins the connection to the vetted addresses). A server environment variable RIVETMSP_WEBHOOK_ALLOW_PRIVATE=1 lifts only the
+ * address-range test, for self-hosted setups and test rigs that deliberately call an internal endpoint; it is not reachable from the UI.
+ */
+function rivetWebhookUrlPolicy(): \RivetCore\Webhooks\UrlPolicy
+{
+    return new \RivetCore\Webhooks\UrlPolicy(getenv('RIVETMSP_WEBHOOK_ALLOW_PRIVATE') === '1');
 }
 
 /**
@@ -160,7 +170,7 @@ function rivetRunJobWorker($mysqli, int $limit = 20, int $seconds = 50): array
 function rivetRegisterJobHandlers(\RivetCore\Jobs\JobWorker $worker, $mysqli): void
 {
     $worker->register('webhook.deliver', static function (array $p, array $job) use ($mysqli) {
-        $r = rivetWebhookDispatcher($mysqli)->deliverTo((int) ($p['webhook_id'] ?? 0), (string) ($p['event'] ?? ''), (array) ($p['data'] ?? []), (int) ($job['attempts'] ?? 1), $p['emitted_at'] ?? null);
+        $r = rivetWebhookDispatcher($mysqli)->deliverTo((int) ($p['webhook_id'] ?? 0), (string) ($p['event'] ?? ''), (array) ($p['data'] ?? []), (int) ($job['attempts'] ?? 1), $p['emitted_at'] ?? null, time());
         if (!empty($r['gone'])) {
             throw new \RivetCore\Jobs\PermanentJobFailure('The webhook endpoint no longer exists or is disabled.');
         }
@@ -231,10 +241,8 @@ function rivetAutomationActionHandlers($mysqli, string $ruleName): array
                 }
             }
             $ch = curl_init((string) $cfg['url']);
-            curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body, CURLOPT_HTTPHEADER => $headers, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10, CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_FOLLOWLOCATION => false, CURLOPT_SSL_VERIFYPEER => true,
-                CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-                // Pin the connection to the addresses just vetted, so a DNS answer that changes in between cannot redirect it inward.
-                CURLOPT_RESOLVE => [$target['host'] . ':' . $target['port'] . ':' . implode(',', $target['ips'])]]);
+            // Pins the connection to the addresses just vetted, so a DNS answer that changes in between cannot redirect it inward.
+            curl_setopt_array($ch, \RivetCore\Webhooks\WebhookDispatcher::curlOptions($body, $headers, 10, $target));
             $out = curl_exec($ch);
             $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
             if ($out === false) {
@@ -291,51 +299,14 @@ function rivetAudit(string $event, ?int $actor, ?string $entityType, $entityId, 
 }
 
 /**
- * Resolve a webhook URL and vet it: http(s) only, no userinfo/backslashes, and every address it resolves to must be public.
- * Returns the vetted target so the caller can PIN the connection to those addresses (stops DNS rebinding between check and use), or null.
+ * Vet a webhook URL (RivetCore UrlPolicy): http(s) only, no userinfo/backslashes, every resolved address public. Returns the vetted
+ * target so the caller can PIN the connection to those addresses (stops DNS rebinding between check and use), or null.
  *
  * @return array{host:string, port:int, ips:string[]}|null
  */
 function rivetWebhookResolveTarget(string $url): ?array
 {
-    if (str_contains($url, '\\') || preg_match('/[\x00-\x20]/', $url)) {
-        return null;
-    }
-    $parts = parse_url($url);
-    if (!$parts || empty($parts['scheme']) || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])
-        || !in_array(strtolower($parts['scheme']), ['http', 'https'], true)) {
-        return null;
-    }
-    $host = trim($parts['host'], '[]');
-    $port = (int) ($parts['port'] ?? (strtolower($parts['scheme']) === 'https' ? 443 : 80));
-    $ips = [];
-    if (filter_var($host, FILTER_VALIDATE_IP)) {
-        $ips[] = $host;
-    } else {
-        foreach (@dns_get_record($host, DNS_A + DNS_AAAA) ?: [] as $record) {
-            if (!empty($record['ip'])) {
-                $ips[] = $record['ip'];
-            } elseif (!empty($record['ipv6'])) {
-                $ips[] = $record['ipv6'];
-            }
-        }
-        if (!$ips) {
-            $resolved = @gethostbyname($host);
-            if ($resolved !== $host) {
-                $ips[] = $resolved;
-            }
-        }
-    }
-    if (!$ips) {
-        return null;
-    }
-    foreach ($ips as $ip) {
-        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-            return null;
-        }
-    }
-
-    return ['host' => $host, 'port' => $port, 'ips' => array_values(array_unique($ips))];
+    return rivetWebhookUrlPolicy()->vet($url);
 }
 
 function rivetWebhookUrlIsSafe(string $url): bool

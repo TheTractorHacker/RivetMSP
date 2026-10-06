@@ -4,11 +4,14 @@ namespace RivetMSP\Redis;
 
 use Predis\Client;
 use RivetCore\Redis\RedisAdmin;
+use RivetCore\Redis\RedisConnectionConfig;
 
 /**
  * Where RivetMSP finds Redis, and the admin tools around it. The connection comes from, in order: the
  * RIVETMSP_REDIS_* environment variables, the values saved in Administration > Redis, then the built-in
  * default (127.0.0.1:6380). Redis stays optional and never holds the only copy of anything.
+ * A Redis ACL username and TLS are environment-only (RIVETMSP_REDIS_USERNAME, RIVETMSP_REDIS_TLS=1, RIVETMSP_REDIS_TLS_VERIFY=0,
+ * RIVETMSP_REDIS_TLS_CA_FILE): the settings page has no fields for them, as they would need new columns.
  */
 final class RedisSettings
 {
@@ -23,7 +26,7 @@ final class RedisSettings
 
     public const POLICIES = ['allkeys-lru', 'volatile-lru', 'allkeys-lfu', 'volatile-lfu', 'noeviction'];
 
-    /** @return array{host:string, port:int, password:?string, db:int, from_env:array<string,bool>, schema_ready:bool, stored_host:string, stored_port:int, stored_db:int, has_stored_password:bool} */
+    /** @return array{host:string, port:int, password:?string, db:int, username:?string, tls:bool, tls_verify:bool, tls_ca_file:?string, from_env:array<string,bool>, schema_ready:bool, stored_host:string, stored_port:int, stored_db:int, has_stored_password:bool} */
     public static function resolve(?\mysqli $db = null): array
     {
         $row = [];
@@ -51,6 +54,10 @@ final class RedisSettings
             'port' => (int) ($env('RIVETMSP_REDIS_PORT') ?? ($storedPort > 0 ? $storedPort : self::DEFAULT_PORT)),
             'password' => $env('RIVETMSP_REDIS_PASSWORD') ?? $storedPass,
             'db' => (int) ($env('RIVETMSP_REDIS_DB') ?? $storedDb),
+            'username' => $env('RIVETMSP_REDIS_USERNAME'),
+            'tls' => filter_var($env('RIVETMSP_REDIS_TLS') ?? false, FILTER_VALIDATE_BOOLEAN),
+            'tls_verify' => filter_var($env('RIVETMSP_REDIS_TLS_VERIFY') ?? true, FILTER_VALIDATE_BOOLEAN),
+            'tls_ca_file' => $env('RIVETMSP_REDIS_TLS_CA_FILE'),
             'from_env' => [
                 'host' => $env('RIVETMSP_REDIS_HOST') !== null, 'port' => $env('RIVETMSP_REDIS_PORT') !== null,
                 'password' => $env('RIVETMSP_REDIS_PASSWORD') !== null, 'db' => $env('RIVETMSP_REDIS_DB') !== null,
@@ -67,11 +74,10 @@ final class RedisSettings
         return RedisAdmin::validate($host, $port, $db, $password);
     }
 
+    /** @param array<string,mixed> $p resolve() output (or the settings form's values) */
     public static function client(array $p, float $timeout = 1.0): Client
     {
-        $parameters = ['scheme' => 'tcp', 'host' => $p['host'], 'port' => $p['port'], 'database' => $p['db'], 'timeout' => $timeout];
-        if (!empty($p['password'])) $parameters['password'] = $p['password'];
-        return new Client($parameters);
+        return self::admin()->client(RedisConnectionConfig::fromArray($p), $timeout);
     }
 
     /** @return array{ok:bool, message:string} */

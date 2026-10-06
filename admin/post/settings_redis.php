@@ -13,7 +13,7 @@ $redis_form_params = static function (array $current): array {
     $typed = (string) ($_POST['redis_password'] ?? '');
     $clear = isset($_POST['redis_clear_password']);
     $password = $current['from_env']['password'] ? $current['password'] : ($typed !== '' ? $typed : ($clear ? null : $current['password']));
-    return ['host' => $host, 'port' => $port, 'db' => $db, 'password' => $password, 'typed' => $typed, 'clear' => $clear];
+    return ['host' => $host, 'port' => $port, 'db' => $db, 'password' => $password, 'username' => $current['username'], 'tls' => $current['tls'], 'tls_verify' => $current['tls_verify'], 'tls_ca_file' => $current['tls_ca_file'], 'typed' => $typed, 'clear' => $clear];
 };
 
 if (isset($_POST['test_redis_connection']) || isset($_POST['save_redis_settings'])) {

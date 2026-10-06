@@ -5,6 +5,7 @@ Needs a THROWAWAY copy of the app (never a real site): install it with scripts/s
 against a scratch database, set $config_https_only = FALSE in its config.php, serve it with
 `php -S 127.0.0.1:<port> -t <app dir>`, and give this script the scratch database credentials in TEST_DB_USER / TEST_DB_PASS.
 
+  (serve the app with RIVETMSP_WEBHOOK_ALLOW_PRIVATE=1: the receiver below is on 127.0.0.1)
   TEST_DB_USER=... TEST_DB_PASS=... python3 tests/e2e/event_bus.py http://127.0.0.1:<port> <scratch db> <admin email> <admin password>
 """
 import re, sys, json, subprocess, os, http.cookiejar, urllib.request, urllib.parse, urllib.error
@@ -103,6 +104,9 @@ sql("update integration_jobs set available_at = '2000-01-01 00:00:00' where stat
 RX['status'] = 200
 out = worker()
 check('the worker retries when due: delivered on attempt 2', wait_for(lambda: sql("select count(*) from webhook_deliveries where attempt_number=2 and http_status=200") == '1') and sql("select status from integration_jobs where job_type='webhook.deliver'") == 'completed', out)
+check('every attempt carries X-Rivet-Timestamp and an X-Rivet-Signature-V2 that verifies against the body', len(RX['log']) >= 2 and all(
+    (lambda ts, v2: ts.isdigit() and abs(int(ts) - time.time()) < 600 and v2 == 't=%s,v1=%s' % (ts, hmac.new(b'topsecret', ts.encode() + b'.' + r['body'], hashlib.sha256).hexdigest()))(r['headers'].get('X-Rivet-Timestamp', ''), r['headers'].get('X-Rivet-Signature-V2', ''))
+    for r in RX['log']), [r['headers'].get('X-Rivet-Signature-V2') for r in RX['log']])
 check('the retry sent byte-identical content (same timestamp, same signature)', len(RX['log']) >= 2 and RX['log'][0]['body'] == RX['log'][-1]['body'])
 
 # ---- endpoint deleted before delivery: permanent failure, no retry loop
