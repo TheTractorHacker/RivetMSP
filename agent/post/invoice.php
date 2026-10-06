@@ -22,6 +22,12 @@ if (isset($_POST['add_invoice'])) {
 
     enforceClientAccess();
 
+    // A negative discount would inflate the total
+    if (moneyToCents($invoice_discount) < 0) {
+        flash_alert("Discount can not be negative", 'error');
+        redirect();
+    }
+
     $invoice_amount = 0 - $invoice_discount;     // Calc amount if discount is applied, otherwise wrongly shows 0
 
     // Get Net Terms
@@ -77,6 +83,11 @@ if (isset($_POST['edit_invoice'])) {
 
     enforceClientAccess();
 
+    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id)) {
+        flash_alert($block_reason, 'error');
+        redirect();
+    }
+
     // Calculate new total
     $sql = mysqli_query($mysqli,"SELECT * FROM invoice_items WHERE item_invoice_id = $invoice_id");
     $invoice_amount = 0;
@@ -84,8 +95,13 @@ if (isset($_POST['edit_invoice'])) {
         $item_total = floatval($row['item_total']);
         $invoice_amount = $invoice_amount + $item_total;
     }
-    $invoice_amount = $invoice_amount - $invoice_discount;
+    // Discount must not be negative, nor exceed the line-item subtotal once items exist
+    if (moneyToCents($invoice_discount) < 0 || (moneyToCents($invoice_amount) > 0 && moneyToCents($invoice_discount) > moneyToCents($invoice_amount))) {
+        flash_alert("Discount must be between 0 and the invoice subtotal", 'error');
+        redirect();
+    }
 
+    $invoice_amount = $invoice_amount - $invoice_discount;
 
     mysqli_query($mysqli,"UPDATE invoices SET invoice_scope = '$scope', invoice_date = '$date', invoice_due = '$due', invoice_category_id = $category, invoice_discount_amount = '$invoice_discount', invoice_amount = '$invoice_amount' WHERE invoice_id = $invoice_id");
 
@@ -185,6 +201,11 @@ if (isset($_GET['mark_invoice_sent'])) {
 
     enforceClientAccess();
 
+    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id)) {
+        flash_alert($block_reason, 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"UPDATE invoices SET invoice_status = 'Sent' WHERE invoice_id = $invoice_id");
 
     mysqli_query($mysqli,"INSERT INTO history SET history_status = 'Sent', history_description = 'Invoice marked sent by $session_name', history_invoice_id = $invoice_id");
@@ -217,6 +238,11 @@ if (isset($_GET['mark_invoice_non-billable'])) {
 
     enforceClientAccess();
 
+    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id, true)) {
+        flash_alert($block_reason, 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"UPDATE invoices SET invoice_status = 'Non-Billable' WHERE invoice_id = $invoice_id");
 
     mysqli_query($mysqli,"INSERT INTO history SET history_status = 'Non-Billable', history_description = 'INVOICE marked Non-Billable', history_invoice_id = $invoice_id");
@@ -246,6 +272,11 @@ if (isset($_GET['cancel_invoice'])) {
 
     enforceClientAccess();
 
+    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id, true)) {
+        flash_alert($block_reason, 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"UPDATE invoices SET invoice_status = 'Cancelled' WHERE invoice_id = $invoice_id");
 
     mysqli_query($mysqli,"INSERT INTO history SET history_status = 'Cancelled', history_description = 'Invoice cancelled by $session_name', history_invoice_id = $invoice_id");
@@ -274,6 +305,11 @@ if (isset($_GET['delete_invoice'])) {
     $client_id = intval($row['invoice_client_id']);
 
     enforceClientAccess();
+
+    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id, true)) {
+        flash_alert($block_reason, 'error');
+        redirect();
+    }
 
     mysqli_query($mysqli,"DELETE FROM invoices WHERE invoice_id = $invoice_id");
 
@@ -327,6 +363,17 @@ if (isset($_POST['add_invoice_item'])) {
     $client_id = intval(getFieldById('invoices', $invoice_id, 'invoice_client_id'));
 
     enforceClientAccess();
+
+    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id)) {
+        flash_alert($block_reason, 'error');
+        redirect();
+    }
+
+    // A negative quantity of a stocked product would ADD inventory and skip the stock check
+    if ($product_id && $qty <= 0) {
+        flash_alert("Quantity must be greater than zero for a product", 'error');
+        redirect();
+    }
 
     $subtotal = $price * $qty;
 
@@ -467,6 +514,11 @@ if (isset($_POST['edit_invoice_item'])) {
 
     enforceClientAccess();
 
+    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id)) {
+        flash_alert($block_reason, 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"UPDATE invoice_items SET item_name = '$name', item_description = '$description', item_quantity = $qty, item_price = $price, item_subtotal = $subtotal, item_tax = $tax_amount, item_total = $total, item_tax_id = $tax_id WHERE item_id = $item_id");
 
     //Update Invoice Balances by tallying up invoice items
@@ -509,6 +561,11 @@ if (isset($_GET['delete_invoice_item'])) {
     $client_id = intval($row['invoice_client_id']);
 
     enforceClientAccess();
+
+    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id)) {
+        flash_alert($block_reason, 'error');
+        redirect();
+    }
 
     $new_invoice_amount = floatval($row['invoice_amount']) - $item_total;
 
