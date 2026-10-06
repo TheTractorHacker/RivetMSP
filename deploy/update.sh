@@ -248,8 +248,9 @@ main() {
     determine_owner
 
     run_git_pull
-    run_db_migrations
+    # Dependencies first (as RivetIT does): a migration step that needs a newer RivetCore skips itself until the package is present.
     run_composer_install
+    run_db_migrations
     reload_php_fpm
 
     success "=== Update complete for ${APP_DIR} ==="
