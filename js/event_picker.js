@@ -360,6 +360,20 @@
     this.root.dispatchEvent(new CustomEvent('eventpicker:change', { bubbles: true, detail: { tokens: this.tokens() } }));
   };
 
+  // Programmatic selection (quick-set chips of the webhook form): replace with these ids, or add/remove them.
+  Picker.prototype.selectedIds = function () { return Object.keys(this.sel); };
+  Picker.prototype.setSelection = function (ids) {
+    var self = this;
+    this.sel = {}; this.raw = [];
+    ids.forEach(function (i) { self.sel[i] = true; });
+    this.render(); this.changed();
+  };
+  Picker.prototype.addIds = function (ids, on) {
+    var self = this;
+    ids.forEach(function (i) { if (on) self.sel[i] = true; else delete self.sel[i]; });
+    this.render(); this.changed();
+  };
+
   Picker.prototype.applyExpanded = function () {
     var self = this, searching = !!this.terms().length;
     Object.keys(this.groups).forEach(function (k) {

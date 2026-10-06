@@ -36,7 +36,7 @@ function webhookFormErrorsRedirect(array $errors, array $post, ?int $id): void {
     webhookRememberDraft($post);
     flash_alert('Webhook not saved:<br>' . implode('<br>', array_map('nullable_htmlentities', $errors)), 'error');
     $dest = urlencode((string) ($post['webhook_destination'] ?? ''));
-    redirect($id ? "webhook_form.php?id=$id" : ($dest !== '' ? "webhook_form.php?destination=$dest" : 'settings_webhooks.php'));
+    redirect($id ? "webhook_form.php?id=$id" : ($dest !== '' ? "webhook_form.php?dest=$dest&step=review" : 'settings_webhooks.php'));
 }
 
 if (isset($_POST['add_webhook'])) {
@@ -57,13 +57,15 @@ if (isset($_POST['add_webhook'])) {
     mysqli_stmt_bind_param($stmt, "ssssisssssss", $r['webhook_name'], $r['webhook_url'], $r['webhook_secret'], $r['webhook_events'], $r['webhook_enabled'],
         $r['webhook_destination'], $r['webhook_format'], $r['webhook_method'], $r['webhook_template'], $r['webhook_auth_mode'], $r['webhook_auth_enc'], $r['webhook_extra']);
     mysqli_stmt_execute($stmt);
+    $new_id = (int) mysqli_insert_id($mysqli);
     unset($_SESSION['webhook_form_draft']);
 
     $webhook_name = $r['webhook_name'];
     logAction("Settings", "Webhook", "$session_name added webhook $webhook_name" . ($r['webhook_destination'] !== '' ? " ({$r['webhook_destination']})" : ''));
 
     flash_alert("Webhook <strong>" . nullable_htmlentities($webhook_name) . "</strong> added");
-    redirect('settings_webhooks.php');
+    // The guided page shows a success screen with the next actions ("Create and send test" also fires a test there).
+    redirect($new_id > 0 && isset($_POST['wizard']) ? "webhook_form.php?id=$new_id&created=1" . (($_POST['after'] ?? '') === 'test' ? '&test=1' : '') : 'settings_webhooks.php');
 }
 
 if (isset($_POST['edit_webhook'])) {

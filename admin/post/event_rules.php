@@ -4,7 +4,7 @@ defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 
 use RivetCore\Automation\AutomationRuleStore;
 
-require_once __DIR__ . '/../../includes/event_bus.php';
+require_once __DIR__ . '/../../includes/event_rules_lib.php';
 
 $event_rules_store = static function () use ($mysqli): ?AutomationRuleStore {
     return class_exists(AutomationRuleStore::class) && rivetTableExists($mysqli, 'automation_rules') ? new AutomationRuleStore(rivetCoreDb($mysqli)) : null;
@@ -19,32 +19,13 @@ if (isset($_POST['save_event_rule'])) {
         flash_alert('Run the database update first.', 'error');
         redirect();
     }
-    $conditions = [];
-    $fields = (array) ($_POST['cond_field'] ?? []);
-    $values = (array) ($_POST['cond_value'] ?? []);
-    foreach ($fields as $i => $f) {
-        $f = trim((string) $f);
-        if ($f !== '') {
-            $conditions[$f] = (string) ($values[$i] ?? '');
-        }
-    }
-    $config = [
-        'subject' => $_POST['cfg_subject'] ?? '', 'details' => $_POST['cfg_details'] ?? '', 'priority' => $_POST['cfg_priority'] ?? 'Low',
-        'url' => $_POST['cfg_url'] ?? '', 'secret' => $_POST['cfg_secret'] ?? '', 'message' => $_POST['cfg_message'] ?? '',
-    ];
     $id = isset($_POST['rule_id']) ? intval($_POST['rule_id']) : null;
-    if (($_POST['action_type'] ?? '') === 'send_webhook' && !rivetWebhookUrlIsSafe((string) ($_POST['cfg_url'] ?? ''))) {
-        flash_alert('The webhook URL must be an http(s) address (' . nullable_htmlentities(rivetWebhookRuleText($mysqli)) . ').', 'error');
+    // The page itself saves over fetch (admin/event_rules_tools.php); this classic post is the no-JavaScript path and the one scripts use.
+    $result = eventRulesSave($mysqli, $store, $_POST, $id, (string) $session_name, (int) $session_user_id);
+    if (!$result['ok']) {
+        flash_alert(implode(' ', array_values($result['errors'])), 'error');
         redirect($id ? "event_rules.php?edit=$id" : 'event_rules.php');
     }
-    try {
-        $saved = $store->save($id ?: null, (string) ($_POST['rule_name'] ?? ''), (string) ($_POST['trigger_event'] ?? ''), $conditions, (string) ($_POST['action_type'] ?? ''), $config, isset($_POST['is_enabled']));
-    } catch (\InvalidArgumentException $e) {
-        flash_alert($e->getMessage(), 'error');
-        redirect($id ? "event_rules.php?edit=$id" : 'event_rules.php');
-    }
-    logAction('Automation', $id ? 'Edit' : 'Create', "$session_name " . ($id ? 'edited' : 'created') . " event rule $saved");
-    rivetAudit($id ? 'automation.rule_updated' : 'automation.rule_created', (int) $session_user_id, 'automation_rule', $saved, $id ? 'update' : 'create', 'Event rule ' . ($id ? 'updated' : 'created'));
     flash_alert('Rule saved.');
     redirect('event_rules.php');
 }

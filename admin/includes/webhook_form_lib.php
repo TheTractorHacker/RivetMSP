@@ -45,6 +45,52 @@ function rivetWebhookSubsClass(): string
 }
 
 /** Icon for a destination card (Font Awesome free). */
+/** Brand glyph + colour for the platforms Font Awesome 5 has a brand icon (or a brand colour) for: [icon classes, #colour]. */
+function rivetWebhookBrand(string $destinationId, string $category = 'generic'): array
+{
+    static $brand = [
+        'n8n' => ['fas fa-project-diagram', '#EA4B71'], 'slack' => ['fab fa-slack', '#E01E5A'], 'discord' => ['fab fa-discord', '#5865F2'],
+        'teams' => ['fab fa-microsoft', '#6264A7'], 'telegram' => ['fab fa-telegram-plane', '#26A5E4'], 'ntfy' => ['fas fa-mobile-alt', '#57A38F'],
+        'home-assistant' => ['fas fa-home', '#18BCF2'], 'rocketchat' => ['fab fa-rocketchat', '#F5455C'], 'mattermost' => ['fas fa-comment-dots', '#0058CC'],
+        'zapier' => ['fas fa-bolt', '#FF4A00'], 'make' => ['fas fa-cogs', '#8B3DFF'], 'node-red' => ['fas fa-sitemap', '#C4283A'],
+        'matrix-hookshot' => ['fas fa-border-all', '#0DBD8B'], 'matrix-client' => ['fas fa-border-all', '#0DBD8B'], 'gotify' => ['fas fa-bullhorn', '#3F8CCB'],
+        'generic-json' => ['fas fa-code', '#0D9488'], 'generic-form' => ['fas fa-file-alt', '#0D9488'], 'custom-template' => ['fas fa-edit', '#0D9488'],
+    ];
+    if (isset($brand[$destinationId])) {
+        return $brand[$destinationId];
+    }
+
+    return ['fas ' . rivetWebhookIcon($destinationId, $category), '#0D9488'];
+}
+
+/** The platforms offered first on step 1. */
+const RIVET_WEBHOOK_POPULAR = ['n8n', 'slack', 'discord', 'teams', 'ntfy', 'home-assistant', 'generic-json'];
+
+/** Short description of a stored events list for the list page: label (All events / ticket.* / 3 events), count of catalog events. @return array{label:string,count:int} */
+function rivetWebhookEventsSummary(string $stored): array
+{
+    $tokens = array_values(array_filter(array_map('trim', explode(',', $stored))));
+    $ids = [];
+    foreach ($tokens as $t) {
+        if ($t === '*') {
+            return ['label' => 'All events', 'count' => count(EventCatalog::all())];
+        }
+        if (str_contains($t, '*')) {
+            foreach (EventCatalog::matchPattern($t) as $e) {
+                $ids[is_object($e) ? $e->id : (string) $e] = true;
+            }
+        } else {
+            $ids[$t] = true;
+        }
+    }
+    $n = count($ids);
+    if (count($tokens) === 1) {
+        return ['label' => $tokens[0], 'count' => $n];
+    }
+
+    return ['label' => $n . ' event' . ($n === 1 ? '' : 's'), 'count' => $n];
+}
+
 function rivetWebhookIcon(string $destinationId, string $category = 'generic'): string
 {
     static $map = [
@@ -203,33 +249,9 @@ function rivetWebhookCollect($mysqli, array $in, ?array $existing = null): array
                 $url = str_replace('{' . $f->name . '}', str_replace('%3A', ':', rawurlencode($fields[$f->name])), $url);
             }
         }
-        if ($url === '') {
-            $errors[] = 'The endpoint URL is required.';
-        } elseif (strlen($url) > 2048 || preg_match('/[\x00-\x20\x7F"<>\\\\]/', $url)) {
-            $errors[] = 'The endpoint URL must be a single address of up to 2048 characters without spaces or control characters.';
-        } else {
-            $unfilled = [];
-            if (preg_match_all('/\{([a-z_]+)\}/', $url, $m)) {
-                foreach ($m[1] as $ph) {
-                    if ($ph !== 'txn') {
-                        $unfilled[$ph] = true;
-                    }
-                }
-            }
-            if ($unfilled) {
-                $labels = [];
-                foreach ($dest->extraFields as $f) {
-                    if (isset($unfilled[$f->name])) {
-                        $labels[] = $f->label;
-                        unset($unfilled[$f->name]);
-                    }
-                }
-                $errors[] = 'Fill in ' . implode(', ', array_merge($labels, array_keys($unfilled))) . ' (the URL still contains a {placeholder}).';
-            } elseif (!$dest->urlMatches($url)) {
-                $errors[] = 'The URL does not look like a ' . $dest->name . ' address. Expected something like ' . $dest->urlHint . '.';
-            } elseif (!rivetWebhookUrlPolicy($mysqli)->isSafe(str_replace('{txn}', 'x', $url))) {
-                $errors[] = 'Endpoint URL rejected (' . rivetWebhookRuleText($mysqli) . '). Loopback, link-local and cloud-metadata addresses are never allowed.';
-            }
+        $verdict = rivetWebhookUrlVerdict($mysqli, $dest, $url);
+        if ($verdict['state'] !== 'ok') {
+            $errors[] = $verdict['error'];
         }
     }
 
@@ -338,6 +360,141 @@ function rivetWebhookCollect($mysqli, array $in, ?array $existing = null): array
     ];
 }
 
+/**
+ * The ONE URL check: what the save runs and what the live "is this address OK?" hint (admin/webhook_url_check.php) shows. No outbound
+ * request is made (only a DNS lookup for a host name, which the save does too).
+ *
+ * state: ok | empty | invalid | placeholder | pattern | private | blocked | unresolved. `error` is the exact message the save reports;
+ * `friendly` is the shorter sentence for the inline hint; `link` (private only) points at Internal network access.
+ *
+ * @return array{state:string, error:?string, friendly:string, host:string, link:?string, suggest:?string}
+ */
+function rivetWebhookUrlVerdict($mysqli, ?Destination $dest, string $url): array
+{
+    $mk = static fn (string $state, ?string $error, string $friendly, string $host = '', ?string $link = null, ?string $suggest = null): array => [
+        'state' => $state, 'error' => $error, 'friendly' => $friendly, 'host' => $host, 'link' => $link, 'suggest' => $suggest,
+    ];
+    $hostOf = static function (string $u): string {
+        $p = parse_url(str_replace(['{', '}'], ['%7B', '%7D'], $u));
+
+        return is_array($p) ? strtolower((string) ($p['host'] ?? '')) : '';
+    };
+    if ($url === '') {
+        return $mk('empty', 'The endpoint URL is required.', 'Paste the address the receiver gave you.');
+    }
+    if (strlen($url) > 2048 || preg_match('/[\x00-\x20\x7F"<>\\\\]/', $url)) {
+        $msg = 'The endpoint URL must be a single address of up to 2048 characters without spaces or control characters.';
+
+        return $mk('invalid', $msg, 'The address must be a single line without spaces.', $hostOf($url));
+    }
+    $unfilled = [];
+    if (preg_match_all('/\{([a-z_]+)\}/', $url, $m)) {
+        foreach ($m[1] as $ph) {
+            if ($ph !== 'txn') {
+                $unfilled[$ph] = true;
+            }
+        }
+    }
+    if ($unfilled) {
+        $labels = [];
+        if ($dest) {
+            foreach ($dest->extraFields as $f) {
+                if (isset($unfilled[$f->name])) {
+                    $labels[] = $f->label;
+                    unset($unfilled[$f->name]);
+                }
+            }
+        }
+        $what = implode(', ', array_merge($labels, array_keys($unfilled)));
+
+        return $mk('placeholder', 'Fill in ' . $what . ' (the URL still contains a {placeholder}).', 'Fill in ' . $what . ' first; it goes into the address.');
+    }
+    $host = $hostOf($url);
+    if ($dest !== null && !$dest->urlMatches($url)) {
+        return $mk('pattern', 'The URL does not look like a ' . $dest->name . ' address. Expected something like ' . $dest->urlHint . '.', 'Expected ' . $dest->urlHint, $host);
+    }
+    $probe = str_replace('{txn}', 'x', $url);
+    $policy = rivetWebhookUrlPolicy($mysqli);
+    if ($policy->isSafe($probe)) {
+        return $mk('ok', null, 'Looks good.', $host);
+    }
+    $error = 'Endpoint URL rejected (' . rivetWebhookRuleText($mysqli) . '). Loopback, link-local and cloud-metadata addresses are never allowed.';
+    // Explain WHY, using a permissive policy only to learn what the host resolves to.
+    $open = (new \RivetCore\Webhooks\UrlPolicy(true))->vet($probe);
+    if ($open === null) {
+        $parts = parse_url($probe);
+        $scheme = is_array($parts) ? strtolower((string) ($parts['scheme'] ?? '')) : '';
+        if (!in_array($scheme, ['http', 'https'], true) || isset($parts['user']) || empty($parts['host'])) {
+            return $mk('invalid', $error, 'Use a plain http:// or https:// address without a username or password.', $host);
+        }
+
+        return $mk('unresolved', $error, 'This host name could not be resolved. Check the spelling, or that DNS can find it from this server.', $host);
+    }
+    foreach ($open['ips'] as $ip) {
+        $bin = @inet_pton($ip);
+        $never = $bin !== false && (strlen($bin) === 4
+            ? (str_starts_with($ip, '127.') || str_starts_with($ip, '169.254.') || str_starts_with($ip, '0.') || (int) explode('.', $ip)[0] >= 224)
+            : ($ip === '::1' || $ip === '::' || stripos($ip, 'fe8') === 0 || stripos($ip, 'fe9') === 0 || stripos($ip, 'fea') === 0 || stripos($ip, 'feb') === 0 || stripos($ip, 'ff') === 0));
+        if ($never) {
+            return $mk('blocked', $error, 'This address (' . $ip . ') is loopback, link-local or a cloud-metadata address. These can never be used by a webhook.', $host);
+        }
+    }
+    $ip = '';
+    foreach ($open['ips'] as $cand) {
+        if (!\RivetCore\Webhooks\UrlPolicy::isPublicIp($cand)) {
+            $ip = $cand;
+            break;
+        }
+    }
+    $suggest = preg_match('/^(\d+\.\d+\.\d+)\.\d+$/', $ip, $mm) ? $mm[1] . '.0/24' : ($ip !== '' ? $ip : null);
+
+    return $mk('private', $error, 'This is a private address' . ($ip !== '' ? ' (' . $ip . ')' : '') . ': add its network' . ($suggest ? ' (for example ' . $suggest . ')' : '') . ' under Internal network access first.', $host, 'settings_webhooks.php#internal-networks', $suggest);
+}
+
+/** Plain-English next step for a failed test delivery. */
+function rivetWebhookTestHint(bool $delivered, ?int $status, ?string $error): string
+{
+    if ($delivered) {
+        return 'The receiver accepted the test. Check that it arrived in the destination.';
+    }
+    $e = strtolower((string) $error);
+    if ($status === 401 || $status === 403) {
+        return 'The receiver refused our credentials (HTTP ' . $status . '). Check the authentication method and its token, header or password under Advanced options, and that the receiver expects the same.';
+    }
+    if ($status === 404 || $status === 410) {
+        return 'The receiver does not know this address (HTTP ' . $status . '). Re-copy the URL from the receiver (for n8n use the Production URL, not /webhook-test/, and make sure the workflow is Active).';
+    }
+    if ($status === 405) {
+        return 'The receiver does not accept this HTTP method (HTTP 405). Check the method the receiver is set to listen for (usually POST).';
+    }
+    if ($status === 429) {
+        return 'The receiver is rate limiting us (HTTP 429). Wait a minute and try again; failed deliveries are retried automatically.';
+    }
+    if ($status !== null && $status >= 500) {
+        return 'The receiver had an internal error (HTTP ' . $status . '). Look at its own logs; failed deliveries are retried automatically.';
+    }
+    if ($status !== null && $status >= 400) {
+        return 'The receiver rejected the request (HTTP ' . $status . '). Check the body format and the platform preset, and the receiver logs.';
+    }
+    if (str_contains($e, 'not allowed')) {
+        return 'This address is blocked by the network policy. Private addresses must be listed under Internal network access; loopback, link-local and cloud-metadata addresses are never allowed.';
+    }
+    if (str_contains($e, 'timed out') || str_contains($e, 'timeout')) {
+        return 'The receiver did not answer in time. Check that it is running and reachable from this server (firewall, DNS).';
+    }
+    if (str_contains($e, 'resolve')) {
+        return 'The host name could not be found. Check the spelling of the address and DNS.';
+    }
+    if (str_contains($e, 'ssl') || str_contains($e, 'certificate')) {
+        return 'The secure connection failed. Check the receiver certificate (expired, self-signed or wrong name).';
+    }
+    if (str_contains($e, 'refused') || str_contains($e, 'failed to connect')) {
+        return 'Nothing is listening at that address and port. Check the port and that the receiver is running.';
+    }
+
+    return 'The test did not get a successful answer. Check the address and the receiver logs.';
+}
+
 /** Encrypt a value for storage, but keep the stored ciphertext when the value did not change (no pointless re-encryption on edit). */
 function rivetWebhookSeal(string $plain, ?array $existing, string $column): string
 {
@@ -403,12 +560,18 @@ function rivetWebhookSendTest($mysqli, WebhookSubscription $sub): array
 /**
  * Exactly what would be sent for a sample event: method, address (path hidden), headers and body. Secrets are redacted.
  *
- * @return array{method:string, url:string, headers:list<string>, body:string, content_type:string}
+ * @return array{method:string, url:string, headers:list<string>, body:string, content_type:string, event:string}
  */
-function rivetWebhookPreview(WebhookSubscription $sub, array $authRedacted): array
+function rivetWebhookPreview(WebhookSubscription $sub, array $authRedacted, ?string $sampleEvent = null): array
 {
     $opts = $sub->options;
-    $event = ['event' => 'test', 'timestamp' => gmdate('Y-m-d\TH:i:s\Z'), 'data' => rivetWebhookSampleData()];
+    $evName = 'test';
+    $evData = rivetWebhookSampleData();
+    if ($sampleEvent !== null && $sampleEvent !== '' && EventCatalog::has($sampleEvent)) {
+        $evName = $sampleEvent;
+        $evData = PayloadTemplate::sampleContext($sampleEvent)['data'] + ['test' => true];
+    }
+    $event = ['event' => $evName, 'timestamp' => gmdate('Y-m-d\TH:i:s\Z'), 'data' => $evData];
     if ($opts === []) {
         $format = 'json';
         $fo = [];
@@ -433,7 +596,7 @@ function rivetWebhookPreview(WebhookSubscription $sub, array $authRedacted): arr
     $headers = ['Content-Type: ' . $f->contentType, 'X-Rivet-Timestamp: <unix time when this attempt is sent>', 'X-Rivet-Signature-V2: t=<unix time>,v1=<HMAC-SHA256 of "<time>.<body>" with your signing secret>'];
     foreach (rivetWebhookHeaderPrefixes() as $prefix) {
         $headers[] = $prefix . '-Signature: sha256=<HMAC-SHA256 of the body with your signing secret>';
-        $headers[] = $prefix . '-Event: test';
+        $headers[] = $prefix . '-Event: ' . $evName;
     }
     foreach ($f->headers as $k => $v) {
         if (!isset($auth[$k])) {
@@ -444,7 +607,7 @@ function rivetWebhookPreview(WebhookSubscription $sub, array $authRedacted): arr
         $headers[] = $k . ': ' . $v;
     }
 
-    return ['method' => strtoupper((string) ($opts['method'] ?? 'POST')), 'url' => rivetWebhookUrlMasked($sub->url), 'headers' => $headers, 'body' => $f->body, 'content_type' => $f->contentType];
+    return ['method' => strtoupper((string) ($opts['method'] ?? 'POST')), 'url' => rivetWebhookUrlMasked($sub->url), 'headers' => $headers, 'body' => $f->body, 'content_type' => $f->contentType, 'event' => $evName];
 }
 
 /** Mask secret-looking keys of a stored request body for display (the delivery log keeps the exact bytes sent). */

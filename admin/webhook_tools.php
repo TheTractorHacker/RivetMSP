@@ -5,6 +5,9 @@
  *   action=validate_template   live check of a custom body template (RivetCore PayloadTemplate::validate)
  *   action=preview             exactly what would be sent for a sample event, secrets redacted
  *   action=test                send a sample event through the real delivery path and report the outcome
+ *   action=toggle              enable / disable a saved webhook (webhook_id, enabled=0|1)
+ *   action=duplicate           copy a saved webhook (disabled, name "... (copy)"); the answer carries the edit URL of the copy
+ *   action=deliveries (GET)    the latest deliveries of one webhook (webhook_id), for the edit page's Deliveries tab
  *   action=payload (GET)       the stored request body of one delivery, secret-looking keys masked
  * The form posts the same fields as the save handler; a webhook_id makes blank secrets fall back to the stored ones.
  */
@@ -44,11 +47,53 @@ if ($action === 'payload') {
         'body' => rivetWebhookRedactBody((string) $row['request_payload_json'])]);
 }
 
+if ($action === 'deliveries') {
+    $id = intval($_GET['webhook_id'] ?? 0);
+    $res = mysqli_query($mysqli, "SELECT delivery_id, event_type, attempt_number, http_status, duration_ms, response_body_snippet, created_at, (request_payload_json <> '') AS has_payload
+        FROM webhook_deliveries WHERE webhook_id = $id ORDER BY delivery_id DESC LIMIT 25");
+    $rows = [];
+    while ($res && ($d = mysqli_fetch_assoc($res))) {
+        $rows[] = ['id' => (int) $d['delivery_id'], 'event' => $d['event_type'], 'attempt' => (int) $d['attempt_number'], 'http' => $d['http_status'] !== null ? (int) $d['http_status'] : null,
+            'ms' => (int) $d['duration_ms'], 'snippet' => mb_substr((string) $d['response_body_snippet'], 0, 200), 'when' => timeAgo($d['created_at']), 'at' => $d['created_at'], 'payload' => (bool) $d['has_payload']];
+    }
+    $out(['ok' => true, 'deliveries' => $rows]);
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     $out(['ok' => false, 'error' => 'POST required.'], 405);
 }
 if (!is_string($_POST['csrf_token'] ?? null) || !hash_equals((string) $_SESSION['csrf_token'], $_POST['csrf_token'])) {
     $out(['ok' => false, 'error' => 'CSRF token verification failed. Reload the page.'], 403);
+}
+
+if ($action === 'toggle' || $action === 'duplicate') {
+    $wid = intval($_POST['webhook_id'] ?? 0);
+    $stmt = mysqli_prepare($mysqli, "SELECT * FROM webhooks WHERE webhook_id = ?");
+    mysqli_stmt_bind_param($stmt, 'i', $wid);
+    mysqli_stmt_execute($stmt);
+    $src = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt)) ?: null;
+    if (!$src) {
+        $out(['ok' => false, 'error' => 'Webhook not found.'], 404);
+    }
+    if ($action === 'toggle') {
+        $on = !empty($_POST['enabled']) && $_POST['enabled'] !== '0' ? 1 : 0;
+        $stmt = mysqli_prepare($mysqli, "UPDATE webhooks SET webhook_enabled = ? WHERE webhook_id = ?");
+        mysqli_stmt_bind_param($stmt, 'ii', $on, $wid);
+        mysqli_stmt_execute($stmt);
+        logAction('Settings', 'Webhook', "$session_name " . ($on ? 'enabled' : 'disabled') . ' webhook ' . $src['webhook_name']);
+        $out(['ok' => true, 'enabled' => (bool) $on]);
+    }
+    $name = mb_substr($src['webhook_name'], 0, 190) . ' (copy)';
+    $zero = 0;
+    $stmt = mysqli_prepare($mysqli, "INSERT INTO webhooks
+        SET webhook_name = ?, webhook_url = ?, webhook_secret = ?, webhook_events = ?, webhook_enabled = ?,
+            webhook_destination = ?, webhook_format = ?, webhook_method = ?, webhook_template = ?, webhook_auth_mode = ?, webhook_auth_enc = ?, webhook_extra = ?");
+    mysqli_stmt_bind_param($stmt, 'ssssisssssss', $name, $src['webhook_url'], $src['webhook_secret'], $src['webhook_events'], $zero,
+        $src['webhook_destination'], $src['webhook_format'], $src['webhook_method'], $src['webhook_template'], $src['webhook_auth_mode'], $src['webhook_auth_enc'], $src['webhook_extra']);
+    mysqli_stmt_execute($stmt);
+    $newId = (int) mysqli_insert_id($mysqli);
+    logAction('Settings', 'Webhook', "$session_name duplicated webhook {$src['webhook_name']} as $name");
+    $out(['ok' => true, 'id' => $newId, 'name' => $name, 'edit_url' => 'webhook_form.php?id=' . $newId]);
 }
 
 if ($action === 'validate_template') {
@@ -95,7 +140,7 @@ if ($action === 'preview' || $action === 'test') {
 
     if ($action === 'preview') {
         try {
-            $p = rivetWebhookPreview($sub, $collected['auth_redacted']);
+            $p = rivetWebhookPreview($sub, $collected['auth_redacted'], (string) ($_POST['sample_event'] ?? ''));
         } catch (\Throwable $e) {
             $out(['ok' => false, 'errors' => ['The payload could not be built: ' . $e->getMessage()]]);
         }
@@ -104,7 +149,8 @@ if ($action === 'preview' || $action === 'test') {
 
     $r = rivetWebhookSendTest($mysqli, $sub);
     logAction('Settings', 'Webhook', "$session_name sent a test event to webhook " . ($existing['webhook_name'] ?? ($input['webhook_name'] ?? '')));
-    $out(['ok' => true, 'delivered' => $r['ok'], 'http_status' => $r['http_status'], 'duration_ms' => $r['duration_ms'], 'error' => $r['error'], 'response' => $r['response']]);
+    $out(['ok' => true, 'delivered' => $r['ok'], 'http_status' => $r['http_status'], 'duration_ms' => $r['duration_ms'], 'error' => $r['error'], 'response' => $r['response'],
+        'hint' => rivetWebhookTestHint((bool) $r['ok'], $r['http_status'] !== null ? (int) $r['http_status'] : null, $r['error'])]);
 }
 
 $out(['ok' => false, 'error' => 'Unknown action.'], 400);

@@ -2,6 +2,27 @@
 
 This file documents all notable changes made to ITFlow.
 
+## [26.10.6] RivetMSP — Event rules builder, webhook guides and creation redesign, icon fixes
+
+No database migration. Requires rivet-core 0.21.0 (already in `vendor/`).
+
+### Event rules
+
+- **A "When, If, Then" rule builder.** The list shows each rule as a card with an instant on/off switch, a plain-English summary ("When a ticket is created, and priority is Critical, then notify technicians"), the event group, the action, when it last fired and how many runs. Rows have Edit, Test, History, Duplicate and Delete; the page has search, filters and sort, a summary strip and an empty state with ten ready-made recipes.
+- **Editor.** Four numbered cards (When, If, Then, Settings) with a live summary beside them: the searchable event picker with the event's fields shown, condition rows with smart value lists, action cards with clickable `{placeholder}` chips and a rendered preview, and inline validation that keeps what you typed.
+- **Test drawer** (no side effects: nothing is created, sent or queued) shows whether the conditions match and what would run, on a sample event or a recent real one. **History drawer** lists each run from the audit trail.
+- This edition's engine is simpler than RivetIT's: conditions are "field is value" only, there are no nested groups, priorities or rate limits, and Notify reaches every technician.
+
+### Webhooks
+
+- **Guides** is now a documentation hub: platform sidebar with search and category filters, an index of all 24 platforms, numbered steppers with remembered ticks, callouts, highlighted code blocks with copy buttons, language tabs for verifying our signature, an example payload per platform, a troubleshooting table and previous/next links.
+- **Creating a webhook is a four-step flow** (Platform, Connect, Events, Review & test) with a progress bar, a sticky Back/Continue footer and a link per step. Only the fields a platform needs are shown; the rest sit under "Advanced options". The address is checked live as you type (no request is sent), quick event chips (Tickets, Critical only, SLA problems, Security...) sit above the picker, and Review shows a masked summary, a payload preview and an inline Send test with a plain-English hint for common failures. The setup guide opens in a slide-over.
+- **Editing** uses tabs (Connection, Events, Payload & advanced, Deliveries) with an enable switch, Duplicate and Delete. The list shows the last delivery result and an inline switch.
+
+### Fixes
+
+- Icons that Font Awesome 5.15 does not have (for example the Job queue icon) are replaced; `tests/fa_icons.php` guards it.
+
 ## [26.10.5] RivetMSP — webhook platforms and event picker, internal-network webhooks, shared date-range picker, icon picker, RivetCore 0.21
 
 Database migrations 2.6.70 to 2.6.73 apply with **Update Database**. Requires rivet-core 0.21.0 (already in `vendor/`).
