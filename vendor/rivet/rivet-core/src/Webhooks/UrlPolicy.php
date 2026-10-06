@@ -11,7 +11,15 @@ namespace RivetCore\Webhooks;
  * Accepted: http/https, no userinfo, no backslash / control characters / whitespace, and a host that resolves ONLY to
  * public addresses. Rejected addresses: loopback, private (10/8, 172.16/12, 192.168/16, fc00::/7), link-local
  * (169.254/16 incl. cloud metadata 169.254.169.254, fe80::/10), reserved/unspecified, CGNAT 100.64/10, and IPv4 embedded
- * in IPv4-mapped / NAT64 IPv6 forms when the embedded address is itself not public.
+ * in IPv4-mapped / NAT64 IPv6 forms when the embedded address is itself not public. Also rejected: documentation, benchmarking
+ * (198.18/15), IETF-protocol (192.0.0/24) and multicast ranges, and the IPv6 tunnelling forms 6to4 (2002::/16), Teredo
+ * (2001::/32) and local-use NAT64 (64:ff9b:1::/48), whose embedded IPv4 cannot be trusted.
+ *
+ * $allowedNetworks (list of CIDR strings or bare addresses, see NetworkList::parse) lets a private/reserved address
+ * through ONLY when it lies inside one of those networks, so webhooks can reach the server's own LAN and nothing else.
+ * Loopback, unspecified (0/8, ::), link-local (169.254/16 incl. cloud metadata, fe80::/10), multicast, broadcast/reserved
+ * (240/4) and their IPv4-mapped/compatible/NAT64 forms are NEVER allowed, even if listed. Every address a host resolves
+ * to must pass. Public addresses need no listing.
  *
  * $allowPrivate=true skips ONLY the address-range test (for editions that deliberately call internal endpoints);
  * the URL shape rules and the pinned target still apply.
@@ -23,11 +31,21 @@ final class UrlPolicy
     /** @var \Closure(string):list<string> */
     private \Closure $resolver;
 
+    /** @var list<string> */
+    private array $allowedNetworks;
+
     /**
      * @param (\Closure(string):list<string>)|null $resolver host name -> IP address strings; defaults to DNS (A + AAAA, then gethostbyname)
+     * @param list<string> $allowedNetworks CIDRs (IPv4/IPv6; a bare address means /32 or /128) of internal networks that may be reached
      */
-    public function __construct(private bool $allowPrivate = false, ?\Closure $resolver = null)
+    public function __construct(private bool $allowPrivate = false, ?\Closure $resolver = null, array $allowedNetworks = [])
     {
+        $this->allowedNetworks = array_map('strval', $allowedNetworks);
+        foreach ($this->allowedNetworks as $i => $net) {
+            if (!str_contains($net, '/') && filter_var($net, FILTER_VALIDATE_IP) !== false) {
+                $this->allowedNetworks[$i] = $net . (str_contains($net, ':') ? '/128' : '/32');
+            }
+        }
         $this->resolver = $resolver ?? self::dnsResolver(...);
     }
 
@@ -68,7 +86,7 @@ final class UrlPolicy
         }
         if (!$this->allowPrivate) {
             foreach ($ips as $ip) {
-                if (!self::isPublicIp($ip)) {
+                if (!self::isPublicIp($ip) && !$this->isAllowedInternal($ip)) {
                     return null;
                 }
             }
@@ -77,10 +95,49 @@ final class UrlPolicy
         return ['host' => $host, 'port' => $port, 'ips' => array_values(array_unique($ips))];
     }
 
+    private function isAllowedInternal(string $ip): bool
+    {
+        if ($this->allowedNetworks === []) {
+            return false;
+        }
+        $bin = @inet_pton($ip);
+        if ($bin === false) {
+            return false;
+        }
+        // judge the embedded IPv4 of mapped / compatible / NAT64 forms
+        if (strlen($bin) === 16 && (str_starts_with($bin, str_repeat("\0", 10) . "\xff\xff") || str_starts_with($bin, str_repeat("\0", 12)) || str_starts_with($bin, "\x00\x64\xff\x9b" . str_repeat("\0", 8)))) {
+            $bin = substr($bin, 12);
+            $ip = (string) inet_ntop($bin);
+        }
+        if (self::inAny($bin, self::NEVER_ALLOWED_V4) || self::inAny($bin, self::NEVER_ALLOWED_V6)) {
+            return false;
+        }
+
+        return NetworkList::contains($this->allowedNetworks, $ip);
+    }
+
     public function isSafe(string $url): bool
     {
         return $this->vet($url) !== null;
     }
+
+    /** IPv4 ranges that are never public (CIDR). */
+    private const NON_PUBLIC_V4 = [
+        '0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
+        '192.0.0.0/24', '192.0.2.0/24', '192.88.99.0/24', '192.168.0.0/16', '198.18.0.0/15',
+        '198.51.100.0/24', '203.0.113.0/24', '224.0.0.0/4', '240.0.0.0/4',
+    ];
+
+    /** Never reachable even when listed in allowedNetworks: this-network, loopback, link-local/metadata, multicast, reserved/broadcast. */
+    private const NEVER_ALLOWED_V4 = ['0.0.0.0/8', '127.0.0.0/8', '169.254.0.0/16', '224.0.0.0/4', '240.0.0.0/4'];
+
+    private const NEVER_ALLOWED_V6 = ['::/128', '::1/128', 'fe80::/10', 'ff00::/8'];
+
+    /** IPv6 ranges that are never public (CIDR), including transition mechanisms that can tunnel to IPv4 (6to4, Teredo, local-use NAT64). */
+    private const NON_PUBLIC_V6 = [
+        '::/128', '::1/128', '100::/64', '2001::/32', '2001:2::/48', '2001:10::/28', '2001:db8::/32', '2002::/16',
+        '64:ff9b:1::/48', '::ffff:0:0:0/96', 'fc00::/7', 'fe80::/10', 'fec0::/10', 'ff00::/8',
+    ];
 
     public static function isPublicIp(string $ip): bool
     {
@@ -92,15 +149,9 @@ final class UrlPolicy
             return false;
         }
         if (strlen($bin) === 4) {
-            return !self::isCgnat($bin);
+            return !self::inAny($bin, self::NON_PUBLIC_V4);
         }
-        // IPv6: unspecified, loopback, ULA, link-local (belt and braces on top of the filter flags)
-        if ($bin === str_repeat("\0", 16) || $bin === str_repeat("\0", 15) . "\x01") {
-            return false;
-        }
-        $b0 = ord($bin[0]);
-        $b1 = ord($bin[1]);
-        if (($b0 & 0xfe) === 0xfc || ($b0 === 0xfe && ($b1 & 0xc0) === 0x80) || ($b0 === 0xfe && ($b1 & 0xc0) === 0xc0) || $b0 === 0xff) {
+        if (self::inAny($bin, self::NON_PUBLIC_V6)) {
             return false;
         }
         // IPv4-mapped (::ffff:a.b.c.d), IPv4-compatible (::a.b.c.d), NAT64 (64:ff9b::/96): judge the embedded IPv4
@@ -112,9 +163,27 @@ final class UrlPolicy
         return $embedded === false || $embedded === null ? true : self::isPublicIp($embedded);
     }
 
-    private static function isCgnat(string $bin4): bool
+    /** @param list<string> $cidrs */
+    private static function inAny(string $bin, array $cidrs): bool
     {
-        return ord($bin4[0]) === 100 && (ord($bin4[1]) & 0xc0) === 0x40;
+        foreach ($cidrs as $cidr) {
+            [$net, $bits] = explode('/', $cidr);
+            $netBin = inet_pton($net);
+            if ($netBin === false || strlen($netBin) !== strlen($bin)) {
+                continue;
+            }
+            $bits = (int) $bits;
+            $bytes = intdiv($bits, 8);
+            if (substr($bin, 0, $bytes) !== substr($netBin, 0, $bytes)) {
+                continue;
+            }
+            $rem = $bits % 8;
+            if ($rem === 0 || ((ord($bin[$bytes]) ^ ord($netBin[$bytes])) & ((0xff << (8 - $rem)) & 0xff)) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @return list<string> */

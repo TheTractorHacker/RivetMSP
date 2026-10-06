@@ -907,17 +907,17 @@
         },
         {
             "name": "rivet/rivet-core",
-            "version": "v0.17.1",
-            "version_normalized": "0.17.1.0",
+            "version": "v0.18.1",
+            "version_normalized": "0.18.1.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/TheTractorHacker/rivet-core",
-                "reference": "16fb061675111a405e846a584567863069079099"
+                "reference": "de345306a53a5eb7e167b9c7416cf8056fd6eec5"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/TheTractorHacker/rivet-core/zipball/16fb061675111a405e846a584567863069079099",
-                "reference": "16fb061675111a405e846a584567863069079099",
+                "url": "https://api.github.com/repos/TheTractorHacker/rivet-core/zipball/de345306a53a5eb7e167b9c7416cf8056fd6eec5",
+                "reference": "de345306a53a5eb7e167b9c7416cf8056fd6eec5",
                 "shasum": ""
             },
             "require": {
@@ -931,7 +931,7 @@
                 "phpstan/phpstan": "^2",
                 "phpunit/phpunit": "^11.5"
             },
-            "time": "2026-10-06T00:41:09+00:00",
+            "time": "2026-10-06T11:10:08+00:00",
             "type": "library",
             "installation-source": "dist",
             "autoload": {
@@ -1459,6 +1459,6 @@
             "install-path": "../symfony/polyfill-php82"
         }
     ],
-    "dev": false,
+    "dev": true,
     "dev-package-names": []
 }
