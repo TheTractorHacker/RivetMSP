@@ -43,22 +43,6 @@ if (!empty($report_export_csv)) {
     report_send_csv('technician_performance_' . $report_from . '_to_' . $report_to . '.csv', $csv_header, $csv_rows);
 }
 
-$canned_options = [
-    'alltime'   => 'All time',
-    'today'     => 'Today',
-    'yesterday' => 'Yesterday',
-    'thisweek'  => 'This week',
-    'lastweek'  => 'Last week',
-    'thismonth' => 'This month',
-    'lastmonth' => 'Last month',
-    'thisyear'  => 'This year',
-    'lastyear'  => 'Last year',
-    'custom'    => 'Custom range',
-];
-$selected_canned = $_GET['canned_date'] ?? 'alltime';
-if ($selected_canned === 'custom' && !isset($_GET['dtf'])) {
-    $selected_canned = 'alltime';
-}
 
 // Build chart series (hours).
 $chart_labels = array_column($report['technicians'], 'name');
@@ -116,28 +100,9 @@ $cap_hours_per_tech = $report['capacity']['capacity_hours_per_tech'];
     <div class="card-body p-0">
 
         <!-- Date range filter -->
-        <form class="p-3 d-print-none form-row align-items-end">
-            <div class="col-md-3 col-6 mb-2">
-                <label class="mb-1">Date range</label>
-                <select class="form-control auto-submit-select" id="tpCanned" name="canned_date">
-                    <?php foreach ($canned_options as $val => $label) { ?>
-                        <option value="<?php echo $val; ?>" <?php if ($selected_canned === $val) { echo 'selected'; } ?>><?php echo $label; ?></option>
-                    <?php } ?>
-                </select>
-            </div>
-            <div class="col-md-3 col-6 mb-2">
-                <label class="mb-1">From</label>
-                <input type="date" class="form-control js-canned-date-input" data-canned-target="tpCanned" name="dtf" value="<?php echo nullable_htmlentities($report_from); ?>">
-            </div>
-            <div class="col-md-3 col-6 mb-2">
-                <label class="mb-1">To</label>
-                <input type="date" class="form-control js-canned-date-input" data-canned-target="tpCanned" name="dtt" value="<?php echo nullable_htmlentities($report_to); ?>">
-            </div>
-            <div class="col-md-3 col-6 mb-2">
-                <button type="submit" class="btn btn-secondary btn-block">
-                    <i class="fas fa-fw fa-filter me-1"></i>Apply (custom)
-                </button>
-            </div>
+        <form class="p-3 d-print-none d-flex flex-wrap align-items-center gap-2">
+            <label class="mb-0 me-1" for="reportDateRange">Date range</label>
+            <?php dateRangePickerField($date_range, 'canned_date', ['hide_groups' => ['Upcoming'], 'id' => 'reportDateRange']); ?>
         </form>
 
         <div class="px-3 pb-2">

@@ -867,3 +867,72 @@ body.dark-mode .content-wrapper small.text-muted {
 .icon-picker-custom { flex: 0 0 auto; border-top: 1px solid var(--color-border-soft, #F1F2F6); padding-top: .5rem; }
 .icon-picker-custom-label { font-size: .75rem; color: var(--color-text-muted, #64748B); margin-bottom: .2rem; }
 @media (prefers-reduced-motion: no-preference) { .icon-picker-button, .icon-picker-item { transition: background-color .12s, border-color .12s; } }
+
+/* ============================================================
+   Date-range picker (includes/date_range_picker.php, js/date_range_picker.js)
+   ============================================================ */
+.date-range-picker { position: relative; display: inline-block; max-width: 100%; }
+.drp-controls { display: inline-flex; align-items: center; gap: .25rem; max-width: 100%; }
+.drp-button {
+    display: inline-flex; align-items: center; gap: .45rem; max-width: 100%; min-height: 2.35rem; padding: .35rem .7rem;
+    background: var(--color-surface, #fff); color: var(--color-text, #0F172A); text-align: left; cursor: pointer;
+    border: 1px solid var(--color-border, #dee2e6); border-radius: var(--input-radius, 8px); font-size: .875rem;
+}
+.drp-button:hover { border-color: var(--color-accent, #0d9488); }
+.drp-button:focus-visible { outline: 2px solid var(--color-accent, #0d9488); outline-offset: 1px; }
+.drp-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drp-icon, .drp-caret { flex: 0 0 auto; color: var(--color-text-muted, #64748B); }
+.drp-caret { font-size: .7rem; }
+.drp-clear {
+    flex: 0 0 auto; width: 1.6rem; height: 1.6rem; padding: 0; font-size: .75rem; cursor: pointer; line-height: 1;
+    background: transparent; color: var(--color-text-muted, #64748B); border: 0; border-radius: 50%;
+}
+.drp-clear[hidden] { display: none; }
+.drp-clear:hover { color: var(--color-text, #0F172A); background: var(--color-accent-soft, rgba(13,148,136,.12)); }
+.drp-clear:focus-visible { outline: 2px solid var(--color-accent, #0d9488); }
+.drp-panel {
+    position: fixed; z-index: 2000; display: flex; gap: .75rem; padding: .6rem; overflow: auto;
+    background: var(--color-surface, #fff); color: var(--color-text, #0F172A);
+    border: 1px solid var(--color-border, #dee2e6); border-radius: var(--input-radius, 8px);
+    box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+.drp-panel[hidden] { display: none; }
+.drp-close { display: none; }
+.drp-presets { flex: 0 0 13rem; max-height: 100%; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; }
+.drp-group + .drp-group { margin-top: .35rem; padding-top: .35rem; border-top: 1px solid var(--color-border-soft, #F1F2F6); }
+.drp-group-label { padding: .1rem .5rem; font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--color-text-muted, #64748B); }
+.drp-option {
+    display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; width: 100%; padding: .3rem .5rem;
+    font-size: .85rem; text-align: left; cursor: pointer; background: transparent; color: inherit;
+    border: 1px solid transparent; border-radius: 6px;
+}
+.drp-option > span { white-space: nowrap; }
+.drp-option small { color: var(--color-text-muted, #64748B); font-size: .7rem; white-space: nowrap; }
+.drp-option:hover { background: var(--color-accent-soft, rgba(13,148,136,.12)); }
+.drp-option:focus-visible { outline: 2px solid var(--color-accent, #0d9488); outline-offset: -2px; }
+.drp-option.selected { border-color: var(--color-accent, #0d9488); background: var(--color-accent-soft, rgba(13,148,136,.12)); font-weight: 600; }
+.drp-option.drp-pending { background: var(--color-accent-soft, rgba(13,148,136,.12)); }
+.drp-custom { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: .5rem; }
+.drp-custom[hidden] { display: none; }
+.drp-calendar { overflow-x: auto; }
+.drp-calendar .litepicker { box-shadow: none; background: transparent; color: inherit; }
+.drp-calendar .litepicker .container__main { background: transparent; box-shadow: none; }
+.drp-calendar .litepicker .month-item-name,
+.drp-calendar .litepicker .month-item-year,
+.drp-calendar .litepicker .container__days .day-item { color: var(--color-text, #0F172A); }
+.drp-calendar .litepicker .container__days .day-item.is-locked,
+.drp-calendar .litepicker .month-item-weekdays-row > div { color: var(--color-text-muted, #64748B); }
+.drp-inputs { display: flex; flex-wrap: wrap; gap: .5rem; }
+.drp-inputs label { display: flex; flex-direction: column; flex: 1 1 8rem; gap: .15rem; margin: 0; font-size: .75rem; color: var(--color-text-muted, #64748B); }
+.drp-hint { font-size: .72rem; color: var(--color-text-muted, #64748B); }
+.drp-actions { display: flex; justify-content: flex-end; gap: .5rem; }
+@media (max-width: 640px) {
+    .drp-panel { flex-direction: column; gap: .5rem; }
+    .drp-close { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: .2rem .4rem; font-weight: 600; background: transparent; color: inherit; border: 0; }
+    .drp-presets { flex: 0 0 auto; max-height: 11.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: .15rem; align-content: start; }
+    .drp-group { display: contents; }
+    .drp-group + .drp-group { border: 0; margin: 0; padding: 0; }
+    .drp-group-label, .drp-option small { display: none; }
+    .drp-calendar .litepicker .container__months { max-width: 100%; }
+}
+@media (prefers-reduced-motion: no-preference) { .drp-button, .drp-option { transition: background-color .12s, border-color .12s; } }

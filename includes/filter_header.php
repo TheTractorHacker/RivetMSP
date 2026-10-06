@@ -63,48 +63,19 @@ if (!empty($_GET['sort'])) {
     $sort = sanitizeInput(preg_replace('/[^a-z_]/', '', $_GET['sort'])); // JQ 2023-05-09 - See issue #673 on GitHub to see the reasoning why we used preg_replace technically sanitizeInput() should have been enough to escape SQL Commands
 }
 
-// Date Handling
-if (empty($_GET['canned_date'])) {
-    //Prevents lots of undefined variable errors.
-    // $dtf and $dtt will be set by the below else to 0000-00-00 / 9999-00-00
-    $_GET['canned_date'] = 'custom';
-}
+// Date Handling (RivetCore DateRange; see includes/date_range.php)
+// Resolves canned_date / dtf / dtt in the app timezone into $date_range, and keeps the legacy $dtf / $dtt strings
+// (all time = 1970-01-01 .. 2099-12-31) and the "$_GET['canned_date'] is always set" behaviour every page relies on.
+require_once __DIR__ . '/date_range.php';
+require_once __DIR__ . '/date_range_picker.php';
 
-// Date Filter
-if ($_GET['canned_date'] == "custom" && !empty($_GET['dtf'])) {
-    $dtf = sanitizeInput($_GET['dtf']);
-    $dtt = sanitizeInput($_GET['dtt']);
-} elseif ($_GET['canned_date'] == "today") {
-    $dtf = date('Y-m-d');
-    $dtt = date('Y-m-d');
-} elseif ($_GET['canned_date'] == "yesterday") {
-    $dtf = date('Y-m-d', strtotime("yesterday"));
-    $dtt = date('Y-m-d', strtotime("yesterday"));
-} elseif ($_GET['canned_date'] == "thisweek") {
-    $dtf = date('Y-m-d', strtotime("monday this week"));
-    $dtt = date('Y-m-d');
-} elseif ($_GET['canned_date'] == "lastweek") {
-    $dtf = date('Y-m-d', strtotime("monday last week"));
-    $dtt = date('Y-m-d', strtotime("sunday last week"));
-} elseif ($_GET['canned_date'] == "thismonth") {
-    $dtf = date('Y-m-01');
-    $dtt = date('Y-m-d');
-} elseif ($_GET['canned_date'] == "lastmonth") {
-    $dtf = date('Y-m-d', strtotime("first day of last month"));
-    $dtt = date('Y-m-d', strtotime("last day of last month"));
-} elseif ($_GET['canned_date'] == "thisyear") {
-    $dtf = date('Y-01-01');
-    $dtt = date('Y-m-d');
-} elseif ($_GET['canned_date'] == "lastyear") {
-    $dtf = date('Y-m-d', strtotime("first day of january last year"));
-    $dtt = date('Y-m-d', strtotime("last day of december last year"));
-}elseif (isset($_GET['canned_date']) && $_GET['canned_date'] === "alltime") {
-    $dtf = '1970-01-01';
-    $dtt = '2099-12-31';
-} else {
-    // Fallback acts like all time
-    $dtf = '1970-01-01';
-    $dtt = '2099-12-31';
+$date_range = dateRangeFromRequest($_GET);
+$dtf = $date_range->from();
+$dtt = $date_range->to();
+
+if (empty($_GET['canned_date'])) {
+    // Prevents lots of undefined variable errors on pages that read it directly.
+    $_GET['canned_date'] = 'custom';
 }
 
 // Archived

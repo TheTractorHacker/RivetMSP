@@ -2196,6 +2196,7 @@ return array(
     'RivetCore\\Support\\NullRequestContext' => $vendorDir . '/rivet/rivet-core/src/Support/NullRequestContext.php',
     'RivetCore\\Support\\SystemClock' => $vendorDir . '/rivet/rivet-core/src/Support/SystemClock.php',
     'RivetCore\\Testing\\DatabaseContractTestCase' => $vendorDir . '/rivet/rivet-core/src/Testing/DatabaseContractTestCase.php',
+    'RivetCore\\Ui\\DateRange' => $vendorDir . '/rivet/rivet-core/src/Ui/DateRange.php',
     'RivetCore\\Ui\\IconCatalog' => $vendorDir . '/rivet/rivet-core/src/Ui/IconCatalog.php',
     'RivetCore\\Webhooks\\Migration\\Migration0005WebhookDeliveries' => $vendorDir . '/rivet/rivet-core/src/Webhooks/Migration/Migration0005WebhookDeliveries.php',
     'RivetCore\\Webhooks\\NetworkList' => $vendorDir . '/rivet/rivet-core/src/Webhooks/NetworkList.php',

@@ -2317,6 +2317,7 @@ class ComposerStaticInit690e04a27fa241bad9da145ee44cf2eb
         'RivetCore\\Support\\NullRequestContext' => __DIR__ . '/..' . '/rivet/rivet-core/src/Support/NullRequestContext.php',
         'RivetCore\\Support\\SystemClock' => __DIR__ . '/..' . '/rivet/rivet-core/src/Support/SystemClock.php',
         'RivetCore\\Testing\\DatabaseContractTestCase' => __DIR__ . '/..' . '/rivet/rivet-core/src/Testing/DatabaseContractTestCase.php',
+        'RivetCore\\Ui\\DateRange' => __DIR__ . '/..' . '/rivet/rivet-core/src/Ui/DateRange.php',
         'RivetCore\\Ui\\IconCatalog' => __DIR__ . '/..' . '/rivet/rivet-core/src/Ui/IconCatalog.php',
         'RivetCore\\Webhooks\\Migration\\Migration0005WebhookDeliveries' => __DIR__ . '/..' . '/rivet/rivet-core/src/Webhooks/Migration/Migration0005WebhookDeliveries.php',
         'RivetCore\\Webhooks\\NetworkList' => __DIR__ . '/..' . '/rivet/rivet-core/src/Webhooks/NetworkList.php',

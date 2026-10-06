@@ -53,12 +53,18 @@ $billing_increment_options = [
     '0.5'  => 30 * 60,  // 30 minutes
 ];
 
-// Default range: current month
-$from = isset($_GET['from']) ? $_GET['from'] : date('Y-m-01');
-$to   = isset($_GET['to'])   ? $_GET['to']   : date('Y-m-t');
-
-if (!isValidDateYmd($from)) $from = date('Y-m-01');
-if (!isValidDateYmd($to))   $to   = date('Y-m-t');
+// Default range: current month. The shared picker submits canned_date (+ from/to for a custom range); old links with only
+// from/to still work as a custom range. Anything unusable falls back to the current month, as before.
+$report_range = dateRangeFromRequest([
+    'canned_date' => $_GET['canned_date'] ?? '',
+    'dtf' => $_GET['from'] ?? '',
+    'dtt' => $_GET['to'] ?? '',
+], 'thismonth');
+if ($report_range->isAllTime() && strtolower((string) ($_GET['canned_date'] ?? '')) !== 'alltime') {
+    $report_range = dateRangeResolve('thismonth');
+}
+$from = $report_range->from();
+$to   = $report_range->to();
 
 // Inclusive datetime bounds
 $from_dt = $from . " 00:00:00";
@@ -144,14 +150,9 @@ $result = $stmt->get_result();
         <!-- Filters -->
         <form class="mb-3">
             <div class="row">
-                <div class="col-md-3 mb-2">
-                    <label class="mb-1">From</label>
-                    <input type="date" class="form-control" name="from" value="<?php echo nullable_htmlentities($from); ?>">
-                </div>
-
-                <div class="col-md-3 mb-2">
-                    <label class="mb-1">To</label>
-                    <input type="date" class="form-control" name="to" value="<?php echo nullable_htmlentities($to); ?>">
+                <div class="col-md-4 mb-2">
+                    <label class="mb-1">Date range</label>
+                    <div><?php dateRangePickerField($report_range, 'canned_date', ['default' => 'thismonth', 'from_name' => 'from', 'to_name' => 'to', 'autosubmit' => false, 'hide_groups' => ['Upcoming']]); ?></div>
                 </div>
 
                 <div class="col-md-3 mb-2">

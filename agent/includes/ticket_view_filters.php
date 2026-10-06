@@ -1,5 +1,8 @@
 <?php
 
+require_once __DIR__ . '/../../includes/date_range.php';
+require_once __DIR__ . '/../../includes/date_range_picker.php';
+
 /*
  * Saved ticket views: a form for choosing the filters a view uses, and the matching validator that turns the posted choices
  * back into the query string stored on the view (the same parameters agent/tickets.php already understands). Nothing is
@@ -106,7 +109,37 @@ function ticketViewQueryFromPost($mysqli, array $post): string
         $q['due_today'] = 1;
     }
 
+    // Date range: presets are stored as the preset id only (so the view stays rolling: "Last 7 days" is always the last
+    // 7 days); only an explicitly custom range stores dates. All time stores nothing. datefield only matters with a range.
+    $range = dateRangeFromRequest([
+        'canned_date' => $post['f_canned_date'] ?? '',
+        'dtf' => $post['f_dtf'] ?? '',
+        'dtt' => $post['f_dtt'] ?? '',
+    ]);
+    if (!$range->isAllTime()) {
+        $q += dateRangeUrlParams($range);
+        $field = ticketDateFieldFromRequest(['datefield' => $post['f_datefield'] ?? '']);
+        if ($field !== 'created') {
+            $q['datefield'] = $field;
+        }
+    }
+
     return http_build_query($q);
+}
+
+/** "Last 7 days (rolling)" / "Sep 1 – Sep 9 (fixed dates)" for a stored view query, or '' when it has no date range. */
+function ticketViewDescribeDateRange(array $p): string
+{
+    $range = dateRangeFromRequest($p);
+    if ($range->isAllTime()) {
+        return '';
+    }
+    $text = $range->preset() === 'custom'
+        ? dateRangeDisplayDates($range) . ' (fixed dates)'
+        : $range->label() . ' (rolling)';
+    $field = ticketDateFieldFromRequest($p);
+
+    return 'Date range: ' . $text . ($field !== 'created' ? ' on ' . strtolower(ticketDateFields()[$field]['label']) : '');
 }
 
 /** Human summary of a stored query, for showing what a view does. */
@@ -147,6 +180,10 @@ function ticketViewDescribe($mysqli, string $query): string
     }
     if (isset($p['due_today'])) {
         $parts[] = 'Due today';
+    }
+    $dates = ticketViewDescribeDateRange($p);
+    if ($dates !== '') {
+        $parts[] = $dates;
     }
 
     return implode(' · ', $parts);
@@ -261,6 +298,25 @@ function ticketViewFilterFields($mysqli, array $p, string $idp = 'tvf'): void
         </div>
     </div>
     <?php } ?>
+    <?php
+    $range = dateRangeFromRequest($p);
+    $sel_field = ticketDateFieldFromRequest($p);
+    ?>
+    <div class="row">
+        <div class="form-group col-md-7">
+            <label>Date range</label>
+            <div><?php dateRangePickerField($range, 'f_canned_date', ['autosubmit' => false, 'id' => $idp . '_daterange']); ?></div>
+            <small class="form-text text-muted">A preset such as "Last 7 days" stays rolling: the view always shows the last 7 days, not the days it was saved on.</small>
+        </div>
+        <div class="form-group col-md-5">
+            <label for="<?= $idp ?>_datefield">Date field</label>
+            <select class="form-control" id="<?= $idp ?>_datefield" name="f_datefield">
+                <?php foreach (ticketDateFields() as $k => $f) { ?>
+                    <option value="<?= $h($k) ?>" <?= $sel_field === $k ? 'selected' : '' ?>><?= $h($f['label']) ?></option>
+                <?php } ?>
+            </select>
+        </div>
+    </div>
     <input type="hidden" name="filters_present" value="1">
     <?php
 }

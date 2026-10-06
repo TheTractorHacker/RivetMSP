@@ -147,6 +147,11 @@ if ($client_access_string) {
     $access_permission_query_overide = "AND ticket_client_id IN (0,$client_access_string)";
 }
 
+// Date filter: which ticket date column the range applies to (whitelisted; created by default) and the resulting
+// sargable condition. $date_range was resolved by includes/filter_header.php.
+$datefield = ticketDateFieldFromRequest($_GET);
+$ticket_date_sql = dateRangeSqlBetween(ticketDateFields()[$datefield]['column'], $date_range);
+
 // Main ticket query:
 $query =
     "SELECT SQL_CALC_FOUND_ROWS * FROM tickets
@@ -164,7 +169,7 @@ $query =
     $priority_query
     $onsite_query
     $stat_query
-    AND DATE(ticket_created_at) BETWEEN '$dtf' AND '$dtt'
+    AND $ticket_date_sql
     AND (CONCAT(ticket_prefix,ticket_number) LIKE '%$q%' OR client_name LIKE '%$q%' OR ticket_subject LIKE '%$q%' OR ticket_status_name LIKE '%$q%' OR ticket_priority LIKE '%$q%' OR user_name LIKE '%$q%' OR contact_name LIKE '%$q%' OR asset_name LIKE '%$q%' OR vendor_name LIKE '%$q%' OR ticket_vendor_ticket_number LIKE '%q%')
     $ticket_billable_snippet
     $ticket_project_snippet
@@ -266,6 +271,16 @@ function ticketSavedViewIsActive($query, $session_user_id) {
         $current = $norm($_GET[$key] ?? null);
         $expected = $norm($view_params[$key] ?? null);
         if ($current !== $expected) return false;
+    }
+    // A view that defines a date range is only active while that range (and the date field it applies to) is selected;
+    // a view without one stays active whatever the range is, as before.
+    if (isset($view_params['canned_date'])) {
+        $view_range = dateRangeFromRequest($view_params);
+        $now_range = dateRangeFromRequest($_GET);
+        if ($view_range->toQuery() !== $now_range->toQuery()
+            || ticketDateFieldFromRequest($view_params) !== ticketDateFieldFromRequest($_GET)) {
+            return false;
+        }
     }
     return true;
 }
@@ -557,6 +572,16 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
                             <option value="Low" data-dot="low" <?= $priority_filter === 'Low' ? 'selected' : '' ?>>Low</option>
                         </select>
                     </div>
+                    <div class="col-auto mb-2">
+                        <?php dateRangePickerField($date_range, 'canned_date', ['id' => 'ticketDateRange']); ?>
+                    </div>
+                    <div class="col-auto mb-2">
+                        <select class="form-control select2 auto-submit-select" name="datefield" data-placeholder="Date field" style="width:170px;" aria-label="Date field the range applies to">
+                            <?php foreach (ticketDateFields() as $_df_key => $_df) { ?>
+                                <option value="<?= $_df_key ?>" <?= $datefield === $_df_key ? 'selected' : '' ?>><?= nullable_htmlentities($_df['label']) ?></option>
+                            <?php } ?>
+                        </select>
+                    </div>
                     <div class="col-auto mb-2" style="width:220px;">
                         <div class="input-group">
                             <input type="search" class="form-control" name="q" value="<?php if (isset($q)) { echo stripslashes(nullable_htmlentities($q)); } ?>" placeholder="Search tickets...">
@@ -584,6 +609,10 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
                     </div>
                 </div>
                 </div>
+
+                <?php if (in_array($datefield, ['resolved', 'closed'], true) && $status === 'Open' && !$date_range->isAllTime()) { ?>
+                <div class="small text-muted mb-1"><i class="fas fa-info-circle me-1"></i>Only resolved tickets have a <?= $datefield ?> date. Set Status to "All Closed" to see them.</div>
+                <?php } ?>
 
                 <div class="row mt-1">
                     <div class="col-12">
@@ -653,23 +682,12 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
                 <div
                     class="collapse mt-3
                         <?php
-                        if (isset($_GET['dtf']) && $_GET['dtf'] !== '1970-01-01'
-                            || (isset($_GET['assigned']) && $_GET['assigned']
-                        ))
+                        if (isset($_GET['assigned']) && $_GET['assigned'])
                             { echo "show"; }
                         ?>"
                     id="advancedFilter"
                 >
                     <div class="row">
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Date range</label>
-                                <input type="text" id="dateFilter" class="form-control" autocomplete="off">
-                                <input type="hidden" name="canned_date" id="canned_date" value="<?php echo nullable_htmlentities($_GET['canned_date']) ?? ''; ?>">
-                                <input type="hidden" name="dtf" id="dtf" value="<?php echo nullable_htmlentities($dtf ?? ''); ?>">
-                                <input type="hidden" name="dtt" id="dtt" value="<?php echo nullable_htmlentities($dtt ?? ''); ?>">
-                            </div>
-                        </div>
                         <div class="col-md-4">
                             <div class="form-group">
                                 <label>Assigned to</label>
