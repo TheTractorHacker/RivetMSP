@@ -6620,3 +6620,16 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.75'");
     }
+
+    if ($rivetit_db_version() == '2.6.75') {
+        // RivetCore 1.0 migration 0013 adds the created_at indexes retention pruning and the audit date filters use
+        // (audit_events, webhook_deliveries, integration_jobs). Idempotent. Skipped (version NOT advanced) until the package is present.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Retention\Migration\Migration0013RetentionIndexes::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.76'");
+        }
+    }

@@ -410,7 +410,8 @@ CREATE TABLE `audit_events` (
   PRIMARY KEY (`audit_id`),
   KEY `idx_audit_events_type_created` (`event_type`,`created_at`),
   KEY `idx_audit_events_entity` (`entity_type`,`entity_id`),
-  KEY `idx_audit_events_actor` (`actor_user_id`)
+  KEY `idx_audit_events_actor` (`actor_user_id`),
+  KEY `idx_audit_events_created` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `auth_logs`;
@@ -1523,7 +1524,8 @@ CREATE TABLE `integration_jobs` (
   `error` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`job_id`),
-  KEY `idx_integration_jobs_status_available` (`status`,`available_at`)
+  KEY `idx_integration_jobs_status_available` (`status`,`available_at`),
+  KEY `idx_integration_jobs_status_created` (`status`,`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `invoice_items`;
@@ -3997,7 +3999,8 @@ CREATE TABLE `webhook_deliveries` (
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`delivery_id`),
   KEY `idx_webhook_deliveries_webhook` (`webhook_id`,`created_at`),
-  KEY `idx_webhook_deliveries_event` (`event_type`,`created_at`)
+  KEY `idx_webhook_deliveries_event` (`event_type`,`created_at`),
+  KEY `idx_webhook_deliveries_created` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `webhook_queue`;
@@ -4167,6 +4170,7 @@ INSERT INTO `rivet_core_migrations` VALUES ('0009_compliance_shared_report','202
 INSERT INTO `rivet_core_migrations` VALUES ('0010_compliance_subjects','2026-10-05 02:46:32');
 INSERT INTO `rivet_core_migrations` VALUES ('0011_compliance_responsibilities','2026-10-05 02:46:32');
 INSERT INTO `rivet_core_migrations` VALUES ('0012_job_heartbeat','2026-10-05 02:46:32');
+INSERT INTO `rivet_core_migrations` VALUES ('0013_retention_indexes','2026-10-06 00:00:00');
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

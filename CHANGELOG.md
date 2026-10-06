@@ -4,7 +4,7 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased] RivetMSP — Redis authentication and TLS, API rate limit, Update checks
 
-Database migrations 2.6.74 and 2.6.75.
+Database migrations 2.6.74, 2.6.75 and 2.6.76 (RivetCore migration 0013: retention indexes on audit_events, webhook_deliveries and integration_jobs).
 
 - **Redis settings:** Administration > Redis now has an ACL username, a TLS switch, certificate verification and CA / client certificate / client key paths; the password stays encrypted and is never shown. Test connection says why it failed (password, TLS, unreachable, invalid field) with a fix. `RIVETMSP_REDIS_USERNAME`, `_TLS`, `_TLS_VERIFY`, `_TLS_CA_FILE` (and `_TLS_CERT_FILE`, `_TLS_KEY_FILE`) win over stored values, and can also be provided in `/etc/rivetmsp/redis.env`. See `docs/REDIS.md`.
 - **API rate limit:** one Redis-backed limiter (RivetCore) per API key/token and per address; configurable on Administration > API Keys (default 120 requests a minute, 0 = off). Over the limit the API answers 429 with `Retry-After` and a JSON error, records one `api.rate_limited` audit event per key per minute, and fails open if Redis is down.

@@ -136,7 +136,12 @@ if (isset($options['update_db'])) {
     $old_db_version = $row['config_current_database_version'];
 
     // Now include the update logic
-    require_once "../admin/database_updates.php";
+    try {
+        require_once "../admin/database_updates.php";
+    } catch (\RivetCore\Migration\MigrationInProgressException $e) {
+        fwrite(STDERR, "Another database update is running (RivetCore migration lock). Wait for it to finish and run this again.\n");
+        exit(1);
+    }
 
     // After database_updates.php has done its job, fetch the updated current DB version again
     $result = mysqli_query($mysqli, "SELECT config_current_database_version FROM settings LIMIT 1");

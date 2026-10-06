@@ -113,7 +113,16 @@ if (isset($_GET['update_db'])) {
     require_once ('../includes/database_version.php');
 
     // Perform upgrades, if required
-    require_once ('database_updates.php');
+    try {
+        require_once ('database_updates.php');
+    } catch (\RivetCore\Migration\MigrationInProgressException $e) {
+        // Another process holds the RivetCore migration lock for this schema: not a failure, just try again shortly.
+        if ($update_lock !== null) {
+            $update_lock->release();
+        }
+        flash_alert('Another database update is running (RivetCore migration lock). Wait for it to finish and try again.', 'error');
+        redirect();
+    }
 
     if ($update_lock !== null) {
         $update_lock->release();

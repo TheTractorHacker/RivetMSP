@@ -244,12 +244,19 @@ function rivetAutomationActionHandlers($mysqli, string $ruleName): array
                     $headers[] = $prefix . '-Signature: sha256=' . hash_hmac('sha256', $body, (string) $cfg['secret']);
                 }
             }
-            $ch = curl_init((string) $cfg['url']);
+            // The vetted host spelling is what the pin is keyed on (a trailing-dot host must not skip it), so curl is given the pinned URL.
+            $ch = curl_init(\RivetCore\Webhooks\WebhookDispatcher::pinnedUrl((string) $cfg['url'], $target));
             // Pins the connection to the addresses just vetted, so a DNS answer that changes in between cannot redirect it inward.
             curl_setopt_array($ch, \RivetCore\Webhooks\WebhookDispatcher::curlOptions($body, $headers, 10, $target));
+            // The receiver is not trusted: the answer body is never used, so stop reading after 64 KiB instead of buffering it all.
+            $read = 0;
+            curl_setopt($ch, CURLOPT_WRITEFUNCTION, static function ($handle, string $chunk) use (&$read): int {
+                $read += strlen($chunk);
+                return $read > 65536 ? 0 : strlen($chunk);
+            });
             $out = curl_exec($ch);
             $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            if ($out === false) {
+            if ($out === false && !($read > 65536 && $code >= 200 && $code < 300)) {
                 throw new \RuntimeException('webhook request failed: ' . curl_error($ch));
             }
             if ($code < 200 || $code >= 300) {

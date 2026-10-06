@@ -33,6 +33,20 @@ final class InstallArtifactsTest extends TestCase
         $this->assertStringContainsString("config_current_database_version` = '$version'", $updates, 'no migration step ends at the latest version');
     }
 
+    /** A fresh install must equal an upgraded one: db.sql records every Core migration and carries the 0013 retention indexes. */
+    public function testDbSqlRecordsEveryCoreMigrationAndItsIndexes(): void
+    {
+        $sql = (string) file_get_contents(self::root() . '/db.sql');
+        foreach (\RivetCore\Migration\CoreMigrations::all() as $migration) {
+            $this->assertStringContainsString("INSERT INTO `rivet_core_migrations` VALUES ('" . $migration->id() . "',", $sql, 'db.sql does not record ' . $migration->id());
+        }
+        foreach (['idx_audit_events_created', 'idx_webhook_deliveries_created', 'idx_integration_jobs_status_created'] as $index) {
+            $this->assertStringContainsString("KEY `$index`", $sql, "db.sql lacks the 0013 index $index");
+        }
+        $updates = (string) file_get_contents(self::root() . '/admin/database_updates.php');
+        $this->assertStringContainsString('Migration0013RetentionIndexes', $updates, 'no database version step applies RivetCore migration 0013 to existing installs');
+    }
+
     public function testSavedViewDedupeMigrationOnlyRemovesExactDuplicates(): void
     {
         $updates = (string) file_get_contents(self::root() . '/admin/database_updates.php');
