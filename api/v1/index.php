@@ -146,6 +146,9 @@ if (preg_match('/^Bearer\s+(\S+)$/i', $authHeader, $m)) {
          FROM api_tokens t
          JOIN users u ON t.token_user_id = u.user_id
          WHERE t.token_hash = '$esc'
+           AND u.user_status = 1
+           AND u.user_archived_at IS NULL
+           AND u.user_type = 1
          LIMIT 1"
     );
     $api_token_row = mysqli_fetch_assoc($sql);

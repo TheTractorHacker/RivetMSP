@@ -156,6 +156,7 @@ if (isset($_POST['edit_user'])) {
         $new_password = password_hash($new_password, PASSWORD_DEFAULT);
         $user_specific_encryption_ciphertext = encryptUserSpecificKey(trim($_POST['new_password']));
         mysqli_query($mysqli, "UPDATE users SET user_password = '$new_password', user_specific_encryption_ciphertext = '$user_specific_encryption_ciphertext' WHERE user_id = $user_id");
+        mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
         //Extended Logging
         $extended_log_description .= ", password changed";
     }
@@ -272,6 +273,9 @@ if (isset($_POST['archive_user'])) {
     // Archive user query
     mysqli_query($mysqli, "UPDATE users SET user_name = '$user_name (archived)', user_password = '$password', user_status = 0, user_specific_encryption_ciphertext = '', user_archived_at = NOW() WHERE user_id = $user_id");
 
+    // Revoke every API/mobile session for the archived user
+    mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
+
     logAction("User", "Archive", "$session_name archived user $user_name", 0, $user_id);
 
     flash_alert("User <strong>$user_name</strong> archived", 'error');
@@ -298,6 +302,7 @@ if (isset($_POST['restore_user'])) {
         $new_password = password_hash($new_password, PASSWORD_DEFAULT);
         $user_specific_encryption_ciphertext = encryptUserSpecificKey(trim($_POST['new_password']));
         mysqli_query($mysqli, "UPDATE users SET user_password = '$new_password', user_specific_encryption_ciphertext = '$user_specific_encryption_ciphertext' WHERE user_id = $user_id");
+        mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
         //Extended Logging
         $extended_log_description .= ", password changed";
     }
@@ -395,6 +400,7 @@ if (isset($_POST['ir_reset_user_password'])) {
         $new_password = password_hash($new_password, PASSWORD_DEFAULT);
 
         mysqli_query($mysqli, "UPDATE users SET user_password = '$new_password', user_specific_encryption_ciphertext = '$user_specific_encryption_ciphertext' WHERE user_id = $user_id");
+        mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
 
         echo "<br><br>";
     }

@@ -93,6 +93,14 @@ if ($method === 'PUT' || $method === 'POST') {
 
     $set = implode(', ', $updates);
     mysqli_query($mysqli, "UPDATE users SET $set WHERE user_id = $api_user_id");
+    if ($new_pass) {
+        // Password changed: drop every other session, keep the one making this call
+        $cur_hash = '';
+        if (preg_match('/^Bearer\s+(\S+)$/i', $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '', $bm)) {
+            $cur_hash = mysqli_real_escape_string($mysqli, hash('sha256', $bm[1]));
+        }
+        mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $api_user_id AND token_hash <> '$cur_hash'");
+    }
     api_response(200, ['ok' => true]);
 }
 
