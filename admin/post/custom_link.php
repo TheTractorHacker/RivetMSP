@@ -13,7 +13,7 @@ if (isset($_POST['add_custom_link'])) {
     $name = sanitizeInput($_POST['name']);
     $uri = sanitizeInput($_POST['uri']);
     $new_tab = intval($_POST['new_tab'] ?? 0);
-    $icon = preg_replace("/[^0-9a-zA-Z-]/", "", sanitizeInput($_POST['icon']));
+    $icon = substr(\RivetCore\Ui\IconCatalog::normalize($_POST['icon'] ?? '', 'fa-link'), 3);
     $order = intval($_POST['order'] ?? 0);
     $location = intval($_POST['location']);
 
@@ -37,7 +37,7 @@ if (isset($_POST['edit_custom_link'])) {
     $name = sanitizeInput($_POST['name']);
     $uri = sanitizeInput($_POST['uri']);
     $new_tab = intval($_POST['new_tab'] ?? 0);
-    $icon = preg_replace("/[^0-9a-zA-Z-]/", "", sanitizeInput($_POST['icon']));
+    $icon = substr(\RivetCore\Ui\IconCatalog::normalize($_POST['icon'] ?? '', 'fa-link'), 3);
     $order = intval($_POST['order'] ?? 0);
     $location = intval($_POST['location']);
 

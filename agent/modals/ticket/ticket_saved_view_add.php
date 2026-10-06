@@ -2,6 +2,7 @@
 
 require_once '../../../includes/modal_header.php';
 require_once __DIR__ . '/../../includes/ticket_view_filters.php';
+require_once __DIR__ . '/../../../includes/icon_picker.php';
 
 // The current ticket dashboard filters, passed in via the querystring
 $saved_query = $_SERVER['QUERY_STRING'] ?? '';
@@ -32,8 +33,8 @@ ob_start();
 
         <div class="form-group">
             <label>Icon</label>
-            <input type="text" class="form-control" name="icon" maxlength="50" value="fa-filter" placeholder="fa-filter">
-            <small class="form-text text-muted">A Font Awesome icon class, e.g. <code>fa-fire</code>, <code>fa-star</code>, <code>fa-truck</code>.</small>
+            <div><?php iconPickerField('icon', 'fa-filter', 'fa-filter'); ?></div>
+            <small class="form-text text-muted">Pick from the catalog, or enter any Font Awesome class under "Custom Font Awesome class".</small>
         </div>
 
         <hr>

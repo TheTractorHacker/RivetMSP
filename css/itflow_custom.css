@@ -825,3 +825,45 @@ body.dark-mode .content-wrapper small.text-muted {
     transform: rotate(180deg);
 }
 
+
+/* ---- Icon catalog picker (includes/icon_picker.php + js/icon_picker.js) ---- */
+.icon-picker { position: relative; display: inline-block; max-width: 100%; }
+.icon-picker-button {
+    display: inline-flex; align-items: center; gap: .75rem; max-width: 100%;
+    padding: .4rem .75rem; background: var(--color-surface, #fff); color: var(--color-text, #0F172A);
+    border: 1px solid var(--color-border, #dee2e6); border-radius: var(--input-radius, 8px); cursor: pointer;
+}
+.icon-picker-button:hover, .icon-picker-button[aria-expanded="true"] { border-color: var(--color-accent, #0d9488); }
+.icon-picker-button:focus-visible { outline: 2px solid var(--color-accent, #0d9488); outline-offset: 2px; }
+.icon-picker-preview { font-size: 1.6rem; width: 2rem; text-align: center; line-height: 1; color: var(--color-accent, #0d9488); }
+.icon-picker-value { font-family: var(--bs-font-monospace, monospace); font-size: .85rem; color: var(--color-text-muted, #64748B); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-picker-caret { font-size: .7rem; color: var(--color-text-muted, #64748B); }
+.icon-picker-panel {
+    position: fixed; z-index: 2000; display: flex; flex-direction: column; gap: .5rem; padding: .6rem;
+    overflow: hidden; background: var(--color-surface, #fff); color: var(--color-text, #0F172A);
+    border: 1px solid var(--color-border, #dee2e6); border-radius: var(--input-radius, 8px);
+    box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+.icon-picker-panel[hidden] { display: none; }
+.icon-picker-chips { display: flex; gap: .25rem; overflow-x: auto; flex: 0 0 auto; padding-bottom: .25rem; }
+.icon-picker-chip {
+    flex: 0 0 auto; padding: .15rem .55rem; font-size: .75rem; white-space: nowrap; cursor: pointer;
+    background: transparent; color: var(--color-text-muted, #64748B);
+    border: 1px solid var(--color-border, #dee2e6); border-radius: 999px;
+}
+.icon-picker-chip.active { background: var(--color-accent, #0d9488); border-color: var(--color-accent, #0d9488); color: #fff; }
+.icon-picker-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(2.5rem, 1fr)); gap: .25rem;
+    overflow-y: auto; min-height: 5rem; flex: 1 1 auto; padding: .1rem;
+}
+.icon-picker-item {
+    height: 2.5rem; font-size: 1.1rem; cursor: pointer; background: transparent; color: inherit;
+    border: 1px solid transparent; border-radius: 6px;
+}
+.icon-picker-item:hover { background: var(--color-accent-soft, rgba(13,148,136,.12)); }
+.icon-picker-item:focus-visible { outline: 2px solid var(--color-accent, #0d9488); outline-offset: -2px; }
+.icon-picker-item.selected { border-color: var(--color-accent, #0d9488); background: var(--color-accent-soft, rgba(13,148,136,.12)); }
+.icon-picker-empty { padding: .75rem; text-align: center; font-size: .85rem; }
+.icon-picker-custom { flex: 0 0 auto; border-top: 1px solid var(--color-border-soft, #F1F2F6); padding-top: .5rem; }
+.icon-picker-custom-label { font-size: .75rem; color: var(--color-text-muted, #64748B); margin-bottom: .2rem; }
+@media (prefers-reduced-motion: no-preference) { .icon-picker-button, .icon-picker-item { transition: background-color .12s, border-color .12s; } }
