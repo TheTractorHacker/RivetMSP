@@ -2,6 +2,18 @@
 
 This file documents all notable changes made to ITFlow.
 
+## [26.10.7] RivetMSP — Webhooks and Event rules highlights, UI fixes
+
+### Highlights: Webhooks and Event rules
+
+- **Webhooks:** 24 ready-made platforms (n8n, Node-RED, Activepieces, Windmill, Huginn, Zapier, Make, Pipedream, IFTTT, Slack, Teams, Discord, Mattermost, Rocket.Chat, Matrix, Telegram, ntfy, Gotify, Apprise, Home Assistant, generic JSON/form/custom template), 13 payload formats, bearer/basic/custom-header/signed auth, signed timestamps with verification snippets in 5 languages, retries, a guided four-step setup with a live address check, Send test and Preview, and a Guides hub.
+- **Events:** 113 events in 14 groups (96 emitted today, 17 planned) in a searchable picker with group wildcards and quick chips; the same catalog drives Event rules.
+- **Event rules:** a When, If, Then builder with 3 actions (create a ticket, send a webhook, notify technicians), 10 recipes, a no-side-effects test drawer and run history.
+
+### Fixes
+
+- Webhook wizard: the Continue button is now the same size as Back; recipe cards no longer show the link underline.
+
 ## [26.10.6] RivetMSP — Event rules builder, webhook guides and creation redesign, icon fixes
 
 No database migration. Requires rivet-core 0.21.0 (already in `vendor/`).

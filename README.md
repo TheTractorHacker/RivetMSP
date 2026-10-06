@@ -71,6 +71,17 @@ Built with Kotlin + Jetpack Compose + Material 3. Features include:
 <!-- MSP ADDITIONS -->
 ## What's Added in This Fork
 
+### Webhooks
+Send events to the tools you already run, without writing glue code.
+- **24 ready-made platforms**: n8n, Node-RED, Activepieces, Windmill, Huginn, Zapier, Make, Pipedream and IFTTT (automation); Slack, Microsoft Teams, Discord, Mattermost, Rocket.Chat, Matrix (hookshot and client API) and Telegram (chat); ntfy, Gotify and Apprise (notifications); Home Assistant; and generic JSON, form and custom-template webhooks. Each has a step-by-step guide in **Administration > Webhooks > Guides**.
+- **113 events in 14 groups** (tickets, SLA and escalations, approvals and service catalog, workflows and lifecycle, problems and changes, assets, clients, billing, security and sign-in, audit and compliance, backups and system, automation and jobs, integrations, training), 96 of them emitted today and 17 planned. A searchable event picker with group wildcards (`ticket.*`) and quick chips ("Critical only", "SLA problems", "Security & sign-in").
+- **13 payload formats** (JSON, form, Slack blocks and attachments, Teams, Discord, ntfy, Gotify, Telegram, Matrix, Apprise and a custom template with `{{placeholders}}` and safe filters), **bearer, basic, custom-header and signed** authentication, and POST or PUT.
+- **Signed and safe by default**: HMAC signatures with a signed timestamp, verification snippets in Node, Python, PHP, Bash and an n8n Code node, retries after 1, 5, 30 and 120 minutes, secrets stored encrypted, and public addresses only unless an admin lists an internal network.
+- **A four-step guided setup** with a live address check, **Send test** and **Preview payload**, a delivery log with View payload, and a tabbed Edit page.
+
+### Event rules
+- A **When, If, Then** builder under Administration > Event rules: pick any of the **113 events** in 14 groups, add conditions, and choose an action (create a ticket, send a webhook, notify technicians). Each rule shows a plain-English summary, a **test drawer** that dry-runs it without side effects, run **history**, and there are **10 ready-made recipes**.
+
 ### Ticket Automation
 - **Rule-based automation engine** — create rules that run automatically on every cron cycle
 - **Conditions**: ticket age, idle time since last reply, priority, status, assigned user, or **ticket category** (On-Site, Remote, Project, etc.)
