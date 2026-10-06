@@ -19,11 +19,11 @@ $src = file_get_contents(__DIR__ . '/../api/v1/auth.php');
 $pwdPos = strpos($src, '// ── 2FA (TOTP)');
 $verifyPos = strpos($src, 'TokenAuth6238::verify($totp_secret, intval($totp), 1)');
 $incPos = strpos($src, 'user_failed_login_count = user_failed_login_count + 1', $verifyPos ?: 0);
-$resetPos = strpos($src, 'X, $verifyPos ?: 0);
+$resetPos = strpos($src, 'SET user_failed_login_count = 0 WHERE user_id = $uid"', $verifyPos ?: 0);
 $ok($verifyPos !== false, 'TOTP verified with a +/-1 step window');
 $ok($incPos !== false && $incPos < $resetPos, 'a wrong TOTP increments the failure counter before any reset');
 $ok($resetPos !== false && $resetPos > $verifyPos, 'failure counter is reset only AFTER the second factor passed');
-$earlyReset = strpos($src, 'X);
+$earlyReset = strpos($src, 'SET user_failed_login_count = 0 WHERE user_id = $uid"');
 $ok($earlyReset === $resetPos, 'no earlier reset of the counter between password check and TOTP check');
 $ok(strpos($src, 'MFA Failed') !== false, 'TOTP failure is logged');
 
