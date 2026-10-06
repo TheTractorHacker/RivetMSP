@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace RivetCore\Redis;
 
-/** A lock handed out by LockManager. */
+/** A lock handed out by LockManager.
+ *
+ * @api
+ */
 final class Lock
 {
     private const RELEASE = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
@@ -38,7 +41,7 @@ final class Lock
             return $this->held;
         }
         try {
-            return (int) $this->redis->client()?->eval(self::EXTEND, 1, $this->key, $this->token, max(1, $ttlSeconds) * 1000) === 1;
+            return (int) $this->redis->client()?->eval(self::EXTEND, 1, $this->key, $this->token, (string) (max(1, $ttlSeconds) * 1000)) === 1;
         } catch (\Throwable) {
             return false;
         }

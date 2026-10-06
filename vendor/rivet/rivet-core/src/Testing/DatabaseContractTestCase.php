@@ -12,6 +12,9 @@ use RivetCore\Database\DatabaseInterface;
  * Behavioural contract every DatabaseInterface implementation must satisfy.
  * RivetCore, RivetIT and RivetMSP each extend this against their own adapter
  * and a scratch MySQL/MariaDB database (never production data).
+ *
+ * @internal A test helper for edition test suites: it needs PHPUnit, which is a dev dependency, so it is not part of the
+ *           semver/backward-compatibility promise (decision on a separate testing package: issue #49).
  */
 abstract class DatabaseContractTestCase extends TestCase
 {
@@ -94,15 +97,16 @@ abstract class DatabaseContractTestCase extends TestCase
     public function testTransactionRollsBackAndRethrows(): void
     {
         $db = $this->database();
+        $message = null;
         try {
             $db->transaction(function () use ($db) {
                 $db->execute('INSERT INTO rc_contract (name) VALUES (?)', ['t']);
                 throw new \LogicException('boom');
             });
-            $this->fail('exception not rethrown');
         } catch (\LogicException $e) {
-            $this->assertSame('boom', $e->getMessage());
+            $message = $e->getMessage();
         }
+        $this->assertSame('boom', $message, 'exception not rethrown');
         $this->assertSame([], $db->fetchAll('SELECT * FROM rc_contract'));
     }
 

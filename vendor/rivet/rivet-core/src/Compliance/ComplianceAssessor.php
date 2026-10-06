@@ -12,6 +12,8 @@ use RivetCore\Contracts\ClockInterface;
  * Scoring: an item counts toward a framework when it is tagged to it. Pass is 1, "needs attention" is 0.5, fail or could-not-check
  * is 0; "not applicable" is left out. A manual item is 1 when current, 0.5 when its review is coming due, 0 when overdue or never
  * recorded. The score is the average as a percentage. It measures how many of the listed controls are evidenced, nothing more.
+ *
+ * @api
  */
 final class ComplianceAssessor
 {
@@ -99,7 +101,7 @@ final class ComplianceAssessor
     }
 
     /**
-     * @param array<string, list<string>> $controls
+     * @param array<string, array<array-key, string>> $controls
      * @return array<string, list<string>>
      */
     private static function cleanControls(array $controls): array

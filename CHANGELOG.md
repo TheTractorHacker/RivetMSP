@@ -4,6 +4,10 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+### RivetCore 0.17.1
+
+- Updates the shared library to RivetCore 0.17.1 (job heartbeat, webhook signed timestamp, PSR-3 logging, audit reader, retention horizons). **Migration 2.6.69** adds `integration_jobs.heartbeat_at` through Core's own migration runner. The Update page now shows the RivetCore version; the library updates with the app (the pin is in `composer.json`/`composer.lock`), no separate button is needed.
+
 ### Same shell as RivetIT
 
 - Administration now uses RivetIT's layout: consolidated sidebar (Access, Configuration), a Settings directory with search, and Maintenance, Ticketing, Templates and Tags & Categories areas with breadcrumbs. Every existing admin page is still reachable (checked by `tests/nav_coverage.py`).

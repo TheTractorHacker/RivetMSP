@@ -1516,6 +1516,7 @@ CREATE TABLE `integration_jobs` (
   `max_attempts` int(11) NOT NULL DEFAULT 5,
   `available_at` datetime NOT NULL DEFAULT current_timestamp(),
   `started_at` datetime DEFAULT NULL,
+  `heartbeat_at` datetime DEFAULT NULL,
   `completed_at` datetime DEFAULT NULL,
   `payload` text DEFAULT NULL,
   `result` text DEFAULT NULL,
@@ -4152,6 +4153,7 @@ INSERT INTO `rivet_core_migrations` VALUES ('0008_compliance','2026-10-05 02:46:
 INSERT INTO `rivet_core_migrations` VALUES ('0009_compliance_shared_report','2026-10-05 02:46:32');
 INSERT INTO `rivet_core_migrations` VALUES ('0010_compliance_subjects','2026-10-05 02:46:32');
 INSERT INTO `rivet_core_migrations` VALUES ('0011_compliance_responsibilities','2026-10-05 02:46:32');
+INSERT INTO `rivet_core_migrations` VALUES ('0012_job_heartbeat','2026-10-05 02:46:32');
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

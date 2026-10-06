@@ -2,6 +2,29 @@
 
 All notable changes to RivetCore. Semantic versioning.
 
+## 0.17.1
+CI only: the backward-compatibility checker needs PHP 8.4+ and was a dev dependency, so `composer install` failed on PHP 8.2 and 8.3 (and the lowest-dependencies job). It is now installed inside the compatibility job only. No library change.
+
+## 0.17.0
+API freeze preparation (milestone v0.9.0) plus the pieces editions were missing.
+- **Public API marked:** every type is tagged `@api` or `@internal` (migration classes and the PHPUnit-based contract test case are internal). `docs/api-surface.md` is generated from the tags (`scripts/api-surface.php`); `docs/api-freeze-review.md` lists what is settled and what is left before 1.0. CI gains an advisory backward-compatibility check against the last tag (`roave/backward-compatibility-check`).
+- **Logging:** services accept a PSR-3 logger instead of calling `error_log()`; `Support\ErrorLogLogger` is the default and keeps the old behaviour. The MCP classes still accept the old closure. `PdfConverter::convert()` takes an optional logger. New dependency: `psr/log` ^3.
+- **Authorization contract (ADR-003):** `Contracts\AccessPolicyInterface`, `Contracts\AccessDenied`, `Support\AllowAllPolicy`, `Support\DenyAllPolicy`. Opt-in; no existing behaviour changes.
+- **Audit read side:** `Audit\AuditReader` (filters, pagination, grouped counts, chunked export) and `Audit\AuditPage`, so editions stop querying `audit_events` themselves.
+- **Webhooks:** `Webhooks\UrlPolicy` (public addresses only, no userinfo, pinned connection against DNS rebinding) with an opt-in/required switch on `WebhookDispatcher`; every request now also carries `X-Rivet-Timestamp` and `X-Rivet-Signature-V2` (`t=<ts>,v1=<hmac of "<ts>.<body>">`); the legacy headers are byte-identical. Pass `$signedAt = time()` on each retry for a useful replay window.
+- **Jobs:** per-type timeouts (cooperative, with a `JobContext` passed to handlers), a heartbeat so only really-dead jobs are reclaimed, `release()`, handler introspection (`has()`), clearer unknown-type dead-lettering, and proof that claiming is atomic. **Migration 0012** adds the nullable `integration_jobs.heartbeat_at`; before an edition applies it everything falls back to `started_at`.
+- **Redis:** `RedisConnectionConfig` (host, port, db, password, ACL user, TLS with CA/client cert) and `RedisAdmin::client()/test()` taking it, with distinct auth / TLS / unreachable results that never echo the password. A password containing a line break or NUL is now rejected.
+- **Retention:** separate horizons for webhook deliveries and finished jobs (7-day floor, 30 days under any framework preset), a dry-run `plan()` and batched deletes; `prune()` stays backward compatible.
+
+## 0.16.0
+Quality gates and hygiene (milestone v0.8.0); no new features.
+- `MigrationRunner`: concurrent runs now take turns through a server-side lock (`GET_LOCK`) instead of racing; a second runner that waits longer than `$lockWaitSeconds` (default 60) throws a `RuntimeException`. New read-only `status()` lists every migration with its applied time. Run-twice and lock tests added.
+- CI: PHP 8.2 to 8.5 on MariaDB 11, plus MariaDB 10.11 and MySQL 8.0 / 8.4 on PHP 8.4; a `--prefer-lowest` job; PHPStan and `composer audit`; a coverage job with an 85% gate outside the DOCX/PDF converters (`scripts/coverage-gate.php`); GitHub Releases are cut from tags with the changelog excerpt.
+- Static analysis: PHPStan level 6 is required and clean (`phpstan.neon`; the two converters keep a documented baseline). Fixes with no behavior change: Redis `eval()` arguments, `CONFIG SET` via `executeRaw`, docblock types in Automation/Compliance, an unreachable statement in `DatabaseContractTestCase`. `declare(strict_types=1)` in the four converter files.
+- Converter corpus: 34 new DOCX/PDF tests (zip bombs, traversal, XXE, billion laughs, script/HTML escaping, JS/Launch actions in PDFs, oversize files); no vulnerabilities found.
+- Dependabot for Composer and GitHub Actions; `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue and pull request templates, `.gitattributes`.
+- Docs: quickstart, "writing an edition adapter", module reference.
+
 ## 0.15.1
 
 ### Added

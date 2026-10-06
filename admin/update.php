@@ -96,6 +96,8 @@ if (!empty($git_log_raw)) {
                 <br>
                 <small class="text-secondary">Latest DB Version: <?php echo LATEST_DATABASE_VERSION; ?></small>
                 <br>
+                <small class="text-secondary">RivetCore: <?php echo htmlspecialchars(class_exists(\Composer\InstalledVersions::class) && \Composer\InstalledVersions::isInstalled('rivet/rivet-core') ? (string) \Composer\InstalledVersions::getPrettyVersion('rivet/rivet-core') : 'not installed'); ?></small>
+                <br>
                 <hr>
 
             <?php } else {
@@ -114,6 +116,7 @@ if (!empty($git_log_raw)) {
                     <p><strong>Version:<br><strong class="text-dark"><?php echo htmlspecialchars($current_version_tag); ?></strong></p>
                     <p class="text-secondary">Latest Release:<br><strong class="text-dark"><a href="https://github.com/TheTractorHacker/itflow/releases" target="_blank"><?php echo htmlspecialchars($latest_version_tag); ?></a></strong></p>
                     <p class="text-secondary">Database Version:<br><strong class="text-dark"><?php echo CURRENT_DATABASE_VERSION; ?></strong></p>
+                    <p class="text-secondary">RivetCore:<br><strong class="text-dark"><?php echo htmlspecialchars(class_exists(\Composer\InstalledVersions::class) && \Composer\InstalledVersions::isInstalled('rivet/rivet-core') ? (string) \Composer\InstalledVersions::getPrettyVersion('rivet/rivet-core') : 'not installed'); ?></strong> <small class="text-muted">(the shared library updates with the app)</small></p>
                     <p class="text-muted">You are up to date!<br>Everything is going to be alright</p>
                     <i class="far fa-3x text-dark fa-smile-wink"></i><br>
 

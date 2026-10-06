@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace RivetCore\KB;
 
 /**
@@ -70,6 +72,8 @@ namespace RivetCore\KB;
  * it likes under a filename *it* generates, then str_replace()s the token for
  * the resulting URL. The token is random precisely so that document text can
  * never collide with it.
+ *
+ * @api
  */
 class DocxConverter
 {
