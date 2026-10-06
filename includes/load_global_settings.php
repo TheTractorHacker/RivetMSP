@@ -172,6 +172,7 @@ $config_comet_server_url   = $row['config_comet_server_url'] ?? 'http://10.1.0.3
 $config_comet_admin_user   = $row['config_comet_admin_user'] ?? '';
 $config_comet_admin_pass   = decryptSetting($row['config_comet_admin_pass'] ?? '');
 $config_comet_auto_ticket    = intval($row['config_comet_auto_ticket'] ?? 0);
+$config_comet_verify_ssl     = intval($row['config_comet_verify_ssl'] ?? 1);
 $config_comet_totp_secret    = decryptSetting($row['config_comet_totp_secret'] ?? '');
 $config_comet_webhook_secret = decryptSetting($row['config_comet_webhook_secret'] ?? '');
 // Locale

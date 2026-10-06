@@ -245,20 +245,29 @@ class UnifiCloudClient {
         return $devices;
     }
 
+    public static function isValidDirectDomain(string $domain): bool {
+        return (bool) preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.id\.ui\.direct$/iD', $domain);
+    }
+
     // Fetch local Network controller data via the host's *.id.ui.direct domain.
     // These domains resolve to the device's LAN IP (when queried from the same
     // network) or to Ubiquiti's cloud relay (when remote access is enabled).
     // The same account API key is accepted by the local controller via this proxy.
     private function proxyGet(string $directDomain, string $endpoint): array {
+        // The domain comes out of the cloud API response and is sent together with the account-level API key,
+        // so it must be a Ubiquiti *.id.ui.direct name (these carry a publicly trusted certificate) - never an
+        // arbitrary host, IP or URL fragment.
+        if (!self::isValidDirectDomain($directDomain)) {
+            throw new RuntimeException("Refusing to send the API key to an unexpected host");
+        }
         $url = 'https://' . $directDomain . $endpoint;
         $ch  = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 15,
-            CURLOPT_SSL_VERIFYPEER => false, // local controllers often use self-signed certs
-            CURLOPT_SSL_VERIFYHOST => 0,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 3,
+            CURLOPT_SSL_VERIFYPEER => true,  // *.id.ui.direct presents a publicly trusted certificate
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_FOLLOWLOCATION => false, // never forward the X-API-KEY header to a redirect target
             CURLOPT_HTTPHEADER     => [
                 'X-API-KEY: ' . $this->api_key,
                 'Accept: application/json',

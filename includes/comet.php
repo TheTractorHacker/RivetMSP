@@ -70,6 +70,19 @@ function comet_normalize_url(string $url): string {
     return $url;
 }
 
+// TLS options for every Comet request. Certificate and host verification are ON unless the admin
+// explicitly cleared "Verify SSL certificate" in the Comet settings (config_comet_verify_ssl = 0), e.g. for
+// a self-signed lab server - the same per-integration opt-out the UniFi integration uses. The admin
+// password / TOTP secret / session key travel over this connection.
+function comet_tls_options(): array {
+    global $config_comet_verify_ssl;
+    $verify = !isset($config_comet_verify_ssl) || (int) $config_comet_verify_ssl !== 0;
+    return [
+        CURLOPT_SSL_VERIFYPEER => $verify,
+        CURLOPT_SSL_VERIFYHOST => $verify ? 2 : 0,
+    ];
+}
+
 // ── Core HTTP request ─────────────────────────────────────────────────────────
 function comet_api(string $endpoint, array $extra = []): ?array {
     global $config_comet_server_url, $config_comet_admin_user,
@@ -103,11 +116,9 @@ function comet_api(string $endpoint, array $extra = []): ?array {
         CURLOPT_POSTFIELDS     => $body,
         CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => 0,
         CURLOPT_TIMEOUT        => 15,
         CURLOPT_CONNECTTIMEOUT => 5,
-    ]);
+    ] + comet_tls_options());
     $resp     = curl_exec($ch);
     $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curl_err = curl_error($ch);
@@ -154,9 +165,9 @@ function comet_start_session(): bool {
     curl_setopt_array($ch, [
         CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body,
         CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'],
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => 0, CURLOPT_TIMEOUT => 10, CURLOPT_CONNECTTIMEOUT => 5,
-    ]);
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 10, CURLOPT_CONNECTTIMEOUT => 5,
+    ] + comet_tls_options());
     $raw      = curl_exec($ch);
     $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curl_err = curl_error($ch);

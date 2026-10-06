@@ -2930,6 +2930,7 @@ CREATE TABLE `settings` (
   `config_comet_admin_user` varchar(200) NOT NULL DEFAULT '',
   `config_comet_admin_pass` varchar(200) NOT NULL DEFAULT '',
   `config_comet_auto_ticket` tinyint(1) NOT NULL DEFAULT 0,
+  `config_comet_verify_ssl` tinyint(1) NOT NULL DEFAULT 1,
   `config_comet_totp_secret` varchar(200) NOT NULL DEFAULT '',
   `config_comet_webhook_secret` varchar(200) NOT NULL DEFAULT '',
   `config_outlook_cal_client_id` varchar(200) DEFAULT NULL,

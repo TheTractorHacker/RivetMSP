@@ -6552,3 +6552,10 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         mysqli_query($mysqli, "ALTER TABLE `payments` ADD UNIQUE INDEX IF NOT EXISTS `uniq_payment_provider_ref` (`payment_provider_ref`)");
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.70'");
     }
+
+    if ($rivetit_db_version() == '2.6.70') {
+        // Comet Backup: TLS certificate verification is now on by default; this switch is the explicit per-install opt-out
+        // (self-signed https Comet servers), mirroring the UniFi integration's verify_ssl.
+        mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_comet_verify_ssl` tinyint(1) NOT NULL DEFAULT 1 AFTER `config_comet_auto_ticket`");
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.71'");
+    }

@@ -442,6 +442,10 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                             <label class="text-muted small mb-1">Server URL</label>
                             <input type="text" class="form-control form-control-sm" name="config_comet_server_url"
                                    value="<?= nullable_htmlentities($config_comet_server_url) ?>" placeholder="http://10.1.0.35:8060">
+                            <div class="form-check mt-1">
+                                <input type="checkbox" class="form-check-input" id="config_comet_verify_ssl" name="config_comet_verify_ssl" value="1" <?php if ($config_comet_verify_ssl) { echo 'checked'; } ?>>
+                                <label class="form-check-label small" for="config_comet_verify_ssl">Verify SSL certificate (https only)</label>
+                            </div>
                         </div>
                     </div>
                     <div class="col-md-4">
