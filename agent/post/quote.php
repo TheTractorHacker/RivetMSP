@@ -129,8 +129,16 @@ if (isset($_POST['add_quote_to_invoice'])) {
     $quote_id = intval($_POST['quote_id']);
     $date = sanitizeInput($_POST['date']);
 
-    $sql = mysqli_query($mysqli,"SELECT * FROM clients, quotes WHERE client_id = quote_client_id AND quote_id = $quote_id");
+    // The transaction + row lock makes the check-then-invoice atomic: a double submit cannot create two invoices
+    mysqli_begin_transaction($mysqli);
+    $sql = mysqli_query($mysqli,"SELECT * FROM clients, quotes WHERE client_id = quote_client_id AND quote_id = $quote_id FOR UPDATE");
     $row = mysqli_fetch_assoc($sql);
+    if (!$row) {
+        mysqli_rollback($mysqli);
+        flash_alert("Quote not found", 'error');
+        redirect();
+    }
+    $quote_status = $row['quote_status'];
     $client_net_terms = intval($row['client_net_terms']);
     $quote_prefix = sanitizeInput($row['quote_prefix']);
     $quote_number = sanitizeInput($row['quote_number']);
@@ -143,7 +151,15 @@ if (isset($_POST['add_quote_to_invoice'])) {
     $client_id = intval($row['quote_client_id']);
     $category_id = intval($row['quote_category_id']);
 
+    // On denial this redirects and ends the request; the open transaction is rolled back on disconnect
     enforceClientAccess();
+
+    // Only an accepted quote can be invoiced, and only once
+    if (!quoteCanBeInvoiced($quote_status)) {
+        mysqli_rollback($mysqli);
+        flash_alert($quote_status === 'Invoiced' ? "Quote has already been invoiced" : "Only an accepted quote can be invoiced", 'error');
+        redirect();
+    }
 
     $config_invoice_prefix = sanitizeInput($config_invoice_prefix);
 
@@ -184,6 +200,7 @@ if (isset($_POST['add_quote_to_invoice'])) {
     }
 
     mysqli_query($mysqli,"UPDATE quotes SET quote_status = 'Invoiced' WHERE quote_id = $quote_id");
+    mysqli_commit($mysqli);
 
     mysqli_query($mysqli,"INSERT INTO history SET history_status = 'Invoiced', history_description = 'Quote invoiced as $config_invoice_prefix$invoice_number', history_quote_id = $quote_id");
 
@@ -529,6 +546,12 @@ if (isset($_GET['accept_quote'])) {
 
     enforceClientAccess();
 
+    // State machine: only a quote in the right state can make this transition
+    if (!$row || !quoteCanBeAnswered($row['quote_status'], '')) {
+        flash_alert("This quote cannot be changed from its current status", 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"UPDATE quotes SET quote_status = 'Accepted' WHERE quote_id = $quote_id");
 
     mysqli_query($mysqli,"INSERT INTO history SET history_status = 'Accepted', history_description = 'Quote accepted by $session_name', history_quote_id = $quote_id");
@@ -558,6 +581,12 @@ if (isset($_GET['decline_quote'])) {
     $client_id = intval($row['quote_client_id']);
 
     enforceClientAccess();
+
+    // State machine: only a quote in the right state can make this transition
+    if (!$row || !quoteCanBeAnswered($row['quote_status'], '')) {
+        flash_alert("This quote cannot be changed from its current status", 'error');
+        redirect();
+    }
 
     mysqli_query($mysqli,"UPDATE quotes SET quote_status = 'Declined' WHERE quote_id = $quote_id");
 
@@ -673,6 +702,12 @@ if (isset($_GET['mark_quote_invoiced'])) {
     $client_id = intval($row['quote_client_id']);
 
     enforceClientAccess();
+
+    // State machine: only a quote in the right state can make this transition
+    if (!$row || !quoteCanBeInvoiced($row['quote_status'])) {
+        flash_alert("This quote cannot be changed from its current status", 'error');
+        redirect();
+    }
 
     mysqli_query($mysqli,"UPDATE quotes SET quote_status = 'Invoiced' WHERE quote_id = $quote_id");
 

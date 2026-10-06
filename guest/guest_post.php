@@ -14,7 +14,7 @@ if (isset($_POST['accept_quote'], $_POST['url_key'])) {
     $url_key = sanitizeInput($_POST['url_key']);
 
     // Select only the necessary fields
-    $sql = mysqli_query($mysqli, "SELECT quote_prefix, quote_number, client_name, client_id FROM quotes LEFT JOIN clients ON quote_client_id = client_id WHERE quote_id = $quote_id AND quote_url_key = '$url_key'");
+    $sql = mysqli_query($mysqli, "SELECT quote_prefix, quote_number, quote_status, quote_expire, client_name, client_id FROM quotes LEFT JOIN clients ON quote_client_id = client_id WHERE quote_id = $quote_id AND quote_url_key = '$url_key'");
 
     if (mysqli_num_rows($sql) == 1) {
         $row = mysqli_fetch_assoc($sql);
@@ -22,6 +22,12 @@ if (isset($_POST['accept_quote'], $_POST['url_key'])) {
         $quote_number = intval($row['quote_number']);
         $client_name = sanitizeInput($row['client_name']);
         $client_id = intval($row['client_id']);
+
+        // State machine: answerable only while Sent/Viewed and not expired (a link can't flip an invoiced/answered quote)
+        if (!quoteCanBeAnswered($row['quote_status'], $row['quote_expire'])) {
+            flash_alert("This quote can no longer be changed", 'danger');
+            redirect();
+        }
 
         mysqli_query($mysqli, "UPDATE quotes SET quote_status = 'Accepted' WHERE quote_id = $quote_id");
         mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Accepted', history_description = 'Client accepted Quote!', history_quote_id = $quote_id");
@@ -79,7 +85,7 @@ if (isset($_POST['decline_quote'], $_POST['url_key'])) {
     $url_key = sanitizeInput($_POST['url_key']);
 
     // Select only the necessary fields
-    $sql = mysqli_query($mysqli, "SELECT quote_prefix, quote_number, client_name, client_id FROM quotes LEFT JOIN clients ON quote_client_id = client_id WHERE quote_id = $quote_id AND quote_url_key = '$url_key'");
+    $sql = mysqli_query($mysqli, "SELECT quote_prefix, quote_number, quote_status, quote_expire, client_name, client_id FROM quotes LEFT JOIN clients ON quote_client_id = client_id WHERE quote_id = $quote_id AND quote_url_key = '$url_key'");
 
     if (mysqli_num_rows($sql) == 1) {
         $row = mysqli_fetch_assoc($sql);
@@ -87,6 +93,12 @@ if (isset($_POST['decline_quote'], $_POST['url_key'])) {
         $quote_number = intval($row['quote_number']);
         $client_name = sanitizeInput($row['client_name']);
         $client_id = intval($row['client_id']);
+
+        // State machine: answerable only while Sent/Viewed and not expired (a link can't flip an invoiced/answered quote)
+        if (!quoteCanBeAnswered($row['quote_status'], $row['quote_expire'])) {
+            flash_alert("This quote can no longer be changed", 'danger');
+            redirect();
+        }
 
         mysqli_query($mysqli, "UPDATE quotes SET quote_status = 'Declined' WHERE quote_id = $quote_id");
         mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Declined', history_description = 'Client declined Quote!', history_quote_id = $quote_id");
