@@ -2988,6 +2988,7 @@ CREATE TABLE `settings` (
   `config_redis_password` varchar(1000) NOT NULL DEFAULT '',
   `config_redis_db` int(11) NOT NULL DEFAULT 0,
   `config_audit_retention_days` int(11) NOT NULL DEFAULT 365,
+  `config_webhook_allowed_networks` varchar(500) NOT NULL DEFAULT '',
   PRIMARY KEY (`company_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;

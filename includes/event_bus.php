@@ -62,17 +62,9 @@ function rivetWebhookDispatcher($mysqli): \RivetCore\Webhooks\WebhookDispatcher
     $db = rivetCoreDb($mysqli);
     $subsClass = rivetCoreAdapterNs() . '\Webhooks\WebhooksTableSubscriptions';
 
-    return new \RivetCore\Webhooks\WebhookDispatcher($db, new $subsClass($db), new \RivetCore\Support\SystemClock(), rivetWebhookHeaderPrefixes(), null, \RivetCore\Webhooks\WebhookDispatcher::DEFAULT_TIMEOUT_SECONDS, rivetWebhookUrlPolicy(), true);
-}
-
-/**
- * The address policy for outgoing webhooks. The Webhooks and Event rules pages already refuse non-public addresses when a URL is saved, so delivery
- * enforces the same rule (and pins the connection to the vetted addresses). A server environment variable RIVETMSP_WEBHOOK_ALLOW_PRIVATE=1 lifts only the
- * address-range test, for self-hosted setups and test rigs that deliberately call an internal endpoint; it is not reachable from the UI.
- */
-function rivetWebhookUrlPolicy(): \RivetCore\Webhooks\UrlPolicy
-{
-    return new \RivetCore\Webhooks\UrlPolicy(getenv('RIVETMSP_WEBHOOK_ALLOW_PRIVATE') === '1');
+    // Delivery re-vets (and pins) with the same policy the settings page used: public addresses plus the admin's allowed networks.
+    $policy = rivetWebhookUrlPolicy($mysqli);
+    return new \RivetCore\Webhooks\WebhookDispatcher($db, new $subsClass($db), new \RivetCore\Support\SystemClock(), rivetWebhookHeaderPrefixes(), null, \RivetCore\Webhooks\WebhookDispatcher::DEFAULT_TIMEOUT_SECONDS, $policy, true);
 }
 
 /**
@@ -296,6 +288,46 @@ function rivetAudit(string $event, ?int $actor, ?string $entityType, $entityId, 
     } catch (\Throwable $e) {
         error_log('audit event not recorded: ' . $e->getMessage());
     }
+}
+
+/**
+ * The admin-configured internal networks webhooks may reach (Administration > Webhooks), canonical CIDRs.
+ * Never throws: a missing column (before the migration), a DB error or an old RivetCore all mean "none".
+ *
+ * @return list<string>
+ */
+function rivetWebhookAllowedNetworks($mysqli = null): array
+{
+    try {
+        $mysqli = $mysqli ?? ($GLOBALS['mysqli'] ?? null);
+        if (!$mysqli || !class_exists('\RivetCore\Webhooks\NetworkList')) {
+            return [];
+        }
+        $res = @mysqli_query($mysqli, "SELECT config_webhook_allowed_networks FROM settings LIMIT 1");
+        $row = $res ? mysqli_fetch_row($res) : null;
+
+        return \RivetCore\Webhooks\NetworkList::parse((string) ($row[0] ?? ''))['networks'];
+    } catch (\Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * THE one place the webhook URL policy is built (delivery, settings page, event rules, chat destinations).
+ * Public addresses plus the admin's allowed internal networks; loopback, link-local and metadata never.
+ * RIVETMSP_WEBHOOK_ALLOW_PRIVATE=1 is for test rigs that receive on loopback; it is not reachable from the UI.
+ */
+function rivetWebhookUrlPolicy($mysqli = null): \RivetCore\Webhooks\UrlPolicy
+{
+    return new \RivetCore\Webhooks\UrlPolicy(getenv('RIVETMSP_WEBHOOK_ALLOW_PRIVATE') === '1', null, rivetWebhookAllowedNetworks($mysqli));
+}
+
+/** Human text of the effective rule, for rejection messages. */
+function rivetWebhookRuleText($mysqli = null): string
+{
+    $nets = rivetWebhookAllowedNetworks($mysqli);
+
+    return 'allowed: public addresses' . ($nets ? ' and ' . implode(', ', $nets) : ' only (no internal networks are allowed)');
 }
 
 /**

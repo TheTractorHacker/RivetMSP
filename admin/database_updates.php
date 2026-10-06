@@ -6559,3 +6559,10 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_comet_verify_ssl` tinyint(1) NOT NULL DEFAULT 1 AFTER `config_comet_auto_ticket`");
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.71'");
     }
+
+    if ($rivetit_db_version() == '2.6.71') {
+        // Internal networks webhooks may reach (Administration > Webhooks); empty = public addresses only.
+        mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_webhook_allowed_networks` varchar(500) NOT NULL DEFAULT ''");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.72'");
+    }
