@@ -4,6 +4,14 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.4] RivetMSP — same shell as RivetIT, RivetCore 0.17.1, Update fixes, installer hardening
+
+### Installer and updater
+
+- `deploy/install.sh` runs the database update loop after setup or restore and stops with a clear message when RivetCore cannot be downloaded (the committed `vendor/` copy is used if present). `deploy/update.sh` installs dependencies before running migrations, as RivetIT does.
+- A single database update now applies every pending migration (it used to apply one step per run).
+- Update App resets Composer's generated `vendor/composer` files first, so git no longer refuses to switch branch or pull.
+
 ### RivetCore 0.17.1
 
 - Updates the shared library to RivetCore 0.17.1 (job heartbeat, webhook signed timestamp, PSR-3 logging, audit reader, retention horizons). **Migration 2.6.69** adds `integration_jobs.heartbeat_at` through Core's own migration runner. The Update page now shows the RivetCore version; the library updates with the app (the pin is in `composer.json`/`composer.lock`), no separate button is needed.

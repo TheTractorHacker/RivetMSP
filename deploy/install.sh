@@ -337,7 +337,15 @@ provision_app_code() {
 
     if [[ -f "${APP_DIR}/composer.json" ]] && command_exists composer; then
         info "Installing PHP dependencies via composer..."
-        ( cd "${APP_DIR}" && composer install --no-dev --optimize-autoloader --no-interaction )
+        # RivetCore (rivet/rivet-core) is installed from its GitHub repository, so the server needs outbound access to github.com.
+        # This repository also commits vendor/, so a failed download is survivable when RivetCore is already on disk.
+        if ! ( cd "${APP_DIR}" && composer install --no-dev --optimize-autoloader --no-interaction ); then
+            if [[ -f "${APP_DIR}/vendor/rivet/rivet-core/composer.json" ]]; then
+                warn "composer install failed (is github.com reachable?); continuing with the RivetCore copy shipped in vendor/."
+            else
+                die "composer install failed and RivetCore is not on disk. Check that this server can reach github.com, then re-run the installer."
+            fi
+        fi
     fi
 }
 
@@ -750,6 +758,25 @@ run_restore_setup() {
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+# run_db_migrations(): bring the schema (and RivetCore's own tables) to the latest version after setup or a restore (the backup
+# may be older than this code). update_cli.php applies the pending steps; repeat until it reports the latest version or stops.
+run_db_migrations() {
+    info "Bringing the database schema up to date (scripts/update_cli.php --update_db)..."
+    local i out
+    for (( i = 1; i <= 200; i++ )); do
+        if ! out="$( cd "${APP_DIR}/scripts" && sudo -u www-data php update_cli.php --update_db 2>&1 )"; then
+            warn "update_cli.php --update_db failed: ${out}"
+            return 1
+        fi
+        if grep -q "already at the latest version" <<<"${out}"; then
+            success "Database schema is current."
+            return 0
+        fi
+    done
+    warn "Database schema still not current after 200 update steps; run scripts/update_cli.php --update_db manually and check for errors."
+    return 1
+}
+
 main() {
     parse_args "$@"
     require_root "$@"
@@ -787,6 +814,7 @@ main() {
     else
         run_fresh_setup
     fi
+    run_db_migrations || true
 
     set +x
     success "=== Install complete for ${DOMAIN} ==="
