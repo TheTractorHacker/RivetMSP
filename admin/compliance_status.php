@@ -145,7 +145,7 @@ $q = static fn (array $extra): string => http_build_query(array_filter($extra, s
 
 <?php if ($shared_ready) { ?>
 <div class="card mb-3">
-    <div class="card-header py-3"><h4 class="card-title mb-0"><i class="fas fa-fw fa-share-nodes me-2"></i>Shared on the portal</h4></div>
+    <div class="card-header py-3"><h4 class="card-title mb-0"><i class="fas fa-fw fa-share-alt me-2"></i>Shared on the portal</h4></div>
     <div class="card-body">
         <?php if ($shared) { ?>
             <p class="mb-2">Portal users can see the snapshot taken <strong><?= nullable_htmlentities($shared['taken_at']) ?></strong> (published <?= nullable_htmlentities($shared['published_at']) ?>), under <em>Security</em> in the portal menu.</p>
@@ -159,7 +159,7 @@ $q = static fn (array $extra): string => http_build_query(array_filter($extra, s
 <?php } ?>
 
 <div class="card mb-3">
-    <div class="card-header py-3"><h4 class="card-title mb-0"><i class="fas fa-fw fa-clock-rotate-left me-2"></i>Snapshots</h4></div>
+    <div class="card-header py-3"><h4 class="card-title mb-0"><i class="fas fa-fw fa-history me-2"></i>Snapshots</h4></div>
     <div class="card-body">
         <p class="text-muted small">A snapshot freezes the results above so you can show how your position changed over time. One is saved automatically each month. Snapshots are kept and never deleted by retention.</p>
         <?php if (!$snapshots) { ?>
