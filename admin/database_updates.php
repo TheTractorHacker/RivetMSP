@@ -6566,3 +6566,24 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.72'");
     }
+
+    if ($rivetit_db_version() == '2.6.72') {
+        // Webhook platforms: each endpoint now remembers which preset it was made from (n8n, ntfy, Discord, custom template ...),
+        // how to shape the body, how to authenticate towards the receiver (encrypted) and any extra fields (ntfy topic, Telegram chat id).
+        // Event subscriptions may also hold patterns ('ticket.*', '*'), so the list column is widened; the URL column is widened because
+        // new endpoints store it encrypted. Legacy rows keep '' destination/format and are delivered the old way.
+        mysqli_query($mysqli, "ALTER TABLE `webhooks` MODIFY COLUMN `webhook_url` varchar(4096) NOT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `webhooks` MODIFY COLUMN `webhook_events` varchar(2000) NOT NULL DEFAULT ''");
+        mysqli_query($mysqli, "ALTER TABLE `webhooks`
+            ADD COLUMN IF NOT EXISTS `webhook_destination` varchar(40) NOT NULL DEFAULT '' AFTER `webhook_secret`,
+            ADD COLUMN IF NOT EXISTS `webhook_format` varchar(24) NOT NULL DEFAULT '' AFTER `webhook_destination`,
+            ADD COLUMN IF NOT EXISTS `webhook_method` varchar(4) NOT NULL DEFAULT 'POST' AFTER `webhook_format`,
+            ADD COLUMN IF NOT EXISTS `webhook_template` text NULL AFTER `webhook_method`,
+            ADD COLUMN IF NOT EXISTS `webhook_auth_mode` varchar(12) NOT NULL DEFAULT 'none' AFTER `webhook_template`,
+            ADD COLUMN IF NOT EXISTS `webhook_auth_enc` text NULL AFTER `webhook_auth_mode`,
+            ADD COLUMN IF NOT EXISTS `webhook_extra` text NULL AFTER `webhook_auth_enc`");
+        // Existing endpoints are plain JSON-envelope receivers.
+        mysqli_query($mysqli, "UPDATE `webhooks` SET `webhook_destination` = 'generic-json', `webhook_format` = 'json' WHERE `webhook_destination` = '' AND `webhook_format` = ''");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.73'");
+    }

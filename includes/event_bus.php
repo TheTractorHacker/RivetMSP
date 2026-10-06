@@ -57,14 +57,26 @@ function rivetWebhookHeaderPrefixes(): array
     return class_exists('\RivetMSP\Core\CoreBridge') ? ['X-RivetMSP', 'X-ITFlow'] : ['X-ITFlow', 'X-RivetIT'];
 }
 
-function rivetWebhookDispatcher($mysqli): \RivetCore\Webhooks\WebhookDispatcher
+/**
+ * @param \RivetCore\Webhooks\WebhookSubscriptionsInterface|null $subscriptions normally the webhooks table; "Send test" passes an
+ *        in-memory subscription so an unsaved form is delivered through exactly this dispatcher (format, auth, signing, URL policy)
+ */
+function rivetWebhookDispatcher($mysqli, $subscriptions = null): \RivetCore\Webhooks\WebhookDispatcher
 {
     $db = rivetCoreDb($mysqli);
     $subsClass = rivetCoreAdapterNs() . '\Webhooks\WebhooksTableSubscriptions';
 
     // Delivery re-vets (and pins) with the same policy the settings page used: public addresses plus the admin's allowed networks.
     $policy = rivetWebhookUrlPolicy($mysqli);
-    return new \RivetCore\Webhooks\WebhookDispatcher($db, new $subsClass($db), new \RivetCore\Support\SystemClock(), rivetWebhookHeaderPrefixes(), null, \RivetCore\Webhooks\WebhookDispatcher::DEFAULT_TIMEOUT_SECONDS, $policy, true);
+    return new \RivetCore\Webhooks\WebhookDispatcher($db, $subscriptions ?? new $subsClass($db), new \RivetCore\Support\SystemClock(), rivetWebhookHeaderPrefixes(), null, \RivetCore\Webhooks\WebhookDispatcher::DEFAULT_TIMEOUT_SECONDS, $policy, true);
+}
+
+/** Does a stored webhook subscription ("ticket.created, invoice.*", "*") include this event? */
+function rivetWebhookEventMatches(string $stored, string $event): bool
+{
+    $class = rivetCoreAdapterNs() . '\Webhooks\WebhooksTableSubscriptions';
+
+    return $class::matches($stored, $event);
 }
 
 /**
@@ -85,12 +97,12 @@ function rivetEmitEvent(string $event, array $data): void
 
         // 1. Webhooks
         $event_safe = mysqli_real_escape_string($mysqli, $event);
-        $sql = mysqli_query($mysqli,
-            "SELECT webhook_id FROM webhooks
-             WHERE webhook_enabled = 1
-               AND FIND_IN_SET('$event_safe', REPLACE(webhook_events, ', ', ','))"
-        );
+        // Subscriptions may be plain ids or patterns ("ticket.*", "*"), so matching is done here, not with FIND_IN_SET.
+        $sql = mysqli_query($mysqli, "SELECT webhook_id, webhook_events FROM webhooks WHERE webhook_enabled = 1");
         while ($sql && ($row = mysqli_fetch_assoc($sql))) {
+            if (!rivetWebhookEventMatches((string) $row['webhook_events'], $event)) {
+                continue;
+            }
             $wid = intval($row['webhook_id']);
             if ($jobs !== null) {
                 $jobs->enqueue('webhook.deliver', ['webhook_id' => $wid, 'event' => $event, 'data' => $data, 'emitted_at' => $emittedAt], null, 'webhook', 0, 5);

@@ -4018,9 +4018,16 @@ DROP TABLE IF EXISTS `webhooks`;
 CREATE TABLE `webhooks` (
   `webhook_id` int(11) NOT NULL AUTO_INCREMENT,
   `webhook_name` varchar(200) NOT NULL DEFAULT '',
-  `webhook_url` varchar(2048) NOT NULL,
+  `webhook_url` varchar(4096) NOT NULL,
   `webhook_secret` varchar(255) NOT NULL DEFAULT '',
-  `webhook_events` varchar(500) NOT NULL DEFAULT '',
+  `webhook_destination` varchar(40) NOT NULL DEFAULT '',
+  `webhook_format` varchar(24) NOT NULL DEFAULT '',
+  `webhook_method` varchar(4) NOT NULL DEFAULT 'POST',
+  `webhook_template` text DEFAULT NULL,
+  `webhook_auth_mode` varchar(12) NOT NULL DEFAULT 'none',
+  `webhook_auth_enc` text DEFAULT NULL,
+  `webhook_extra` text DEFAULT NULL,
+  `webhook_events` varchar(2000) NOT NULL DEFAULT '',
   `webhook_enabled` tinyint(1) NOT NULL DEFAULT 1,
   `webhook_created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`webhook_id`)

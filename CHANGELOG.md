@@ -4,6 +4,14 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+### Webhook platforms (RivetCore 0.21.0, migration 2.6.73)
+
+- **Administration > Webhooks has a guided Add flow.** Pick one of 24 platforms (n8n, Node-RED, Activepieces, Windmill, Huginn, Zapier, Make, Pipedream, IFTTT, Home Assistant, Apprise, ntfy, Gotify, Discord, Mattermost, Rocket.Chat, Slack, Teams, Matrix, Telegram, Generic JSON/form, Custom template) from a searchable card grid; the form is built from the platform (address shape, allowed authentication, extra fields such as the ntfy topic or Telegram chat id, body format) with its setup guide beside it. Everything is validated with RivetCore; the address, signing secret and outgoing authentication are stored encrypted and never shown again (blank keeps them on edit).
+- **Send test** and **Preview payload** (in the form and per webhook): a sample event goes through the real delivery path; the preview shows the exact body and headers with secrets hidden. Deliveries have a **Payload** view (secret-looking fields hidden).
+- **Guides** page: every platform's guide, signature-verification snippets (Node, Python, PHP, Bash, n8n) with copy buttons and a "Receiving in n8n" walk-through.
+- **Searchable events picker** (also on Event rules): search, expandable groups, descriptions, per-group select-all, chips. Subscriptions may be patterns such as `ticket.*` or `*`.
+- Database: `webhooks` gains destination, format, method, template, auth mode/auth (encrypted) and extra columns; the URL and event list columns are widened. Existing webhooks are backfilled as Generic JSON and deliver exactly as before.
+
 ## [26.10.4] RivetMSP — same shell as RivetIT, RivetCore 0.17.1, Update fixes, installer hardening
 
 ### Installer and updater

@@ -2,6 +2,7 @@
 require_once "includes/inc_all_admin.php";
 require_once "../includes/event_bus.php";
 require_once "includes/webhook_events.php";
+require_once "../includes/event_picker.php";
 
 use RivetCore\Automation\AutomationRuleStore;
 
@@ -55,16 +56,9 @@ $h = static fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                     <label class="form-label">Name</label>
                     <input class="form-control" name="rule_name" maxlength="200" required value="<?= $h($edit['name'] ?? '') ?>" placeholder="e.g. Alert the team when a High ticket arrives">
                 </div>
-                <div class="col-md-6">
+                <div class="col-12">
                     <label class="form-label">When this happens</label>
-                    <select class="form-select" name="trigger_event" required>
-                        <option value="">Choose an event...</option>
-                        <?php foreach (webhook_event_groups() as $group => $events) { ?>
-                            <optgroup label="<?= $h($group) ?>">
-                                <?php foreach ($events as $ev) { ?><option value="<?= $h($ev) ?>" <?= ($edit['trigger_event'] ?? '') === $ev ? 'selected' : '' ?>><?= $h($ev) ?></option><?php } ?>
-                            </optgroup>
-                        <?php } ?>
-                    </select>
+                    <?php eventPickerField('trigger_event', $edit ? [(string) $edit['trigger_event']] : [], ['mode' => 'single', 'id' => 'trigger_event_picker', 'other' => webhook_event_groups()['Other events seen on this server'] ?? [], 'label' => 'Search for the event that starts this rule']); ?>
                 </div>
                 <div class="col-12">
                     <label class="form-label">Only if <span class="text-muted small">(optional; field = value, for example <code>priority</code> = <code>High</code> or <code>ticket.priority</code> = <code>High</code>)</span></label>

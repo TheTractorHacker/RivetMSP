@@ -121,7 +121,7 @@ window.CSP_NONCE = <?php echo json_encode($csp_nonce ?? ''); ?>;
 // used to come from adminlte.min.js, and nothing else in the list depends on it, so
 // wiring the chrome before the page-level scripts run is the sane order. All entries are
 // deferred, so list order IS execution order.
-foreach (['shell.js', 'chart_theme.js', 'app.js', 'ajax_modal.js', 'confirm_modal.js', 'icon_picker.js', 'date_range_picker.js'] as $__asset) {
+foreach (['shell.js', 'chart_theme.js', 'app.js', 'ajax_modal.js', 'confirm_modal.js', 'icon_picker.js', 'date_range_picker.js', 'event_picker.js', 'webhook_form.js'] as $__asset) {
     $__asset_path = __DIR__ . '/../js/' . $__asset;
     $__asset_version = file_exists($__asset_path) ? filemtime($__asset_path) : time();
     echo '<script src="/js/' . $__asset . '?v=' . $__asset_version . '" defer></script>' . "\n";
