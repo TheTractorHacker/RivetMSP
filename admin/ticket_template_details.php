@@ -18,7 +18,7 @@ if (isset($_GET['ticket_template_id'])) {
 $sql_ticket_template = mysqli_query($mysqli, "SELECT * FROM ticket_templates WHERE ticket_template_id = $ticket_template_id LIMIT 1");
 
 if (mysqli_num_rows($sql_ticket_template) == 0) {
-    echo "<center><h1 class='text-secondary mt-5'>Nothing to see here</h1><a class='btn btn-lg btn-secondary mt-3' href='javascript:history.back()'><i class='fa fa-fw fa-arrow-left'></i> Go Back</a></center>";
+    echo "<center><h1 class='text-secondary mt-5'>Nothing to see here</h1><a class='btn btn-lg btn-secondary mt-3' href='#' data-history-back><i class='fa fa-fw fa-arrow-left'></i> Go Back</a></center>";
     require_once "../includes/footer.php";
     exit();
 }

@@ -70,7 +70,7 @@ ob_start();
                         <div class="input-group-prepend">
                             <span class="input-group-text"><i class="fa fa-fw fa-user"></i></span>
                         </div>
-                        <input type="text" class="form-control" name="name" id="client_name" placeholder="Name or Company" maxlength="200" onfocusout="client_duplicate_check()" required autofocus>
+                        <input type="text" class="form-control" name="name" id="client_name" placeholder="Name or Company" maxlength="200" data-focusout-call="client_duplicate_check" required autofocus>
                         <div class="input-group-append">
                             <div class="input-group-text">
                                 <input type="checkbox" name="lead" value="1" <?php if($leads_filter == 1){ echo "checked"; } ?>>

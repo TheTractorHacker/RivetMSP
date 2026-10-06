@@ -1161,3 +1161,12 @@ body.dark-mode .content-wrapper small.text-muted {
 a.er-recipe, a.er-recipe:hover, a.er-recipe:focus, a.er-recipe:focus-visible, a.er-recipe:active,
 a.er-recipe .er-recipe-title, a.er-recipe .er-recipe-blurb, a.er-recipe .er-recipe-flow,
 a.er-recipe:hover .er-recipe-title, a.er-recipe:hover .er-recipe-blurb, a.er-recipe:hover .er-recipe-flow { text-decoration: none; }
+
+/* The ticket list filter row scrolls sideways inside its toolbar. Tom Select keeps each original <select> as an absolutely
+   positioned, visually hidden sibling; without a positioned scroller that sibling escapes the clip and stretches the whole page
+   (1201px wide at 390px). Making the scroller the containing block keeps those hidden selects inside it. */
+.ticket-filter-bar .filter-row-nowrap,
+.filter-bar .filter-row-nowrap,
+.filter-toolbar > .filter-row-nowrap {
+    position: relative;
+}

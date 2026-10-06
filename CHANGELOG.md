@@ -2,6 +2,15 @@
 
 This file documents all notable changes made to ITFlow.
 
+## [Unreleased] RivetMSP — Redis authentication and TLS, API rate limit, Update checks
+
+Database migrations 2.6.74 and 2.6.75.
+
+- **Redis settings:** Administration > Redis now has an ACL username, a TLS switch, certificate verification and CA / client certificate / client key paths; the password stays encrypted and is never shown. Test connection says why it failed (password, TLS, unreachable, invalid field) with a fix. `RIVETMSP_REDIS_USERNAME`, `_TLS`, `_TLS_VERIFY`, `_TLS_CA_FILE` (and `_TLS_CERT_FILE`, `_TLS_KEY_FILE`) win over stored values, and can also be provided in `/etc/rivetmsp/redis.env`. See `docs/REDIS.md`.
+- **API rate limit:** one Redis-backed limiter (RivetCore) per API key/token and per address; configurable on Administration > API Keys (default 120 requests a minute, 0 = off). Over the limit the API answers 429 with `Retry-After` and a JSON error, records one `api.rate_limited` audit event per key per minute, and fails open if Redis is down.
+- **Update page:** a Checks panel (git, `.git` writable by the web user, update source, Composer files, database against code, libraries) with plain-English fixes, and Update App stops with the reason instead of failing half way. See `docs/UPDATING.md`.
+- **Fixes:** a fresh install no longer shows every default saved ticket view twice (`db.sql` seeded them twice; migration 2.6.75 removes exact duplicates, keeping the lowest id, on installs made that way). The ticket list filter row no longer makes the page scroll sideways on a phone. The duplicate-name check in Add Client (and the e-mail check in Add Contact and the domain check in Add Domain) works again: inline `on*` handlers were blocked by the Content-Security-Policy and are now delegated from `js/app.js` (also the Share/Delete file menus, workflow and Redis confirmations, and the "Go Back" links). The RivetCore webhook dispatcher built by `CoreBridge::webhooks()` always vets URLs with the shared policy. Adapter conformance tests for RivetCore's kit in `tests/core/`.
+
 ## [26.10.7] RivetMSP — Webhooks and Event rules highlights, UI fixes
 
 ### Highlights: Webhooks and Event rules

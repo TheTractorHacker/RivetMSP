@@ -18,6 +18,31 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
 
 ?>
 
+<?php
+$rl_ready = false;
+$rl_value = 120;
+$rl_res = @mysqli_query($mysqli, "SELECT config_api_rate_limit_per_minute FROM settings WHERE company_id = 1");
+if ($rl_res && ($rl_row = mysqli_fetch_assoc($rl_res))) { $rl_ready = true; $rl_value = (int) $rl_row['config_api_rate_limit_per_minute']; }
+?>
+<div class="card mb-3">
+    <div class="card-header py-2"><h4 class="card-title mt-2 mb-0"><i class="fas fa-fw fa-tachometer-alt me-2"></i>Rate limit</h4></div>
+    <div class="card-body">
+        <?php if (!$rl_ready) { ?>
+            <div class="alert alert-info mb-0 py-2">Run the database update (Administration &rarr; Update) to set the API rate limit here.</div>
+        <?php } else { ?>
+        <form action="post.php" method="post" class="row g-2 align-items-end" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+            <div class="col-sm-4 col-md-3">
+                <label class="form-label" for="api_rate_limit_per_minute">Requests per minute, per key</label>
+                <input class="form-control" type="number" min="0" max="100000" id="api_rate_limit_per_minute" name="api_rate_limit_per_minute" value="<?= $rl_value ?>">
+            </div>
+            <div class="col-auto"><button type="submit" name="set_api_rate_limit" class="btn btn-primary">Save</button></div>
+            <div class="form-text">Applies to every API key and app sign-in. One address may make three times this. Over the limit the API answers HTTP 429 with a Retry-After header. 0 turns the limit off. Counted in Redis; if Redis is down the API keeps working without a limit.</div>
+        </form>
+        <?php } ?>
+    </div>
+</div>
+
 <div class="card card-dark">
     <div class="card-header py-2">
         <h3 class="card-title mt-2"><i class="fas fa-fw fa-key me-2"></i>API Keys</h3>

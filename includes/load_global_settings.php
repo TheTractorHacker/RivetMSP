@@ -175,6 +175,8 @@ $config_comet_auto_ticket    = intval($row['config_comet_auto_ticket'] ?? 0);
 $config_comet_verify_ssl     = intval($row['config_comet_verify_ssl'] ?? 1);
 $config_comet_totp_secret    = decryptSetting($row['config_comet_totp_secret'] ?? '');
 $config_comet_webhook_secret = decryptSetting($row['config_comet_webhook_secret'] ?? '');
+// REST API rate limit (requests per minute per key, 0 = off)
+$config_api_rate_limit_per_minute = intval($row['config_api_rate_limit_per_minute'] ?? 120);
 // Locale
 $config_currency_format = "US_en";
 $config_timezone = $row['config_timezone'];

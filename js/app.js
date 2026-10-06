@@ -1066,3 +1066,48 @@ function initPasswordToggles() {
         }
     });
 }
+
+
+// Delegated replacements for inline on* handlers (the Content-Security-Policy has no 'unsafe-inline' for scripts, so
+// onclick="..." / onsubmit="..." attributes are blocked). Markup opts in with data attributes:
+//   data-focusout-call="fnName"       call window.fnName() when the field loses focus (duplicate-name / e-mail / domain checks)
+//   data-confirm-submit="Message"     ask before a form submits
+//   data-share-modal='{"client_id":1,"item_type":"File","item_id":2}'   fill #shareModal (populateShareModal)
+//   data-history-back                 go back one page (replaces href="javascript:history.back()")
+//   data-file-delete='{"id":2,"name":"x.pdf"}'                           fill #deleteFileModal (populateFileDeleteModal)
+// Guarded because js/app.js is also included by modal_footer.php on pages that already loaded it.
+if (!window.__cspDelegates) {
+    window.__cspDelegates = true;
+
+    document.addEventListener('focusout', function (e) {
+        var el = e.target && e.target.closest ? e.target.closest('[data-focusout-call]') : null;
+        if (!el) { return; }
+        var fn = window[el.getAttribute('data-focusout-call')];
+        if (typeof fn === 'function') { fn.call(el, e); }
+    });
+
+    document.addEventListener('submit', function (e) {
+        var form = e.target;
+        var msg = form && form.getAttribute ? form.getAttribute('data-confirm-submit') : null;
+        if (msg && !window.confirm(msg)) { e.preventDefault(); }
+    }, true);
+
+    document.addEventListener('click', function (e) {
+        if (!e.target || !e.target.closest) { return; }
+        if (e.target.closest('[data-history-back]')) { e.preventDefault(); window.history.back(); return; }
+        var share = e.target.closest('[data-share-modal]');
+        if (share && typeof window.populateShareModal === 'function') {
+            try {
+                var s = JSON.parse(share.getAttribute('data-share-modal'));
+                window.populateShareModal(s.client_id, s.item_type, s.item_id);
+            } catch (err) { /* malformed attribute: leave the modal as is */ }
+        }
+        var del = e.target.closest('[data-file-delete]');
+        if (del && typeof window.populateFileDeleteModal === 'function') {
+            try {
+                var d = JSON.parse(del.getAttribute('data-file-delete'));
+                window.populateFileDeleteModal(d.id, d.name);
+            } catch (err) { /* malformed attribute: leave the modal as is */ }
+        }
+    });
+}

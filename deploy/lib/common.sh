@@ -272,4 +272,44 @@ _cleanup_tmpfiles() {
         fi
     done
 }
+
+# ensure_updater_remote APP_DIR [OWNER]: RivetMSP's updater (includes/release_channel.php RELEASE_REMOTE) pulls from a git
+# remote named "fork", but an install cloned or copied from a checkout only has "origin". Without it `git pull fork ...`
+# fails and update_cli.php still prints "Update successful", so nothing ever updates. Add it as an alias of origin when
+# missing. Idempotent; a no-op when the app does not name a remote other than origin.
+ensure_updater_remote() {
+    local app="${1:?app dir}" owner="${2:-}" rf name url
+    rf="${app}/includes/release_channel.php"
+    [[ -f "${rf}" && -d "${app}/.git" ]] || return 0
+    name="$(sed -n "s/.*define('RELEASE_REMOTE', *'\([^']*\)').*/\1/p" "${rf}" | head -1)"
+    [[ -n "${name}" && "${name}" != "origin" ]] || return 0
+    local -a g=(git -C "${app}")
+    [[ -n "${owner}" ]] && g=(sudo -u "${owner}" git -C "${app}")
+    if "${g[@]}" remote get-url "${name}" >/dev/null 2>&1; then
+        return 0
+    fi
+    url="$("${g[@]}" remote get-url origin 2>/dev/null || true)"
+    if [[ -z "${url}" ]]; then
+        warn "No git remote '${name}' (used by the updater) and no 'origin' to copy it from; add it by hand: git -C ${app} remote add ${name} <repository url>"
+        return 0
+    fi
+    if "${g[@]}" remote add "${name}" "${url}"; then
+        info "Added git remote '${name}' -> ${url} (the remote the updater pulls from)."
+    else
+        warn "Could not add git remote '${name}'; updates will fail until it exists."
+    fi
+}
+# ignore_git_filemode APP_DIR [OWNER]: install.sh's set_file_permissions rewrites every file to 640/750, which git sees as
+# mode changes on the tracked executables (cron/*.php, scripts/*.php, deploy/*.sh). A later `git pull` that touches any of
+# them aborts with "Your local changes would be overwritten", leaving the instance un-updatable. Mode bits are not content,
+# so tell this checkout to ignore them. Idempotent, never fatal.
+ignore_git_filemode() {
+    local app="${1:?app dir}" owner="${2:-}"
+    [[ -d "${app}/.git" ]] || return 0
+    local -a g=(git -C "${app}")
+    [[ -n "${owner}" ]] && g=(sudo -u "${owner}" git -C "${app}")
+    [[ "$("${g[@]}" config --get core.fileMode 2>/dev/null || true)" == "false" ]] && return 0
+    "${g[@]}" config core.fileMode false || warn "Could not set core.fileMode=false in ${app}; a later update may be blocked by file-mode differences."
+}
+
 trap _cleanup_tmpfiles EXIT

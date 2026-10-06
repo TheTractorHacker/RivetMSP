@@ -9,7 +9,7 @@ if (isset($_GET['project_template_id'])) {
         WHERE project_template_id = $project_template_id AND project_template_is_onboarding = 1 LIMIT 1");
 
     if (mysqli_num_rows($sql_project_template) == 0) {
-        echo "<center><h1 class='text-secondary mt-5'>Nothing to see here</h1><a class='btn btn-lg btn-secondary mt-3' href='javascript:history.back()'><i class='fa fa-fw fa-arrow-left'></i> Go Back</a></center>";
+        echo "<center><h1 class='text-secondary mt-5'>Nothing to see here</h1><a class='btn btn-lg btn-secondary mt-3' href='#' data-history-back><i class='fa fa-fw fa-arrow-left'></i> Go Back</a></center>";
 
         require_once "../includes/footer.php";
         exit;

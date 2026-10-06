@@ -6,6 +6,24 @@
 
 defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 
+if (isset($_POST['set_api_rate_limit'])) {
+
+    validateCSRFToken($_POST['csrf_token']);
+
+    $per_minute = max(0, min(100000, intval($_POST['api_rate_limit_per_minute'] ?? 120)));
+    mysqli_query($mysqli, "UPDATE settings SET config_api_rate_limit_per_minute = $per_minute WHERE company_id = 1");
+
+    logAction("API Key", "Edit", "$session_name set the API rate limit to $per_minute requests per minute per key");
+    if (function_exists('rivetAudit')) {
+        rivetAudit('api.rate_limit_changed', (int) $session_user_id, 'settings', 'api_rate_limit', 'update', 'API rate limit changed', ['per_minute' => $per_minute]);
+    }
+
+    flash_alert($per_minute === 0 ? "API rate limit turned off" : "API rate limit set to <strong>$per_minute</strong> requests per minute per key");
+
+    redirect();
+
+}
+
 if (isset($_POST['add_api_key'])) {
 
     validateCSRFToken($_POST['csrf_token']);

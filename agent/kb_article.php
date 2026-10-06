@@ -28,7 +28,7 @@ $sql = mysqli_query(
 );
 
 if (mysqli_num_rows($sql) == 0) {
-    echo "<center><h1 class='text-secondary mt-5'>Nothing to see here</h1><a class='btn btn-lg btn-secondary mt-3' href='javascript:history.back()'><i class='fa fa-fw fa-arrow-left'></i> Go Back</a></center>";
+    echo "<center><h1 class='text-secondary mt-5'>Nothing to see here</h1><a class='btn btn-lg btn-secondary mt-3' href='#' data-history-back><i class='fa fa-fw fa-arrow-left'></i> Go Back</a></center>";
     require_once "../includes/footer.php";
     exit;
 }

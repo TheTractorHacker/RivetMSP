@@ -6587,3 +6587,36 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.73'");
     }
+
+    if ($rivetit_db_version() == '2.6.73') {
+        // Redis authentication and TLS from Administration > Redis (the password column already exists and stays encrypted):
+        // an ACL username, a TLS switch, certificate verification, and the CA / client certificate / client key file paths.
+        // The RIVETMSP_REDIS_* environment variables (or /etc/rivetmsp/redis.env) still win over these.
+        mysqli_query($mysqli, "ALTER TABLE `settings`
+            ADD COLUMN IF NOT EXISTS `config_redis_username` text DEFAULT NULL,
+            ADD COLUMN IF NOT EXISTS `config_redis_tls` tinyint(1) NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `config_redis_tls_verify` tinyint(1) NOT NULL DEFAULT 1,
+            ADD COLUMN IF NOT EXISTS `config_redis_tls_ca_file` text DEFAULT NULL,
+            ADD COLUMN IF NOT EXISTS `config_redis_tls_cert_file` text DEFAULT NULL,
+            ADD COLUMN IF NOT EXISTS `config_redis_tls_key_file` text DEFAULT NULL");
+        // REST API rate limit: requests per minute per API key (and three times that per address); 0 turns it off.
+        mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_api_rate_limit_per_minute` int(11) NOT NULL DEFAULT 120");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.74'");
+    }
+
+    if ($rivetit_db_version() == '2.6.74') {
+        // Installs created from db.sql before this fix got every default saved ticket view twice. Remove exact duplicates only
+        // (same name, icon, filters, owner, position and archive state), keeping the lowest id. Idempotent; edited or differing views are untouched.
+        mysqli_query($mysqli, "DELETE d FROM `ticket_saved_views` d
+            JOIN `ticket_saved_views` k
+              ON k.`ticket_saved_view_id` < d.`ticket_saved_view_id`
+             AND k.`ticket_saved_view_name` = d.`ticket_saved_view_name`
+             AND k.`ticket_saved_view_icon` = d.`ticket_saved_view_icon`
+             AND k.`ticket_saved_view_query` = d.`ticket_saved_view_query`
+             AND k.`ticket_saved_view_user_id` = d.`ticket_saved_view_user_id`
+             AND k.`ticket_saved_view_order` = d.`ticket_saved_view_order`
+             AND k.`ticket_saved_view_archived_at` <=> d.`ticket_saved_view_archived_at`");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.75'");
+    }

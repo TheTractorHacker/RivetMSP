@@ -13,7 +13,7 @@ try {
     $stats = RedisSettings::stats($rc);
     $counts = RedisSettings::groupCounts($rc);
 } catch (Throwable $e) {
-    $connect_error = RedisSettings::test($conn)['message'];
+    $connect_error = RedisSettings::friendly(RedisSettings::test($conn));
 }
 $csrf = $_SESSION['csrf_token'];
 $state = $stats ? ['Connected', 'success'] : ['Not connected', 'warning'];
@@ -23,6 +23,8 @@ $advice = [];
 if ($stats) {
     if ($stats['maxmemory'] === 0) $advice[] = 'No memory limit is set. Set one below so Redis cannot grow without bound.';
     if ($stats['maxmemory'] > 0 && $stats['policy'] === 'noeviction') $advice[] = 'A memory limit with the "noeviction" policy makes Redis refuse writes when full. Choose allkeys-lru or volatile-lru instead.';
+    if (!$conn['tls'] && !in_array($conn['host'], ['127.0.0.1', 'localhost', '::1'], true)) $advice[] = 'Redis is on another machine without TLS, so the password and data cross the network unencrypted. Turn on TLS below.';
+    if ($conn['tls'] && !$conn['tls_verify']) $advice[] = 'TLS certificate verification is off, so the server is not checked. Give the CA file and turn verification back on.';
     if (empty($conn['password']) && !in_array($conn['host'], ['127.0.0.1', 'localhost', '::1'], true)) $advice[] = 'Redis is on another machine with no password. Set one on the server and here.';
 }
 ?>
@@ -76,6 +78,44 @@ if ($stats) {
                     <input class="form-control" type="password" id="redis_password" name="redis_password" autocomplete="new-password" <?= $conn['from_env']['password'] ? 'readonly' : '' ?> placeholder="<?= $conn['from_env']['password'] ? 'Set by the server' : ($conn['has_stored_password'] ? 'Saved. Leave blank to keep' : 'None') ?>">
                 </div>
             </div>
+            <?php
+            $ro = static fn(string $k) => $conn['from_env'][$k] ? 'readonly' : '';
+            $dis = static fn(string $k) => $conn['from_env'][$k] ? 'disabled' : '';
+            $envnote = static fn(string $k, string $var) => $conn['from_env'][$k] ? '<div class="form-text">Set by the server (' . $var . ').</div>' : '';
+            ?>
+            <?php if ($conn['tls_schema_ready']) { ?>
+            <div class="row g-3 mt-1">
+                <div class="col-md-4">
+                    <label class="form-label" for="redis_username">ACL username <span class="text-muted">(optional)</span></label>
+                    <input class="form-control" id="redis_username" name="redis_username" maxlength="128" autocomplete="off" value="<?= nullable_htmlentities((string) $conn['username']) ?>" <?= $ro('username') ?> placeholder="default user">
+                    <?= $envnote('username', 'RIVETMSP_REDIS_USERNAME') ?>
+                </div>
+                <div class="col-md-8 d-flex flex-column justify-content-end">
+                    <div class="form-check"><input class="form-check-input" type="checkbox" id="redis_tls" name="redis_tls" value="1" <?= $conn['tls'] ? 'checked' : '' ?> <?= $dis('tls') ?>><label class="form-check-label" for="redis_tls">Use TLS (encrypted connection)</label></div>
+                    <?= $envnote('tls', 'RIVETMSP_REDIS_TLS') ?>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" id="redis_tls_verify" name="redis_tls_verify" value="1" <?= $conn['tls_verify'] ? 'checked' : '' ?> <?= $dis('tls_verify') ?>><label class="form-check-label" for="redis_tls_verify">Verify the server certificate (recommended)</label></div>
+                    <?= $envnote('tls_verify', 'RIVETMSP_REDIS_TLS_VERIFY') ?>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="redis_tls_ca_file">CA file</label>
+                    <input class="form-control" id="redis_tls_ca_file" name="redis_tls_ca_file" maxlength="1024" value="<?= nullable_htmlentities((string) $conn['tls_ca_file']) ?>" <?= $ro('tls_ca_file') ?> placeholder="/etc/ssl/certs/redis-ca.pem">
+                    <?= $envnote('tls_ca_file', 'RIVETMSP_REDIS_TLS_CA_FILE') ?>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="redis_tls_cert_file">Client certificate <span class="text-muted">(optional)</span></label>
+                    <input class="form-control" id="redis_tls_cert_file" name="redis_tls_cert_file" maxlength="1024" value="<?= nullable_htmlentities((string) $conn['tls_cert_file']) ?>" <?= $ro('tls_cert_file') ?>>
+                    <?= $envnote('tls_cert_file', 'RIVETMSP_REDIS_TLS_CERT_FILE') ?>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="redis_tls_key_file">Client key <span class="text-muted">(optional)</span></label>
+                    <input class="form-control" id="redis_tls_key_file" name="redis_tls_key_file" maxlength="1024" value="<?= nullable_htmlentities((string) $conn['tls_key_file']) ?>" <?= $ro('tls_key_file') ?>>
+                    <?= $envnote('tls_key_file', 'RIVETMSP_REDIS_TLS_KEY_FILE') ?>
+                </div>
+                <div class="form-text">The certificate files must exist on this server and be readable by the web server user. They are checked when you test or save.</div>
+            </div>
+            <?php } else { ?>
+                <div class="alert alert-info mt-3 mb-0 py-2 small">Run the database update (Administration &rarr; Update) to set an ACL username and TLS here.</div>
+            <?php } ?>
             <?php if ($conn['has_stored_password'] && !$conn['from_env']['password']) { ?>
                 <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="redis_clear_password" name="redis_clear_password" value="1"><label class="form-check-label" for="redis_clear_password">Remove the saved password</label></div>
             <?php } ?>
@@ -112,7 +152,7 @@ if ($stats) {
     <div class="card-body">
         <p class="text-muted small">Safe to clear: the app rebuilds all of it on demand. Nothing else in Redis is touched.</p>
         <?php foreach (RedisSettings::CLEARABLE as $group => $def) { ?>
-            <form action="post.php" method="post" class="d-flex align-items-center justify-content-between border-top py-2" onsubmit="return confirm('Clear <?= nullable_htmlentities(strtolower($def['label'])) ?>?<?= $group === 'locks' ? ' Clearing locks can let a job that is running start a second copy.' : '' ?>')">
+            <form action="post.php" method="post" class="d-flex align-items-center justify-content-between border-top py-2" data-confirm-submit="Clear <?= nullable_htmlentities(strtolower($def['label'])) ?>?<?= $group === 'locks' ? ' Clearing locks can let a job that is running start a second copy.' : '' ?>">
                 <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
                 <input type="hidden" name="redis_group" value="<?= nullable_htmlentities($group) ?>">
                 <div><strong><?= nullable_htmlentities($def['label']) ?></strong> <span class="badge bg-secondary"><?= (int) ($counts[$group] ?? 0) ?></span></div>

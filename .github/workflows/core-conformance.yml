@@ -1,0 +1,77 @@
+name: Core conformance
+
+# Runs tests/core (adapter contract + RivetCore conformance kit) against a scratch MariaDB and a throwaway Redis.
+# PHPUnit comes from a rivet-core checkout (it is not a runtime dependency of this app). The conformance kit
+# (RivetCore\Testing\*ConformanceTestCase) ships from rivet-core v1.0.0-rc.1: until composer.json pins a Core that
+# carries it, each *ConformanceTest class is a one-test placeholder that reports a skip with the reason.
+# Once the pin includes the kit, add --fail-on-skipped to the phpunit step so an unverified rule fails the job.
+
+on:
+  pull_request:
+  push:
+    branches: [beta, main]
+  workflow_dispatch:
+    inputs:
+      core_ref:
+        description: 'rivet-core tag or branch to verify (default: the version pinned in composer.json)'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:latest
+        ports: ['3306:3306']
+        env:
+          MARIADB_ROOT_PASSWORD: rootpw
+          MARIADB_USER: user
+          MARIADB_PASSWORD: password
+          MARIADB_DATABASE: rivetcore_scratch_conf
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=5
+
+    env:
+      RIVETCORE_TEST_DB_HOST: 127.0.0.1
+      RIVETCORE_TEST_DB_NAME: rivetcore_scratch_conf
+      RIVETCORE_TEST_DB_USER: user
+      RIVETCORE_TEST_DB_PASS: password
+      RIVETCORE_TEST_REDIS_PORT: 6379
+      RIVETMSP_REDIS_ENV_FILE: /nonexistent
+      RIVETCORE_PHPUNIT_AUTOLOAD: ${{ github.workspace }}/rivet-core/vendor/autoload.php
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mysqli, openssl, mbstring, gd, curl
+          tools: composer:v2
+
+      - name: Install the edition
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Check out rivet-core (it carries PHPUnit and, from v1.0.0-rc.1, the kit)
+        run: |
+          REF="${{ github.event.inputs.core_ref }}"
+          if [ -z "$REF" ]; then REF="$(composer show rivet/rivet-core --format=json | php -r 'echo json_decode(stream_get_contents(STDIN))->versions[0];')"; fi
+          echo "rivet-core ref: $REF"
+          git clone --depth 1 --branch "$REF" https://github.com/TheTractorHacker/rivet-core.git rivet-core
+          composer install --no-interaction --prefer-dist --working-dir=rivet-core
+
+      - name: Load the edition schema into the scratch database
+        run: mysql --host 127.0.0.1 -uroot -prootpw rivetcore_scratch_conf < db.sql
+
+      - name: Run tests/core
+        run: rivet-core/vendor/bin/phpunit -c tests/core/phpunit.xml

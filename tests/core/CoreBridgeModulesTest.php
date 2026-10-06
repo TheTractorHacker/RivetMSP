@@ -5,14 +5,13 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 use RivetMSP\Core\CoreBridge;
 
-// RivetMSP's real getRedisClient() is hard-wired to port 6380. Tests point it at a throwaway server instead.
+// The app's real getRedisClient() (includes/redis_functions.php) reads RIVETMSP_REDIS_HOST/PORT from the environment first, so the tests
+// point it at the throwaway server (RIVETCORE_TEST_REDIS_PORT) and, with none set, at a closed port: never at a real Redis. This also
+// means the Redis conformance case exercises the real function, not a stand-in.
 if (!function_exists('getRedisClient')) {
-    function getRedisClient(): ?\Predis\Client
-    {
-        $port = (int) getenv('RIVETCORE_TEST_REDIS_PORT');
-
-        return $port ? new \Predis\Client(['scheme' => 'tcp', 'host' => '127.0.0.1', 'port' => $port, 'timeout' => 0.5]) : null;
-    }
+    putenv('RIVETMSP_REDIS_HOST=127.0.0.1');
+    putenv('RIVETMSP_REDIS_PORT=' . ((int) getenv('RIVETCORE_TEST_REDIS_PORT') ?: 1));
+    require_once __DIR__ . '/../../includes/redis_functions.php';
 }
 if (!function_exists('decryptSetting')) {
     function decryptSetting(string $c): string { return str_starts_with($c, 'ENC:') ? substr($c, 4) : $c; } // stand-in for functions.php

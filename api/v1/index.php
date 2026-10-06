@@ -266,15 +266,16 @@ $is_sse_stream = ($resource === 'notifications' && $sub === 'stream')
 if (!$is_sse_stream) {
     if ($api_token_row) {
         $rl_bucket = 'tok:' . substr($token_hash, 0, 40);
+        $rl_label = 'token:' . intval($api_token_row['token_id'] ?? 0);
     } elseif ($legacy_api_key_auth) {
         $rl_bucket = 'key:' . substr($legacy_key, 0, 40);
+        $rl_label = 'api_key:' . intval($legacy_key_row['api_key_id'] ?? 0);
     } else {
         $rl_bucket = 'usr:' . intval($api_user_id);
+        $rl_label = 'user:' . intval($api_user_id);
     }
-    if (!api_rate_limit($rl_bucket, 300, 60)) {
-        header('Retry-After: 60');
-        api_error(429, 'Rate limit exceeded');
-    }
+    // Per key (or token) and per address; the limit is Administration > API Keys > Rate limit (0 = off). 429 + Retry-After.
+    api_enforce_rate_limit($rl_bucket, $rl_label, $api_user_id ? intval($api_user_id) : null, getIP());
 }
 
 // Route

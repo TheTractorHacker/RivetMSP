@@ -14,6 +14,7 @@ use RivetCore\Redis\CronGuard;
 use RivetCore\Redis\LockManager;
 use RivetCore\Redis\RateLimiter;
 use RivetCore\Support\SystemClock;
+use RivetCore\Webhooks\UrlPolicy;
 use RivetCore\Webhooks\WebhookDispatcher;
 use RivetCore\Workflow\WorkflowService;
 use RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter;
@@ -199,7 +200,13 @@ final class CoreBridge
             self::database(),
             new WebhooksTableSubscriptions(self::database()),
             new SystemClock(),
-            ['X-ITFlow', 'X-RivetMSP']
+            ['X-ITFlow', 'X-RivetMSP'],
+            null,
+            WebhookDispatcher::DEFAULT_TIMEOUT_SECONDS,
+            // Always vetted: the shared policy (public addresses plus the admin's allowed networks) when the event bus is loaded,
+            // otherwise the strict default (public addresses only).
+            function_exists('rivetWebhookUrlPolicy') ? rivetWebhookUrlPolicy() : new UrlPolicy(),
+            true
         ));
     }
 

@@ -627,7 +627,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                             <a class="dropdown-item" href="<?php echo "../uploads/clients/$client_id/$file_reference_name"; ?>" download="<?php echo $file_name; ?>">
                                                 <i class="fas fa-fw fa-cloud-download-alt me-2"></i>Download
                                             </a>
-                                            <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#shareModal" onclick="populateShareModal(<?php echo "$client_id, 'File', $file_id"; ?>)">
+                                            <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#shareModal" data-share-modal='<?= json_encode(['client_id' => (int) $client_id, 'item_type' => 'File', 'item_id' => (int) $file_id], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG) ?>'>
                                                 <i class="fas fa-fw fa-share me-2"></i>Share
                                             </a>
                                             <a class="dropdown-item ajax-modal" href="#"
@@ -648,7 +648,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                                 </a>
                                                 <?php if ($session_user_role == 3) { ?>
                                                     <div class="dropdown-divider"></div>
-                                                    <a class="dropdown-item text-danger text-bold" href="#" data-bs-toggle="modal" data-bs-target="#deleteFileModal" onclick="populateFileDeleteModal(<?php echo "$file_id , '$file_name'" ?>)">
+                                                    <a class="dropdown-item text-danger text-bold" href="#" data-bs-toggle="modal" data-bs-target="#deleteFileModal" data-file-delete='<?= json_encode(['id' => (int) $file_id, 'name' => (string) $file_name], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG) ?>'>
                                                         <i class="fas fa-fw fa-trash me-2"></i>Delete
                                                     </a>
                                                 <?php } ?>
@@ -795,7 +795,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                                         <a class="dropdown-item" href="<?php echo "../uploads/clients/$client_id/$file_reference_name"; ?>" download="<?php echo $file_name; ?>">
                                                             <i class="fas fa-fw fa-cloud-download-alt me-2"></i>Download
                                                         </a>
-                                                        <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#shareModal" onclick="populateShareModal(<?php echo "$client_id, 'File', $file_id"; ?>)">
+                                                        <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#shareModal" data-share-modal='<?= json_encode(['client_id' => (int) $client_id, 'item_type' => 'File', 'item_id' => (int) $file_id], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG) ?>'>
                                                             <i class="fas fa-fw fa-share me-2"></i>Share
                                                         </a>
                                                         <a class="dropdown-item ajax-modal" href="#"
@@ -816,7 +816,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                                             </a>
                                                             <?php if ($session_user_role == 3) { ?>
                                                                 <div class="dropdown-divider"></div>
-                                                                <a class="dropdown-item text-danger text-bold" href="#" data-bs-toggle="modal" data-bs-target="#deleteFileModal" onclick="populateFileDeleteModal(<?php echo "$file_id , '$file_name'" ?>)">
+                                                                <a class="dropdown-item text-danger text-bold" href="#" data-bs-toggle="modal" data-bs-target="#deleteFileModal" data-file-delete='<?= json_encode(['id' => (int) $file_id, 'name' => (string) $file_name], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG) ?>'>
                                                                     <i class="fas fa-fw fa-trash me-2"></i>Delete
                                                                 </a>
                                                             <?php } ?>
@@ -916,7 +916,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                                             <i class="fas fa-fw fa-pencil-alt me-2"></i>Edit
                                                         </a>
                                                         <div class="dropdown-divider"></div>
-                                                        <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#shareModal" onclick="populateShareModal(<?php echo "$client_id, 'Document', $document_id"; ?>)">
+                                                        <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#shareModal" data-share-modal='<?= json_encode(['client_id' => (int) $client_id, 'item_type' => 'Document', 'item_id' => (int) $document_id], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG) ?>'>
                                                             <i class="fas fa-fw fa-share me-2"></i>Share
                                                         </a>
                                                         <div class="dropdown-divider"></div>

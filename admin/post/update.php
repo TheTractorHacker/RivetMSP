@@ -43,6 +43,15 @@ if (isset($_GET['update'])) {
 
     validateAdminRole(); // Old function
 
+    // Stop with a plain explanation (not a half-run git command) when the server cannot update itself; the Checks panel has the details.
+    require_once __DIR__ . '/../../includes/update_checks.php';
+    foreach (updateChecks(dirname(__DIR__, 2)) as $update_check) {
+        if ($update_check['status'] === 'fail' && in_array($update_check['id'], ['exec', 'git', 'repo', 'gitwrite', 'treewrite'], true)) {
+            flash_alert('The update did not run: ' . htmlspecialchars($update_check['detail'] . ' ' . $update_check['fix'], ENT_QUOTES), 'error');
+            redirect();
+        }
+    }
+
     //git fetch downloads the latest from remote without trying to merge or rebase anything. Then the git reset resets the master branch to what you just fetched. The --hard option changes all the files in your working tree to match the files in origin/master
 
     // Follow the release channel: move onto its branch first (forward only; refused if it would install older code), then update from it.

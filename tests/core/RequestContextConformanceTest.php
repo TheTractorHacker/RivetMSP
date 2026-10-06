@@ -1,0 +1,21 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/ConformanceSupport.php';
+
+use RivetCore\Contracts\RequestContextInterface;
+
+if (ConformanceSupport::kitAvailable()) {
+    final class RequestContextConformanceTest extends \RivetCore\Testing\RequestContextConformanceTestCase
+    {
+        protected function context(): RequestContextInterface
+        {
+            return new \RivetMSP\Core\Adapter\Http\ServerRequestContext();
+        }
+    }
+} else {
+    final class RequestContextConformanceTest extends KitMissingTestCase
+    {
+    }
+}

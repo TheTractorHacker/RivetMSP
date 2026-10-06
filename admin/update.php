@@ -2,6 +2,7 @@
 require_once "includes/inc_all_admin.php";
 
 require_once "../includes/database_version.php";
+require_once "../includes/update_checks.php";
 
 $updates = fetchUpdates();
 
@@ -15,6 +16,12 @@ $repo_branch = $updates->branch;   // the release channel's branch (Production o
 $git_log_raw = shell_exec("git log HEAD.." . escapeshellarg(RELEASE_REMOTE . '/' . $repo_branch) . " --pretty=format:'%h|%ar|%s'");
 $channel_status = $updates->channel_status;
 $channels = releaseChannels();
+
+$update_checks = updateChecks(dirname(__DIR__), defined('CURRENT_DATABASE_VERSION') ? (string) CURRENT_DATABASE_VERSION : null, (string) LATEST_DATABASE_VERSION);
+$check_problems = count(array_filter($update_checks, static fn($c) => $c['status'] === 'fail'));
+$check_warnings = count(array_filter($update_checks, static fn($c) => $c['status'] === 'warn'));
+$check_badge = ['ok' => 'success', 'warn' => 'warning', 'fail' => 'danger', 'info' => 'secondary'];
+$check_icon = ['ok' => 'fa-check-circle', 'warn' => 'fa-exclamation-triangle', 'fail' => 'fa-times-circle', 'info' => 'fa-info-circle'];
 
 $git_log = '';
 if (!empty($git_log_raw)) {
@@ -64,6 +71,32 @@ if (!empty($git_log_raw)) {
         </div>
     </div>
 
+    <div class="card card-dark mb-3" id="update-checks">
+        <div class="card-header py-3 d-flex align-items-center justify-content-between">
+            <h3 class="card-title mb-0"><i class="fas fa-fw fa-stethoscope me-2"></i>Checks</h3>
+            <?php if ($check_problems) { ?>
+                <span class="badge bg-danger fs-6"><?= (int) $check_problems ?> problem<?= $check_problems === 1 ? '' : 's' ?></span>
+            <?php } elseif ($check_warnings) { ?>
+                <span class="badge bg-warning fs-6"><?= (int) $check_warnings ?> to look at</span>
+            <?php } else { ?>
+                <span class="badge bg-success fs-6">All good</span>
+            <?php } ?>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small">What the updater needs, checked on this server without contacting the update source. Red items stop an update; fix them, then reload this page.</p>
+            <?php foreach ($update_checks as $chk) { ?>
+                <div class="d-flex align-items-start border-top py-2" data-check="<?= htmlspecialchars($chk['id']) ?>" data-status="<?= htmlspecialchars($chk['status']) ?>">
+                    <span class="badge bg-<?= $check_badge[$chk['status']] ?? 'secondary' ?> me-3 mt-1" style="min-width: 4.5rem;"><i class="fas fa-fw <?= $check_icon[$chk['status']] ?? 'fa-info-circle' ?> me-1"></i><?= htmlspecialchars(['ok' => 'OK', 'warn' => 'Check', 'fail' => 'Problem', 'info' => 'Note'][$chk['status']] ?? '') ?></span>
+                    <div>
+                        <strong><?= htmlspecialchars($chk['title']) ?></strong>
+                        <div class="small text-muted"><?= htmlspecialchars($chk['detail']) ?></div>
+                        <?php if ($chk['fix'] !== '') { ?><div class="small mt-1"><strong>Fix:</strong> <?= htmlspecialchars($chk['fix']) ?></div><?php } ?>
+                    </div>
+                </div>
+            <?php } ?>
+        </div>
+    </div>
+
     <div class="card card-dark">
         <div class="card-header py-3">
             <h3 class="card-title"><i class="fas fa-fw fa-download me-2"></i>Update</h3>
@@ -75,9 +108,9 @@ if (!empty($git_log_raw)) {
                 <div class="alert alert-danger">
                     <strong>WARNING: Could not find execute 'git fetch'.</strong>
                     <br><br>
-                    <i>Error details:- <?php echo htmlspecialchars(shell_exec("git fetch fork 2>&1")); ?></i>
+                    <i>Error details:- <?php echo htmlspecialchars(substr(trim(implode("\n", (array) $updates->output)), 0, 600)); ?></i>
                     <br>
-                    <br>Things to check: Is Git installed? Is the Git origin/remote correct? Are web server file permissions too strict?
+                    <br>See the <a href="#update-checks" class="alert-link">Checks</a> above for what to fix: git installed, the web user allowed to write the repository, and the update source.
                     <br>Seek support on the <a href="https://forum.itflow.org">Forum</a> if required - include relevant PHP error logs & RivetMSP debug output
                 </div>
             <?php } ?>

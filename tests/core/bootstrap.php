@@ -8,3 +8,15 @@ if ($phpunit && is_file($phpunit)) {
     require $phpunit;
 }
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
+
+// A schema-only scratch database (db.sql) has no `settings` row; the feature-flag tests read and write it. Make it (scratch only).
+if (getenv('RIVETCORE_TEST_DB_NAME') && extension_loaded('mysqli')) {
+    mysqli_report(MYSQLI_REPORT_OFF);
+    $m = @new mysqli(getenv('RIVETCORE_TEST_DB_HOST') ?: 'localhost', getenv('RIVETCORE_TEST_DB_USER') ?: 'root', getenv('RIVETCORE_TEST_DB_PASS') ?: '', (string) getenv('RIVETCORE_TEST_DB_NAME'));
+    if (!$m->connect_errno) {
+        $r = $m->query('SELECT company_id FROM settings WHERE company_id = 1');
+        if ($r !== false && $r->num_rows === 0) {
+            $m->query("INSERT INTO settings SET company_id = 1, config_current_database_version = '0'");
+        }
+    }
+}

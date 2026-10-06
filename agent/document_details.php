@@ -25,7 +25,7 @@ $sql_document = mysqli_query($mysqli, "SELECT * FROM documents
 );
 
 if (mysqli_num_rows($sql_document) == 0) {
-    echo "<center><h1 class='text-secondary mt-5'>Nothing to see here</h1><a class='btn btn-lg btn-secondary mt-3' href='javascript:history.back()'><i class='fa fa-fw fa-arrow-left'></i> Go Back</a></center>";
+    echo "<center><h1 class='text-secondary mt-5'>Nothing to see here</h1><a class='btn btn-lg btn-secondary mt-3' href='#' data-history-back><i class='fa fa-fw fa-arrow-left'></i> Go Back</a></center>";
     require_once "../includes/footer.php";
     exit();
 }
@@ -189,7 +189,7 @@ $page_title = $row['document_name'];
                     <i class="fas fa-fw fa-edit" title="Edit"></i>
                 </button>
                 <button type="button" class="btn btn-secondary me-1" data-bs-toggle="modal" data-bs-target="#shareModal"
-                    onclick="populateShareModal(<?= "$client_id, 'Document', $document_id"; ?>)">
+                    data-share-modal='<?= json_encode(['client_id' => (int) $client_id, 'item_type' => 'Document', 'item_id' => (int) $document_id], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG) ?>'>
                     <i class="fas fa-fw fa-share" title="Share"></i>
                 </button>
                 <a class="btn btn-success me-1" href="post.php?export_document=<?= $document_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>"><i class='fas fa-fw fa-file-pdf' title="PDF Export"></i></a>

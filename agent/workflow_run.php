@@ -123,7 +123,7 @@ $status_badge = [
 
         <?php if ($run['status'] !== 'cancelled' && lookupUserPermission('module_client') >= 2) { ?>
         <div class="mt-3">
-            <form action="post.php" method="post" onsubmit="return confirm('Cancel this workflow? This cannot be undone.');">
+            <form action="post.php" method="post" data-confirm-submit="Cancel this workflow? This cannot be undone.">
                 <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
                 <input type="hidden" name="run_id" value="<?= $run_id ?>">
                 <button type="submit" name="cancel_workflow_run" class="btn btn-sm btn-outline-danger">Cancel Workflow</button>

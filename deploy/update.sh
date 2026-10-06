@@ -246,6 +246,8 @@ main() {
     # single-script "populated later in main()" convention install.sh uses
     # for DB_PASSWORD, not a scoping accident.
     determine_owner
+    ensure_updater_remote "${APP_DIR}" "${OWNER}"
+    ignore_git_filemode "${APP_DIR}" "${OWNER}"
 
     run_git_pull
     # Dependencies first (as RivetIT does): a migration step that needs a newer RivetCore skips itself until the package is present.

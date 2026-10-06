@@ -2987,6 +2987,13 @@ CREATE TABLE `settings` (
   `config_redis_port` int(11) NOT NULL DEFAULT 0,
   `config_redis_password` varchar(1000) NOT NULL DEFAULT '',
   `config_redis_db` int(11) NOT NULL DEFAULT 0,
+  `config_redis_username` text DEFAULT NULL,
+  `config_redis_tls` tinyint(1) NOT NULL DEFAULT 0,
+  `config_redis_tls_verify` tinyint(1) NOT NULL DEFAULT 1,
+  `config_redis_tls_ca_file` text DEFAULT NULL,
+  `config_redis_tls_cert_file` text DEFAULT NULL,
+  `config_redis_tls_key_file` text DEFAULT NULL,
+  `config_api_rate_limit_per_minute` int(11) NOT NULL DEFAULT 120,
   `config_audit_retention_days` int(11) NOT NULL DEFAULT 365,
   `config_webhook_allowed_networks` varchar(500) NOT NULL DEFAULT '',
   PRIMARY KEY (`company_id`)
@@ -4148,11 +4155,6 @@ INSERT INTO `ticket_saved_views` VALUES (2,'On-Site','fa-truck','onsite=1&status
 INSERT INTO `ticket_saved_views` VALUES (3,'Assigned to me','fa-user','assigned=me&status=Open',0,2,'2026-10-05 02:45:50',NULL);
 INSERT INTO `ticket_saved_views` VALUES (4,'All Unresolved','fa-folder-open','status=Open',0,3,'2026-10-05 02:45:50',NULL);
 INSERT INTO `ticket_saved_views` VALUES (5,'Remote','fa-headset','onsite=0&status=Open',0,5,'2026-10-05 02:45:50',NULL);
-INSERT INTO `ticket_saved_views` VALUES (6,'Default','fa-list','',0,0,'2026-10-04 21:46:07',NULL);
-INSERT INTO `ticket_saved_views` VALUES (7,'On-Site','fa-truck','onsite=1&status=Open',0,1,'2026-10-04 21:46:07',NULL);
-INSERT INTO `ticket_saved_views` VALUES (8,'Assigned to me','fa-user','assigned=me&status=Open',0,2,'2026-10-04 21:46:07',NULL);
-INSERT INTO `ticket_saved_views` VALUES (9,'All Unresolved','fa-folder-open','status=Open',0,3,'2026-10-04 21:46:07',NULL);
-INSERT INTO `ticket_saved_views` VALUES (11,'Remote','fa-headset','onsite=0&status=Open',0,5,'2026-10-04 21:46:07',NULL);
 INSERT INTO `rivet_core_migrations` VALUES ('0001_audit_events','2026-10-05 02:46:31');
 INSERT INTO `rivet_core_migrations` VALUES ('0002_integration_jobs','2026-10-05 02:46:31');
 INSERT INTO `rivet_core_migrations` VALUES ('0003_mcp_unlinked_identities','2026-10-05 02:46:32');
