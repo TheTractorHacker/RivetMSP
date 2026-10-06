@@ -1949,12 +1949,14 @@ CREATE TABLE `payments` (
   `payment_currency_code` varchar(10) NOT NULL,
   `payment_method` varchar(200) DEFAULT NULL,
   `payment_reference` varchar(200) DEFAULT NULL,
+  `payment_provider_ref` varchar(200) DEFAULT NULL,
   `payment_created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `payment_updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
   `payment_archived_at` datetime DEFAULT NULL,
   `payment_account_id` int(11) NOT NULL,
   `payment_invoice_id` int(11) NOT NULL DEFAULT 0,
-  PRIMARY KEY (`payment_id`)
+  PRIMARY KEY (`payment_id`),
+  UNIQUE KEY `uniq_payment_provider_ref` (`payment_provider_ref`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `payroll_deduction_categories`;

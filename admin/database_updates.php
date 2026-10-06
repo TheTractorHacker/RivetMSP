@@ -6536,3 +6536,19 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.69'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.69') {
+        // Payment gateway idempotency: one dedicated column holds the provider reference ("Stripe - pi_...") and carries a UNIQUE
+        // index, so the webhook, the portal, the agent and the autopay paths can never record the same PaymentIntent twice
+        // (free-text payment_reference cannot be unique: manual entries repeat). NULL for manual payments; several NULLs are allowed.
+        mysqli_query($mysqli, "ALTER TABLE `payments`
+            ADD COLUMN IF NOT EXISTS `payment_provider_ref` varchar(200) DEFAULT NULL AFTER `payment_reference`");
+        // Backfill the earliest row per existing Stripe reference only, so historical duplicates cannot block the unique index
+        // (the later duplicate rows keep a NULL provider ref and are left for the owner to reconcile).
+        mysqli_query($mysqli, "UPDATE `payments` p
+            INNER JOIN (SELECT MIN(payment_id) AS keep_id FROM `payments` WHERE payment_reference LIKE 'Stripe - pi\\_%' GROUP BY payment_reference) k ON k.keep_id = p.payment_id
+            SET p.payment_provider_ref = p.payment_reference
+            WHERE p.payment_provider_ref IS NULL");
+        mysqli_query($mysqli, "ALTER TABLE `payments` ADD UNIQUE INDEX IF NOT EXISTS `uniq_payment_provider_ref` (`payment_provider_ref`)");
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.70'");
+    }

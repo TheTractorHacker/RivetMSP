@@ -257,13 +257,15 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
         mysqli_query($mysqli, "INSERT INTO expenses SET expense_date = '$pi_date', expense_amount = $gateway_fee, expense_currency_code = '$invoice_currency_code', expense_account_id = $stripe_account, expense_vendor_id = $stripe_expense_vendor, expense_client_id = $client_id, expense_category_id = $stripe_expense_category, expense_description = 'Stripe Transaction for Invoice $invoice_prefix$invoice_number In the Amount of $balance_to_pay', expense_reference = 'Stripe - $pi_id'");
     }
 
-    if (intval($balance_to_pay) !== intval($pi_amount_paid)) {
+    if (moneyToCents($balance_to_pay) !== moneyToCents($pi_amount_paid)) {
         error_log("Stripe payment error - Invoice balance does not match amount paid for $pi_id");
         exit(WORDING_PAYMENT_FAILED);
     }
 
-    // Add Payment to History
-    mysqli_query($mysqli, "INSERT INTO payments SET payment_date = '$pi_date', payment_amount = $pi_amount_paid, payment_currency_code = '$pi_currency', payment_account_id = $stripe_account, payment_method = 'Stripe', payment_reference = 'Stripe - $pi_id', payment_invoice_id = $invoice_id");
+    // Add Payment to History (exactly once per PaymentIntent; the webhook may have won the race)
+    if (!insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $stripe_account, 'Stripe', $pi_id, $invoice_id)) {
+        exit(WORDING_PAYMENT_FAILED);
+    }
 
     // Recompute invoice status from total payments, rather than assuming this
     // single PaymentIntent covers the invoice in full - matches guest/payment_webhook.php.

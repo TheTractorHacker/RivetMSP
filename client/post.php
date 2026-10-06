@@ -499,6 +499,16 @@ if (isset($_POST['add_contact'])) {
     $contact_billing = intval($_POST['contact_billing'] ?? 0);
     $contact_auth_method = sanitizeInput($_POST['contact_auth_method']);
 
+    // Auth method is a fixed set; only the primary contact may grant technical/billing roles
+    if (!in_array($contact_auth_method, ['local', 'azure'], true)) {
+        flash_alert("Invalid authentication method", 'danger');
+        redirect('contact_add.php');
+    }
+    if ($session_contact_primary != 1) {
+        $contact_technical = 0;
+        $contact_billing = 0;
+    }
+
     // Check the email isn't already in use
     $sql = mysqli_query($mysqli, "SELECT user_id FROM users WHERE user_email = '$contact_email'");
     if ($sql && mysqli_num_rows($sql) > 0) {
@@ -549,10 +559,27 @@ if (isset($_POST['edit_contact'])) {
     $contact_billing = intval($_POST['contact_billing'] ?? 0);
     $contact_auth_method = sanitizeInput($_POST['contact_auth_method']);
 
-    // Get the existing contact_user_id - we look it up ourselves so the user can't just overwrite random users
-    $sql = mysqli_query($mysqli,"SELECT contact_user_id FROM contacts WHERE contact_id = $contact_id AND contact_client_id = $session_client_id");
+    // Get the existing contact_user_id - we look it up ourselves so the user can't just overwrite random users.
+    // The primary contact (and archived contacts) can never be edited from here: the users row
+    // carries the login email/auth method, so changing it would be an account takeover.
+    $sql = mysqli_query($mysqli,"SELECT contact_user_id, contact_technical, contact_billing FROM contacts WHERE contact_id = $contact_id AND contact_client_id = $session_client_id AND contact_primary = 0 AND contact_archived_at IS NULL");
     $row = mysqli_fetch_assoc($sql);
+    if (!$row) {
+        flash_alert("Contact cannot be edited", 'danger');
+        redirect('contacts.php');
+    }
     $contact_user_id = intval($row['contact_user_id']);
+
+    if (!in_array($contact_auth_method, ['local', 'azure'], true)) {
+        flash_alert("Invalid authentication method", 'danger');
+        redirect('contact_edit.php?id=' . $contact_id);
+    }
+
+    // Only the primary contact may change technical/billing roles
+    if ($session_contact_primary != 1) {
+        $contact_technical = intval($row['contact_technical']);
+        $contact_billing = intval($row['contact_billing']);
+    }
 
     // Check the email isn't already in use
     $sql = mysqli_query($mysqli, "SELECT user_id FROM users WHERE user_email = '$contact_email' AND user_id != $contact_user_id");
@@ -589,6 +616,12 @@ if (isset($_POST['edit_contact'])) {
 if (isset($_GET['add_payment_by_provider'])) {
 
     validateCSRFToken($_GET['csrf_token']);
+
+    // Charging the saved card is a billing action: primary or billing contacts only
+    if ($session_contact_primary != 1 && !$session_contact_is_billing_contact) {
+        flash_alert("You do not have permission to make payments", 'danger');
+        redirect();
+    }
 
     $invoice_id = intval($_GET['invoice_id']);
     $saved_payment_id = intval($_GET['add_payment_by_provider']);
@@ -679,7 +712,7 @@ if (isset($_GET['add_payment_by_provider'])) {
     // Create a payment intent
     try {
         $payment_intent = $stripe->paymentIntents->create([
-            'amount' => intval($balance_to_pay * 100), // Times by 100 as Stripe expects values in cents
+            'amount' => moneyToCents($balance_to_pay), // Times by 100 as Stripe expects values in cents
             'currency' => $invoice_currency_code,
             'customer' => $payment_provider_client,
             'payment_method' => $saved_payment_method,
@@ -692,7 +725,7 @@ if (isset($_GET['add_payment_by_provider'])) {
                 'itflow_invoice_number' => $invoice_prefix . $invoice_number,
                 'itflow_invoice_id' => $invoice_id,
             ]
-        ]);
+        ], ['idempotency_key' => stripeChargeIdempotencyKey($invoice_id, $balance_to_pay, $saved_payment_id)]);
 
         // Get details from PI
         $pi_id = sanitizeInput($payment_intent->id);
@@ -707,13 +740,16 @@ if (isset($_GET['add_payment_by_provider'])) {
         logApp("Stripe", "error", "Exception during PI for invoice ID $invoice_id: $error");
     }
 
-    if ($payment_intent->status == "succeeded" && intval($balance_to_pay) == intval($pi_amount_paid)) {
+    if ($payment_intent->status == "succeeded" && moneyToCents($balance_to_pay) === moneyToCents($pi_amount_paid)) {
+
+        // Record the payment first, exactly once per PaymentIntent (the webhook may have recorded it already)
+        if (!insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $account_id, 'Stripe', $pi_id, $invoice_id)) {
+            flash_alert("Payment already recorded", 'info');
+            redirect();
+        }
 
         // Update Invoice Status
         mysqli_query($mysqli, "UPDATE invoices SET invoice_status = 'Paid' WHERE invoice_id = $invoice_id");
-
-        // Add Payment to History
-        mysqli_query($mysqli, "INSERT INTO payments SET payment_date = '$pi_date', payment_amount = $pi_amount_paid, payment_currency_code = '$pi_currency', payment_account_id = $account_id, payment_method = 'Stripe', payment_reference = 'Stripe - $pi_id', payment_invoice_id = $invoice_id");
         mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Paid', history_description = 'Online Payment added (agent)', history_invoice_id = $invoice_id");
 
         // Email receipt
