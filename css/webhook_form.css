@@ -62,7 +62,7 @@ button.whf-step-link:not(:disabled), a.whf-step-link { cursor: pointer; }
 /* ---------- sticky footer */
 .whf-footer { position: sticky; bottom: 0; z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .75rem 1rem; margin-top: 1rem;
   background: var(--color-surface, #fff); border: 1px solid var(--color-border, #dee2e6); border-radius: var(--whf-r); box-shadow: 0 -6px 16px rgba(0,0,0,.06); }
-.whf-footer .whf-primary { min-width: 9rem; padding-top: .55rem; padding-bottom: .55rem; font-weight: 600; }
+.whf-footer .whf-primary { min-width: 7.5rem; font-weight: 600; }
 .whf-hint { font-size: .8rem; color: var(--color-text-muted, #64748b); }
 .whf-dirty { font-size: .85rem; color: var(--whf-warn); }
 .whf-dirty .fa-circle { font-size: .5rem; vertical-align: middle; }
