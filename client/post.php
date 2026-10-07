@@ -568,6 +568,12 @@ if (isset($_POST['edit_contact'])) {
         flash_alert("Contact cannot be edited", 'danger');
         redirect('contacts.php');
     }
+    // A non-primary technical contact must not be able to take over a contact that holds technical or billing rights by
+    // re-pointing its login email (password reset) - that would hand out the roles only the primary contact may grant.
+    if ($session_contact_primary != 1 && $contact_id !== $session_contact_id && (intval($row['contact_technical']) === 1 || intval($row['contact_billing']) === 1)) {
+        flash_alert("Only the primary contact can edit a contact with technical or billing rights", 'danger');
+        redirect('contacts.php');
+    }
     $contact_user_id = intval($row['contact_user_id']);
 
     if (!in_array($contact_auth_method, ['local', 'azure'], true)) {
