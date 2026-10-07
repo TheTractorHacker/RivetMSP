@@ -1282,29 +1282,31 @@ $sql_wq = mysqli_query($mysqli,
 while ($wq = mysqli_fetch_assoc($sql_wq)) {
     $wq_id       = intval($wq['queue_id']);
     $wq_payload  = $wq['queue_payload'];
-    $wq_secret   = decryptSetting($wq['webhook_secret']);
-    $wq_url      = $wq['webhook_url'];
+    $wq_secret   = decryptSetting((string) $wq['webhook_secret']);
+    $wq_url      = decryptSetting((string) $wq['webhook_url']); // platform endpoints are stored encrypted
     $wq_attempts = intval($wq['queue_attempts']) + 1;
     $wq_event    = $wq['queue_event'];
 
     $signature = 'sha256=' . hash_hmac('sha256', $wq_payload, $wq_secret);
 
-    $ctx = stream_context_create(['http' => [
-        'method'        => 'POST',
-        'header'        => "Content-Type: application/json
-X-RivetMSP-Signature: $signature
-X-RivetMSP-Event: $wq_event
-",
-        'content'       => $wq_payload,
-        'timeout'       => 10,
-        'ignore_errors' => true,
-    ]]);
-
-    @file_get_contents($wq_url, false, $ctx);
-
+    // Same outbound rules as the job-queue delivery (RivetCore WebhookDispatcher): the URL is vetted against the shared URL policy
+    // again at call time, the connection is pinned to the vetted addresses (DNS rebinding) and redirects are never followed, so a
+    // saved public URL cannot be turned into a request to an internal address or the cloud metadata service.
+    require_once dirname(__DIR__) . '/includes/event_bus.php';
     $resp_code = 0;
-    if (isset($http_response_header) && preg_match('/HTTP\/\S+ (\d+)/', $http_response_header[0], $m)) {
-        $resp_code = intval($m[1]);
+    $wq_target = rivetWebhookResolveTarget($wq_url);
+    if ($wq_target !== null) {
+        $ch = curl_init(\RivetCore\Webhooks\WebhookDispatcher::pinnedUrl($wq_url, $wq_target));
+        curl_setopt_array($ch, \RivetCore\Webhooks\WebhookDispatcher::curlOptions($wq_payload, [
+            'Content-Type: application/json',
+            "X-RivetMSP-Signature: $signature",
+            "X-RivetMSP-Event: $wq_event",
+        ], 10, $wq_target));
+        curl_exec($ch);
+        $resp_code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+    } else {
+        logApp('Webhook', 'warning', "Queued webhook $wq_id not sent: its URL does not resolve to an allowed address");
     }
 
     $success = ($resp_code >= 200 && $resp_code < 300);
