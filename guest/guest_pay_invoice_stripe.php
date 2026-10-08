@@ -35,7 +35,7 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
          LEFT JOIN clients ON invoice_client_id = client_id
          WHERE invoice_id = $invoice_id
          AND invoice_url_key = '$invoice_url_key'
-         AND invoice_status NOT IN ('Draft', 'Paid', 'Cancelled')
+         AND invoice_status NOT IN ('Draft', 'Paid', 'Cancelled', 'Non-Billable')
          LIMIT 1"
     );
 
@@ -219,7 +219,7 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
          LEFT JOIN clients ON invoice_client_id = client_id
          LEFT JOIN contacts ON clients.client_id = contacts.contact_client_id AND contact_primary = 1
          WHERE invoice_id = $pi_invoice_id
-         AND invoice_status NOT IN ('Draft', 'Paid', 'Cancelled')
+         AND invoice_status NOT IN ('Draft', 'Paid', 'Cancelled', 'Non-Billable')
          LIMIT 1"
     );
     if (!$invoice_sql || mysqli_num_rows($invoice_sql) !== 1) {
@@ -251,12 +251,6 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
     $amount_paid_previously = floatval(mysqli_fetch_assoc($sql_amount_paid_previously)['amount_paid']);
     $balance_to_pay = $invoice_amount - $amount_paid_previously;
 
-    // Stripe expense
-    if ($stripe_expense_vendor > 0 && $stripe_expense_category > 0) {
-        $gateway_fee = round($balance_to_pay * $stripe_percentage_fee + $stripe_flat_fee, 2);
-        mysqli_query($mysqli, "INSERT INTO expenses SET expense_date = '$pi_date', expense_amount = $gateway_fee, expense_currency_code = '$invoice_currency_code', expense_account_id = $stripe_account, expense_vendor_id = $stripe_expense_vendor, expense_client_id = $client_id, expense_category_id = $stripe_expense_category, expense_description = 'Stripe Transaction for Invoice $invoice_prefix$invoice_number In the Amount of $balance_to_pay', expense_reference = 'Stripe - $pi_id'");
-    }
-
     if (moneyToCents($balance_to_pay) !== moneyToCents($pi_amount_paid)) {
         error_log("Stripe payment error - Invoice balance does not match amount paid for $pi_id");
         exit(WORDING_PAYMENT_FAILED);
@@ -267,11 +261,18 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
         exit(WORDING_PAYMENT_FAILED);
     }
 
+    // Stripe expense: only after the balance matched and this PaymentIntent was recorded for the first time,
+    // so a duplicate or mismatched callback can not leave duplicate/orphan expense rows (nightly MSP-5)
+    if ($stripe_expense_vendor > 0 && $stripe_expense_category > 0) {
+        $gateway_fee = round($balance_to_pay * $stripe_percentage_fee + $stripe_flat_fee, 2);
+        mysqli_query($mysqli, "INSERT INTO expenses SET expense_date = '$pi_date', expense_amount = $gateway_fee, expense_currency_code = '$invoice_currency_code', expense_account_id = $stripe_account, expense_vendor_id = $stripe_expense_vendor, expense_client_id = $client_id, expense_category_id = $stripe_expense_category, expense_description = 'Stripe Transaction for Invoice $invoice_prefix$invoice_number In the Amount of $balance_to_pay', expense_reference = 'Stripe - $pi_id'");
+    }
+
     // Recompute invoice status from total payments, rather than assuming this
     // single PaymentIntent covers the invoice in full - matches guest/payment_webhook.php.
     $paid_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT SUM(payment_amount) AS amount_paid FROM payments WHERE payment_invoice_id = $invoice_id"));
     $total_paid = floatval($paid_row['amount_paid']);
-    $invoice_status = ($invoice_amount - $total_paid <= 0) ? 'Paid' : 'Partial';
+    $invoice_status = invoiceStatusAfterPayment($invoice_amount, $total_paid);
     mysqli_query($mysqli, "UPDATE invoices SET invoice_status = '$invoice_status' WHERE invoice_id = $invoice_id");
     mysqli_query($mysqli, "INSERT INTO history SET history_status = '$invoice_status', history_description = 'Online Payment added (client) - $ip - $os - $browser', history_invoice_id = $invoice_id");
 

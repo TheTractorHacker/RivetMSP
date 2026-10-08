@@ -15,8 +15,20 @@ if (isset($_POST['add_credit'])) {
     $client_id = intval($_POST['client']);
     enforceClientAccess($client_id);
 
-    $amount = floatval($_POST['amount']);
+    require_once __DIR__ . '/../../includes/billing_guards.php';
+
+    // A credit is a positive amount (a negative one would silently reduce the client's balance) and the type is a
+    // fixed list (nightly MSP-5)
+    $amount = parsePositiveMoney($_POST['amount'] ?? null);
+    if ($amount === null) {
+        flash_alert("Credit amount must be greater than zero", 'error');
+        redirect();
+    }
     $type = sanitizeInput($_POST['type']);
+    if (!in_array($type, ['prepaid', 'manual', 'refund', 'promotion'], true)) {
+        flash_alert("Invalid credit type", 'error');
+        redirect();
+    }
     $expire = sanitizeInput($_POST['expire']);
     $note = sanitizeInput($_POST['note']);
 

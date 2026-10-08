@@ -10,8 +10,9 @@ $src = function (string $rel): string { return file_get_contents(__DIR__ . '/../
 $block = function (string $file, string $post) use ($src): string {
     $s = $src($file);
     $p = strpos($s, "isset(\$_POST['$post'])");
+    if ($p === false) $p = strpos($s, "isset(\$_GET['$post'])");
     if ($p === false) return '';
-    $n = strpos($s, "\nif (isset(\$_POST[", $p + 10);
+    $n = strpos($s, "\nif (isset(\$_", $p + 10);
     return substr($s, $p, ($n === false ? strlen($s) : $n) - $p);
 };
 
@@ -39,5 +40,29 @@ $ok(preg_match("/\\\$two_fa == 'disable'\) \{.*?DELETE FROM api_tokens/s", $e) =
 $pf = $src('agent/user/post/profile.php');
 $p = strpos($pf, "isset(\$_GET['disable_mfa'])");
 $ok($p !== false && strpos(substr($pf, $p, 900), 'DELETE FROM api_tokens') !== false, 'MSP-4: self disable_mfa revokes API tokens');
+
+// MSP-5: billing hardening on every payment/credit path
+require_once __DIR__ . '/../includes/billing_guards.php';
+$b = $block('agent/post/payment.php', 'add_bulk_payment');
+$ok($b !== '', 'MSP-5: bulk handler found');
+$ok(strpos($b, 'mysqli_begin_transaction') !== false && strpos($b, 'FOR UPDATE') !== false && strpos($b, 'mysqli_commit') !== false, 'MSP-5: bulk payment runs in a transaction with row locks');
+$ok(strpos($b, "\$_POST['balance']") === false, 'MSP-5: bulk payment no longer trusts the posted balance');
+$ok(strpos($b, 'parsePositiveMoney') !== false && strpos($b, "('Sent', 'Viewed', 'Partial', 'Overdue')") !== false, 'MSP-5: bulk payment validates the amount and skips Non-Billable/closed invoices');
+$ok(strpos($b, 'floatval($_POST[\'amount\'])') === false, 'MSP-5: bulk payment amount is not a bare floatval');
+$d = $block('agent/post/payment.php', 'delete_payment');
+$ok($d !== '' && strpos($d, 'payment_client_id') === false && strpos($d, 'invoice_client_id') !== false, 'MSP-5: delete_payment resolves the client through the invoice');
+$ok(strpos($d, '$invoice_balance == 0') === false, 'MSP-5: delete_payment compares in cents');
+$c = $src('agent/post/credit.php');
+$ok(strpos($c, 'parsePositiveMoney') !== false && strpos($c, "'promotion'") !== false, 'MSP-5: add_credit needs a positive amount and a known type');
+$g = $src('guest/guest_pay_invoice_stripe.php');
+$ok(strpos($g, 'INSERT INTO expenses') > strpos($g, 'insertStripePaymentOnce('), 'MSP-5: Stripe fee expense is inserted only after the payment was recorded once');
+$ok(strpos($g, 'INSERT INTO expenses') > strpos($g, 'moneyToCents($balance_to_pay) !== moneyToCents($pi_amount_paid)'), 'MSP-5: Stripe fee expense is inserted only after the balance check');
+$ok(strpos($g, 'invoiceStatusAfterPayment(') !== false && strpos($src('guest/payment_webhook.php'), 'invoiceStatusAfterPayment(') !== false, 'MSP-5: final Stripe status uses the cents helper (portal and webhook)');
+$ok(substr_count($g . $src('guest/payment_webhook.php') . $src('guest/guest_ajax.php'), "'Cancelled','Non-Billable'") + substr_count($g, "'Cancelled', 'Non-Billable'") >= 4, 'MSP-5: online payment queries exclude Non-Billable invoices');
+
+// MSP-6: balances under 1.00 are payable online
+$ok(strpos($src('guest/guest_ajax.php'), 'intval($balance_to_pay) == 0') === false && strpos($src('guest/guest_ajax.php'), 'moneyToCents($balance_to_pay) <= 0') !== false, 'MSP-6: guest_ajax no longer rounds the balance down to whole dollars');
+$ok(moneyToCents(0.50) > 0 && moneyToCents(0.01) > 0 && moneyToCents(0.004) <= 0 && moneyToCents(0.0) <= 0, 'MSP-6: cents check treats 0.50 and 0.01 as payable, 0 as nothing owed');
+$ok(invoiceStatusAfterPayment(10.00, 9.50) === 'Partial' && invoiceStatusAfterPayment(10.00, 10.00) === 'Paid', 'MSP-5: status after payment in cents');
 
 exit($fails ? 1 : 0);

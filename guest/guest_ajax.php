@@ -35,7 +35,7 @@ if (isset($_GET['stripe_create_pi'])) {
         LEFT JOIN clients ON invoice_client_id = client_id
         WHERE invoice_id = $invoice_id
         AND invoice_url_key = '$url_key'
-        AND invoice_status NOT IN ('Draft','Paid','Cancelled')
+        AND invoice_status NOT IN ('Draft','Paid','Cancelled','Non-Billable')
         LIMIT 1"
     );
     if (!$invoice_sql || mysqli_num_rows($invoice_sql) !== 1) {
@@ -58,7 +58,7 @@ if (isset($_GET['stripe_create_pi'])) {
 
     $balance_to_pay = round($balance_to_pay, 2);
 
-    if (intval($balance_to_pay) == 0) {
+    if (moneyToCents($balance_to_pay) <= 0) {
         exit("No balance outstanding");
     }
 
