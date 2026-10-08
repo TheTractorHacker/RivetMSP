@@ -115,9 +115,10 @@ if (isset($_POST['edit_user'])) {
     }
 
     // Get current Avatar
-    $sql = mysqli_query($mysqli, "SELECT user_avatar FROM users WHERE user_id = $user_id");
+    $sql = mysqli_query($mysqli, "SELECT user_avatar, user_role_id FROM users WHERE user_id = $user_id");
     $row = mysqli_fetch_assoc($sql);
     $existing_file_name = sanitizeInput($row['user_avatar']);
+    $previous_role_id = intval($row['user_role_id']);
 
     $extended_log_description = '';
     if (!empty($_POST['2fa'])) {
@@ -152,6 +153,11 @@ if (isset($_POST['edit_user'])) {
 
     mysqli_query($mysqli, "UPDATE users SET user_name = '$name', user_email = '$email', user_role_id = $role WHERE user_id = $user_id");
 
+    // Existing API tokens carry the old rights: any role change revokes them (nightly MSP-4)
+    if ($previous_role_id !== intval($role)) {
+        mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
+    }
+
     if (!empty($new_password)) {
         $new_password = password_hash($new_password, PASSWORD_DEFAULT);
         $user_specific_encryption_ciphertext = encryptUserSpecificKey(trim($_POST['new_password']));
@@ -163,6 +169,8 @@ if (isset($_POST['edit_user'])) {
 
     if (!empty($two_fa) && $two_fa == 'disable') {
         mysqli_query($mysqli, "UPDATE users SET user_token = '' WHERE user_id = '$user_id'");
+        // A 2FA reset invalidates API tokens minted under the old second factor (nightly MSP-4)
+        mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
         mysqli_query($mysqli, "INSERT INTO logs SET log_type = 'User', log_action = 'Modify', log_description = '$session_name disabled 2FA for $name', log_ip = '$session_ip', log_user_agent = '$session_user_agent', log_user_id = $session_user_id");
     }
 
@@ -205,6 +213,9 @@ if (isset($_GET['disable_user'])) {
 
     mysqli_query($mysqli, "UPDATE users SET user_status = 0 WHERE user_id = $user_id");
 
+    // Tokens must not come back to life when the account is re-activated (nightly MSP-4)
+    mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
+
     // Un-assign tickets
     mysqli_query($mysqli, "UPDATE tickets SET ticket_assigned_to = 0 WHERE ticket_assigned_to = $user_id AND ticket_closed_at IS NULL");
     mysqli_query($mysqli, "UPDATE recurring_tickets SET recurring_ticket_assigned_to = 0 WHERE recurring_ticket_assigned_to = $user_id");
@@ -222,6 +233,7 @@ if (isset($_GET['disable_2fa'])) {
     $user_id   = intval($_GET['disable_2fa']);
     $user_name = sanitizeInput(getFieldById('users', $user_id, 'user_name'));
     mysqli_query($mysqli, "UPDATE users SET user_token = NULL WHERE user_id = $user_id");
+    mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
     logAction("User", "Edit", "$session_name disabled 2FA for $user_name", 0, $user_id);
     flash_alert("2FA disabled for <strong>$user_name</strong>.", 'warning');
     redirect();
