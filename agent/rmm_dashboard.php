@@ -179,7 +179,7 @@ $sql_clients = mysqli_query($mysqli,
 );
 
 // Integrations for sync selector
-$sql_integrations = mysqli_query($mysqli, "SELECT id, name FROM rmm_integrations WHERE enabled=1 ORDER BY name");
+$sql_integrations = mysqli_query($mysqli, "SELECT id, name FROM rmm_integrations WHERE enabled=1 AND type <> 'rivetit_agent' ORDER BY name");
 $integrations = [];
 while ($i = mysqli_fetch_assoc($sql_integrations)) { $integrations[] = $i; }
 $default_intg = $config_rmm_default_integration_id ?: ($integrations[0]['id'] ?? 0);

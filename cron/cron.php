@@ -1550,7 +1550,8 @@ if ($config_module_enable_rmm) {
     require_once dirname(__DIR__) . '/includes/rmm_client_factory.php';
     require_once dirname(__DIR__) . '/includes/class_rmm_asset_mapper.php';
 
-    $sql_rmm_integrations = mysqli_query($mysqli, "SELECT id, name FROM rmm_integrations WHERE enabled=1");
+    // The built-in endpoint agent pushes its own data (the type rivetit_agent has no vendor API to sync).
+    $sql_rmm_integrations = mysqli_query($mysqli, "SELECT id, name FROM rmm_integrations WHERE enabled=1 AND type <> 'rivetit_agent'");
     while ($rmm_intg = mysqli_fetch_assoc($sql_rmm_integrations)) {
         $rmm_intg_id = intval($rmm_intg['id']);
         try {
@@ -1604,6 +1605,27 @@ if ($config_module_enable_rmm && !empty($config_rmm_auto_ticket_severities)) {
             logApp("Cron", "info", "RMM auto-ticketing created $auto_ticket_count ticket(s) from new alerts");
         }
     }
+}
+
+/*
+ * ###############################################################################################################
+ *  BUILT-IN ENDPOINT AGENT / RMM MODULE HOUSEKEEPING (optional module, off by default)
+ *  Devices that stopped checking in go offline on their RMM link, lost job acknowledgements are settled (destructive jobs
+ *  become failed/result_lost and are never retried), and old check-in, attempt and job rows are pruned. The module's queued
+ *  check-in ingest is drained by the job worker above (only while it is on). While the module is off this is two primary-key
+ *  SELECTs on the settings rows: the state file is checked first and nothing of the module is loaded.
+ * ###############################################################################################################
+ */
+try {
+    require_once dirname(__DIR__) . '/vendor/autoload.php';
+    require_once dirname(__DIR__) . '/includes/rmm_bootstrap.php';
+    // rivetRmmHousekeeping() answers [] without building the module while it is off (edition flag, master switch and state file).
+    $ea_stats = rivetRmmHousekeeping($mysqli);
+    if (array_sum($ea_stats) > 0) {
+        logApp("Cron", "info", "Endpoint agent housekeeping: " . json_encode($ea_stats));
+    }
+} catch (\Throwable $e) {
+    logApp("Cron", "error", "Endpoint agent housekeeping failed: " . $e->getMessage());
 }
 
 /*

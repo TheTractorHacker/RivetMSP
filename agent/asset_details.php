@@ -275,7 +275,14 @@ if (isset($_GET['asset_id'])) {
         $rmm_alerts_count = 0;
         $rmm_type          = 'tactical';
         $rmm_provider_name = 'RMM';
-        if ($config_module_enable_rmm && lookupUserPermission('module_rmm') >= 1) {
+        // The built-in endpoint agent (optional RMM module, off by default) shows its link here too, even when the vendor RMM integrations
+        // (config_module_enable_rmm) are off; in that case only its own link is loaded.
+        $rmm_agent_module_on = false;
+        if ($config_core_rmm_enabled && lookupUserPermission('module_rmm') >= 1) {
+            require_once dirname(__DIR__) . '/includes/rmm_bootstrap.php';
+            $rmm_agent_module_on = rivetRmmEnabled();
+        }
+        if (($config_module_enable_rmm || $rmm_agent_module_on) && lookupUserPermission('module_rmm') >= 1) {
             // An asset can have simultaneous links to more than one RMM
             // integration (e.g. both Tactical RMM and Level.io tracking the
             // same physical device). With no ORDER BY, MySQL returned
@@ -289,13 +296,13 @@ if (isset($_GET['asset_id'])) {
                 "SELECT arl.*, i.web_url, i.type AS integration_type, i.name AS integration_name
                  FROM asset_rmm_links arl
                  LEFT JOIN rmm_integrations i ON i.id = arl.integration_id
-                 WHERE arl.asset_id = $asset_id $rmm_link_order LIMIT 1"
+                 WHERE arl.asset_id = $asset_id" . ($config_module_enable_rmm ? '' : " AND i.type = 'rivetit_agent'") . " $rmm_link_order LIMIT 1"
             ));
             if ($rmm_link) {
                 $rmm_type = $rmm_link['integration_type'] ?: 'tactical';
                 $rmm_provider_name = $rmm_link['integration_name'] ?: (
                     ['tactical_rmm' => 'Tactical RMM', 'level' => 'Level.io',
-                     'action1' => 'Action1', 'sophos_central' => 'Sophos Central'][$rmm_type] ?? 'RMM'
+                     'action1' => 'Action1', 'sophos_central' => 'Sophos Central', 'rivetit_agent' => 'RivetIT agent'][$rmm_type] ?? 'RMM'
                 );
                 if ($rmm_link['rmm_status'] === 'online')       { $rmm_badge = 'text-bg-success'; $rmm_border = '#28a745'; }
                 elseif ($rmm_link['rmm_status'] === 'offline')  { $rmm_badge = 'text-bg-danger';  $rmm_border = '#dc3545'; }
@@ -369,6 +376,11 @@ if (isset($_GET['asset_id'])) {
                             </div>
                             <?php endif; ?>
                         </div>
+                        <?php if ($rmm_type === 'rivetit_agent' && $rmm_agent_module_on): ?>
+                        <a class="btn btn-outline-primary btn-sm" href="/agent/rmm_agent_device.php?device_id=<?= intval(preg_replace('/^rivetit:/', '', (string) $rmm_link['tactical_agent_id'])) ?>" title="Inventory, checks, jobs and remote access for the endpoint agent">
+                            <i class="fas fa-satellite me-1"></i>Agent device
+                        </a>
+                        <?php endif; ?>
                         <?php if ($rmm_type === 'tactical_rmm'): ?>
                         <button class="btn btn-outline-warning btn-sm" data-rmm-action="reboot" data-link-id="<?= intval($rmm_link['id']) ?>" title="Reboot device">
                             <i class="fas fa-power-off me-1"></i>Reboot

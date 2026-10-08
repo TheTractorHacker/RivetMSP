@@ -60,7 +60,7 @@ $cnt = mysqli_fetch_assoc(mysqli_query($mysqli,
      FROM asset_rmm_links WHERE integration_id=" . ($filter_intg_id ?: 'integration_id')
 ));
 
-$sql_integrations = mysqli_query($mysqli, "SELECT id, name FROM rmm_integrations WHERE enabled=1 ORDER BY name");
+$sql_integrations = mysqli_query($mysqli, "SELECT id, name FROM rmm_integrations WHERE enabled=1 AND type <> 'rivetit_agent' ORDER BY name");
 $sql_clients = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients WHERE client_archived_at IS NULL" . ($client_access_string && !$session_is_admin ? " AND client_id IN ($client_access_string)" : '') . " ORDER BY client_name ASC");
 $clients_list = [];
 while ($c = mysqli_fetch_assoc($sql_clients)) $clients_list[] = $c;

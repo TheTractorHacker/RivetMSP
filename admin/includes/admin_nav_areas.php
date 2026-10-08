@@ -32,7 +32,7 @@ function itflowAdminSettingsPages(): array
         'settings_default.php', 'settings_invoice.php', 'settings_quote.php', 'settings_online_payment.php', 'settings_online_payment_clients.php',
         'settings_project.php', 'settings_ticket.php', 'settings_ai.php', 'settings_custom_fields.php', 'identity_provider.php',
         'settings_telemetry.php', 'settings_module.php', 'settings_calendar_sync.php', 'settings_webhooks.php', 'webhook_form.php', 'webhook_guides.php',
-        'settings_integrations.php', 'settings_comet.php', 'comet_status.php', 'settings_rmm.php', 'settings_unifi.php',
+        'settings_integrations.php', 'settings_comet.php', 'comet_status.php', 'settings_rmm.php', 'settings_unifi.php', 'settings_endpoint_agent.php',
         'settings_accounting.php', 'accounting_client_mapping.php', 'accounting_item_mapping.php', 'accounting_sync_status.php',
         'oauth_quickbooks_callback.php', 'oauth_quickbooks_connect.php', 'settings_kb.php'];
 }
