@@ -2,6 +2,16 @@
 
 This file documents all notable changes made to ITFlow.
 
+## [Unreleased] RivetMSP — Optional RMM module (the built-in endpoint agent), off by default
+
+Database migration 2.6.77 (RivetCore migrations 0014 to 0016 and `settings.config_core_rmm_enabled`). Pins `rivet/rivet-core` 1.0.0-rc.4. Nothing changes until an administrator switches the module on.
+
+- **Optional module, OFF by default:** the server side of the RivetIT endpoint agent (RivetCore RMM): enrollment, device inventory and checks, signed jobs, hosted updates, per-client installers, MeshCentral launch, technician REST API (`/api/v1/endpoint_devices`). Same URL space and wire protocol as RivetIT. Switch it on under Administration > Settings > Endpoint agent (the card sets `settings.config_core_rmm_enabled` and the module's master switch together). Needs `$config_settings_enc_key` in `config.php` (the signing key is sealed with it and is never stored in plaintext). RivetMSP has no metrics store: check-ins keep the latest values on the device and its RMM link.
+- **Costs nothing while off:** the API gate (`api/v1/rmm_gate.php`) answers agents `503 module_disabled` with `Retry-After: 3600` from a state file, before `config.php` is loaded (no connection, no query); cron and pages skip the module. Switching off deletes nothing.
+- **Tickets and alerts:** the module opens and resolves ordinary `rmm_alerts` rows. MSP's own RMM auto-ticketing creates the tickets; a cleared alert closes an untouched ticket through the existing conservative auto-close (`RmmAssetMapper::autoCloseAlertTicket` is now public). The agent's integration row (`type = rivetit_agent`) is excluded from the vendor RMM sync, lists and selectors.
+- **Permissions:** no new keys. The nine `rmm.*` abilities use `module_rmm`, `module_rmm_scripts`, `module_rmm_remote_connect` and `role_is_admin`; client-portal contacts never hold any. The `module_rmm*` modules are not created by setup (add them under Administration > Access Modules to grant a technician role access); until then only administrators can use the module, as with the existing RMM pages. See `docs/RMM_MODULE.md`.
+- **Tests:** Core's adapter conformance kit, the golden HTTP transcripts of the original agent code replayed against the MSP bridges, module switch (zero-query gate, fresh install off, real 2.6.76 to 2.6.77 updater), an end-to-end smoke (enroll, link, alert, ticket, signed job, update download, offline flip) and an optional run with a real Linux test agent.
+
 ## [Unreleased] RivetMSP — Redis authentication and TLS, API rate limit, Update checks
 
 Database migrations 2.6.74, 2.6.75 and 2.6.76 (RivetCore migration 0013: retention indexes on audit_events, webhook_deliveries and integration_jobs).
