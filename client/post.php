@@ -575,6 +575,14 @@ if (isset($_POST['edit_contact'])) {
         redirect('contact_edit.php?id=' . $contact_id);
     }
 
+    // A non-primary technical contact must not rewrite the login of a contact that holds technical or billing
+    // rights (a password reset on the new email would hand over that role). Only the primary contact may, or
+    // the contact may edit its own record (nightly MSP-3).
+    if ($session_contact_primary != 1 && ($row['contact_technical'] == 1 || $row['contact_billing'] == 1) && $contact_id != intval($session_contact_id)) {
+        flash_alert("Only the primary contact can edit a contact with technical or billing rights", 'danger');
+        redirect('contacts.php');
+    }
+
     // Only the primary contact may change technical/billing roles
     if ($session_contact_primary != 1) {
         $contact_technical = intval($row['contact_technical']);
@@ -590,7 +598,7 @@ if (isset($_POST['edit_contact'])) {
 
     // Update Existing User
     if ($contact_user_id > 0) {
-        mysqli_query($mysqli, "UPDATE users SET user_name = '$contact_name', user_email = '$contact_email', user_auth_method = '$contact_auth_method' WHERE user_id = $contact_user_id");
+        mysqli_query($mysqli, "UPDATE users SET user_name = '$contact_name', user_email = '$contact_email', user_auth_method = '$contact_auth_method' WHERE user_id = $contact_user_id AND user_type = 2");
 
     // Else, create New User
     } elseif ($contact_user_id == 0 && $contact_name && $contact_email && $contact_auth_method) {

@@ -22,4 +22,22 @@ $ok(strpos($b, 'WHERE invoice_id = $invoice_id AND invoice_client_id = $client_i
 $ok(strpos($b, 'invoiceChangeBlockReason($mysqli, $invoice_id)') !== false, 'MSP-1: Paid/locked invoices are refused');
 $ok(strpos($b, "Ticket not found") !== false, 'MSP-1: missing ticket is refused');
 
+// MSP-3: client portal contact edit
+$b = $block('client/post.php', 'edit_contact');
+$ok(preg_match('/session_contact_primary != 1 && \(\$row\[\'contact_technical\'\] == 1 \|\| \$row\[\'contact_billing\'\] == 1\) && \$contact_id != intval\(\$session_contact_id\)/', $b) === 1, 'MSP-3: non-primary editor cannot touch a technical/billing contact');
+$ok(strpos($b, 'WHERE user_id = $contact_user_id AND user_type = 2') !== false, 'MSP-3: users UPDATE is limited to portal users (user_type = 2)');
+
+// MSP-4: API tokens are revoked on disable / 2FA reset / role change
+$u = $src('admin/post/users.php');
+foreach (['disable_user' => 'GET', 'disable_2fa' => 'GET'] as $k => $_) {
+    $p = strpos($u, "isset(\$_GET['$k'])"); $n = strpos($u, "\nif (isset(", $p + 10);
+    $ok($p !== false && strpos(substr($u, $p, $n - $p), 'DELETE FROM api_tokens WHERE token_user_id') !== false, "MSP-4: $k revokes API tokens");
+}
+$e = $block('admin/post/users.php', 'edit_user');
+$ok(strpos($e, '$previous_role_id !== intval($role)') !== false && strpos($e, 'DELETE FROM api_tokens', strpos($e, '$previous_role_id !== intval')) !== false, 'MSP-4: role change revokes API tokens');
+$ok(preg_match("/\\\$two_fa == 'disable'\) \{.*?DELETE FROM api_tokens/s", $e) === 1, 'MSP-4: edit_user 2FA reset revokes API tokens');
+$pf = $src('agent/user/post/profile.php');
+$p = strpos($pf, "isset(\$_GET['disable_mfa'])");
+$ok($p !== false && strpos(substr($pf, $p, 900), 'DELETE FROM api_tokens') !== false, 'MSP-4: self disable_mfa revokes API tokens');
+
 exit($fails ? 1 : 0);
