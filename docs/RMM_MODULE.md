@@ -1,6 +1,6 @@
 # Optional RMM module (the built-in endpoint agent) in RivetMSP
 
-Status: since DB 2.6.77 RivetMSP can run the **RMM module of RivetCore** (`rivet/rivet-core` >= 1.0.0-rc.4, namespace `RivetCore\Rmm`): the server side of the
+Status: since DB 2.6.77 RivetMSP can run the **RMM module of RivetCore** (`rivet/rivet-core` >= 1.0.0-rc.5, namespace `RivetCore\Rmm`): the server side of the
 RivetIT endpoint agent (enrollment, signed jobs, hosted updates, per-client installers, MeshCentral launch). It is an **optional module and it is OFF by
 default**. RivetMSP installs never ran the endpoint agent, so there is no data and no older code; switching it on is the first time anything exists. This page
 covers what is RivetMSP's own: how it is wired, the switch, permissions, operations and tests. The module itself, the wire protocol and the capacity guide are in
@@ -21,7 +21,7 @@ The URL space and behaviour are the same as RivetIT's (`docs/ENDPOINT_AGENT.md` 
 | Piece | File |
 | --- | --- |
 | Composition root: builds `RivetCore\Rmm\RmmModule` from the adapters below | `includes/rmm_bootstrap.php` (`rivetRmmModule()`, `rivetRmmEnabled()`, `rivetRmmSyncState()`, `rivetRmmHousekeeping()`, `rivetRmmRequest()`) |
-| Adapters for the Core contracts | `src/Core/Adapter/Endpoint/`: `EndpointTenancy` (clients, locations, client scope), `EndpointAssets` (`assets`, `asset_interfaces`), `EndpointBridge` (`rmm_integrations`, `asset_rmm_links`, `rmm_alerts`, `rmm_scripts`, `rmm_remote_sessions`), `EndpointSecretBox` (`encryptSetting()`), `EndpointAudit` (`logAction()`), `EndpointModuleState` (the kill switch), `EndpointAccessPolicy` (the nine `rmm.*` abilities). Metrics use Core's `NullRmmMetricSink` |
+| Adapters for the Core contracts | `src/Core/Adapter/Endpoint/`: `EndpointTenancy` (clients, locations, client scope), `EndpointAssets` (`assets`, `asset_interfaces`; also `RmmAssetNamesInterface`, so the device list carries `asset_name` from one batched query), `EndpointBridge` (`rmm_integrations`, `asset_rmm_links`, `rmm_alerts`, `rmm_scripts`, `rmm_remote_sessions`), `EndpointSecretBox` (`encryptSetting()`), `EndpointAudit` (`logAction()`), `EndpointModuleState` (the kill switch), `EndpointAccessPolicy` (the nine `rmm.*` abilities). Metrics use Core's `NullRmmMetricSink` |
 | Device REST bridges | `api/v1/agent_enroll.php`, `agent_checkin.php`, `agent_jobs.php`, `agent_update.php`, `agent_installer.php` via `api/v1/includes/agent_device_api.php`; routed in `api/v1/index.php` above the Bearer parsing |
 | Technician REST API (user API token; the legacy shared key is refused) | `api/v1/endpoint_devices.php`, `case 'endpoint_devices'` in `api/v1/index.php` |
 | Pre-bootstrap gate | `api/v1/rmm_gate.php`, the first include of `api/v1/index.php` |
@@ -57,7 +57,18 @@ What "off" costs:
 
 **Prerequisite.** `$config_settings_enc_key` must be set in `config.php` (a long random string, kept with config.php's backups). The signing key is sealed with
 it; `encryptSetting()` would otherwise store the key in plaintext, so `EndpointSecretBox` refuses and the page keeps the switch disabled with the reason. A
-RivetMSP `setup` does not generate this key today.
+RivetMSP `setup` does not generate this key today, **on purpose** (decision of the maintainer's default, 2026-10): the key protects every other encrypted setting too, a
+silently generated one would be lost with a restored `config.php`, and a silent change of it makes sealed values unreadable. The fix on an install without one is a
+single line in `config.php`, then reload the page:
+
+```php
+$config_settings_enc_key = '<output of: openssl rand -base64 32>';   // back it up with config.php; it cannot be recovered
+```
+
+Two guards: the page disables "Switch the RMM module on" and says why, and the POST handler refuses a forged request the same way. The handler's check stays even
+though RivetCore 1.0.0-rc.5 makes `RmmAdmin::enable()` return a failed result (500 `secret_box_unavailable`, naming the key, nothing written) instead of throwing:
+`enable()` only seals when it has to create the signing key, so with an already sealed key and no `$config_settings_enc_key` it would succeed and leave a module that cannot
+read its own key. Core's catch covers the other admin paths (settings save that switches on, key rotation, MeshCentral login key).
 
 ## 3. Permissions
 
@@ -80,6 +91,8 @@ outside the caller's clients is a 404, indistinguishable from a missing one.
 `module_sales`, `module_financial`, `module_reporting` and `module_kb`; the RMM pages have always checked `module_rmm`, `module_rmm_scripts`,
 `module_rmm_remote_connect` etc. against rows an administrator adds under Administration > Access Modules. Until that is done, only administrators can use the
 module (this matches the existing RMM pages); to give a technician role access, add those module names and set the role's levels (Roles).
+**No `module_rmm*` rows are seeded**, on purpose (maintainer's default, 2026-10): creating them in a migration would change what every existing technician role can open, and
+the existing RMM pages have always worked this way. Revisit only together with a decision about the existing RMM pages.
 
 ## 4. Alerts and tickets
 
@@ -87,7 +100,8 @@ The module opens and resolves ordinary `rmm_alerts` rows (status `new`, no ticke
 
 * **Create**: the existing RMM auto-ticketing (Administration > Integrations > RMM alert auto-ticketing severities, `cron/cron.php`, `createTicketFromRmmAlert()`)
   picks the rows up like any other alert, and so do the Alerts page and the manual "create ticket" action. This part of the cron is gated by the vendor RMM switch
-  (`config_module_enable_rmm`), as before.
+  (`config_module_enable_rmm`), as before. This is deliberate (maintainer's default, 2026-10): with the vendor RMM switch off the module still records devices and
+  alerts, but no ticket is created automatically (the Alerts page and the manual "create ticket" action work regardless). A separate switch for the built-in agent can be added later.
 * **Close**: when a check recovers, the module resolves the alert and calls `RmmAssetMapper::autoCloseAlertTicket()` (made public for this): the same conservative close the
   vendor sync uses (honours `config_rmm_auto_close_on_clear`, closes only an untouched open ticket, otherwise leaves it open with a note).
 * **Vendor sync**: the built-in agent's integration row (`type = 'rivetit_agent'`) is excluded from the vendor sync loop, the integration lists and selectors, and

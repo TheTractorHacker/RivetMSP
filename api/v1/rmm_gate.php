@@ -3,7 +3,7 @@
 /*
  * RMM pre-bootstrap gate for the REST entry point (api/v1/index.php requires this FIRST, before config.php, before any database
  * connection and before Composer's autoloader). Copied from rivet-core docs/rmm/templates/rmm_gate.php; keep it identical to the template
- * apart from the default state directory below. The template used here is the one that follows RivetCore 1.0.0-rc.4: it no longer answers
+ * apart from the default state directory below. The template used here is the one of RivetCore 1.0.0-rc.4 and rc.5 (unchanged between them): it no longer answers
  * for the technician endpoint (endpoint_devices), so an anonymous caller cannot tell from a 404 whether the module is on; that endpoint
  * authenticates first and TechnicianApi answers 404 "disabled" itself.
  *

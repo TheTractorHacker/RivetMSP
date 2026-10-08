@@ -3,7 +3,7 @@
 /*
  * RMM module bootstrap: builds RivetCore\Rmm\RmmModule from RivetMSP's adapters (src/Core/Adapter/Endpoint).
  *
- * The endpoint agent's PHP lives in the rivet/rivet-core package (RivetCore 1.0.0-rc.4 and later); this file is the only place RivetMSP wires it.
+ * The endpoint agent's PHP lives in the rivet/rivet-core package (RivetCore 1.0.0-rc.5 and later); this file is the only place RivetMSP wires it.
  * The module is OPTIONAL and OFF by default: settings.config_core_rmm_enabled (the edition kill switch) AND endpoint_agent_settings.enabled (the
  * module's master switch) must both be on. Both are switched together from Administration > Endpoint agent.
  * Everything here is lazy: nothing touches the database until a function that needs the module is called, and a request that only asks

@@ -6635,7 +6635,7 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
     }
 
     if ($rivetit_db_version() == '2.6.76') {
-        // The optional RMM module (the endpoint agent / RMM server side, RivetCore 1.0.0-rc.4): it is OFF on every install until an administrator
+        // The optional RMM module (the endpoint agent / RMM server side, RivetCore 1.0.0-rc.5): it is OFF on every install until an administrator
         // switches it on (Administration > Endpoint agent). This adds the edition kill switch settings.config_core_rmm_enabled (default 0, the
         // config_core_<module>_enabled convention of the other Core modules) and applies RivetCore migrations 0014 (the ten endpoint_agent_* tables,
         // CREATE IF NOT EXISTS), 0015 (convergence for installs that stopped at RivetIT 2.6.145; a no-op here, nothing agent-related existed before)

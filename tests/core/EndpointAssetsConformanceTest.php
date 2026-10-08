@@ -39,4 +39,18 @@ final class EndpointAssetsConformanceTest extends RmmAssetsConformanceTestCase
             'os' => (string) $r['asset_os'], 'type' => (string) $r['asset_type'], 'status' => (string) $r['asset_status'],
         ];
     }
+
+    /** The optional RmmAssetNamesInterface (RivetCore 1.0.0-rc.5): one batched lookup, unknown ids absent, duplicates and junk ids tolerated. */
+    public function testAssetNamesBatchLookup(): void
+    {
+        $adapter = $this->assets();
+        $this->assertInstanceOf(\RivetCore\Rmm\Contracts\RmmAssetNamesInterface::class, $adapter);
+        $base = ['make' => '', 'model' => 'M', 'serial' => null, 'os' => '', 'client_id' => 0, 'archived' => false, 'macs' => []];
+        $a = $this->createAsset(['name' => 'NAMES-A'] + $base);
+        $b = $this->createAsset(['name' => 'NAMES-B'] + $base);
+
+        $this->assertSame([], $adapter->assetNames([]));
+        $this->assertSame([$a => 'NAMES-A', $b => 'NAMES-B'], $adapter->assetNames([$a, $b, $a, 0, -3, 999999999]));
+        $this->assertSame([$b => 'NAMES-B'], $adapter->assetNames([$b, 999999999]));
+    }
 }

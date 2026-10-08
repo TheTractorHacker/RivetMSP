@@ -4,7 +4,7 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased] RivetMSP — Optional RMM module (the built-in endpoint agent), off by default
 
-Database migration 2.6.77 (RivetCore migrations 0014 to 0016 and `settings.config_core_rmm_enabled`). Pins `rivet/rivet-core` 1.0.0-rc.4. Nothing changes until an administrator switches the module on.
+Database migration 2.6.77 (RivetCore migrations 0014 to 0016 and `settings.config_core_rmm_enabled`). Pins `rivet/rivet-core` 1.0.0-rc.5. Nothing changes until an administrator switches the module on.
 
 - **Optional module, OFF by default:** the server side of the RivetIT endpoint agent (RivetCore RMM): enrollment, device inventory and checks, signed jobs, hosted updates, per-client installers, MeshCentral launch, technician REST API (`/api/v1/endpoint_devices`). Same URL space and wire protocol as RivetIT. Switch it on under Administration > Settings > Endpoint agent (the card sets `settings.config_core_rmm_enabled` and the module's master switch together). Needs `$config_settings_enc_key` in `config.php` (the signing key is sealed with it and is never stored in plaintext). RivetMSP has no metrics store: check-ins keep the latest values on the device and its RMM link.
 - **Costs nothing while off:** the API gate (`api/v1/rmm_gate.php`) answers agents `503 module_disabled` with `Retry-After: 3600` from a state file, before `config.php` is loaded (no connection, no query); cron and pages skip the module. Switching off deletes nothing.

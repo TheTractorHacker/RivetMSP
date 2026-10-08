@@ -40,6 +40,8 @@ if (isset($_POST['rmm_module_switch'])) {
     validateCSRFToken($_POST['csrf_token']);
     $ea_on = ($_POST['rmm_module_switch'] ?? '') === 'on';
     if ($ea_on) {
+        // Kept although RmmAdmin::enable() now answers a failed result when sealing a NEW signing key fails (RivetCore 1.0.0-rc.5): when a sealed key
+        // already exists enable() never calls encrypt(), so without $config_settings_enc_key it would switch on a module that cannot read its own key.
         if (!\RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured()) {
             flash_alert('The RMM module cannot be switched on yet: the settings encryption key is not set. Add $config_settings_enc_key to config.php (a long random string; keep a copy, like config.php itself), then try again. The module seals its signing key with it and will not store the key unencrypted.', 'error');
             redirect();

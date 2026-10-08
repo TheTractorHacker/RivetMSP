@@ -178,9 +178,28 @@ $ok($c === 200 && strpos($b, 'Switch the RMM module off') !== false, 'ON: the pa
 $ok($c === 200 && strpos($b, 'MODULE-PC') !== false, 'ON: the device page renders');
 $assetId = (int) $one("SELECT asset_id FROM endpoint_agent_devices WHERE device_id = $devId");
 if ($assetId === 0) { $assetId = (int) $one("SELECT asset_id FROM asset_rmm_links LIMIT 1"); }
+if ($assetId === 0) {   // the module test's device may be unlinked: give it an asset to show
+    $q("INSERT INTO assets SET asset_type='Laptop', asset_name='ASSET-NAME-CHECK', asset_client_id=1, asset_status='Active', asset_created_at=NOW()"); $assetId = (int) $db->insert_id;
+    $q("UPDATE endpoint_agent_devices SET asset_id = $assetId WHERE device_id = $devId");
+}
+if ($assetId > 0) {
+    // asset_name comes from RmmReadModel::listDevices() through EndpointAssets::assetNames() (RivetCore 1.0.0-rc.5), not from a query of the page's own
+    $assetNm = (string) $one("SELECT asset_name FROM assets WHERE asset_id = $assetId");
+    [$c, $b] = web($wb, 'GET', '/admin/settings_endpoint_agent.php', $sid);
+    $ok($c === 200 && $assetNm !== '' && strpos($b, '>' . htmlspecialchars($assetNm) . '</a>') !== false, 'the administration page lists the device with its asset name (batched lookup through the assets adapter)');
+} else { $ok(false, 'no asset linked to the device to check the asset name on the administration page'); }
 web($wb, 'POST', '/admin/post.php', $sid, ['csrf_token' => 'csrftok1', 'rmm_module_switch' => 'off'], $post);
 $ok((int) $one('SELECT enabled FROM endpoint_agent_settings') === 0 && (int) $one('SELECT config_core_rmm_enabled FROM settings WHERE company_id=1') === 0 && $state()['enabled'] === false, 'the page switch turns both off again');
 $ok((int) $one('SELECT COUNT(*) FROM endpoint_agent_devices') === 1, 'and nothing was deleted');
+
+// RivetCore 1.0.0-rc.5: when sealing a NEW signing key fails (no $config_settings_enc_key) RmmAdmin::enable() answers a failed result instead of throwing,
+// and nothing is switched on or written. (The page's own guard still covers the case where a sealed key already exists.)
+$savedKey = $GLOBALS['config_settings_enc_key'] ?? ''; $savedEnc = $one('SELECT signing_private_key_enc FROM endpoint_agent_settings'); $savedPub = $one('SELECT signing_public_key FROM endpoint_agent_settings');
+$q("UPDATE endpoint_agent_settings SET enabled = 0, signing_private_key_enc = NULL, signing_public_key = ''"); $GLOBALS['config_settings_enc_key'] = '';
+$rmmFresh = rivetRmmModule();
+$res = $rmmFresh->admin()->enable($admin);
+$ok(!$res->ok && $res->http === 500 && $res->code === 'secret_box_unavailable' && (int) $one('SELECT enabled FROM endpoint_agent_settings') === 0 && (string) $one("SELECT COALESCE(signing_private_key_enc, '') FROM endpoint_agent_settings") === '', 'RmmAdmin::enable() without the encryption key: failed result (500 secret_box_unavailable), module stays off, no key written');
+$GLOBALS['config_settings_enc_key'] = $savedKey; $q("UPDATE endpoint_agent_settings SET signing_private_key_enc = " . ($savedEnc === null ? 'NULL' : "'" . $esc((string) $savedEnc) . "'") . ", signing_public_key = '" . $esc((string) $savedPub) . "'");
 
 // the switch needs the settings encryption key
 $webNoKey = ea_start_php($root . '/tests/rmm_golden/router.php', ['RMM_TEST_STATE_DIR' => $sd, 'RMM_GATE_STATE_DIR' => $sd, 'RMM_TEST_NO_ENC_KEY' => '1'], ["session.save_path=$sdir"]);
