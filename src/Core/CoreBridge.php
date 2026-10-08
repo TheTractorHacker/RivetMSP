@@ -107,7 +107,7 @@ final class CoreBridge
     /** Log types whose entries are security- or configuration-relevant and so also go to the structured audit trail. */
     private const AUDITED_TYPES = [
         'Settings', 'User', 'User Account', 'Credential', 'API Key', 'Payment Provider', 'Mailbox',
-        'SLA Policy', 'SLA Calendar', 'Role', 'Identity Provider', 'Backup', 'Integration',
+        'SLA Policy', 'SLA Calendar', 'Role', 'Identity Provider', 'Backup', 'Integration', 'Endpoint Agent',
     ];
 
     /**

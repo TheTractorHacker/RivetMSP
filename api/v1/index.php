@@ -1,6 +1,9 @@
 <?php
 define('FROM_API', true);
 
+// Module switch: while the RMM module is off (the default), device and technician endpoints are answered here, before config.php and any database work.
+require __DIR__ . '/rmm_gate.php';
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
@@ -122,6 +125,15 @@ if ($resource === 'openapi' || $resource === 'docs') {
     }
 
     require __DIR__ . '/docs.php';
+    exit;
+}
+
+// Device-credential endpoints: the built-in endpoint agent (enroll / check-in / jobs / update download, plus the token-gated installer download). Routed here, above the Bearer parsing and
+// above the pre-auth JSON body read below, because a device credential is not an api_tokens row and that body read has no size
+// ceiling. Each handler authenticates its caller, bounds its own body read and rate-limits itself (agent_device_api.php). The RMM module is
+// off by default: with the gate in front (rmm_gate.php) and the module switch off they answer 503 module_disabled.
+if ($resource === 'agent_enroll' || $resource === 'agent_checkin' || $resource === 'agent_jobs' || $resource === 'agent_installer' || $resource === 'agent_update') {
+    require __DIR__ . '/' . $resource . '.php';
     exit;
 }
 
@@ -294,6 +306,7 @@ switch ($resource) {
         break;
     case 'statuses':      require __DIR__ . '/tickets.php';      break;
     case 'alerts':        require __DIR__ . '/alerts.php';       break;
+    case 'endpoint_devices': require __DIR__ . '/endpoint_devices.php'; break;
     case 'ticket-categories':
     case 'ticket_categories':
         require __DIR__ . '/ticket_categories.php';

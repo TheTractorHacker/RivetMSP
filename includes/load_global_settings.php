@@ -136,6 +136,8 @@ $config_client_portal_enable = intval($row['config_client_portal_enable']);
 
 // RMM Integration (Syncro-Beta)
 $config_module_enable_rmm = intval($row['config_module_enable_rmm'] ?? 0);
+// Edition kill switch of the optional endpoint agent / RMM module (RivetCore RMM); default 0. See includes/rmm_bootstrap.php rivetRmmEnabled().
+$config_core_rmm_enabled = intval($row['config_core_rmm_enabled'] ?? 0);
 $config_rmm_default_integration_id = intval($row['config_rmm_default_integration_id'] ?? 0);
 $config_rmm_auto_ticket_severities = sanitizeInput($row['config_rmm_auto_ticket_severities'] ?? '');
 $config_rmm_prefer_tactical = intval($row['config_rmm_prefer_tactical'] ?? 1);
