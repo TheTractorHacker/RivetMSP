@@ -65,4 +65,20 @@ $ok(strpos($src('guest/guest_ajax.php'), 'intval($balance_to_pay) == 0') === fal
 $ok(moneyToCents(0.50) > 0 && moneyToCents(0.01) > 0 && moneyToCents(0.004) <= 0 && moneyToCents(0.0) <= 0, 'MSP-6: cents check treats 0.50 and 0.01 as payable, 0 as nothing owed');
 $ok(invoiceStatusAfterPayment(10.00, 9.50) === 'Partial' && invoiceStatusAfterPayment(10.00, 10.00) === 'Paid', 'MSP-5: status after payment in cents');
 
+// IT-7: share links (TOTP seed, never-expires) and the vendor page include
+$aj = $src('agent/ajax.php');
+$ok(preg_match('/SELECT credential_name, credential_username, credential_password, credential_otp_secret FROM credentials/', $aj) === 1, 'IT-7a: share query selects the OTP seed');
+$gv = $src('guest/guest_view_item.php');
+$ok(strpos($gv, 'get_totp_token') === false && strpos($gv, 'totp_secret') === false, 'IT-7a: the seed is never sent to the server (computed in the browser)');
+$ok(strpos($gv, "'HMAC'") !== false && strpos($gv, 'SHA-1') !== false, 'IT-7a: browser-side HMAC-SHA1 TOTP present');
+foreach (['guest/guest_view_item.php', 'guest/guest_download_file.php', 'agent/files.php', 'agent/credentials.php'] as $f) {
+    $t = $src($f);
+    $ok(strpos($t, 'AND item_expire_at > NOW()') === false && strpos($t, 'item_expire_at IS NULL OR item_expire_at > NOW()') !== false, "IT-7b: $f accepts never-expiring shares");
+}
+$vd = $src('agent/vendor_details.php');
+$ok(strpos($vd, 'vendor_contact_edit_modal.php') === false, 'IT-7c: vendor page no longer requires a missing file');
+preg_match_all('/(?:require|include)(?:_once)?\s+["\']([^"\']+\.php)["\']/', $vd, $m);
+$missing = array_filter($m[1], function ($f) { return !file_exists(__DIR__ . '/../agent/' . $f); });
+$ok(!$missing, 'IT-7c: every relative include in vendor_details.php exists' . ($missing ? ' (missing: ' . implode(',', $missing) . ')' : ''));
+
 exit($fails ? 1 : 0);
