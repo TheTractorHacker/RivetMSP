@@ -22,5 +22,12 @@ $q("UPDATE users SET user_email='admin@scratch.test', user_name='Scratch Admin',
 $q("INSERT IGNORE INTO user_settings (user_id) VALUES (1)");   // the preferences page (theme switch) reads this row
 // the asset page needs the Assets module for non-admin roles; the smoke signs in as the administrator, so nothing else is needed
 $q("UPDATE settings SET config_module_enable_rmm=1 WHERE company_id=1");
+// RMM_SMOKE_SERVICE_URL (the throwaway server's own address, plain http is allowed on loopback by EA_ALLOW_INSECURE_HTTP): installers are made from the service URL.
+// No agent binary is published here on purpose: the smoke first checks the "no Windows agent yet" empty state, then uploads one through the drop zone.
+if (($svc = (string) getenv('RMM_SMOKE_SERVICE_URL')) !== '') {
+    require_once dirname(__DIR__, 2) . '/includes/rmm_bootstrap.php';
+    $svcRes = rivetRmmModule($db)->admin()->saveSettings(new \RivetCore\Rmm\Authz\RmmPrincipal(1, 'admin'), ['service_url' => $svc]);
+    if (!$svcRes->ok) { fwrite(STDERR, "service URL not saved: {$svcRes->message}\n"); exit(1); }
+}
 file_put_contents($out, json_encode(['dev' => $S['dev'], 'asset' => $S['asset'], 'job_collect' => $S['job_collect'], 'job_failed' => $S['job_failed'], 'job_queued' => $S['job_queued']], JSON_PRETTY_PRINT));
 echo "seeded " . count($S['dev']) . " devices; ids in $out\n";

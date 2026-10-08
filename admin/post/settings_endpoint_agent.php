@@ -91,24 +91,84 @@ if (isset($_POST['save_agent_settings'])) {
 
 // ---------------------------------------------------------------- agent binaries and per-client installers
 
+/**
+ * The uploaded agent files as a list of [name, tmp_name, error], whether the form sent one file (agent_binary) or several (agent_binary[]).
+ *
+ * @return list<array{name:string,tmp_name:string,error:int}>
+ */
+function ea_uploaded_binaries(): array
+{
+    $f = $_FILES['agent_binary'] ?? null;
+    if (!is_array($f) || !isset($f['error'])) {
+        return [];
+    }
+    $out = [];
+    foreach (is_array($f['error']) ? array_keys($f['error']) : [null] as $i) {
+        $pick = static fn (string $k) => $i === null ? ($f[$k] ?? null) : ($f[$k][$i] ?? null);
+        $err = (int) ($pick('error') ?? UPLOAD_ERR_NO_FILE);
+        if ($err === UPLOAD_ERR_NO_FILE && $i !== null) {
+            continue;   // an empty slot of a multi-file input
+        }
+        $out[] = ['name' => (string) ($pick('name') ?? ''), 'tmp_name' => (string) ($pick('tmp_name') ?? ''), 'error' => $err];
+    }
+
+    return $out;
+}
+
+/** The version in an agent file name (rivetit-agent-1.4.2-windows-amd64.exe, v1.4.2, 1.4.2-rc.1), or ''. */
+function ea_detect_version(string $fileName): string
+{
+    return preg_match('/(?:^|[^0-9])v?(\d+\.\d+\.\d+(?:-(?:rc|alpha|beta|pre|dev)[.0-9]*)?)/i', preg_replace('/\.exe$/i', '', $fileName), $m) === 1 ? rtrim($m[1], '.') : '';
+}
+
+/** The architecture in an agent file name (amd64 / x64 / x86_64, arm64 / aarch64), or ''. */
+function ea_detect_arch(string $fileName): string
+{
+    $n = strtolower($fileName);
+    if (preg_match('/arm64|aarch64/', $n)) {
+        return 'arm64';
+    }
+
+    return preg_match('/amd64|x86[-_]?64|x64/', $n) ? 'amd64' : '';
+}
+
 if (isset($_POST['upload_agent_binary'])) {
     validateCSRFToken($_POST['csrf_token']);
-    $f = $_FILES['agent_binary'] ?? null;
+    $files = ea_uploaded_binaries();
     $limit = $rmm->binaryStore()->effectiveUploadLimit();
-    if (!$f || ($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file((string) ($f['tmp_name'] ?? ''))) {
-        $code = (int) ($f['error'] ?? UPLOAD_ERR_NO_FILE);
-        $why = in_array($code, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
-            ? 'The file is larger than the limit of ' . \RivetCore\Rmm\Binaries\BinaryStore::human($limit) . ' (PHP upload_max_filesize ' . ini_get('upload_max_filesize') . ', post_max_size ' . ini_get('post_max_size') . '). Raise them in php.ini or upload with scripts/endpoint_agent_publish.php.'
-            : ($code === UPLOAD_ERR_NO_FILE ? 'Choose the agent .exe to upload.' : 'The upload failed (PHP error ' . $code . ').');
-        flash_alert(nullable_htmlentities($why), 'error');
+    if ($files === []) {
+        flash_alert('Choose the agent .exe to upload.', 'error');
         redirect();
     }
     $ring = (string) ($_POST['release_ring'] ?? '');
-    ea_flash_result($ea_admin->uploadBinary($ea_who, (string) $f['tmp_name'], trim((string) ($_POST['version'] ?? '')), (string) ($_POST['arch'] ?? ''), [
-        'activate' => isset($_POST['activate']),
-        'release_ring' => in_array($ring, ['pilot', 'stable'], true) ? $ring : null,
-        'rollout_pct' => ea_post_int('rollout_pct', 0, 100, 10),
-    ]));
+    $opts = ['activate' => isset($_POST['activate']), 'release_ring' => in_array($ring, ['pilot', 'stable'], true) ? $ring : null, 'rollout_pct' => ea_post_int('rollout_pct', 0, 100, 10)];
+    // version[] / arch[] are positional with the files (the form's rows); a single version / arch field (an older form, a script) applies to its one file.
+    $versions = isset($_POST['version']) ? array_values((array) $_POST['version']) : [];
+    $arches = isset($_POST['arch']) ? array_values((array) $_POST['arch']) : [];
+    $ok = 0;
+    $messages = [];
+    foreach (array_values($files) as $n => $f) {
+        $label = count($files) > 1 ? ($f['name'] !== '' ? $f['name'] : 'File ' . ($n + 1)) . ': ' : '';
+        if ($f['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($f['tmp_name'])) {
+            $messages[] = $label . (in_array($f['error'], [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+                ? 'The file is larger than the limit of ' . \RivetCore\Rmm\Binaries\BinaryStore::human($limit) . ' (PHP upload_max_filesize ' . ini_get('upload_max_filesize') . ', post_max_size ' . ini_get('post_max_size') . '). Raise them in php.ini or upload with scripts/endpoint_agent_publish.php.'
+                : 'The upload failed (PHP error ' . $f['error'] . ').');
+            continue;
+        }
+        $version = trim((string) ($versions[$n] ?? ''));
+        $version = $version !== '' ? $version : ea_detect_version($f['name']);
+        $arch = (string) ($arches[$n] ?? '');
+        $arch = in_array($arch, ['amd64', 'arm64'], true) ? $arch : ea_detect_arch($f['name']);
+        if ($version === '' || $arch === '') {
+            $messages[] = $label . 'Could not tell the ' . ($version === '' ? 'version' : 'architecture') . ' from the file name. Enter it and upload again.';
+            continue;
+        }
+        $r = $ea_admin->uploadBinary($ea_who, $f['tmp_name'], $version, $arch, $opts);
+        $messages[] = $label . $r->message;
+        $ok += $r->ok ? 1 : 0;
+    }
+    flash_alert(nullable_htmlentities(implode(' ', $messages)), $ok === count($files) ? 'success' : ($ok > 0 ? 'warning' : 'error'));
+    redirect();
 }
 
 if (isset($_POST['binary_action'])) {

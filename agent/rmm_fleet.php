@@ -44,6 +44,12 @@ if ($rmm_fleet === null) {
     $rmm_denied('No access', 'Your role cannot view agent devices.');
     return;
 }
-echo rivetRmmUiFleetPage($rmm_fleet, (string) ($_SESSION['csrf_token'] ?? ''));
+// "Add device": null (no button, no dialog) for a user who may neither administer the module nor manage enrollment tokens.
+$rmm_installer = rivetRmmUiInstaller($mysqli, (int) $session_user_id, null, (int) ($_GET['client_id'] ?? 0) ?: null);
+if ($rmm_installer !== null) {
+    $rmm_installer['autoopen'] = isset($_GET['add']);   // the Endpoints menu's "Add device" opens the dialog straight away
+}
+$rmm_installer_scripts = $rmm_installer !== null;   // includes/footer.php links js/rmm_installer.js only when this is set
+echo rivetRmmUiFleetPage($rmm_fleet, (string) ($_SESSION['csrf_token'] ?? ''), $rmm_installer);
 
 require_once "../includes/footer.php";

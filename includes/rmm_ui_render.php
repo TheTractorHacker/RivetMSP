@@ -576,7 +576,8 @@ function rivetRmmUiDeviceLink(array $d): string
     return $aid > 0 ? '<a class="fw-bold" href="/agent/asset_details.php?asset_id=' . $aid . '">' . $label . '</a>' : '<span class="fw-bold">' . $label . '</span>';
 }
 
-function rivetRmmUiFleetPage(array $f, string $csrf): string
+/** @param array<string,mixed>|null $installer the "Add device" view-model (rivetRmmUiInstaller()), null when the user may not add devices */
+function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null): string
 {
     $c = $f['counts'];
     $names = $f['client_names'];
@@ -701,15 +702,17 @@ function rivetRmmUiFleetPage(array $f, string $csrf): string
     $capacity = $f['capacity'] !== null ? rivetRmmUiCapacity($f['capacity']) : '';
 
     return '<div class="d-flex align-items-center flex-wrap mb-3" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-satellite me-2" aria-hidden="true"></i>Agent fleet</h4>'
+        . ($installer !== null ? rivetRmmUiInstallerButton($installer, 'Add device', 'btn btn-primary', null, 'fa-plus') : '')
         . '<a href="/agent/rmm_assets.php" class="btn btn-info btn-sm"><i class="fas fa-desktop me-1" aria-hidden="true"></i>All RMM assets</a>'
         . '<a href="/agent/rmm_alerts.php" class="btn btn-warning btn-sm"><i class="fas fa-bell me-1" aria-hidden="true"></i>Alerts</a>'
         . ($f['perm']['admin'] ? '<a href="/admin/settings_endpoint_agent.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-cog me-1" aria-hidden="true"></i>Administration</a>' : '') . '</div>'
         . ($c['total'] === 0 && $f['filters'] === [] ? '<section class="card card-dark mb-3"><div class="card-body">' . rivetRmmUiEmpty('fas fa-satellite-dish', 'No agent is enrolled yet',
-            $f['perm']['admin'] ? 'Create an enrollment token under Administration, Endpoint agent, then install the agent on a device.' : 'An administrator creates an enrollment token and installs the agent.') . '</div></section>' : '')
+            $installer !== null ? 'Use Add device to download an installer, then run it on a PC.' : ($f['perm']['admin'] ? 'Create an enrollment token under Administration, Endpoint agent, then install the agent on a device.' : 'An administrator creates an enrollment token and installs the agent.'),
+            $installer !== null ? rivetRmmUiInstallerButton($installer, 'Download installer', 'btn btn-primary', null, 'fa-download') : '') . '</div></section>' : '')
         . '<div class="row mb-3">' . $kpi . '</div>'
         . '<div class="row"><div class="col-lg-7">' . $healthCard . '</div><div class="col-lg-5">' . $apCard . '</div></div>'
         . '<div class="row"><div class="col-lg-6">' . $offCard . '</div><div class="col-lg-6">' . $fCard . '</div></div>'
-        . $versionsCard . $capacity . $table;
+        . $versionsCard . $capacity . $table . ($installer !== null ? rivetRmmUiInstallerModal($installer, $csrf) : '');
 }
 
 function rivetRmmUiCapacity(array $cap): string
@@ -742,4 +745,100 @@ function rivetRmmUiCapacity(array $cap): string
         . ($warn !== '' ? '<ul class="list-group list-group-flush mb-2">' . $warn . '</ul>' : '<p class="small text-muted"><i class="fas fa-check-circle text-success me-1" aria-hidden="true"></i>No capacity warnings.</p>')
         . ($tables !== '' ? '<div class="table-responsive"><table class="table table-sm mb-2">' . rivetRmmUiThead(['Table', 'Rows (estimate)', 'Size']) . '<tbody>' . $tables . '</tbody></table></div>' : '')
         . '</div></section>';
+}
+
+// ------------------------------------------------------------------ the "Add device" installer flow (view-model: rivetRmmUiInstaller())
+
+/** The id of the dialog every opener points at (one dialog per page). */
+const RMM_INSTALLER_MODAL = 'rmmInstallerModal';
+
+/**
+ * The opener. $clientId preselects a client in the dialog (the client page); null leaves the choice to the dialog.
+ *
+ * @param array<string,mixed> $ins the view-model
+ */
+function rivetRmmUiInstallerButton(array $ins, string $label = 'Add device', string $class = 'btn btn-primary btn-sm', ?int $clientId = null, string $icon = 'fa-plus'): string
+{
+    return '<button type="button" class="' . rmmH($class) . '" data-bs-toggle="modal" data-bs-target="#' . RMM_INSTALLER_MODAL . '" data-rmm-installer-open'
+        . ($clientId !== null ? ' data-client-id="' . (int) $clientId . '"' : '') . '><i class="fas ' . rmmH($icon) . ' me-1" aria-hidden="true"></i>' . rmmH($label) . '</button>';
+}
+
+/** The one-sentence empty state shown when no Windows installer can be built, with the way out. Empty string when one can. */
+function rivetRmmUiInstallerNotice(array $ins): string
+{
+    $adminLink = $ins['can_publish'] ? ' <a href="/admin/settings_endpoint_agent.php#binaries">Upload it under Administration &gt; Endpoint agent &gt; Agent binaries</a>.'
+        : ' An administrator can upload it under Administration &gt; Endpoint agent &gt; Agent binaries.';
+    if ($ins['service_problem'] !== null) {
+        return '<div class="alert alert-warning py-2 mb-3" role="status" data-rmm-installer-notice="service"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' . rmmH($ins['service_problem'])
+            . ($ins['can_publish'] ? ' <a href="/admin/settings_endpoint_agent.php">Fix it in Administration &gt; Endpoint agent</a>.' : ' An administrator can fix it in Administration &gt; Endpoint agent.') . '</div>';
+    }
+    if ($ins['windows']['amd64'] === null && $ins['windows']['arm64'] === null) {
+        return '<div class="alert alert-warning py-2 mb-3" role="status" data-rmm-installer-notice="binary"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>No Windows agent is uploaded yet, so a Windows installer cannot be built.' . $adminLink . '</div>';
+    }
+
+    return '';
+}
+
+/**
+ * The dialog: client, location, Windows / Linux, architecture, ring, Advanced (token lifetime, uses, label) and one primary button. Windows streams the
+ * stamped exe from POST agent/post/rmm_installer.php (CSRF, RmmAdmin::downloadInstaller); Linux shows the one-time install command. js/rmm_installer.js drives it.
+ *
+ * @param array<string,mixed> $ins the view-model
+ */
+function rivetRmmUiInstallerModal(array $ins, string $csrf): string
+{
+    $noWin = $ins['windows']['amd64'] === null && $ins['windows']['arm64'] === null;
+    $blocked = $ins['service_problem'] !== null;
+    $winBlocked = $noWin || $blocked;
+    $defaultArch = $ins['windows']['amd64'] === null && $ins['windows']['arm64'] !== null ? 'arm64' : 'amd64';
+    $clientOpts = '<option value=""' . ($ins['selected'] === 0 ? ' selected' : '') . '>Choose a client...</option>';
+    foreach ($ins['clients'] as $c) {
+        $clientOpts .= '<option value="' . (int) $c['id'] . '"' . ($ins['selected'] === $c['id'] ? ' selected' : '') . '>' . rmmH($c['name']) . '</option>';
+    }
+    $locOpts = '<option value="0" selected>No specific location</option>';
+    foreach ($ins['locations'] as $cid => $list) {
+        foreach ($list as $l) {
+            $locOpts .= '<option value="' . (int) $l['id'] . '" data-client="' . (int) $cid . '" hidden disabled>' . rmmH($l['name']) . '</option>';
+        }
+    }
+    $archOpt = static fn (string $v, string $label, ?string $winVersion): string => '<option value="' . $v . '"' . ($v === $defaultArch ? ' selected' : '') . ' data-win-version="' . rmmH((string) $winVersion) . '">' . rmmH($label) . '</option>';
+    $m = RMM_INSTALLER_MODAL;
+
+    return '<div class="modal fade" id="' . $m . '" tabindex="-1" aria-labelledby="' . $m . 'Title" aria-hidden="true" data-rmm-installer="1"' . (!empty($ins['autoopen']) ? ' data-autoopen="1"' : '') . '><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">'
+        . '<form id="rmm-inst-form" method="post" action="' . rmmH($ins['post_url']) . '" autocomplete="off" novalidate data-max-ttl="' . (int) $ins['max_ttl_h'] . '" data-win-ready="' . ($winBlocked ? '0' : '1') . '" data-service-ready="' . ($blocked ? '0' : '1') . '">'
+        . '<input type="hidden" name="csrf_token" value="' . rmmH($csrf) . '"><input type="hidden" name="os" id="rmm-inst-os" value="windows">'
+        . '<div class="modal-header"><h5 class="modal-title" id="' . $m . 'Title"><i class="fas fa-download me-2" aria-hidden="true"></i>Add a device</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>'
+        . '<div class="modal-body">'
+        . '<ul class="nav nav-tabs mb-3" role="tablist" aria-label="Operating system">'
+        . '<li class="nav-item" role="presentation"><button type="button" class="nav-link active" id="rmm-inst-tab-windows" role="tab" aria-selected="true" aria-controls="rmm-inst-pane-windows" data-os="windows"><i class="fab fa-windows me-1" aria-hidden="true"></i>Windows</button></li>'
+        . '<li class="nav-item" role="presentation"><button type="button" class="nav-link" id="rmm-inst-tab-linux" role="tab" aria-selected="false" aria-controls="rmm-inst-pane-linux" tabindex="-1" data-os="linux"><i class="fab fa-linux me-1" aria-hidden="true"></i>Linux</button></li></ul>'
+        . '<div class="row g-3">'
+        . '<div class="col-md-6"><label class="form-label" for="rmm-inst-client">Client</label><select class="form-select" id="rmm-inst-client" name="client_id" required>' . $clientOpts . '</select></div>'
+        . '<div class="col-md-6"><label class="form-label" for="rmm-inst-loc">Location <span class="text-muted">(optional)</span></label><select class="form-select" id="rmm-inst-loc" name="location_id">' . $locOpts . '</select></div>'
+        . '<div class="col-md-6"><label class="form-label" for="rmm-inst-arch">Architecture</label><select class="form-select" id="rmm-inst-arch" name="arch">'
+        . $archOpt('amd64', 'x64 (Intel / AMD, most PCs)', $ins['windows']['amd64']) . $archOpt('arm64', 'ARM64', $ins['windows']['arm64']) . '</select></div>'
+        . '<div class="col-md-6"><label class="form-label" for="rmm-inst-ring">Update ring</label><select class="form-select" id="rmm-inst-ring" name="ring"><option value="stable" selected>Stable (recommended)</option><option value="pilot">Pilot (early builds)</option></select></div>'
+        . '</div>'
+        . '<p class="mt-3 mb-2"><button type="button" class="btn btn-link p-0" data-bs-toggle="collapse" data-bs-target="#rmm-inst-adv" aria-expanded="false" aria-controls="rmm-inst-adv"><i class="fas fa-sliders-h me-1" aria-hidden="true"></i>Advanced</button></p>'
+        . '<div class="collapse" id="rmm-inst-adv"><div class="row g-3 mb-2">'
+        . '<div class="col-md-4"><label class="form-label" for="rmm-inst-ttl">Token lifetime, hours</label><input class="form-control" type="number" id="rmm-inst-ttl" name="ttl_hours" min="1" max="' . (int) $ins['max_ttl_h'] . '" value="' . min(24, (int) $ins['max_ttl_h']) . '"></div>'
+        . '<div class="col-md-8"><label class="form-label" for="rmm-inst-label">Label <span class="text-muted">(optional)</span></label><input class="form-control" type="text" id="rmm-inst-label" name="label" maxlength="100" placeholder="e.g. Front office rollout"></div>'
+        . '<div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="rmm-inst-multi" name="multiple" value="1"><label class="form-check-label" for="rmm-inst-multi">I will install this on multiple PCs</label>'
+        . '<div class="form-text">Off: the installer works for one PC and then stops working. On: it works for up to 25 PCs until it expires.</div></div></div>'
+        . '</div></div>'
+        . '<div id="rmm-inst-pane-windows" role="tabpanel" aria-labelledby="rmm-inst-tab-windows" class="mt-3">' . rivetRmmUiInstallerNotice($ins)
+        . '<div class="rmm-inst-steps small"><p class="mb-1 fw-bold">After you download it</p>'
+        . '<p class="mb-1">Copy the file to the PC, double-click it, and accept the administrator prompt. The agent installs itself and enrolls with this client.</p>'
+        . '<p class="mb-0 text-muted">For deployment tools (Intune, group policy, your RMM) run it with <code>setup --silent</code>, for example <code data-rmm-inst-file>rivetit-agent-client-x64.exe</code> <code>setup --silent</code>.</p></div></div>'
+        . '<div id="rmm-inst-pane-linux" role="tabpanel" aria-labelledby="rmm-inst-tab-linux" class="mt-3" hidden>'
+        . ($blocked ? rivetRmmUiInstallerNotice(array_merge($ins, ['windows' => ['amd64' => '-', 'arm64' => '-']])) : '')
+        . '<p class="small mb-2">Linux needs no download from here. Create the install command, then run it as root on the machine, next to the unpacked <code>rivetit-agent-linux-*.tar.gz</code> from the agent release.</p>'
+        . '<div id="rmm-inst-cmd" hidden><div class="d-flex align-items-center mb-1" style="gap:6px"><span class="fw-bold small me-auto">Install command</span><button type="button" class="btn btn-outline-secondary btn-sm" id="rmm-inst-copy"><i class="far fa-copy me-1" aria-hidden="true"></i>Copy</button></div>'
+        . '<pre class="border rounded p-2 small mb-1" id="rmm-inst-cmd-text" tabindex="0" style="white-space:pre-wrap;word-break:break-all;max-height:14rem;overflow:auto"></pre>'
+        . '<p class="small text-muted mb-0">The token inside is a secret and is shown only once. Do not paste it into tickets or chat.</p></div></div>'
+        . '<div id="rmm-inst-msg" class="alert mt-3 mb-0 d-none" role="alert"></div>'
+        . '</div>'
+        . '<div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>'
+        . '<button type="submit" class="btn btn-primary" id="rmm-inst-go"' . ($winBlocked ? ' disabled' : '') . '><i class="fas fa-download me-1" aria-hidden="true"></i><span id="rmm-inst-go-label">Download installer</span></button></div>'
+        . '</form></div></div></div>';
 }

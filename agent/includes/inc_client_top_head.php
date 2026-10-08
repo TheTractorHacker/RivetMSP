@@ -54,6 +54,16 @@ $client_header_open = (basename($_SERVER["PHP_SELF"]) == "client_overview.php");
 // Locations live behind module_support (agent/locations.php enforces it), so the
 // "link a site" affordance is only offered to someone who can actually follow it.
 $client_header_can_edit_sites = (lookupUserPermission("module_support") >= 1);
+
+// "Add device" (endpoint agent installer): the dialog and its opener, only for someone who may issue installers (rmm.admin / rmm.token.manage, asked of the
+// module's adapter inside rivetRmmUiInstaller()) and only while the RMM module is on. $session_is_admin is just the cheap guard that keeps every other
+// user from building the module on each client page. Null: nothing renders, nothing is requested.
+$client_header_installer = null;
+if (!empty($session_is_admin) && $config_core_rmm_enabled && lookupUserPermission('module_rmm') >= 1 && empty($client_archived_at)) {
+    require_once dirname(__DIR__, 2) . '/includes/rmm_ui_render.php';
+    $client_header_installer = rivetRmmUiInstaller($mysqli, (int) $session_user_id, (int) $client_id);
+    $rmm_installer_scripts = $client_header_installer !== null;   // includes/footer.php links js/rmm_installer.js only when this is set
+}
 ?>
 
 <style nonce="<?php echo htmlspecialchars($csp_nonce ?? '', ENT_QUOTES); ?>">
@@ -83,6 +93,8 @@ $client_header_can_edit_sites = (lookupUserPermission("module_support") >= 1);
         </div>
         <?php if (!empty($client_tag_name_display_array)) { ?><div class="card-title ms-2"><?php echo $client_tags_display; ?></div> <?php } ?>
         <div class="card-tools">
+
+            <?php if ($client_header_installer !== null) { echo rivetRmmUiInstallerButton($client_header_installer, 'Add device', 'btn btn-outline-primary btn-sm me-2', (int) $client_id, 'fa-download'); } ?>
 
             <button class="btn btn-tool client-header-toggle<?php if (!$client_header_open) { echo ' collapsed'; } ?>"
                     type="button"
@@ -157,6 +169,8 @@ $client_header_can_edit_sites = (lookupUserPermission("module_support") >= 1);
         </div>
     </div>
 </div>
+
+<?php if ($client_header_installer !== null) { echo rivetRmmUiInstallerModal($client_header_installer, (string) $_SESSION['csrf_token']); } ?>
 
 <div class="collapse <?php if ($client_header_open) { echo "show"; } ?>" id="clientHeader">
 

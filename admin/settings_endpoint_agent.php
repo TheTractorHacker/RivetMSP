@@ -201,15 +201,21 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
     <div class="card-header"><h4 class="card-title mb-0">Agent binaries</h4></div>
     <div class="card-body">
         <p class="small text-muted">Upload the Windows agent executable (unstamped, as built by <code>make build</code>) for each architecture. The server checks the PE header, the machine type and that the file is not already an installer, and stores it outside the web-served area. The <strong>current</strong> binary per architecture is what per-department installers are made from; offering a binary as an update lets enrolled agents fetch it from this server. Largest accepted upload: <strong><?= $h(BinaryStore::human($uploadLimit)) ?></strong> (the lower of the <?= $h(BinaryStore::human($rmm->binaryStore()->maxBytes())) ?> cap, PHP <code>upload_max_filesize</code> <?= $h(ini_get('upload_max_filesize')) ?> and <code>post_max_size</code> <?= $h(ini_get('post_max_size')) ?>). Larger or automated uploads: <code>scripts/endpoint_agent_publish.php</code>.</p>
-        <form action="post.php" method="post" enctype="multipart/form-data" class="row g-2 align-items-end mb-3" autocomplete="off">
+        <form action="post.php" method="post" enctype="multipart/form-data" class="mb-3" autocomplete="off" id="bn_form">
             <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
-            <div class="col-lg-3"><label class="form-label small" for="bn_file">Agent executable (.exe)</label><input type="file" class="form-control form-control-sm" id="bn_file" name="agent_binary" accept=".exe" required></div>
-            <div class="col-lg-1"><label class="form-label small" for="bn_v">Version</label><input class="form-control form-control-sm" id="bn_v" name="version" placeholder="1.2.0" maxlength="40" required></div>
-            <div class="col-lg-2"><label class="form-label small" for="bn_a">Architecture</label><select class="form-select form-select-sm" id="bn_a" name="arch"><option value="amd64">Windows x64 (amd64)</option><option value="arm64">Windows ARM64</option></select></div>
-            <div class="col-lg-2"><div class="form-check"><input type="checkbox" class="form-check-input" id="bn_cur" name="activate" value="1" checked><label class="form-check-label small" for="bn_cur">Make current for installers</label></div></div>
-            <div class="col-lg-2"><label class="form-label small" for="bn_ring">Offer as update</label><select class="form-select form-select-sm" id="bn_ring" name="release_ring"><option value="">No</option><option value="pilot">Pilot ring</option><option value="stable">Stable ring</option></select></div>
-            <div class="col-lg-1"><label class="form-label small" for="bn_pct">Rollout %</label><input class="form-control form-control-sm" id="bn_pct" name="rollout_pct" type="number" min="0" max="100" value="10"></div>
-            <div class="col-lg-1"><button class="btn btn-sm btn-primary w-100" name="upload_agent_binary">Upload</button></div>
+            <label for="bn_file" id="bn_drop" class="d-block border border-2 rounded p-4 text-center mb-2" style="border-style:dashed !important;cursor:pointer">
+                <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2 d-block" aria-hidden="true"></i>
+                <span class="d-block fw-bold">Drop the agent .exe files here, or click to choose them</span>
+                <span class="d-block small text-muted">Add the x64 and the ARM64 build together. The version and architecture are read from the file name (for example <code>rivetit-agent-1.4.2-windows-amd64.exe</code>); you can correct them below.</span>
+                <input type="file" class="visually-hidden" id="bn_file" name="agent_binary[]" accept=".exe" multiple>
+            </label>
+            <div id="bn_rows" class="mb-2" aria-live="polite"></div>
+            <div class="row g-2 align-items-end">
+                <div class="col-lg-3"><div class="form-check"><input type="checkbox" class="form-check-input" id="bn_cur" name="activate" value="1" checked><label class="form-check-label small" for="bn_cur">Make current for installers</label></div></div>
+                <div class="col-lg-3"><label class="form-label small" for="bn_ring">Offer as update</label><select class="form-select form-select-sm" id="bn_ring" name="release_ring"><option value="">No</option><option value="pilot">Pilot ring</option><option value="stable">Stable ring</option></select></div>
+                <div class="col-lg-2"><label class="form-label small" for="bn_pct">Rollout %</label><input class="form-control form-control-sm" id="bn_pct" name="rollout_pct" type="number" min="0" max="100" value="10"></div>
+                <div class="col-lg-2"><button class="btn btn-sm btn-primary w-100" name="upload_agent_binary" id="bn_go"><i class="fas fa-upload me-1" aria-hidden="true"></i>Upload</button></div>
+            </div>
         </form>
         <div class="table-responsive"><table class="table table-sm align-middle mb-0">
             <thead><tr><th>Version</th><th>Arch</th><th>Size</th><th>SHA-256</th><th>Uploaded (UTC)</th><th>State</th><th></th></tr></thead><tbody>
@@ -230,7 +236,7 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
                         </form>
                     </td>
                 </tr>
-            <?php } if (!$binaries) { echo '<tr><td colspan="7" class="text-muted">No agent binary uploaded yet. Installers cannot be created until one is current.</td></tr>'; } ?>
+            <?php } if (!$binaries) { echo '<tr><td colspan="7" class="text-muted">No agent binary uploaded yet. Drop the Windows agent above; installers cannot be created until one is current.</td></tr>'; } ?>
         </tbody></table></div>
     </div>
 </div>
@@ -238,7 +244,7 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
 <div class="card mb-3" id="deployment">
     <div class="card-header"><h4 class="card-title mb-0">Deployment: per-client installer</h4></div>
     <div class="card-body">
-        <p class="small text-muted">Creates an enrollment token for the client and gives you an installer that already contains the server address, the token, the client and (if set) your CA certificate. Run it on a Windows PC as administrator and the agent installs and enrolls itself. Each click creates a new audited token.</p>
+        <p class="small text-muted">Creates an enrollment token for the client and gives you an installer that already contains the server address, the token, the client and (if set) your CA certificate. Run it on a Windows PC as administrator and the agent installs and enrolls itself. Each click creates a new audited token. The same flow is one click away on <a href="/agent/rmm_fleet.php?add=1">Endpoints &gt; Agent Fleet &gt; Add device</a>, and on every client page.</p>
         <?php
         $dep_problems = [];
         if (!$cfg['enabled']) { $dep_problems[] = 'The endpoint agent service is switched off.'; }
@@ -420,6 +426,7 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
     </div>
 </div>
 
+<script src="/js/rmm_binary_upload.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/js/rmm_binary_upload.js') ?>" defer></script>
 <script nonce="<?= $h($csp_nonce ?? '') ?>">
 document.querySelectorAll('form[data-ea-confirm]').forEach(function (f) {
     f.addEventListener('submit', function (e) { if (!confirm(f.getAttribute('data-ea-confirm'))) { e.preventDefault(); } });

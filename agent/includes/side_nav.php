@@ -340,6 +340,12 @@ foreach ($section_pages as $key => $pages) {
                             <span class="dropdown-item-icon"><i class="fas fa-satellite"></i></span>
                             <span class="text-truncate">Agent Fleet</span>
                         </a>
+                        <?php if (!empty($session_is_admin)) { ?>
+                        <a href="/agent/rmm_fleet.php?add=1" class="dropdown-item" data-nav-add-device>
+                            <span class="dropdown-item-icon"><i class="fas fa-download"></i></span>
+                            <span class="text-truncate">Add device</span>
+                        </a>
+                        <?php } ?>
                         <?php } ?>
                         <?php if ($config_module_enable_rmm) { ?>
                         <a href="/agent/rmm_assets.php" class="dropdown-item<?php if (in_array($current_page, ['rmm_assets.php','rmm_asset.php'])) { echo ' active'; } ?>">
