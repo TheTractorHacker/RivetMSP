@@ -26,9 +26,10 @@ function ea_dispatch(string $endpoint): void
     mysqli_report(MYSQLI_REPORT_OFF);
 
     try {
-        // Compatibility mode (no module state handed to DeviceApi): a disabled service still answers 403 forbidden here, as it always did. The new
-        // 503 module_disabled answer comes from the pre-bootstrap gate (api/v1/rmm_gate.php) once the state file says the module is off.
-        $api = rivetRmmModule()->deviceApi(static fn (string $bucket, int $limit, int $window): bool => api_rate_limit($bucket, $limit, $window), false);
+        // Module-state mode: besides the pre-bootstrap gate (api/v1/rmm_gate.php, which answers from the state file with no database work), DeviceApi
+        // itself answers 503 module_disabled (Retry-After 3600) while the module is off: the edition kill switch (settings.config_core_rmm_enabled) or
+        // the master switch is off. RivetMSP never had enrolled agents, so there is no older 403 behaviour to keep.
+        $api = rivetRmmModule()->deviceApi(static fn (string $bucket, int $limit, int $window): bool => api_rate_limit($bucket, $limit, $window));
         $response = $api->handle(rivetRmmRequest($endpoint));
     } catch (\Throwable $e) {
         error_log('endpoint agent: ' . get_class($e) . ': ' . $e->getMessage());
