@@ -592,3 +592,70 @@ function rivetRmmUiOpenAlertCount(\mysqli $mysqli, \RivetCore\Rmm\RmmModule $rmm
 
     return (int) ($row['c'] ?? 0);
 }
+
+// ------------------------------------------------------------------ the "Add device" installer flow
+
+/**
+ * View-model of the "Add device / Download installer" dialog (Agent Fleet page, the client page header). Null, having asked the database
+ * NOTHING beyond the module state file, when the module is off; null too for a user who may neither administer the module nor manage
+ * enrollment tokens (rmm.admin / rmm.token.manage). The download itself is authorized again, per client, by RivetCore RmmAdmin::downloadInstaller()
+ * in agent/post/rmm_installer.php: hiding the button is cosmetic.
+ *
+ * @param int|null $onlyClientId a client page: the dialog offers just that client (no list is read)
+ * @return array{clients:list<array{id:int,name:string}>,locations:array<int,list<array{id:int,name:string}>>,windows:array{amd64:?string,arm64:?string},
+ *     service_problem:?string,max_ttl_h:int,can_publish:bool,selected:int,post_url:string}|null
+ */
+function rivetRmmUiInstaller(\mysqli $mysqli, int $userId, ?int $onlyClientId = null, ?int $selectedClientId = null): ?array
+{
+    if ($userId <= 0 || !rivetRmmEnabled($mysqli)) {
+        return null;
+    }
+    $rmm = rivetRmmModule($mysqli);
+    $authz = $rmm->authorizer();
+    if (!$authz->allowed($userId, RmmAbility::ADMIN, 0) && !$authz->allowed($userId, RmmAbility::TOKEN_MANAGE, 0)) {
+        return null;
+    }
+    $read = $rmm->readModel();
+    $cfg = $read->settingsSummary();
+    $cur = $read->currentBinaries();
+    $problem = null;
+    if (empty($cfg['enabled'])) {
+        $problem = 'The endpoint agent service is switched off.';
+    } elseif (($cfg['service_base'] ?? null) === null) {
+        $problem = 'The service URL is not an https:// address yet.';
+    }
+
+    $visible = $authz->visibleClientIds($userId);
+    $where = 'client_archived_at IS NULL';
+    if ($onlyClientId !== null) {
+        $where .= ' AND client_id = ' . (int) $onlyClientId;
+    }
+    if ($visible !== null) {
+        $where .= $visible === [] ? ' AND 1 = 0' : ' AND client_id IN (' . implode(',', array_map('intval', $visible)) . ')';
+    }
+    $clients = [];
+    $r = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients WHERE $where ORDER BY client_name LIMIT 1000");
+    while ($r && ($row = mysqli_fetch_assoc($r))) {
+        $clients[] = ['id' => (int) $row['client_id'], 'name' => (string) $row['client_name']];
+    }
+    $locations = [];
+    if ($clients !== []) {
+        $ids = implode(',', array_map(static fn (array $c): int => $c['id'], $clients));
+        $r = mysqli_query($mysqli, "SELECT location_id, location_client_id, location_name FROM locations WHERE location_archived_at IS NULL AND location_client_id IN ($ids) ORDER BY location_primary DESC, location_name LIMIT 5000");
+        while ($r && ($row = mysqli_fetch_assoc($r))) {
+            $locations[(int) $row['location_client_id']][] = ['id' => (int) $row['location_id'], 'name' => (string) $row['location_name']];
+        }
+    }
+    $selected = $selectedClientId ?? $onlyClientId ?? 0;
+
+    return [
+        'clients' => $clients,
+        'locations' => $locations,
+        'windows' => ['amd64' => $cur['amd64']['version'] ?? null, 'arm64' => $cur['arm64']['version'] ?? null],
+        'service_problem' => $problem,
+        'max_ttl_h' => max(1, (int) ($cfg['enroll_max_ttl_h'] ?? 720)),
+        'can_publish' => $authz->allowed($userId, RmmAbility::BINARY_PUBLISH, 0) || $authz->allowed($userId, RmmAbility::ADMIN, 0),
+        'selected' => in_array($selected, array_column($clients, 'id'), true) ? $selected : 0,
+        'post_url' => '/agent/post/rmm_installer.php',
+    ];
+}
