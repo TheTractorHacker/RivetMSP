@@ -104,4 +104,10 @@ function report_schedulable_reports_for_test() {
 $ok(count($reports) >= 8, 'IT-8: found the schedulable report list (' . count($reports) . ')');
 foreach ($reports as $k) $ok(in_array(reportScheduleRequiredModule($k), ['module_financial', 'module_support'], true), "IT-8: schedulable report $k maps to a module");
 
+// IT-14: the RMM alerts client filter is scoped like the alert rows
+$ra = $src('agent/rmm_alerts.php');
+$ok(preg_match('/FROM rmm_alerts a JOIN clients c.*?client_archived_at IS NULL" \. \(\$client_access_string && !\$session_is_admin \? " AND c\.client_id IN/s', $ra) === 1, 'IT-14: client filter list is limited to the user\'s clients');
+// IT-13: RMM remote-session logging uses getIP(), never REMOTE_ADDR
+$ok(strpos($src('agent/post/rmm_remote.php'), 'REMOTE_ADDR') === false, 'IT-13: rmm_remote.php does not log REMOTE_ADDR');
+
 exit($fails ? 1 : 0);
