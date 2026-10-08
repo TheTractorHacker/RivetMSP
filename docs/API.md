@@ -397,6 +397,21 @@ Scheduled/onsite entries against a ticket.
 | GET | `/appointments` | List ticket appointments. `when` (past/today/future), `mine`, `client_id`. **Bare array.** |
 | POST | `/appointments` | Create a ticket appointment. Requires `ticket_id`, `schedule_start`. |
 
+### Endpoint agent (optional RMM module, off by default)
+
+Only when the RMM module is switched on (Administration > Settings > Endpoint agent; see `docs/RMM_MODULE.md`). While it is off the device endpoints answer `503 {"code":"module_disabled"}` with `Retry-After: 3600`, and `endpoint_devices` answers `404 {"code":"disabled"}` after authentication.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/agent_enroll`, `/agent_installer` | Device-facing, enrollment-token gated, no Bearer. |
+| POST | `/agent_checkin` | Device-facing (per-device credential). |
+| GET, POST | `/agent_jobs` | Device-facing: signed job offer (long poll) and job report. |
+| GET | `/agent_update` | Device-facing: hosted agent update download. |
+| GET | `/endpoint_devices`, `/endpoint_devices/{id}`, `/endpoint_devices/{id}/jobs` | User token only (the legacy `X-Api-Key` is refused). Role `module_rmm`; devices outside the caller's clients are a 404. |
+| POST | `/endpoint_devices/{id}/jobs`, `/endpoint_devices/{id}/jobs/{job_id}/cancel`, `/endpoint_devices/{id}/remote` | Needs `module_rmm_scripts` / `module_rmm_remote_connect`; a reboot needs `"confirm": true`. |
+
+The wire protocol of the device endpoints is frozen and documented in rivet-core (`docs/rmm/PROTOCOL.md`).
+
 ### Notifications
 
 | Method | Path | Description |
