@@ -47,6 +47,24 @@ final class RmmState
         return $this->editionAllows() && (bool) $this->load()['master'];
     }
 
+    /**
+     * The two module switches as the device API needs them, answered from the state file when it is valid (no database work, and the
+     * edition is not asked: the file carries its kill switch, which the edition re-syncs when it changes) and from the live edition
+     * answer plus the settings row otherwise (fail-safe rules as for {@see enabled()}).
+     *
+     * @return array{edition:bool,master:bool}
+     */
+    public function switches(): array
+    {
+        $m = $this->load();
+        $file = $m['file'];
+        if ($m['from_file'] === true && $file !== null) {
+            return ['edition' => $file['edition'], 'master' => $m['master']];
+        }
+
+        return ['edition' => $this->editionAllows(), 'master' => $m['master']];
+    }
+
     /** True when the module is on and the sub-switch is. */
     public function featureOn(string $feature): bool
     {
@@ -87,6 +105,23 @@ final class RmmState
         $snap = $this->snapshot($this->settings->get(true), $refreshShed ? null : RmmStateFile::read($dir));
 
         return RmmStateFile::write($dir, $snap, $this->sql->time());
+    }
+
+    /**
+     * Re-create the state file when it is missing or unusable (a valid one is left alone, so this costs one read). Returns true when a
+     * valid file exists afterwards. False without a state directory or when it is not writable; never throws for I/O problems.
+     */
+    public function ensureFile(): bool
+    {
+        $dir = $this->directory();
+        if ($dir === null || $dir === '') {
+            return false;
+        }
+        if (RmmStateFile::read($dir) !== null) {
+            return true;
+        }
+
+        return $this->sync();
     }
 
     private function editionAllows(): bool
