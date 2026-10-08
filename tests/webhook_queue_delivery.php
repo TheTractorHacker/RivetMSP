@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * Regression checks for two security fixes, no database or network:  php tests/webhook_queue_delivery.php
  *   1. cron/cron.php legacy webhook_queue delivery must use the shared URL policy + pinned, non-redirecting curl

@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * A REAL agent (the Linux build of rivet-core's endpoint-agent, the "Linux test agent") enrolls against a scratch RivetMSP, is approved onto an MSP asset,
  * checks in and runs a signed job. Optional: skipped (exit 0) unless RMM_AGENT_BIN points at the binary, for example

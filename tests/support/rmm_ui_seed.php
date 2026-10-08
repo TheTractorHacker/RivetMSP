@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * Fixtures for the RMM asset panel / fleet page tests (tests/rmm_ui.php) and the browser smoke (tests/browser/rmm_seed.php): a small fleet built
  * through the REAL enrollment and check-in endpoints of a scratch RivetMSP install, so every number on the pages comes from rows the product itself wrote.

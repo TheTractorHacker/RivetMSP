@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * Seeds a THROWAWAY install for tests/browser/rmm_smoke.mjs: the small fleet of tests/support/rmm_ui_seed.php (real enrollment and check-in through the
  * install's own endpoints), then gives user 1 the login admin@scratch.test / the password in RMM_SMOKE_PASSWORD (default Scratch-Admin-1234) and writes

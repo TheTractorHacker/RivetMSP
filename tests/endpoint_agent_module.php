@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * The optional RMM module's switch and its edges, on a scratch database with the real front controller (php -S):
  *   - a fresh RivetMSP install is OFF (settings.config_core_rmm_enabled = 0, endpoint_agent_settings.enabled = 0); the 2.6.77 updater step leaves

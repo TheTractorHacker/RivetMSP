@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+if (PHP_SAPI !== 'cli' && PHP_SAPI !== 'cli-server') { http_response_code(404); exit; }   // tests never run under FPM (nightly MSP-2); php -S harness allowed
 
 /**
  * RivetMSP edition adapter for RivetCore's golden-transcript driver (rivet-core scripts/rmm-golden/golden.php): it resets and seeds a SCRATCH RivetMSP

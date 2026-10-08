@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * End-to-end smoke test of the optional RMM module on RivetMSP: enroll -> link -> check-in -> check alert -> MSP ticket -> alert clears -> ticket
  * auto-closes -> signed job -> update download -> offline flip, through the real front controller (php -S) and the real MSP code paths. Also proves

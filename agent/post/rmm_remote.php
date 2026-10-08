@@ -57,7 +57,7 @@ if (($ea_type['type'] ?? '') === 'rivetit_agent') {
     require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/rmm_bootstrap.php';
     $ea_device = (int) preg_replace('/^rivetit:/', '', (string) $link['tactical_agent_id']);
     $ea = rivetRmmModule()->technician()->launchRemote(rivetRmmPrincipal((int) $session_user_id, (string) $session_name), $ea_device, !empty($_POST['force']),
-        (string) ($_SERVER['REMOTE_ADDR'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+        (string) getIP(), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
     echo json_encode($ea->ok ? ['success' => true, 'url' => $ea->data['url'] ?? ''] : ['success' => false, 'error' => $ea->message, 'code' => $ea->code]);
     exit;
 }

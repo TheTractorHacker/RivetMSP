@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * Shared harness for tests/endpoint_agent_module.php and tests/endpoint_agent_smoke.php: REAL HTTP against a `php -S` instance (the same front
  * controller nginx uses, through tests/rmm_golden/router.php), on a SCRATCH database holding the fully installed RivetMSP schema. Refuses anything else.

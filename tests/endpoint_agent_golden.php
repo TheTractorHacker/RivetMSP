@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * Golden replay: the HTTP transcripts RivetCore recorded from the ORIGINAL RivetIT endpoint agent code (rivet-core tests/Fixtures/rmm/golden, baseline
  * c26957c0b, 10 files covering the device API and the technician calls) are replayed against THIS install's bridges (api/v1/agent_*.php,

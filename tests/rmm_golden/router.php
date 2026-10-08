@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli' && PHP_SAPI !== 'cli-server') { http_response_code(404); exit; }   // tests never run under FPM (nightly MSP-2); php -S harness allowed
 // Router for `php -S` in tests/endpoint_agent_golden.php, tests/endpoint_agent_module.php and tests/endpoint_agent_smoke.php: sends /api/v1/*
 // through the same front controller nginx uses.
 $rmm_test_uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);

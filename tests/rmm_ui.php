@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * The RMM asset panel and the agent fleet page: view-models, permission matrix, module-off path, states, escaping, query budget, and the real
  * pages over HTTP (forged sessions, `php -S`). Scratch database only (same guard and environment as tests/endpoint_agent_lib.php).
