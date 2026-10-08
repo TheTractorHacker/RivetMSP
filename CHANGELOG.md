@@ -2,7 +2,9 @@
 
 This file documents all notable changes made to ITFlow.
 
-## [Unreleased] RivetMSP — Optional RMM module (the built-in endpoint agent), off by default
+## [Unreleased]
+
+## [26.10.8] RivetMSP — Optional RMM module (the built-in endpoint agent), off by default
 
 Database migration 2.6.77 (RivetCore migrations 0014 to 0016 and `settings.config_core_rmm_enabled`). Pins `rivet/rivet-core` 1.0.0-rc.6. Nothing changes until an administrator switches the module on.
 
