@@ -6633,3 +6633,29 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.76'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.76') {
+        // The optional RMM module (the endpoint agent / RMM server side, RivetCore 1.0.0-rc.4): it is OFF on every install until an administrator
+        // switches it on (Administration > Endpoint agent). This adds the edition kill switch settings.config_core_rmm_enabled (default 0, the
+        // config_core_<module>_enabled convention of the other Core modules) and applies RivetCore migrations 0014 (the ten endpoint_agent_* tables,
+        // CREATE IF NOT EXISTS), 0015 (convergence for installs that stopped at RivetIT 2.6.145; a no-op here, nothing agent-related existed before)
+        // and 0016 (the module switch columns). MSP installs never ran the endpoint agent, so there is no data to carry over and nothing is
+        // switched on. Idempotent. Skipped (version NOT advanced, so it retries) until the package with the module is installed.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Rmm\Migration\Migration0016ModuleSwitches::class)) {
+            mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_core_rmm_enabled` tinyint(1) NOT NULL DEFAULT 0");
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.77'");
+            // Write the module's zero-database state file ("disabled") so the API gate answers agents without touching the database from the first
+            // request. Never fatal.
+            try {
+                require_once dirname(__DIR__) . '/includes/rmm_bootstrap.php';
+                rivetRmmSyncState($mysqli);
+            } catch (\Throwable $e) {
+                error_log('RMM state file not written by the database update: ' . $e->getMessage());
+            }
+        }
+    }
