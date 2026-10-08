@@ -81,4 +81,27 @@ preg_match_all('/(?:require|include)(?:_once)?\s+["\']([^"\']+\.php)["\']/', $vd
 $missing = array_filter($m[1], function ($f) { return !file_exists(__DIR__ . '/../agent/' . $f); });
 $ok(!$missing, 'IT-7c: every relative include in vendor_details.php exists' . ($missing ? ' (missing: ' . implode(',', $missing) . ')' : ''));
 
+// IT-8: scheduled report recipients and who may schedule
+require_once __DIR__ . '/../includes/report_schedule_guards.php';
+$staff = ['Alice@msp.example', 'bob@msp.example'];
+$r = reportScheduleFilterRecipients('alice@msp.example, outsider@evil.example; bob@msp.example bad-address ALICE@msp.example', $staff);
+$ok($r['allowed'] === ['alice@msp.example', 'bob@msp.example'], 'IT-8: only staff addresses are allowed (case-insensitive, de-duplicated)');
+$ok($r['rejected'] === ['outsider@evil.example', 'bad-address'], 'IT-8: outside and malformed addresses are rejected');
+$ok(reportScheduleFilterRecipients('x@evil.example', [])['allowed'] === [], 'IT-8: no staff means no recipients');
+foreach (['mrr', 'income_summary', 'expense_summary', 'clients_with_balance'] as $k) $ok(reportScheduleRequiredModule($k) === 'module_financial', "IT-8: $k needs module_financial");
+foreach (['service_desk', 'technician_performance', 'ticket_summary', 'csat'] as $k) $ok(reportScheduleRequiredModule($k) === 'module_support', "IT-8: $k needs module_support");
+$ok(reportScheduleRequiredModule('something_new') === 'module_financial', 'IT-8: unknown reports need the strictest module');
+$sc = $src('agent/reports/schedules.php');
+$ok(substr_count($sc, '$requireScheduleWrite(') >= 3 && strpos($sc, 'reportScheduleFilterRecipients(') !== false, 'IT-8: add/delete/toggle are gated and recipients filtered');
+$cr = $src('cron/report_scheduler.php');
+$ok(strpos($cr, 'reportScheduleFilterRecipients(') !== false && strpos($cr, 'reportScheduleStaffEmails(') !== false, 'IT-8: cron re-checks staff recipients at send time');
+$reports = array_keys(report_schedulable_reports_for_test());
+function report_schedulable_reports_for_test() {
+    preg_match("/function report_schedulable_reports\(\)\s*\{\s*return \[(.*?)\];/s", file_get_contents(__DIR__ . '/../functions.php'), $m);
+    preg_match_all("/'([a-z_]+)'\s*=>/", $m[1], $k);
+    return array_flip($k[1]);
+}
+$ok(count($reports) >= 8, 'IT-8: found the schedulable report list (' . count($reports) . ')');
+foreach ($reports as $k) $ok(in_array(reportScheduleRequiredModule($k), ['module_financial', 'module_support'], true), "IT-8: schedulable report $k maps to a module");
+
 exit($fails ? 1 : 0);
