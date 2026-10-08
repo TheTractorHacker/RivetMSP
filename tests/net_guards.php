@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * Outbound host guard used before the server connects to a user-supplied host (getSSL): literal-IP cases are
  * deterministic and need no network:  php tests/net_guards.php

@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * Fails when PHP/JS source uses a Font Awesome class that the shipped Font Awesome (plugins/fontawesome-free, version 5.x)
  * does not contain - for example the Font Awesome 6 names fa-list-check or fa-circle-info, which render as an empty box.

@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 // Bootstrap for the RivetCore adapter tests. PHPUnit is not a RivetIT runtime dependency, so point at a
 // RivetCore checkout that has run `composer install` (it carries PHPUnit):
 //   RIVETCORE_PHPUNIT_AUTOLOAD=/path/to/rivet-core/vendor/autoload.php

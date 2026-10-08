@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * Billing state-machine and money guards (includes/billing_guards.php). Pure PHP, no database needed:
  *   php tests/billing_guards.php        (exit 0 = all pass)
