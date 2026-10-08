@@ -1,4 +1,5 @@
 <?php
+ob_start();   // the page may redirect to the asset page after the layout has been built (see below); nothing is sent until the script ends
 require_once "includes/inc_all.php";
 enforceUserPermission('module_rmm');
 
@@ -29,6 +30,15 @@ if (!$dev) {
     $ea_denied('Device not found', 'That device does not exist or is outside your clients.');
     require_once "../includes/footer.php";
     return;
+}
+// The device's page is now the RMM panel on its asset (agent/asset_details.php). Bookmarks land there; a device with no asset yet (waiting for
+// approval, unlinked) has no asset page, so it keeps this page.
+if ((int) ($dev['asset_id'] ?? 0) > 0 && $dev['link_state'] === 'linked' && $dev['revoked_at'] === null && $dev['retired_at'] === null && !headers_sent()) {
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Location: /agent/asset_details.php?asset_id=' . (int) $dev['asset_id'] . '#rmm-overview');
+    exit;
 }
 $client_id = (int) $dev['client_id'];
 $authz = $rmm->authorizer();

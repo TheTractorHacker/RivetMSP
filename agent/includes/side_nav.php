@@ -18,7 +18,7 @@ $section_pages = [
     'work'          => ['projects.php', 'project_details.php', 'calendar.php'],
     'billing'       => ['quotes.php', 'quote.php', 'invoices.php', 'invoice.php', 'recurring_invoices.php', 'recurring_invoice.php', 'revenues.php', 'products.php'],
     'finance'       => ['payments.php', 'vendors.php', 'expenses.php', 'recurring_expenses.php', 'accounts.php', 'transfers.php', 'trips.php'],
-    'endpoint'      => ['rmm_dashboard.php', 'rmm_assets.php', 'rmm_asset.php', 'rmm_alerts.php', 'rmm_scripts.php', 'rmm_checks.php', 'network.php', 'firewalls.php'],
+    'endpoint'      => ['rmm_dashboard.php', 'rmm_fleet.php', 'rmm_assets.php', 'rmm_asset.php', 'rmm_alerts.php', 'rmm_scripts.php', 'rmm_checks.php', 'network.php', 'firewalls.php'],
     'backups'       => ['backups.php'],
 ];
 $section_open = [];
@@ -314,17 +314,34 @@ foreach ($section_pages as $key => $pages) {
                 </li>
                 <?php } ?>
 
-                <?php if ($config_module_enable_rmm && lookupUserPermission("module_rmm") >= 1) { ?>
+                <?php
+                // The built-in endpoint agent (optional RMM module, state file: no query) has its own page here even when the vendor RMM integrations are off.
+                $rmm_nav_agent = false;
+                if ($config_core_rmm_enabled && lookupUserPermission("module_rmm") >= 1) {
+                    require_once dirname(__DIR__, 2) . '/includes/rmm_bootstrap.php';
+                    $rmm_nav_agent = rivetRmmEnabled($mysqli);
+                }
+                ?>
+                <?php if (($config_module_enable_rmm || $rmm_nav_agent) && lookupUserPermission("module_rmm") >= 1) { ?>
                 <li class="nav-item dropdown mt-2<?php echo $section_open['endpoint'] ? ' active' : ''; ?>">
                     <a href="#nav-group-endpoints" class="nav-link dropdown-toggle<?php echo $section_open['endpoint'] ? ' show' : ''; ?>" data-if-toggle="submenu" role="button" aria-controls="nav-group-endpoints" aria-expanded="<?php echo $section_open['endpoint'] ? 'true' : 'false'; ?>">
                         <span class="nav-link-icon"><i class="fas fa-desktop"></i></span>
                         <span class="nav-link-title">Endpoints</span>
                     </a>
                     <div class="dropdown-menu<?php echo $section_open['endpoint'] ? ' show' : ''; ?>" id="nav-group-endpoints">
+                        <?php if ($config_module_enable_rmm) { ?>
                         <a href="/agent/rmm_dashboard.php" class="dropdown-item<?php if ($current_page == 'rmm_dashboard.php') { echo ' active'; } ?>">
                             <span class="dropdown-item-icon"><i class="fas fa-tachometer-alt"></i></span>
                             <span class="text-truncate">RMM Dashboard</span>
                         </a>
+                        <?php } ?>
+                        <?php if ($rmm_nav_agent) { ?>
+                        <a href="/agent/rmm_fleet.php" class="dropdown-item<?php if ($current_page == 'rmm_fleet.php') { echo ' active'; } ?>">
+                            <span class="dropdown-item-icon"><i class="fas fa-satellite"></i></span>
+                            <span class="text-truncate">Agent Fleet</span>
+                        </a>
+                        <?php } ?>
+                        <?php if ($config_module_enable_rmm) { ?>
                         <a href="/agent/rmm_assets.php" class="dropdown-item<?php if (in_array($current_page, ['rmm_assets.php','rmm_asset.php'])) { echo ' active'; } ?>">
                             <span class="dropdown-item-icon"><i class="fas fa-desktop"></i></span>
                             <span class="text-truncate">Assets</span>
@@ -341,6 +358,7 @@ foreach ($section_pages as $key => $pages) {
                             <span class="dropdown-item-icon"><i class="fas fa-heartbeat"></i></span>
                             <span class="text-truncate">Check Policies</span>
                         </a>
+                        <?php } ?>
                         <a href="/agent/network.php" class="dropdown-item<?php if (in_array($current_page, ['network.php','firewalls.php'])) { echo ' active'; } ?>">
                             <span class="dropdown-item-icon"><i class="fas fa-network-wired"></i></span>
                             <span class="text-truncate">Network</span>

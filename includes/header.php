@@ -181,6 +181,11 @@ function itflow_nav_icon_class($icon, $fallback = 'fa-link')
          itflow.compat-color.css / itflow_metrics.css / itflow.bind-tabler.css. -->
     <link rel="stylesheet" href="/css/itflow_motion.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_motion.css') ?>">
 
+    <!-- RMM asset panel and agent fleet page (includes/rmm_ui_render.php). Scoped under .rmm-* (plus the .ifm-* / .it-* tile and empty-state rules it needs,
+         since there is no itflow_metrics.css here). Built from --if-* tokens; must sit AFTER itflow_design.css and itflow_motion.css and BEFORE
+         itflow.bind-tabler.css. -->
+    <link rel="stylesheet" href="/css/itflow_rmm.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm.css') ?>">
+
     <!-- --color-* -> --if-* alias. MUST come after BOTH itflow_custom.css (which
          declares --color-*) and itflow_design.css (which declares --if-*): it is a
          pure alias layer and linked any earlier it silently does nothing. Keeps the

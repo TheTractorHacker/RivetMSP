@@ -275,14 +275,19 @@ if (isset($_GET['asset_id'])) {
         $rmm_alerts_count = 0;
         $rmm_type          = 'tactical';
         $rmm_provider_name = 'RMM';
-        // The built-in endpoint agent (optional RMM module, off by default) shows its link here too, even when the vendor RMM integrations
-        // (config_module_enable_rmm) are off; in that case only its own link is loaded.
-        $rmm_agent_module_on = false;
+        // The built-in endpoint agent (optional RMM module, off by default) has its own panel (includes/rmm_ui_render.php). $rmm_agent_ui is null, and
+        // nothing here has asked the database anything, when the module is switched off (answered from the module's state file); null too when the asset
+        // has no agent device, the user may not view devices, or the device is outside the user's clients. The vendor RMM card never shows an agent
+        // link: the panel replaces it, whether or not the vendor RMM integrations (config_module_enable_rmm) are on.
+        $rmm_agent_ui = null;
         if ($config_core_rmm_enabled && lookupUserPermission('module_rmm') >= 1) {
-            require_once dirname(__DIR__) . '/includes/rmm_bootstrap.php';
-            $rmm_agent_module_on = rivetRmmEnabled();
+            require_once dirname(__DIR__) . '/includes/rmm_ui_render.php';
+            $rmm_agent_ui = rivetRmmUiPanel($mysqli, $asset_id, (int) $session_user_id);
+            if ($rmm_agent_ui !== null) {
+                $rmm_ui_scripts = true;   // includes/footer.php links js/rmm_panel.js only when this is set
+            }
         }
-        if (($config_module_enable_rmm || $rmm_agent_module_on) && lookupUserPermission('module_rmm') >= 1) {
+        if ($config_module_enable_rmm && lookupUserPermission('module_rmm') >= 1) {
             // An asset can have simultaneous links to more than one RMM
             // integration (e.g. both Tactical RMM and Level.io tracking the
             // same physical device). With no ORDER BY, MySQL returned
@@ -296,7 +301,7 @@ if (isset($_GET['asset_id'])) {
                 "SELECT arl.*, i.web_url, i.type AS integration_type, i.name AS integration_name
                  FROM asset_rmm_links arl
                  LEFT JOIN rmm_integrations i ON i.id = arl.integration_id
-                 WHERE arl.asset_id = $asset_id" . ($config_module_enable_rmm ? '' : " AND i.type = 'rivetit_agent'") . " $rmm_link_order LIMIT 1"
+                 WHERE arl.asset_id = $asset_id AND COALESCE(i.type, '') <> 'rivetit_agent' $rmm_link_order LIMIT 1"
             ));
             if ($rmm_link) {
                 $rmm_type = $rmm_link['integration_type'] ?: 'tactical';
@@ -313,6 +318,8 @@ if (isset($_GET['asset_id'])) {
         }
 
         ?>
+
+        <?php if ($rmm_agent_ui !== null) { echo rivetRmmUiStrip($rmm_agent_ui); } ?>
 
         <?php if ($rmm_link): ?>
         <div class="card card-dark mb-2" style="border-left:5px solid <?= $rmm_border ?>; border-radius:4px;">
@@ -376,11 +383,6 @@ if (isset($_GET['asset_id'])) {
                             </div>
                             <?php endif; ?>
                         </div>
-                        <?php if ($rmm_type === 'rivetit_agent' && $rmm_agent_module_on): ?>
-                        <a class="btn btn-outline-primary btn-sm" href="/agent/rmm_agent_device.php?device_id=<?= intval(preg_replace('/^rivetit:/', '', (string) $rmm_link['tactical_agent_id'])) ?>" title="Inventory, checks, jobs and remote access for the endpoint agent">
-                            <i class="fas fa-satellite me-1"></i>Agent device
-                        </a>
-                        <?php endif; ?>
                         <?php if ($rmm_type === 'tactical_rmm'): ?>
                         <button class="btn btn-outline-warning btn-sm" data-rmm-action="reboot" data-link-id="<?= intval($rmm_link['id']) ?>" title="Reboot device">
                             <i class="fas fa-power-off me-1"></i>Reboot
@@ -596,6 +598,18 @@ if (isset($_GET['asset_id'])) {
                         </div>
                     </div>
                 </div>
+
+                <?php
+                if ($rmm_agent_ui !== null) {
+                    // RivetMSP keeps no metric history (the RMM module runs with the null metric sink), so the Performance section says so; the gauges above it
+                    // are the latest check-in. Nothing here is drawn from invented numbers.
+                    $rmm_perf_note = '<p class="mb-1"><i class="fas fa-info-circle me-1 text-info" aria-hidden="true"></i><strong>No performance history in RivetMSP.</strong></p>'
+                        . '<p class="text-muted small mb-0">The gauges above are the latest reading the agent sent with its last check-in. RivetMSP does not store CPU, memory, '
+                        . 'disk or network history, so there are no charts to draw. Each check-in replaces the previous reading.'
+                        . ($rmm_link ? ' This asset is also managed by ' . nullable_htmlentities($rmm_provider_name) . ', whose own card below may keep history.' : '') . '</p>';
+                    echo rivetRmmUiTabs($rmm_agent_ui, '', $rmm_perf_note, rivetRmmUiJobUserNames($mysqli, $rmm_agent_ui), (string) ($_SESSION['csrf_token'] ?? ''));
+                }
+                ?>
 
                 <?php if ($rmm_link): ?>
                 <div class="card card-dark mb-3">

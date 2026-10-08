@@ -136,6 +136,10 @@ The scratch `config.php` must define `EA_ALLOW_INSECURE_HTTP` (the golden runner
 `$config_settings_enc_key`, `$config_enable_setup = 0`, and may honour `RMM_TEST_STATE_DIR` / `RMM_TEST_NO_ENC_KEY` / `RMM_TEST_DATABASE` / `EA_TEST_LINUX` (see the
 headers of the test files). The golden runner records this install into a temporary directory and compares it with Core's transcripts (recorded from the original RivetIT code): everything is identical except the four "disabled" exchanges of `01-disabled.json`, the one intentional wire change (a disabled module answers 503 `module_disabled` with `Retry-After: 3600`, not 403 after a database lookup; RivetMSP has no enrolled agents to stay compatible with). `php tests/endpoint_agent_golden.php strict` runs the driver's own replay instead, which reports exactly that difference.
 
+## 6a. Asset page panel and Agent Fleet (T10b)
+
+`includes/rmm_ui.php` (view-models, read-only, first call is the state file), `includes/rmm_ui_render.php` (HTML), `css/itflow_rmm.css`, `js/rmm_panel.js`, `agent/rmm_fleet.php`, `agent/rmm_job_output.php`, and the panel inside `agent/asset_details.php`. Actions are unchanged (`agent/post/rmm_agent.php`). RivetMSP specifics: clients (not departments); no Metrics subsystem, so the Performance section explains that the latest check-in is all that is kept; the Endpoints menu shows Agent Fleet whenever the module is on, even with the vendor RMM integrations off. Tests: `php tests/rmm_ui.php` (needs `EA_TEST_LINUX=1`) and `tests/browser/rmm_seed.php` + `tests/browser/rmm_smoke.mjs`.
+
 ## 7. Not verified
 
 A real MeshCentral server (only Core's mock), the Windows agent and installer on a Windows host, and a production-sized fleet (see Core's `docs/rmm/CAPACITY.md`).
