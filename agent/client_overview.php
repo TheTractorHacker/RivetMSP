@@ -869,7 +869,7 @@ if ($has_stale || $has_expiring || $has_expired):
                         $item_recipient  = nullable_htmlentities($row['item_recipient']);
                         $item_views      = nullable_htmlentities($row['item_views']);
                         $item_expire_at  = nullable_htmlentities($row['item_expire_at']);
-                        $item_expire_at_human = timeAgo($row['item_expire_at']);
+                        $item_expire_at_human = $row['item_expire_at'] ? timeAgo($row['item_expire_at']) : 'never';
 
                         if ($item_type == 'Credential') {
                             $r2 = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT credential_name FROM credentials WHERE credential_id = $item_related_id AND credential_client_id = $client_id"));

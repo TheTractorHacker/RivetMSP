@@ -14,10 +14,29 @@
 require_once $_SERVER['DOCUMENT_ROOT'] . '/config.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/functions.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/check_login.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/report_schedule_guards.php';
 
 enforceUserPermission('module_reporting');
 
-$schedulable = report_schedulable_reports();
+// Creating, pausing and deleting schedules is a write action, and a schedule may only cover reports the user could
+// open on screen: the emailed summaries are company-wide figures (nightly IT-8).
+$can_schedule = lookupUserPermission('module_reporting') >= 2;
+$can_schedule_report = function ($report_key) {
+    return lookupUserPermission(reportScheduleRequiredModule($report_key)) >= 1;
+};
+$requireScheduleWrite = function ($report_key = null) use ($can_schedule, $can_schedule_report) {
+    if (!$can_schedule || ($report_key !== null && !$can_schedule_report($report_key))) {
+        $_SESSION['alert_type'] = 'danger';
+        $_SESSION['alert_message'] = 'You do not have permission to manage this report schedule.';
+        header('Location: schedules.php');
+        exit;
+    }
+};
+
+$schedulable_all = report_schedulable_reports();
+$schedulable = array_filter($schedulable_all, function ($key) use ($can_schedule_report) {
+    return $can_schedule_report($key);
+}, ARRAY_FILTER_USE_KEY);
 $valid_frequencies = ['daily' => 'Daily', 'weekly' => 'Weekly', 'monthly' => 'Monthly'];
 
 // ---- Add a schedule -------------------------------------------------------
@@ -28,11 +47,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_schedule'])) {
     $frequency  = $_POST['schedule_frequency'] ?? '';
     $recipients = trim($_POST['schedule_recipients'] ?? '');
 
+    $requireScheduleWrite(isset($schedulable[$report]) ? $report : null);
+
     // Validate against the whitelists so only known reports/frequencies land in the table.
-    $emails = preg_split('/[,;\s]+/', $recipients, -1, PREG_SPLIT_NO_EMPTY);
-    $valid_emails = array_filter($emails, function ($e) {
-        return filter_var($e, FILTER_VALIDATE_EMAIL);
-    });
+    // Recipients must be addresses of active staff accounts: company financials are never emailed to outside addresses.
+    $filtered = reportScheduleFilterRecipients($recipients, reportScheduleStaffEmails($mysqli));
+    $valid_emails = $filtered['allowed'];
 
     if (!isset($schedulable[$report])) {
         $_SESSION['alert_type'] = 'danger';
@@ -40,6 +60,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_schedule'])) {
     } elseif (!isset($valid_frequencies[$frequency])) {
         $_SESSION['alert_type'] = 'danger';
         $_SESSION['alert_message'] = 'Please choose a valid frequency.';
+    } elseif (!empty($filtered['rejected'])) {
+        $_SESSION['alert_type'] = 'danger';
+        $_SESSION['alert_message'] = 'Recipients must be email addresses of active staff users. Not accepted: ' . implode(', ', array_map('htmlspecialchars', $filtered['rejected']));
     } elseif (empty($valid_emails)) {
         $_SESSION['alert_type'] = 'danger';
         $_SESSION['alert_message'] = 'Please enter at least one valid recipient email address.';
@@ -69,6 +92,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_schedule'])) {
 if (isset($_GET['delete'])) {
     validateCSRFToken($_GET['csrf_token'] ?? '');
     $schedule_id = intval($_GET['delete']);
+    $sched_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT schedule_report FROM report_schedules WHERE schedule_id = $schedule_id"));
+    $requireScheduleWrite($sched_row['schedule_report'] ?? '');
     mysqli_query($mysqli, "DELETE FROM report_schedules WHERE schedule_id = $schedule_id");
 
     if (function_exists('logAction')) {
@@ -85,6 +110,8 @@ if (isset($_GET['delete'])) {
 if (isset($_GET['toggle'])) {
     validateCSRFToken($_GET['csrf_token'] ?? '');
     $schedule_id = intval($_GET['toggle']);
+    $sched_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT schedule_report FROM report_schedules WHERE schedule_id = $schedule_id"));
+    $requireScheduleWrite($sched_row['schedule_report'] ?? '');
     mysqli_query($mysqli, "UPDATE report_schedules SET schedule_active = IF(schedule_active = 1, 0, 1) WHERE schedule_id = $schedule_id");
 
     $_SESSION['alert_type'] = 'success';
@@ -108,11 +135,14 @@ $sql_schedules = mysqli_query($mysqli, "SELECT * FROM report_schedules ORDER BY 
 
         <div class="px-3 pt-3 pb-1">
             <small class="text-muted">
-                Each active schedule emails a headline summary of the chosen report to its recipients at the selected cadence.
+                Recipients must be active staff users. Each active schedule emails a headline summary of the chosen report to its recipients at the selected cadence.
                 Delivery runs from the RivetMSP cron (the same scheduler that sends other queued mail); a schedule is sent again once its frequency has elapsed since the last send.
             </small>
         </div>
 
+ <?php if (!$can_schedule) { ?>
+            <div class="px-3 pb-2"><small class="text-muted">You have read-only access to reporting, so schedules can be viewed but not changed.</small></div>
+        <?php } else { ?>
         <!-- Add schedule -->
         <form method="post" class="p-3 form-row align-items-end">
             <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
@@ -141,6 +171,7 @@ $sql_schedules = mysqli_query($mysqli, "SELECT * FROM report_schedules ORDER BY 
                 <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-fw fa-plus me-1"></i>Add</button>
             </div>
         </form>
+        <?php } ?>
 
         <!-- Existing schedules -->
         <div class="table-responsive-sm px-3 pb-3">
@@ -162,6 +193,9 @@ $sql_schedules = mysqli_query($mysqli, "SELECT * FROM report_schedules ORDER BY 
                         while ($row = mysqli_fetch_assoc($sql_schedules)) {
                             $schedule_id = intval($row['schedule_id']);
                             $report_key  = $row['schedule_report'];
+                            if (!$can_schedule_report($report_key)) {
+                                continue; // never list recipients/figures of a report the viewer could not open
+                            }
                             $report_name = $schedulable[$report_key] ?? ($report_key . ' (unavailable)');
                             $frequency   = $valid_frequencies[$row['schedule_frequency']] ?? ucfirst((string) $row['schedule_frequency']);
                             $active      = intval($row['schedule_active']) === 1;
@@ -180,12 +214,14 @@ $sql_schedules = mysqli_query($mysqli, "SELECT * FROM report_schedules ORDER BY 
                             </td>
                             <td><?php echo $last_sent; ?></td>
                             <td class="text-end">
+                                <?php if ($can_schedule) { ?>
                                 <a class="btn btn-sm btn-outline-secondary" href="schedules.php?toggle=<?php echo $schedule_id; ?>&csrf_token=<?php echo $_SESSION['csrf_token']; ?>">
                                     <i class="fas fa-fw fa-<?php echo $active ? 'pause' : 'play'; ?>"></i><?php echo $active ? ' Pause' : ' Resume'; ?>
                                 </a>
                                 <a class="btn btn-sm btn-outline-danger confirm-link" href="schedules.php?delete=<?php echo $schedule_id; ?>&csrf_token=<?php echo $_SESSION['csrf_token']; ?>">
                                     <i class="fas fa-fw fa-trash"></i> Delete
                                 </a>
+                                <?php } ?>
                             </td>
                         </tr>
                     <?php } } ?>

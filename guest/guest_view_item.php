@@ -47,7 +47,7 @@ if (!isset($_GET['id']) || !isset($_GET['key'])) {
 $item_id = intval($_GET['id']);
 $item_key = sanitizeInput($_GET['key']);
 
-$sql = mysqli_query($mysqli, "SELECT * FROM shared_items WHERE item_id = $item_id AND item_key = '$item_key' AND item_expire_at > NOW() LIMIT 1");
+$sql = mysqli_query($mysqli, "SELECT * FROM shared_items WHERE item_id = $item_id AND item_key = '$item_key' AND (item_expire_at IS NULL OR item_expire_at > NOW()) LIMIT 1");
 $row = mysqli_fetch_assoc($sql);
 
 // Check we got a result
@@ -76,7 +76,7 @@ $item_recipient = nullable_htmlentities($row['item_recipient']);
 $item_views = intval($row['item_views']);
 $item_view_limit = intval($row['item_view_limit']);
 $item_created = nullable_htmlentities($row['item_created_at']);
-$item_expire = date('Y-m-d h:i A', strtotime($row['item_expire_at']));
+$item_expire = $row['item_expire_at'] ? date('Y-m-d h:i A', strtotime($row['item_expire_at'])) : 'Never';
 $client_id = intval($row['item_client_id']);
 
 // Create in-app notification
@@ -211,7 +211,7 @@ if ($item_type == "Document") {
             <th>2FA (TOTP)</th>
             <td>
                 <span class="js-show-otp" data-enc="<?= $enc_otp_b64 ?>" data-credential-id="<?= $credential_id ?>">
-                    <i class="far fa-clock"></i> <span id="otp_<?= $credential_id ?>"><i>Hover..</i></span>
+                    <i class="far fa-clock"></i> <span id="otp_<?= $credential_id ?>"><i>Decrypting&hellip;</i></span>
                 </span>
             </td>
         </tr>
@@ -280,23 +280,48 @@ if ($item_type == "Document") {
                 });
             });
 
-            // Delegated listener (CSP blocks inline onmouseenter= attributes) - lazily
-            // decrypts and fetches the current TOTP code the first time each OTP field
-            // is hovered.
-            document.addEventListener('mouseover', function (e) {
-                var trigger = e.target.closest && e.target.closest('.js-show-otp');
-                if (!trigger || trigger.dataset.otpLoaded) return;
-                trigger.dataset.otpLoaded = '1';
+            // The TOTP code is computed here in the browser from the decrypted seed. The seed never leaves this
+            // page: it is not sent to the server, so it can not end up in a query string or an access log.
+            function base32ToBytes(str) {
+                var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+                var clean = String(str).toUpperCase().replace(/[^A-Z2-7]/g, '');
+                var bits = '';
+                for (var i = 0; i < clean.length; i++) {
+                    bits += ('00000' + alphabet.indexOf(clean.charAt(i)).toString(2)).slice(-5);
+                }
+                var out = new Uint8Array(Math.floor(bits.length / 8));
+                for (var j = 0; j < out.length; j++) out[j] = parseInt(bits.substr(j * 8, 8), 2);
+                return out;
+            }
+
+            function totpCode(secretBytes) {
+                var counter = Math.floor(Date.now() / 30000);
+                var msg = new Uint8Array(8);
+                for (var i = 7; i >= 0; i--) { msg[i] = counter & 0xff; counter = Math.floor(counter / 256); }
+                return crypto.subtle.importKey('raw', secretBytes, {name: 'HMAC', hash: 'SHA-1'}, false, ['sign'])
+                    .then(function (k) { return crypto.subtle.sign('HMAC', k, msg); })
+                    .then(function (sig) {
+                        var h = new Uint8Array(sig);
+                        var o = h[h.length - 1] & 0x0f;
+                        var bin = ((h[o] & 0x7f) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3];
+                        return ('000000' + (bin % 1000000)).slice(-6);
+                    });
+            }
+
+            document.querySelectorAll('.js-show-otp').forEach(function (trigger) {
                 decryptField(trigger.dataset.enc, ek).then(function (secret) {
-                    if (!secret) return;
-                    jQuery.get(
-                        '/agent/ajax.php',
-                        {get_totp_token: 'true', totp_secret: secret},
-                        function (data) {
-                            var token = JSON.parse(data);
-                            document.getElementById('otp_' + trigger.dataset.credentialId).innerText = token;
-                        }
-                    );
+                    var secretBytes = base32ToBytes(secret || '');
+                    var target = document.getElementById('otp_' + trigger.dataset.credentialId);
+                    if (!secretBytes.length) { target.textContent = '-'; return; }
+                    function refresh() {
+                        totpCode(secretBytes).then(function (code) {
+                            target.textContent = code + ' (' + (30 - (Math.floor(Date.now() / 1000) % 30)) + 's)';
+                        });
+                    }
+                    refresh();
+                    setInterval(refresh, 1000);
+                }).catch(function () {
+                    document.getElementById('otp_' + trigger.dataset.credentialId).textContent = '(decryption failed)';
                 });
             });
         })();

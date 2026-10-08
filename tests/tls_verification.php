@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * TLS verification for the Comet and UniFi integrations, no database or network:  php tests/tls_verification.php
  */

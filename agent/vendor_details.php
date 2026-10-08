@@ -83,8 +83,8 @@ if (isset($_GET['vendor_id'])) {
                     <?php } ?>
                     <div class="mt-2"><i class="fa fa-fw fa-clock text-secondary me-2"></i><?php echo date('Y-m-d', strtotime($vendor_created_at)); ?></div>
 
-                    <?php require_once "vendor_edit_modal.php";
- ?>
+                    <?php // vendor_edit_modal.php does not exist; the edit form is the ajax modal (nightly IT-7c) ?>
+                    <button type="button" class="btn btn-sm btn-primary mt-2 ajax-modal" data-modal-url="modals/vendor/vendor_edit.php?id=<?php echo intval($vendor_id); ?>"><i class="fas fa-edit me-2"></i>Edit vendor</button>
 
                 </div>
             </div>
@@ -243,10 +243,9 @@ if (isset($_GET['vendor_id'])) {
                                 </tr>
 
                                 <?php
-
-                                require "vendor_contact_edit_modal.php";
-
-
+                                // The old per-row edit modal include pointed at a file that does not exist and made this page
+                                // return a 500 for any vendor with a contact (nightly IT-7c); there is no edit_vendor_contact
+                                // handler to post to, so nothing is included here.
                             }
 
                             ?>

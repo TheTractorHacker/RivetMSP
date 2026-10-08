@@ -55,7 +55,7 @@ $cnt = mysqli_fetch_assoc(mysqli_query($mysqli,
 $sql_clients = mysqli_query($mysqli,
     "SELECT DISTINCT c.client_id, c.client_name
      FROM rmm_alerts a JOIN clients c ON c.client_id = a.client_id
-     WHERE c.client_archived_at IS NULL ORDER BY c.client_name"
+     WHERE c.client_archived_at IS NULL" . ($client_access_string && !$session_is_admin ? " AND c.client_id IN ($client_access_string)" : '') . " ORDER BY c.client_name"
 );
 
 $has_active_filter = $filter_severity || $filter_client || $filter_search || $filter_asset_id;

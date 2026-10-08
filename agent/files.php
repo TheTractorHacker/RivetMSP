@@ -737,7 +737,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                              WHERE item_client_id = $client_id
                                              AND item_active = 1
                                              AND item_views != item_view_limit
-                                             AND item_expire_at > NOW()
+                                             AND (item_expire_at IS NULL OR item_expire_at > NOW())
                                              AND item_type = 'File'
                                              AND item_related_id = $file_id
                                              LIMIT 1"
@@ -746,7 +746,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                         if ($file_shared) {
                                             $row_shared = mysqli_fetch_assoc($sql_shared);
                                             $item_recipient       = nullable_htmlentities($row_shared['item_recipient']);
-                                            $item_expire_at_human = timeAgo($row_shared['item_expire_at']);
+                                            $item_expire_at_human = $row_shared['item_expire_at'] ? timeAgo($row_shared['item_expire_at']) : 'never';
                                         }
                                         ?>
                                         <tr>
@@ -849,7 +849,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                              WHERE item_client_id = $client_id
                                              AND item_active = 1
                                              AND item_views != item_view_limit
-                                             AND item_expire_at > NOW()
+                                             AND (item_expire_at IS NULL OR item_expire_at > NOW())
                                              AND item_type = 'Document'
                                              AND item_related_id = $document_id
                                              LIMIT 1"
@@ -858,7 +858,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                         if ($doc_shared) {
                                             $row_shared = mysqli_fetch_assoc($sql_shared);
                                             $item_recipient       = nullable_htmlentities($row_shared['item_recipient']);
-                                            $item_expire_at_human = timeAgo($row_shared['item_expire_at']);
+                                            $item_expire_at_human = $row_shared['item_expire_at'] ? timeAgo($row_shared['item_expire_at']) : 'never';
                                         }
                                         ?>
                                         <tr>

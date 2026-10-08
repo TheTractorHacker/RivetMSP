@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * Unit tests (plain php, no database): RuleSummary sentences, RuleDryRun matching/rendering and the recipe catalogue.
  *   php tests/rule_summary.php

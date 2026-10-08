@@ -121,7 +121,7 @@ $inv = mysqli_fetch_assoc(mysqli_query($mysqli, "
     LEFT JOIN clients ON invoice_client_id = client_id
     LEFT JOIN contacts ON clients.client_id = contacts.contact_client_id AND contact_primary = 1
     WHERE invoice_id = $pi_invoice_id
-    AND invoice_status NOT IN ('Draft','Paid','Cancelled')
+    AND invoice_status NOT IN ('Draft','Paid','Cancelled','Non-Billable')
     LIMIT 1
 "));
 if (!$inv) {
@@ -180,7 +180,7 @@ if (!insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $
 // Recompute invoice status from total payments
 $paid_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT SUM(payment_amount) AS amount_paid FROM payments WHERE payment_invoice_id = $invoice_id"));
 $total_paid = floatval($paid_row['amount_paid']);
-$invoice_status = ($invoice_amount - $total_paid <= 0) ? 'Paid' : 'Partial';
+$invoice_status = invoiceStatusAfterPayment($invoice_amount, $total_paid);
 mysqli_query($mysqli, "UPDATE invoices SET invoice_status = '$invoice_status' WHERE invoice_id = $invoice_id");
 mysqli_query($mysqli, "INSERT INTO history SET history_status = '$invoice_status', history_description = 'Online Payment added (webhook)', history_invoice_id = $invoice_id");
 

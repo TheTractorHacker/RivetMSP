@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * API login hardening, no database needed:  php tests/api_auth_hardening.php
  *  - api_rate_limit() fails open by default but CLOSED when asked and Redis is unavailable

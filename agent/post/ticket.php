@@ -2912,6 +2912,10 @@ if (isset($_POST['add_invoice_from_ticket'])) {
     );
 
     $row = mysqli_fetch_assoc($sql);
+    if (!$row) {
+        flash_alert('Ticket not found', 'error');
+        redirect();
+    }
     $client_id = intval($row['client_id']);
     $client_net_terms = intval($row['client_net_terms']);
     if ($client_net_terms == 0) {
@@ -2957,8 +2961,18 @@ if (isset($_POST['add_invoice_from_ticket'])) {
         mysqli_query($mysqli, "INSERT INTO invoices SET invoice_prefix = '$config_invoice_prefix', invoice_number = $invoice_number, invoice_scope = '$scope', invoice_date = '$date', invoice_due = DATE_ADD('$date', INTERVAL $client_net_terms day), invoice_currency_code = '$session_company_currency', invoice_category_id = $category, invoice_status = 'Draft', invoice_url_key = '$url_key', invoice_client_id = $client_id");
         $invoice_id = mysqli_insert_id($mysqli);
     } else {
-        $sql_invoice = mysqli_query($mysqli, "SELECT invoice_prefix, invoice_number FROM invoices WHERE invoice_id = $invoice_id");
+        // The invoice must belong to the ticket's client (nightly MSP-1) and must still be editable (Paid is a closed record)
+        $sql_invoice = mysqli_query($mysqli, "SELECT invoice_prefix, invoice_number FROM invoices WHERE invoice_id = $invoice_id AND invoice_client_id = $client_id");
         $row = mysqli_fetch_assoc($sql_invoice);
+        if (!$row) {
+            flash_alert("Invoice not found for this ticket's client", 'error');
+            redirect();
+        }
+        $block_reason = invoiceChangeBlockReason($mysqli, $invoice_id);
+        if ($block_reason !== null) {
+            flash_alert($block_reason, 'error');
+            redirect();
+        }
         $invoice_prefix = sanitizeInput($row['invoice_prefix']);
         $invoice_number = intval($row['invoice_number']);
     }

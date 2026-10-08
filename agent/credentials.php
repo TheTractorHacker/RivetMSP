@@ -556,7 +556,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                 WHERE item_client_id = $client_id
                                 AND item_active = 1
                                 AND item_views != item_view_limit
-                                AND item_expire_at > NOW()
+                                AND (item_expire_at IS NULL OR item_expire_at > NOW())
                                 AND item_type = 'Credential'
                                 AND item_related_id = $credential_id
                                 LIMIT 1"
@@ -574,7 +574,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                 $item_view_limit = nullable_htmlentities($row['item_view_limit']);
                                 $item_created_at = nullable_htmlentities($row['item_created_at']);
                                 $item_expire_at = nullable_htmlentities($row['item_expire_at']);
-                                $item_expire_at_human = timeAgo($row['item_expire_at']);
+                                $item_expire_at_human = $row['item_expire_at'] ? timeAgo($row['item_expire_at']) : 'never';
                             }
 
 

@@ -288,6 +288,9 @@ if (isset($_GET['disable_mfa'])){
 
     mysqli_query($mysqli,"UPDATE users SET user_token = '' WHERE user_id = $session_user_id");
 
+    // API tokens minted under the old second factor are revoked too (nightly MSP-4)
+    mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $session_user_id");
+
     // Delete any existing MFA tokens - these browsers should be re-validated
     mysqli_query($mysqli, "DELETE FROM remember_tokens WHERE remember_token_user_id = $session_user_id");
 

@@ -48,6 +48,12 @@ if ($scheduler_standalone) {
     }
 }
 
+require_once dirname(__DIR__) . '/includes/report_schedule_guards.php';
+
+// Only active, non-archived staff addresses may receive a scheduled report; this is re-checked on every send so a
+// recipient whose account was archived or removed stops receiving figures (nightly IT-8).
+$scheduler_staff_emails = reportScheduleStaffEmails($mysqli);
+
 // Resolve a sensible From address/name (fall back to company email if the mail-from isn't configured).
 $scheduler_from_email = !empty($config_mail_from_email) ? $config_mail_from_email : ($company_email ?? '');
 $scheduler_from_name  = !empty($config_mail_from_name)  ? $config_mail_from_name  : ($company_name ?? 'RivetMSP');
@@ -90,12 +96,9 @@ while ($sched = mysqli_fetch_assoc($res)) {
     }
 
     // Recipients may be comma/semicolon/whitespace separated.
-    $emails = preg_split('/[,;\s]+/', $recipients, -1, PREG_SPLIT_NO_EMPTY);
+    $emails = reportScheduleFilterRecipients($recipients, $scheduler_staff_emails)['allowed'];
     $mail = [];
     foreach ($emails as $to) {
-        if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
-            continue;
-        }
         $mail[] = [
             'from'           => $scheduler_from_email,
             'from_name'      => $scheduler_from_name,
