@@ -6659,3 +6659,16 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             }
         }
     }
+
+    if ($rivetit_db_version() == '2.6.77') {
+        // RivetCore 1.0.0-rc.7 migration 0017 moves mcp_unlinked_identities.issuer/subject to utf8mb4_bin (OIDC iss/sub are case-sensitive).
+        // Idempotent. Skipped (version NOT advanced, so it retries) until the package with the migration is installed.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Mcp\Migration\Migration0017McpIdentityBinaryCollation::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.78'");
+        }
+    }

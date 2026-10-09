@@ -4,6 +4,8 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+- **RivetCore 1.0.0-rc.7 and database migration 2.6.78:** pins `rivet/rivet-core` rc.7. Migration 2.6.78 applies RivetCore 0017, which makes `mcp_unlinked_identities.issuer` and `.subject` case-sensitive (`utf8mb4_bin`; OIDC `iss`/`sub` are case-sensitive). Idempotent; the version does not advance until the package is installed. `db.sql` is updated to match. Also picks up rc.7 fixes to RMM enrollment and technician actions and automation. Test: `tests/core_rc7_migration.php`.
+
 ## [26.10.8] RivetMSP — Optional RMM module (the built-in endpoint agent), off by default
 
 Database migration 2.6.77 (RivetCore migrations 0014 to 0016 and `settings.config_core_rmm_enabled`). Pins `rivet/rivet-core` 1.0.0-rc.6. Nothing changes until an administrator switches the module on.

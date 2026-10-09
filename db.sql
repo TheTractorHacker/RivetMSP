@@ -2041,8 +2041,8 @@ DROP TABLE IF EXISTS `mcp_unlinked_identities`;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `mcp_unlinked_identities` (
   `mcp_unlinked_id` int(11) NOT NULL AUTO_INCREMENT,
-  `issuer` varchar(255) NOT NULL,
-  `subject` varchar(255) NOT NULL,
+  `issuer` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `subject` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
   `email` varchar(200) DEFAULT NULL,
   `display_name` varchar(200) DEFAULT NULL,
   `attempts` int(11) NOT NULL DEFAULT 1,
@@ -4431,6 +4431,7 @@ INSERT INTO `rivet_core_migrations` VALUES ('0013_retention_indexes','2026-10-06
 INSERT INTO `rivet_core_migrations` VALUES ('0014_endpoint_agent_core','2026-10-07 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0015_endpoint_agent_converge','2026-10-07 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0016_rmm_module_switches','2026-10-07 00:00:00');
+INSERT INTO `rivet_core_migrations` VALUES ('0017_mcp_identity_binary_collation','2026-10-09 00:00:00');
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 

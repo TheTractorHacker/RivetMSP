@@ -253,8 +253,8 @@ $cu->query("INSERT INTO companies SET company_id = 1, company_name = 'x'"); $cu-
 $ok((int) $cu->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'settings' AND column_name = 'config_core_rmm_enabled'")->fetch_row()[0] === 0, 'UPGRADE precondition: no config_core_rmm_enabled column yet');
 $run = proc_open([PHP_BINARY, "$root/scripts/update_cli.php", '--update_db'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, "$root/scripts", array_merge(getenv(), ['RMM_TEST_DATABASE' => $up]));
 $updOut = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); proc_close($run);
-$ok(strpos($updOut, '2.6.77') !== false, 'UPGRADE: update_cli --update_db reports 2.6.77');
-$ok($cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0] === '2.6.77', 'UPGRADE: the database is at 2.6.77');
+$ok(strpos($updOut, '2.6.78') !== false, 'UPGRADE: update_cli --update_db reports 2.6.78');
+$ok($cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0] === '2.6.78', 'UPGRADE: the database is at 2.6.78');
 $ok($tableCount($cu) === 10 && (int) $cu->query('SELECT enabled FROM endpoint_agent_settings WHERE id=1')->fetch_row()[0] === 0 && (int) $cu->query('SELECT config_core_rmm_enabled FROM settings WHERE company_id=1')->fetch_row()[0] === 0, 'UPGRADE: the ten tables exist and the module is OFF (neither switch is turned on by the update)');
 $ok($shape($cf) === $shape($cu), 'UPGRADE: the upgraded schema equals a fresh install from db.sql (' . count($shape($cu)) . ' column/index facts compared)');
 $ok(is_file($sd . '/rmm_state.json') && ($state()['enabled'] ?? null) === false, 'UPGRADE: the updater wrote a state file that says disabled (the gate answers without the database from the first request)');
