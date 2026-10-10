@@ -444,6 +444,25 @@ CREATE TABLE `automation_rules` (
   KEY `idx_automation_rules_trigger` (`trigger_event`,`is_enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `backup_runs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `backup_runs` (
+  `run_id` int(11) NOT NULL AUTO_INCREMENT,
+  `run_kind` varchar(20) NOT NULL DEFAULT 'app_manual',
+  `run_started_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `run_finished_at` datetime DEFAULT NULL,
+  `run_file` varchar(255) DEFAULT NULL,
+  `run_size` bigint(20) unsigned DEFAULT NULL,
+  `run_sha256` char(64) DEFAULT NULL,
+  `run_ok` tinyint(1) NOT NULL DEFAULT 0,
+  `run_error` text DEFAULT NULL,
+  `run_offsite_result` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`run_id`),
+  KEY `idx_backup_runs_started` (`run_started_at`),
+  KEY `idx_backup_runs_ok` (`run_ok`,`run_finished_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `budget`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -2706,6 +2725,27 @@ CREATE TABLE `records` (
   PRIMARY KEY (`record_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `recovery_alerts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `recovery_alerts` (
+  `alert_key` varchar(120) NOT NULL,
+  `alert_last_sent_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `alert_last_message` varchar(500) DEFAULT NULL,
+  `alert_send_count` int(11) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`alert_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `recovery_settings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `recovery_settings` (
+  `setting_key` varchar(60) NOT NULL,
+  `setting_value` text DEFAULT NULL,
+  `setting_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `recurring_expenses`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -2856,6 +2896,28 @@ CREATE TABLE `report_schedules` (
   `schedule_active` tinyint(4) DEFAULT 1,
   `schedule_created_at` datetime DEFAULT current_timestamp(),
   PRIMARY KEY (`schedule_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `restore_drill_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `restore_drill_log` (
+  `drill_id` int(11) NOT NULL AUTO_INCREMENT,
+  `drill_started_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `drill_finished_at` datetime DEFAULT NULL,
+  `drill_trigger` varchar(20) NOT NULL DEFAULT 'cron',
+  `drill_backup_kind` varchar(20) DEFAULT NULL,
+  `drill_backup_file` varchar(255) DEFAULT NULL,
+  `drill_status` varchar(20) NOT NULL DEFAULT 'running',
+  `drill_message` varchar(500) DEFAULT NULL,
+  `drill_restore_seconds` decimal(10,2) DEFAULT NULL,
+  `drill_total_seconds` decimal(10,2) DEFAULT NULL,
+  `drill_scratch_db` varchar(64) DEFAULT NULL,
+  `drill_cleanup_ok` tinyint(1) DEFAULT NULL,
+  `drill_checks` mediumtext DEFAULT NULL,
+  PRIMARY KEY (`drill_id`),
+  KEY `idx_restore_drill_started` (`drill_started_at`),
+  KEY `idx_restore_drill_status` (`drill_status`,`drill_finished_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `revenues`;

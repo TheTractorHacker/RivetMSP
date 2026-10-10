@@ -118,6 +118,8 @@ function zip_uploads(string $uploadsPath, string $zipFilePath): void {
  * $type: 'manual' or 'auto'
  */
 function build_backup(mysqli $mysqli, string $type, string $backupDir): array {
+    // Status record (Recovery): a failed or interrupted run is alerted, see src/Recovery/BackupStatus.php.
+    $statusId     = \RivetMSP\Recovery\BackupStatus::begin($mysqli, $type === 'auto' ? 'app_auto' : 'app_manual');
     $timestamp    = date('YmdHis');
     $baseName     = "itflow_{$timestamp}_{$type}";
     $sqlFile      = tempnam(sys_get_temp_dir(), $baseName . '_sql_');
@@ -151,10 +153,13 @@ function build_backup(mysqli $mysqli, string $type, string $backupDir): array {
     $final->addFile($sqlFile,     'db.sql');
     $final->addFile($uploadsZip,  'uploads.zip');
     $final->addFile($versionFile, 'version.txt');
-    $final->close();
+    $snapshotFile = \RivetMSP\Recovery\TableSnapshot::attach($final, $mysqli, $baseName);   // restore-drill row counts (no secrets)
+    $zipClosed = $final->close();
     @chmod($finalZip, 0640);
 
     @unlink($sqlFile); @unlink($uploadsZip); @unlink($versionFile);
+    if ($snapshotFile !== null) { @unlink($snapshotFile); }
+    \RivetMSP\Recovery\BackupStatus::finishFromZip($mysqli, $statusId, $finalZip, $zipClosed);
 
     return ['path' => $finalZip, 'name' => basename($finalZip)];
 }
@@ -239,9 +244,11 @@ function backup_upload_to_s3(string $filePath, string $fileName): bool {
         ]);
 
         logApp('Backup', 'info', "Uploaded backup $fileName to S3 bucket {$config_backup_s3_bucket} (key: $key)");
+        \RivetMSP\Recovery\BackupStatus::noteOffsite($mysqli, $fileName, "ok: s3://{$config_backup_s3_bucket}/$key");
         return true;
     } catch (\Throwable $e) {
         logApp('Backup', 'error', "S3 upload failed for $fileName: " . $e->getMessage());
+        \RivetMSP\Recovery\BackupStatus::noteOffsite($mysqli, $fileName, 'failed: ' . strtok($e->getMessage(), "\n"));
         return false;
     }
 }
