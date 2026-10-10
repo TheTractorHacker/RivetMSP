@@ -4,7 +4,7 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
-## [Unreleased] RivetMSP — Wave 1 integration (security + mail intake + recovery, RivetCore rc.8)
+## [26.10.9] RivetMSP — Security hardening, mail intake reliability, backup alerts and restore drill (RivetCore rc.8)
 
 The three Wave 1 branches on one tree. Database chain: **2.6.78** security, **2.6.79** mail intake, **2.6.80** recovery, **2.6.81** RivetCore migration 0017. `db.sql` is regenerated from a clean install plus every step (no `utf8mb4_uca1400_ai_ci`, explicit `utf8mb4_general_ci`), and a database migrated from 2.6.77 has the same schema as a fresh import.
 
