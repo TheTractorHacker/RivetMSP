@@ -24,7 +24,17 @@ function fmt_age(?int $ts): string {
     if (!$ts) return '<span class="text-muted">Never</span>';
     return '<span title="' . date('Y-m-d H:i:s', $ts) . '">' . timeAgo(date('Y-m-d H:i:s', $ts)) . '</span>';
 }
+$backup_passphrase_ready = strlen((string) $config_backup_passphrase) >= 16;
 ?>
+
+<?php if (!$backup_passphrase_ready): ?>
+<div class="alert alert-danger" role="alert">
+    <i class="fas fa-exclamation-triangle me-2"></i><strong>Backups are turned off until a backup passphrase is set.</strong>
+    Set a passphrase of at least 16 characters under <em>Scheduled Backups &rarr; Backup encryption passphrase</em> below.
+    Every backup carries the key that unlocks your stored secrets, so it is only ever written encrypted with that passphrase.
+    Keep the passphrase somewhere other than this server; without it a backup cannot be restored onto a new server.
+</div>
+<?php endif; ?>
 
 <!-- ── Hero card ─────────────────────────────────────────────────────────── -->
 <div class="card card-dark mb-3" style="border-top:3px solid #007bff;">
@@ -45,11 +55,11 @@ function fmt_age(?int $ts): string {
             // stat row below, so the buttons land centered directly above it. ?>
             <div class="col-md-4 text-center mt-3 mt-md-0 text-nowrap">
                 <a href="post.php?backup_download_fresh=1&csrf_token=<?= $_SESSION['csrf_token'] ?>"
-                   class="btn btn-sm btn-primary me-1">
+                   class="btn btn-sm btn-primary me-1<?= $backup_passphrase_ready ? '' : ' disabled' ?>"<?= $backup_passphrase_ready ? '' : ' aria-disabled="true" title="Set a backup passphrase first"' ?>>
                     <i class="fas fa-download me-1"></i>Download Backup
                 </a>
                 <a href="post.php?backup_save=1&csrf_token=<?= $_SESSION['csrf_token'] ?>"
-                   class="btn btn-sm btn-outline-secondary">
+                   class="btn btn-sm btn-outline-secondary<?= $backup_passphrase_ready ? '' : ' disabled' ?>"<?= $backup_passphrase_ready ? '' : ' aria-disabled="true" title="Set a backup passphrase first"' ?>>
                     <i class="fas fa-save me-1"></i>Save to Server
                 </a>
             </div>
@@ -130,6 +140,24 @@ function fmt_age(?int $ts): string {
                                 <small class="text-muted">Older backups are deleted automatically.</small>
                             </div>
                         </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="form-group mb-3">
+                        <label class="text-muted small mb-1">Backup encryption passphrase <span class="text-danger">(required, 16+ characters)</span></label>
+                        <input type="password" class="form-control form-control-sm" name="config_backup_passphrase"
+                               autocomplete="new-password" minlength="16"
+                               <?= $backup_passphrase_ready ? '' : 'required' ?>
+                               placeholder="<?= $backup_passphrase_ready ? '(saved - leave blank to keep)' : 'at least 16 characters' ?>">
+                        <small class="text-muted">
+                            No backup is built without this. Each backup includes a <code>backup-manifest.json.enc</code> holding what a
+                            restore onto a different server needs to read this database's encrypted secrets (SMTP/IMAP passwords,
+                            API keys, TOTP seeds, the credentials vault). The manifest is encrypted with this passphrase
+                            (<code>openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt</code>, the scheme <code>deploy/backup.sh</code> also uses),
+                            so the settings key never sits in a backup in plain text. Use a long random passphrase and keep a copy
+                            away from this server: if you lose it you cannot recover the key from a backup.
+                        </small>
                     </div>
 
                     <button type="submit" name="save_backup_settings" class="btn btn-primary btn-sm">

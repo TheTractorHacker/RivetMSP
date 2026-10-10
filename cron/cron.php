@@ -1178,6 +1178,8 @@ $config_backup_s3_access_key = $settings_row['config_backup_s3_access_key'] ?? '
 $config_backup_s3_secret_key = decryptSetting($settings_row['config_backup_s3_secret_key'] ?? '');
 $config_backup_s3_path_style = intval($settings_row['config_backup_s3_path_style'] ?? 1);
 $config_backup_s3_prefix     = $settings_row['config_backup_s3_prefix'] ?? '';
+// The backup passphrase (required: build_backup() refuses to run without one, and the settings key goes only into the manifest it encrypts).
+$config_backup_passphrase    = decryptSetting($settings_row['config_backup_passphrase'] ?? '');
 
 if ($config_backup_auto_enabled) {
     $backup_dir   = dirname(__DIR__) . '/backups';
@@ -1209,12 +1211,22 @@ if ($config_backup_auto_enabled) {
             define('FROM_POST_HANDLER', true);
         }
         require_once dirname(__DIR__) . '/admin/post/backup.php';
-        $result = build_backup($mysqli, 'auto', $backup_dir);
-        prune_backups($backup_dir, $config_backup_retain_count);
-        logApp('Backup', 'info', "Auto-backup completed: {$result['name']}");
-        appNotify('Backup', "Auto-backup saved: {$result['name']}", '/admin/backup.php');
-        if (function_exists('backup_upload_to_s3')) {
-            backup_upload_to_s3($result['path'], $result['name']);
+        try {
+            $result = build_backup($mysqli, 'auto', $backup_dir);
+        } catch (BackupPassphraseRequired $e) {
+            // No usable backup passphrase: refuse loudly instead of writing a backup that cannot protect the settings key.
+            logApp('Backup', 'error', 'Auto-backup refused: ' . $e->getMessage());
+            appNotify('Backup', 'Automatic backup was NOT taken: set a backup passphrase (16+ characters) in Maintenance > Backup.', '/admin/backup.php');
+            echo gmdate('Y-m-d\\TH:i:s\\Z') . " cron: auto-backup refused (no backup passphrase)\n";
+            $result = null;
+        }
+        if ($result !== null) {
+            prune_backups($backup_dir, $config_backup_retain_count);
+            logApp('Backup', 'info', "Auto-backup completed: {$result['name']}");
+            appNotify('Backup', "Auto-backup saved: {$result['name']}", '/admin/backup.php');
+            if (function_exists('backup_upload_to_s3')) {
+                backup_upload_to_s3($result['path'], $result['name']);
+            }
         }
     }
 }

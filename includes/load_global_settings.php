@@ -172,6 +172,7 @@ $config_backup_s3_region      = $row['config_backup_s3_region'] ?? 'us-east-1';
 $config_backup_s3_bucket      = $row['config_backup_s3_bucket'] ?? '';
 $config_backup_s3_access_key  = $row['config_backup_s3_access_key'] ?? '';
 $config_backup_s3_secret_key  = decryptSetting($row['config_backup_s3_secret_key'] ?? '');
+$config_backup_passphrase     = decryptSetting($row['config_backup_passphrase'] ?? '');
 $config_backup_s3_path_style  = intval($row['config_backup_s3_path_style'] ?? 1);
 $config_backup_s3_prefix      = $row['config_backup_s3_prefix'] ?? '';
 // Comet Backup

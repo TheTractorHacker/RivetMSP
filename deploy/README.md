@@ -254,9 +254,29 @@ unattended.
 ### What's inside a backup, and how to restore one
 
 Each run produces one file: `<dest>/backup-<dbname>-<timestamp>.tar.gz.enc` — an
-`openssl enc -aes-256-cbc -pbkdf2` encrypted tar archive containing the `mysqldump` output, a small
-`backup-manifest.json` (installation ID + `config_settings_enc_key`, if the source instance ever set
-one — see `restore.sh` below for why that travels separately from the SQL dump), and `uploads/`.
+`openssl enc -aes-256-cbc -pbkdf2 -iter 600000` encrypted tar archive containing the `mysqldump` output, a small
+`backup-manifest.json` (installation ID + a **fingerprint** of `config_settings_enc_key`; the key itself is in a
+separate file, see below), and `uploads/`.
+
+### Archive key derivation and the settings-key file
+
+`backup.sh` uses 600000 PBKDF2 iterations for the passphrase (OpenSSL's own default is only 10000). `restore.sh` tries
+600000 first and falls back to the old default, so archives made by earlier versions still restore with no flag.
+
+The archive **no longer contains `config_settings_enc_key`**. That key unlocks every stored SMTP/IMAP password, API
+key, webhook secret, TOTP seed and the wrapped credential-vault master key in the dump, so it must not sit in the same file as
+the data it unlocks. Each run now writes it to a separate file next to the archive:
+
+```
+backup-<db>-<timestamp>.tar.gz.enc          the encrypted archive (database + uploads + manifest with a key fingerprint)
+backup-<db>-<timestamp>.settings-key        the settings key, mode 0600 root:root, one line plus # comments
+```
+
+Copy the `.settings-key` file **off the server**, and keep it apart from both the archive and the passphrase: the dump, the
+settings key and the passphrase should never share one file or one disk copy. Old key files are pruned with their archives
+by `--retention-days`. To restore, `restore.sh` uses `<archive>.settings-key` automatically when it sits next to `--backup`,
+or you name it with `--settings-key-file=<path>`; the key is checked against the manifest fingerprint and the restore stops
+if they differ. An archive written before this change still carries the key in its manifest and restores exactly as before.
 
 **Test a restore before you need it for real.** A backup you've never restored is a backup you don't
 actually have:
@@ -272,11 +292,14 @@ against a **scratch** instance stood up with `deploy/install.sh --domain=<scratc
 never straight into a live instance you care about, for a *test* restore. See `restore.sh` below for
 exactly what this does.
 
-The application also has its own independent, manual, on-demand backup feature reachable from inside
+The application also has its own independent backup feature reachable from inside
 the app (Settings → Backup → "Download Backup" / "Save to Server", `admin/backup.php`) that produces
-the same kind of database-dump-plus-uploads-zip on demand — useful before a risky change, but it is
-**not** encrypted and **not** scheduled, so it does not replace `deploy/backup.sh` + the systemd timer
-for actual disaster-recovery purposes. The two coexist in the same `backups/` directory without either
+the same kind of database-dump-plus-uploads-zip — useful before a risky change. **It refuses to build a backup until a
+backup passphrase of at least 16 characters is saved** (Maintenance → Backup → Backup encryption passphrase); the zip's
+`backup-manifest.json.enc` is encrypted with that passphrase and is the only place the settings key is written. The
+`db.sql` and `uploads.zip` inside the zip are not themselves encrypted, so it does not replace `deploy/backup.sh` + the systemd
+timer for actual disaster-recovery purposes. The browser restore (`/setup` → "Restore from Backup") asks for that
+passphrase and applies the recovered key. The two coexist in the same `backups/` directory without either
 deleting the other's files (`backup.sh` only ever touches its own `backup-*.enc` naming).
 
 ---
@@ -301,8 +324,9 @@ empty instance, then point this at the backup to restore into it.
    explicit `--no-pre-restore-backup-confirmed` opt-out). Skip this only if the target has nothing worth
    keeping (e.g. it was just created by `install.sh` and never used).
 2. **Decrypt + extract** the backup archive.
-3. **Recover the manifest** (`installation_id`/`config_settings_enc_key`) if the archive has one. Older
-   backups predate this and print a warning instead — see below for why this matters.
+3. **Recover the settings key**: from the archive's manifest if it still carries it (older archives), else from
+   `--settings-key-file` / the `<archive>.settings-key` sidecar, checked against the manifest fingerprint. Backups that
+   predate the manifest print a warning instead — see below for why this matters.
 4. **`DROP DATABASE` + `CREATE DATABASE`, then import the SQL dump** — deliberately NOT a plain import
    into whatever's already there. `mysqldump`'s own per-table `DROP TABLE IF EXISTS` only covers tables
    that exist *in the dump*; a table that exists in the target but not in an older backup (schema drift
@@ -314,18 +338,17 @@ empty instance, then point this at the backup to restore into it.
    `www-data:www-data`/`750`/`640` ownership and permissions.
 6. **Apply the recovered `config_settings_enc_key`** to the target's `config.php`, if the manifest had
    one and it differs from what's already there. Without this step, any setting
-   `encryptSettingsValue()`/`decryptSettingsValue()` protected under the *source* instance's key (SMTP,
-   IMAP, RMM/webhook secrets — mostly N/A today, since `scripts/setup_cli.php` doesn't currently
-   generate one by default, but this travels defensively in case an instance set one by hand) would
-   decrypt to garbage under the target's own different-or-absent key.
+   `encryptSetting()`/`decryptSetting()` protected under the *source* instance's key (SMTP, IMAP, API keys,
+   webhook secrets, TOTP seeds, the wrapped vault master key) would decrypt to nothing under the target's
+   own freshly generated key (`setup`/`setup_cli.php` now mint one on every install).
 
 ### Why the manifest exists
 
 `config_settings_enc_key` lives **only** in `config.php` — never in the database, and therefore never
 in the SQL dump `backup.sh` produces. A naive restore (dump + uploads only) onto a fresh instance with
 its own freshly-blank `config.php` would silently corrupt every setting that key protected. The
-manifest (`backup-manifest.json`, encrypted inside the same archive as everything else — no less
-protected than the data it travels with) is what lets `restore.sh` recover and re-apply it.
+manifest holds a fingerprint of it, and the key itself is supplied from the separate `.settings-key` file (or, for
+older archives, read from the manifest inside the encrypted archive); that is what lets `restore.sh` recover and re-apply it.
 
 ### Testing a restore safely
 

@@ -6662,6 +6662,7 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
     // Wave 1 security (DB 2.6.78). One idempotent step, gated on 2.6.77:
     //   - security_settings (policy key/value), user_recovery_codes (hashed, single use), user_sessions (hashed session id, revocable)
+    //   - settings.config_backup_passphrase (the in-app backup passphrase, required, wraps the manifest that holds the settings key)
     //   - software.software_key / software_keys.software_key become TEXT (a wrapped license key is longer than the old varchar(200)/(400))
     //   - session lifetime: settings.config_login_session_lifetime is now the ABSOLUTE maximum (default 7 days, floor 60 minutes, cap 90 days)
     //     and the idle timeout is security_settings.session_idle_minutes (default 8 hours, the old RivetMSP session length). An install that
@@ -6708,6 +6709,10 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
           UNIQUE KEY `uq_user_sessions_hash` (`session_hash`),
           KEY `idx_user_sessions_user` (`session_user_id`,`session_revoked_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        // The backup encryption passphrase (encrypted at rest): required before the in-app backup builds anything; it encrypts the manifest
+        // that is the only place the settings key is written.
+        mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_backup_passphrase` text DEFAULT NULL AFTER `config_backup_s3_prefix`");
 
         mysqli_query($mysqli, "ALTER TABLE `software` MODIFY COLUMN `software_key` text DEFAULT NULL");
         if (mysqli_num_rows(mysqli_query($mysqli, "SHOW TABLES LIKE 'software_keys'")) > 0) {
