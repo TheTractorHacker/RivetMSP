@@ -156,6 +156,21 @@ file_put_contents($cfgPath, $cfgOrig);
 $ok($c === 0 && str_contains($out, 'NOT re-wrapped'), 'with an empty key the step prints that it did not re-wrap');
 $ok($one("SELECT config_whitelabel_key FROM settings WHERE company_id=1") === 'nokey-token' && $one("SELECT user_token FROM users WHERE user_id=$u1") === $seed, 'with an empty key the stored secrets are untouched');
 
+// update_cli --rewrap_secrets: wraps what is still plaintext, repeats harmlessly, refuses without a key
+$q("UPDATE settings SET config_imap_password='cli-plain-pw', config_whitelabel_key='cli-plain-key' WHERE company_id=1");
+[$c, $o] = sec_sh('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --rewrap_secrets');
+$row = $rows("SELECT config_imap_password, config_whitelabel_key FROM settings WHERE company_id=1")[0];
+$ok($c === 0 && str_contains($o, 'Re-wrapped') && secIsWrapped($row['config_imap_password']) && decryptSetting($row['config_imap_password']) === 'cli-plain-pw' && decryptSetting($row['config_whitelabel_key']) === 'cli-plain-key', 'update_cli --rewrap_secrets wraps the plaintext secrets');
+[$c, $o] = sec_sh('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --rewrap_secrets');
+$ok($c === 0 && str_contains($o, 'Re-wrapped 0 '), 'and a second run wraps nothing');
+$cfgOrig2 = file_get_contents("$root/config.php");
+file_put_contents("$root/config.php", $cfgOrig2 . "\n\$config_settings_enc_key = '';\n");
+$q("UPDATE settings SET config_imap_password='cli-plain-2' WHERE company_id=1");
+[$c, $o] = sec_sh('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --rewrap_secrets');
+file_put_contents("$root/config.php", $cfgOrig2);
+$ok($c !== 0 && str_contains($o, 'missing from config.php') && $one("SELECT config_imap_password FROM settings WHERE company_id=1") === 'cli-plain-2', 'without a key it refuses and changes nothing');
+secRewrapAll($db);
+
 // the deferred columns (cron/mail_queue.php reads them raw) are NOT wrapped by the step, the lazy re-wrap or secRewrapAll
 $row = $rows("SELECT * FROM settings WHERE company_id=1")[0];
 $defOk = true; foreach ($deferred as $c2 => $v) { $defOk = $defOk && $row[$c2] === $v; }

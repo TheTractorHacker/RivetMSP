@@ -274,6 +274,22 @@ $ok((int) $one("SELECT config_login_session_lifetime FROM settings WHERE company
 [$c, $body] = $ba->go('GET', '/admin/settings_security.php');
 $ok(str_contains($body, 'value="MYKEY123"'), 'the login key secret shows decrypted on the settings page');
 
+// ============================================================ the missing settings key banner (config.php without $config_settings_enc_key)
+$ba2 = new Browser($base);
+[$c, $body] = $login($ba2, 'admin');
+$ba2->go('POST', '/login.php', ['mfa_login' => '1', 'pending_mfa_token' => $mfaToken($body), 'current_code' => (string) $code($seedA)]);
+[$c, $body] = $ba2->go('GET', '/admin/settings_security.php');
+$ok($c === 200 && !str_contains($body, 'settings-key-missing-banner'), 'with a settings key configured, no warning banner is shown on the admin pages');
+putenv('RMM_TEST_NO_ENC_KEY=1');   // the scratch config.php blanks $config_settings_enc_key for a server started with this set
+$sdir2 = sys_get_temp_dir() . '/sec_http_sess2_' . bin2hex(random_bytes(3));
+mkdir($sdir2, 0700);
+register_shutdown_function(function () use ($sdir2) { foreach (glob("$sdir2/*") ?: [] as $f) { @unlink($f); } @rmdir($sdir2); });
+$baseNoKey = sec_start_server($sdir2);
+putenv('RMM_TEST_NO_ENC_KEY');
+$sidNK = sec_forge_session($sdir2, ['logged' => true, 'user_id' => $admin, 'csrf_token' => 'csrftok1', 'sec_created' => time(), 'sec_last' => time()]);
+[$c, $body] = sec_web($baseNoKey, 'GET', '/admin/settings_security.php', $sidNK);
+$ok($c === 200 && str_contains($body, 'settings-key-missing-banner') && str_contains($body, 'Settings encryption key missing') && str_contains($body, '--rewrap_secrets'), 'without a key every admin page carries a clear warning banner that names the fix');
+
 // cleanup
 foreach (['user_sessions', 'remember_tokens', 'user_recovery_codes', 'security_settings'] as $t) { $q("DELETE FROM $t"); }
 $q("UPDATE settings SET config_login_key_secret='', config_login_session_lifetime=10080, config_core_audit_enabled=$auditWas WHERE company_id=1");
