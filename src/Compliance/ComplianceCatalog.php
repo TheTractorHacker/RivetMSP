@@ -106,16 +106,18 @@ final class ComplianceCatalog
             'Long-lived sessions leave an unattended or stolen device signed in.',
             [F::ISO27001 => ['A.8.5'], F::SOC2 => ['CC6.1'], F::PCI => ['8.2.8'], F::HIPAA => ['164.312(a)(2)(iii)']],
             function (): CheckResult {
-                $min = (int) $this->setting('config_login_session_lifetime', 480);
+                // config_login_session_lifetime is the ABSOLUTE maximum session length (minutes); the idle timeout (default 8 hours) is a separate,
+                // shorter limit (Settings > Security > Sign-in policy). Up to a week is the default and passes; up to 30 days warns.
+                $min = (int) $this->setting('config_login_session_lifetime', 10080);
                 $hours = round($min / 60, 1);
                 $m = ['session_hours' => $hours];
-                if ($min <= 1440) {
-                    return CheckResult::pass("Sessions last up to $hours hours.", 'Shorter is stricter; PCI DSS expects idle sessions to end within 15 minutes, which is a separate control.', $m);
+                if ($min <= 10080) {
+                    return CheckResult::pass("Sessions last at most $hours hours.", 'Shorter is stricter; a session also ends after a period of inactivity (idle timeout). PCI DSS expects idle sessions to end within 15 minutes, which is a separate control.', $m);
                 }
 
-                return $min <= 10080
-                    ? CheckResult::warn("Sessions last up to $hours hours.", null, 'settings_security.php', $m)
-                    : CheckResult::fail("Sessions last up to $hours hours.", null, 'settings_security.php', $m);
+                return $min <= 43200
+                    ? CheckResult::warn("Sessions last at most $hours hours.", null, 'settings_security.php', $m)
+                    : CheckResult::fail("Sessions last at most $hours hours.", null, 'settings_security.php', $m);
             });
 
         $out[] = new CallbackCheck('https_only', 'Traffic is encrypted (HTTPS only)', 'Cryptography',

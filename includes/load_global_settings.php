@@ -157,7 +157,8 @@ $config_login_message = $row['config_login_message'];
 $config_login_key_required = $row['config_login_key_required'];
 $config_login_key_secret = decryptSetting((string) ($row['config_login_key_secret'] ?? ''));
 $config_login_remember_me_expire = intval($row['config_login_remember_me_expire']);
-$config_login_session_lifetime = intval($row['config_login_session_lifetime'] ?? 480);
+// Absolute session lifetime in minutes (default 7 days, floor 60, cap 90 days). The idle timeout is a separate setting (security_settings).
+$config_login_session_lifetime = max(60, min(129600, intval($row['config_login_session_lifetime'] ?? 10080)));
 $config_log_retention = intval($row['config_log_retention']);
 $config_compliance_profile = (string) ($row['config_compliance_profile'] ?? 'none');
 $config_audit_retention_days = intval($row['config_audit_retention_days'] ?? 365);
