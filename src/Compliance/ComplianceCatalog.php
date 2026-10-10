@@ -19,6 +19,7 @@ final class ComplianceCatalog
 {
     private const SETTINGS_PATH = 'settings_compliance.php';
     private const STALE_AGENT_DAYS = 90;
+    private const RESTORE_TEST_DAYS = 35;
 
     public function __construct(private \mysqli $db, private string $appRoot, private array $settings)
     {
@@ -29,6 +30,11 @@ final class ComplianceCatalog
         $res = mysqli_query($this->db, $sql);
 
         return ($res ? mysqli_fetch_assoc($res) : null) ?: [];
+    }
+
+    private function drillEnabled(): bool
+    {
+        return \RivetMSP\Recovery\RecoverySettings::get($this->db, 'drill_enabled') === '1';
     }
 
     private function setting(string $key, mixed $default = null): mixed
@@ -106,16 +112,18 @@ final class ComplianceCatalog
             'Long-lived sessions leave an unattended or stolen device signed in.',
             [F::ISO27001 => ['A.8.5'], F::SOC2 => ['CC6.1'], F::PCI => ['8.2.8'], F::HIPAA => ['164.312(a)(2)(iii)']],
             function (): CheckResult {
-                $min = (int) $this->setting('config_login_session_lifetime', 480);
+                // config_login_session_lifetime is the ABSOLUTE maximum session length (minutes); the idle timeout (default 8 hours) is a separate,
+                // shorter limit (Settings > Security > Sign-in policy). Up to a week is the default and passes; up to 30 days warns.
+                $min = (int) $this->setting('config_login_session_lifetime', 10080);
                 $hours = round($min / 60, 1);
                 $m = ['session_hours' => $hours];
-                if ($min <= 1440) {
-                    return CheckResult::pass("Sessions last up to $hours hours.", 'Shorter is stricter; PCI DSS expects idle sessions to end within 15 minutes, which is a separate control.', $m);
+                if ($min <= 10080) {
+                    return CheckResult::pass("Sessions last at most $hours hours.", 'Shorter is stricter; a session also ends after a period of inactivity (idle timeout). PCI DSS expects idle sessions to end within 15 minutes, which is a separate control.', $m);
                 }
 
-                return $min <= 10080
-                    ? CheckResult::warn("Sessions last up to $hours hours.", null, 'settings_security.php', $m)
-                    : CheckResult::fail("Sessions last up to $hours hours.", null, 'settings_security.php', $m);
+                return $min <= 43200
+                    ? CheckResult::warn("Sessions last at most $hours hours.", null, 'settings_security.php', $m)
+                    : CheckResult::fail("Sessions last at most $hours hours.", null, 'settings_security.php', $m);
             });
 
         $out[] = new CallbackCheck('https_only', 'Traffic is encrypted (HTTPS only)', 'Cryptography',
@@ -157,6 +165,27 @@ final class ComplianceCatalog
                 return ($age > 8 || !$enabled || !$m['offsite'])
                     ? CheckResult::warn('Newest backup is ' . max(0, (int) $age) . ' days old.', implode('; ', $notes), 'backup.php', $m)
                     : CheckResult::pass('Newest backup is ' . max(0, (int) $age) . ' days old.', implode('; ', $notes), $m);
+            });
+
+        $out[] = new CallbackCheck('restore_tested', 'A restore was proven in the last ' . self::RESTORE_TEST_DAYS . ' days', 'Resilience',
+            'A backup only counts once a restore from it has worked. The nightly restore drill restores the newest backup into a scratch database and verifies it.',
+            [F::ISO27001 => ['A.8.13', 'A.5.30'], F::SOC2 => ['A1.3'], F::PCI => ['12.10.1'], F::HIPAA => ['164.308(a)(7)(ii)(D)']],
+            function (): CheckResult {
+                $t = mysqli_query($this->db, "SHOW TABLES LIKE 'restore_drill_log'");
+                if (!$t || mysqli_num_rows($t) === 0) {
+                    return CheckResult::notApplicable('The restore drill needs the latest database update.');
+                }
+                $good = $this->one("SELECT drill_restore_seconds, drill_status, TIMESTAMPDIFF(SECOND, drill_finished_at, NOW()) / 86400 AS age_days FROM restore_drill_log
+                                    WHERE drill_status IN ('pass','warn') AND drill_finished_at IS NOT NULL ORDER BY drill_id DESC LIMIT 1");
+                $last = $this->one("SELECT drill_status, drill_finished_at FROM restore_drill_log WHERE drill_status <> 'running' ORDER BY drill_id DESC LIMIT 1");
+                $a = \RivetMSP\Recovery\DrillVerifier::restoreTestedState(
+                    isset($good['age_days']) ? (float) $good['age_days'] : null, $last['drill_status'] ?? null,
+                    isset($good['drill_restore_seconds']) && $good['drill_restore_seconds'] !== null ? (float) $good['drill_restore_seconds'] : null,
+                    self::RESTORE_TEST_DAYS, $this->drillEnabled());
+                $m = ['last_pass_days_ago' => isset($good['age_days']) ? round((float) $good['age_days'], 1) : null, 'last_status' => $last['drill_status'] ?? null,
+                    'restore_seconds' => isset($good['drill_restore_seconds']) ? (float) $good['drill_restore_seconds'] : null];
+
+                return $a['state'] === 'pass' ? CheckResult::pass($a['summary'], $a['detail'], $m) : CheckResult::fail($a['summary'], $a['detail'], 'backup.php', $m);
             });
 
         $out[] = new CallbackCheck('api_keys', 'API keys expire', 'Access control',

@@ -31,6 +31,7 @@ function printHelp() {
     echo "  --update        Perform a git pull to update the application.\n";
     echo "  --force_update  Perform a git fetch and hard reset to the release channel branch.\n";
     echo "  --update_db     Update the database structure to the latest version.\n";
+    echo "  --rewrap_secrets  Encrypt stored secrets that are still plaintext (needs \$config_settings_enc_key in config.php; safe to repeat).\n";
     echo "\nIf no options are provided, a standard update (git pull) is performed.\n";
 }
 
@@ -39,11 +40,12 @@ $allowed_options = [
     'help',
     'update',
     'force_update',
-    'update_db'
+    'update_db',
+    'rewrap_secrets'
 ];
 
 // Parse command-line options
-$options = getopt('', ['update', 'force_update', 'update_db', 'help']);
+$options = getopt('', ['update', 'force_update', 'update_db', 'rewrap_secrets', 'help']);
 
 // Check for invalid options by comparing argv against allowed options
 $argv_copy = $argv;
@@ -153,5 +155,20 @@ if (isset($options['update_db'])) {
         echo "The latest database version is $latest_db_version.\n";
     } else {
         echo "Database is already at the latest version ($latest_db_version). No updates were applied.\n";
+    }
+}
+
+// If "rewrap_secrets" is requested: wrap the secrets that are still stored in plaintext (settings passwords and tokens, the vault master key,
+// integration keys, license keys, TOTP seeds). Idempotent; refuses to run without $config_settings_enc_key.
+if (isset($options['rewrap_secrets'])) {
+    require_once "../includes/security_crypto.php";
+    if (!secSettingsKeyAvailable()) {
+        fwrite(STDERR, "\$config_settings_enc_key is missing from config.php, so nothing was changed.\n" . secKeyMissingNotice() . "\n");
+        exit(1);
+    }
+    $rewrap = secRewrapAll($mysqli);
+    echo "Re-wrapped {$rewrap['wrapped']} stored secret(s) across {$rewrap['columns']} column(s).\n";
+    if ($rewrap['skipped_too_long'] > 0) {
+        echo "WARNING: {$rewrap['skipped_too_long']} secret(s) left as-is - the encrypted value does not fit the column.\n";
     }
 }

@@ -89,6 +89,8 @@ try {
     $_SESSION['csrf_token'] = randomString(32);
     $_SESSION['logged']     = true;
     session_regenerate_id(true);
+    require_once __DIR__ . '/includes/security_sessions.php';
+    secSessionStart($mysqli, $userId);   // idle / absolute clocks and the Active sessions row
 
     $user_name  = sanitizeInput($userRow['user_name']);
     $user_email = sanitizeInput($userRow['user_email']);

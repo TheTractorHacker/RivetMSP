@@ -16,15 +16,13 @@ if (!file_exists('config.php')) {
 require_once "config.php";
 require_once "functions.php";
 require_once "plugins/totp/totp.php";
+require_once "includes/security_crypto.php";
+require_once "includes/security_policy.php";
+require_once "includes/security_sessions.php";
 
 if (session_status() === PHP_SESSION_NONE) {
-    ini_set("session.cookie_httponly", true);
-
-    if ($config_https_only || !isset($config_https_only)) {
-        ini_set("session.cookie_secure", true);
-    }
-
-    session_set_cookie_params(['samesite' => 'Lax']);
+    // HttpOnly, Secure on HTTPS, strict mode, SameSite=Lax; cookie lifetime = the absolute session lifetime.
+    secSessionIniApply($mysqli ?? null, ($config_https_only || !isset($config_https_only)));
 
     session_start();
 }
@@ -88,7 +86,7 @@ $config_smtp_host       = $row['config_smtp_host'];
 $config_smtp_port       = intval($row['config_smtp_port']);
 $config_smtp_encryption = $row['config_smtp_encryption'];
 $config_smtp_username   = $row['config_smtp_username'];
-$config_smtp_password   = $row['config_smtp_password'];
+$config_smtp_password   = decryptSetting((string) ($row['config_smtp_password'] ?? ''));
 $config_mail_from_email = sanitizeInput($row['config_mail_from_email']);
 $config_mail_from_name  = sanitizeInput($row['config_mail_from_name']);
 
@@ -96,7 +94,7 @@ $config_client_portal_enable     = intval($row['config_client_portal_enable']);
 $config_login_remember_me_expire = intval($row['config_login_remember_me_expire']);
 
 $config_login_key_required = $row['config_login_key_required'];
-$config_login_key_secret   = $row['config_login_key_secret'];
+$config_login_key_secret   = decryptSetting((string) ($row['config_login_key_secret'] ?? ''));
 
 $azure_client_id = $row['config_azure_client_id'] ?? null;
 
@@ -123,6 +121,12 @@ $_theme_rgb_map = [
 $_login_accent_rgb = $_theme_rgb_map[$config_theme] ?? '13, 148, 136';
 
 $response         = null;
+$login_notice_html = '';
+if (!empty($_SESSION['login_notice'])) {
+    // why the previous session ended (idle timeout, maximum length, signed out elsewhere); kept apart from $response, which gates sign-in
+    $login_notice_html = "<div class='alert alert-info'>" . htmlspecialchars((string) $_SESSION['login_notice'], ENT_QUOTES) . "</div>";
+    unset($_SESSION['login_notice']);
+}
 $token_field      = null;
 $show_role_choice = false;
 
@@ -263,6 +267,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                 if (!password_verify($password, $r['user_password'])) {
                     continue;
                 }
+                // Staff hashes move to Argon2id (and stronger parameters) on the first successful sign-in after the change.
+                if ($ut === 1) {
+                    secPasswordRehashIfNeeded($mysqli, intval($r['user_id']), $password, (string) $r['user_password']);
+                }
             } else {
                 // Step 2/3: restrict to ids we previously verified
                 if ($ut === 1 && $allowed_agent_id !== null && intval($r['user_id']) !== $allowed_agent_id) {
@@ -368,7 +376,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                     }
 
                     $user_name                  = sanitizeInput($selectedRow['user_name']);
-                    $token                      = sanitizeInput($selectedRow['user_token']);
+                    $token                      = secUserTotpSecret($selectedRow['user_token'] ?? null);   // wrapped or legacy plaintext
                     $force_mfa                  = intval($selectedRow['user_config_force_mfa']);
                     $user_encryption_ciphertext = $selectedRow['user_specific_encryption_ciphertext'];
 
@@ -384,8 +392,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                         $mfa_is_complete = true; // no MFA configured
                     }
 
-                    // remember-me cookie allows bypass
-                    if (isset($_COOKIE['rememberme'])) {
+                    // remember-me cookie allows bypass - but never for an administrator or a user with vault access, unless
+                    // the "allow remember-me to skip MFA" setting is on (Admin > Settings > Security)
+                    if (isset($_COOKIE['rememberme']) && secRememberMeMaySkipMfa($mysqli, $user_id)) {
                         $remember_tokens = mysqli_query($mysqli, "
                             SELECT remember_token_token
                             FROM remember_tokens
@@ -402,9 +411,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                     }
 
                     // Validate MFA code
-                    if (!empty($current_code) && TokenAuth6238::verify($token, $current_code)) {
+                    if (!$mfa_is_complete && !empty($current_code) && TokenAuth6238::verifyOnce($token, $current_code)) {
                         $mfa_is_complete = true;
                         $extended_log    = 'with MFA';
+                        secUserTotpRewrap($mysqli, $user_id, $selectedRow['user_token'] ?? null);   // lazily wrap a legacy plaintext seed
+                    }
+
+                    // A single-use recovery code in place of the authenticator code (only on the MFA step, only when MFA is set up)
+                    $recovery_input = trim((string) ($_POST['recovery_code'] ?? ''));
+                    $used_recovery_code = false;
+                    if (!$mfa_is_complete && $is_mfa_step && !empty($token) && $recovery_input !== '' && secRecoveryCodeConsume($mysqli, $user_id, $recovery_input, (string) getIP())) {
+                        $mfa_is_complete    = true;
+                        $used_recovery_code = true;
+                        $extended_log       = 'with a MFA recovery code';
                     }
 
                     if ($mfa_is_complete) {
@@ -467,8 +486,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                         $_SESSION['csrf_token'] = randomString(32);
                         $_SESSION['logged']     = true;
                         session_regenerate_id(true);
+                        secSessionStart($mysqli, $user_id);   // idle / absolute clocks and the Active sessions row
 
-                        if ($force_mfa == 1 && $token == NULL) {
+                        if ($used_recovery_code) {
+                            $recovery_left = secRecoveryCodesRemaining($mysqli, $user_id);
+                            logAction("Login", "MFA Recovery Code", "$user_name signed in with a MFA recovery code ($recovery_left left)", 0, $user_id);
+                            secAudit('auth.recovery_code_used', $user_id, 'user', $user_id, 'success', "$user_name used a MFA recovery code", ['remaining' => $recovery_left, 'ip' => $session_ip]);
+                            if ((!empty($config_smtp_host) || !empty($config_smtp_provider))) {
+                                addToMailQueue([[
+                                    'from'           => $config_mail_from_email,
+                                    'from_name'      => $config_mail_from_name,
+                                    'recipient'      => $user_email,
+                                    'recipient_name' => $user_name,
+                                    'subject'        => "$config_app_name: a recovery code was used to sign in as $user_name",
+                                    'body'           => "Hi $user_name, <br><br>A two-factor recovery code was just used to sign in to your $config_app_name account. You have $recovery_left recovery code(s) left. If this was not you, change your password and regenerate your recovery codes now.<br><br>IP Address: $session_ip<br> User Agent: $session_user_agent<br><br>Thanks, <br>$config_app_name"
+                                ]]);
+                            }
+                            $_SESSION['alert_message'] = $recovery_left <= 3
+                                ? "You signed in with a recovery code. You have $recovery_left left - generate new ones under Account > Security."
+                                : 'You signed in with a recovery code.';
+                        }
+
+                        $mfa_state = secMfaEnforcementState($mysqli, $user_id);
+                        if ($mfa_state['blocked'] || ($force_mfa == 1 && $token == NULL)) {
+                            // required (per-user flag or the global policy), not enrolled and out of grace: enrolment is the only page
                             $config_start_page = "user/mfa_enforcement.php";
                         }
 
@@ -601,15 +642,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                             <div class='input-group mb-3'>
                                 <input type='text' inputmode='numeric' pattern='[0-9]*' maxlength='6'
                                        class='form-control' placeholder='Verify your 2FA code'
-                                       name='current_code' required autofocus>
+                                       name='current_code' autofocus>
                                 <div class='input-group-append'>
                                   <div class='input-group-text'>
                                     <span class='fas fa-key'></span>
                                   </div>
                                 </div>
-                            </div>";
+                            </div>
+                            <details class='mb-3'>
+                                <summary class='small text-muted'>Lost your authenticator? Use a recovery code</summary>
+                                <input type='text' class='form-control mt-2' name='recovery_code' maxlength='24'
+                                       autocomplete='off' autocapitalize='none' spellcheck='false' placeholder='xxxxx-xxxxx'>
+                            </details>";
 
-                        if ($current_code !== 0) {
+                        if ($current_code !== 0 || trim((string) ($_POST['recovery_code'] ?? '')) !== '') {
 
                             // Option B: set session_user_id BEFORE logAction()
                             $session_user_id = $user_id;
@@ -631,7 +677,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
 
                             $response = "
                                   <div class='alert alert-danger'>
-                                    Please enter a valid 2FA code.
+                                    Please enter a valid 2FA code or recovery code.
                                   </div>";
                         }
                     }
@@ -934,6 +980,7 @@ $show_login_form = (!$show_role_choice && !$show_mfa_form);
                 <p class="text-center px-0"><?php echo nl2br($config_login_message); ?></p>
             <?php } ?>
 
+            <?php echo $login_notice_html; ?>
             <?php if (isset($response)) { ?>
                 <p><?php echo $response; ?></p>
             <?php } ?>

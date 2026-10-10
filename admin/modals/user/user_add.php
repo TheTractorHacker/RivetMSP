@@ -1,6 +1,7 @@
 <?php
 
 require_once '../../../includes/modal_header.php';
+require_once '../../../includes/security_policy.php';
 
 ob_start();
 
@@ -75,11 +76,11 @@ ob_start();
                              parent ($(this).parent().find(".input-group-text")), so the eye must be
                              the only one here - a decorative addon would become a second, unlabelled
                              reveal button. The generate button is deliberately a .btn, not an addon. -->
-                        <input type="password" class="form-control" data-toggle="password" name="password" id="user_add_password" placeholder="Enter a Password" autocomplete="new-password" minlength="8" required>
+                        <input type="password" class="form-control" data-toggle="password" name="password" id="user_add_password" placeholder="Enter a Password" autocomplete="new-password" minlength="<?= secSettingInt('password_min_length') ?>" required>
                         <span class="input-group-text" title="Show password"><i class="fa fa-fw fa-eye"></i></span>
                         <button type="button" class="btn btn-outline-secondary js-generate-password" title="Generate a random password" aria-label="Generate a random password"><i class="fa fa-fw fa-dice"></i></button>
                     </div>
-                    <small class="form-text text-muted">Minimum 8 characters.</small>
+                    <small class="form-text text-muted">Minimum <?= secSettingInt('password_min_length') ?> characters, and not the same as the name or email address.</small>
                 </div>
 
                 <div class="form-group">

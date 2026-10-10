@@ -6,12 +6,11 @@ set -euo pipefail
 # Dumps one instance's database (mysqldump), its uploads/ directory
 # (user-uploaded contracts/documents/tickets/etc — the content that isn't
 # reproducible by re-cloning the git repo), and a small backup-manifest.json
-# (installation_id + config_settings_enc_key, needed to restore onto a fresh
-# instance without corrupting anything config_settings_enc_key encrypted —
-# see the comment above the manifest write in do_backup() below), bundles
-# all of it into one archive, encrypts it, and enforces a retention window
-# on old encrypted backups. See deploy/restore.sh for the matching restore
-# path.
+# (installation_id + a fingerprint of config_settings_enc_key; the key itself
+# is written to a SEPARATE 0600 file next to the archive, see do_backup()
+# below), bundles all of it into one archive, encrypts it, and enforces a
+# retention window on old encrypted backups. See deploy/restore.sh for the
+# matching restore path.
 #
 # Meant to be driven by deploy/templates/itflow-backup.{service,timer} (a
 # daily systemd timer) or root's own crontab — see this script's own
@@ -62,10 +61,18 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 LOG_FILE="/var/log/itflow-backup.log"
 
+# Recovery additions: checksum file, status report to the app, optional off-site copy (see lib/backup_extras.sh).
+# shellcheck source=./lib/backup_extras.sh
+source "${SCRIPT_DIR}/lib/backup_extras.sh"
+
 APP_DIR=""
 RETENTION_DAYS=14
 DEST=""
 PASSPHRASE_FILE=""
+OFFSITE_ENABLED=0
+OFFSITE_DISABLED=0
+OFFSITE_CONFIG="/etc/itflow/offsite.conf"
+OFFSITE_RETENTION_OVERRIDE=""
 
 print_help() {
     cat <<'EOF'
@@ -86,6 +93,16 @@ Options:
                               from --dest. Default: 14.
   --dest=<dir>                Directory encrypted backups are written to.
                               Default: <app-dir>/backups.
+  --offsite[=<config>]        Also copy each archive (and its .sha256 checksum
+                              file) off this machine and apply retention there
+                              too. <config> defaults to /etc/itflow/offsite.conf
+                              (template: deploy/etc/offsite.conf.example; rclone,
+                              S3, SFTP or a mounted directory).
+  --no-offsite                Skip the off-site copy even if /etc/itflow/offsite.conf
+                              exists (without --offsite/--no-offsite, that file's
+                              presence turns the off-site copy on).
+  --offsite-retention-days=<N>  Retention for the off-site copies (default: the
+                              config's OFFSITE_RETENTION_DAYS, else --retention-days).
   --help                      Show this help and exit.
 
 Must be run as root. Every run's outcome (success + file size + duration,
@@ -101,6 +118,10 @@ parse_args() {
             --retention-days=*)   RETENTION_DAYS="${arg#*=}" ;;
             --dest=*)              DEST="${arg#*=}" ;;
             --passphrase-file=*)  PASSPHRASE_FILE="${arg#*=}" ;;
+            --offsite)            OFFSITE_ENABLED=1 ;;
+            --no-offsite)         OFFSITE_DISABLED=1 ;;
+            --offsite=*)          OFFSITE_ENABLED=1; OFFSITE_CONFIG="${arg#*=}" ;;
+            --offsite-retention-days=*) OFFSITE_RETENTION_OVERRIDE="${arg#*=}" ;;
             --help|-h)
                 print_help
                 exit 0
@@ -133,6 +154,12 @@ validate_args() {
     if [[ -z "${DEST}" ]]; then
         DEST="${APP_DIR}/backups"
     fi
+
+    # The default off-site config being present is the opt-in, so an existing systemd unit needs no edit: drop the file in place.
+    if [[ "${OFFSITE_ENABLED}" -eq 0 && "${OFFSITE_DISABLED}" -eq 0 && -f "${OFFSITE_CONFIG}" ]]; then
+        OFFSITE_ENABLED=1
+    fi
+    [[ "${OFFSITE_DISABLED}" -eq 1 ]] && OFFSITE_ENABLED=0
 }
 
 setup_logging() {
@@ -140,6 +167,33 @@ setup_logging() {
     chmod 640 "${LOG_FILE}"
     chown root:root "${LOG_FILE}"
     exec > >(tee -a "${LOG_FILE}") 2>&1
+}
+
+# PBKDF2 iterations for the archive passphrase (OpenSSL's own default is 10000).
+BACKUP_PBKDF2_ITER=600000
+
+# write_settings_key_file(path): writes the instance's config_settings_enc_key to a
+# separate file, mode 0600 root:root, created without ever being group/world
+# readable. Empty key (config.php without one) writes nothing and warns.
+write_settings_key_file() {
+    local path="$1"
+    if [[ -z "${SETTINGS_ENC_KEY}" ]]; then
+        warn "config.php has no \$config_settings_enc_key; no settings-key file written."
+        return 0
+    fi
+    ( umask 077; : > "${path}" )
+    chmod 600 "${path}"
+    # backup.sh itself always runs as root (require_root); the guard only lets tests source and exercise this function.
+    if [[ "${EUID}" -eq 0 ]]; then chown root:root "${path}"; fi
+    php -r '
+        $fp = substr(hash("sha256", "rivetit-settings-key-fingerprint|v1|" . $argv[1]), 0, 16);
+        file_put_contents($argv[3],
+            "# RivetMSP settings-encryption key for " . $argv[2] . "\n" .
+            "# fingerprint: " . $fp . "\n" .
+            "# Keep this file OFF the server, apart from the archive and from the backup passphrase.\n" .
+            $argv[1] . "\n");
+    ' -- "${SETTINGS_ENC_KEY}" "$(basename "${path}" .settings-key).tar.gz.enc" "${path}"
+    success "Settings-encryption key written to ${path} (0600). Move it off this server; it is deliberately NOT inside the archive."
 }
 
 # cleanup_old_backups(): enforces --retention-days on this script's OWN
@@ -159,6 +213,8 @@ cleanup_old_backups() {
     else
         info "No backups older than ${RETENTION_DAYS} day(s) to delete."
     fi
+    # The settings-key files that belong to those archives age out with them.
+    find "${DEST}" -maxdepth 1 -type f -name 'backup-*.settings-key' -mtime "+${RETENTION_DAYS}" -delete
 }
 
 do_backup() {
@@ -172,6 +228,7 @@ do_backup() {
     local sql_file="${DEST}/backup-${DB_NAME}-${timestamp}.sql"
     local combined="${DEST}/backup-${DB_NAME}-${timestamp}.tar.gz"
     local encrypted="${combined}.enc"
+    local keyfile="${DEST}/backup-${DB_NAME}-${timestamp}.settings-key"
 
     # Pre-create both intermediates chmod 600 BEFORE anything writes to
     # them. A plain `mysqldump > file` / `tar -czf file ...` creates the
@@ -209,34 +266,38 @@ EOF
     success "Database dump complete ($(du -h "${sql_file}" | awk '{print $1}'))."
 
     # backup-manifest.json travels inside the encrypted archive alongside the
-    # dump so deploy/restore.sh can recover config_settings_enc_key on a
-    # brand-new box — that key never appears in the SQL dump itself (it
-    # lives only in config.php, which this script does not back up), so
-    # without this manifest a restore onto a fresh instance would decrypt
-    # every setting encryptSettingsValue()/decryptSettingsValue() protects
-    # to garbage. (On this app, config_settings_enc_key is usually unset —
-    # scripts/setup_cli.php doesn't currently generate one, and
-    # functions.php no-ops encryption when it's empty — but this still
-    # travels defensively in case an instance set one by hand.) The whole
-    # archive is openssl-encrypted end to end below, same as the SQL dump
-    # itself, so this is no less protected than the data it travels with.
+    # dump. It carries a FINGERPRINT of config_settings_enc_key, not the key:
+    # that key lives only in config.php (which this script does not back up)
+    # and it unlocks every SMTP/IMAP password, RMM/webhook secret and the
+    # wrapped credential-vault master key in the dump, so it must not travel
+    # in the same file as the data it unlocks. The key itself is written to a
+    # separate 0600 root-only file next to the archive (see below); copy that
+    # file OFF this server, apart from the archive and from the passphrase.
+    # deploy/restore.sh takes it back with --settings-key-file (or finds it
+    # next to the archive) and checks it against the manifest fingerprint.
     local manifest_file="${DEST}/backup-manifest.json"
     : > "${manifest_file}"
     chmod 600 "${manifest_file}"
     register_tmpfile "${manifest_file}"
     php -r '
         $data = [
-            "schema_version"    => 1,
-            "db_name"           => $argv[1],
-            "installation_id"   => $argv[2],
-            "settings_enc_key"  => $argv[3],
-            "backup_timestamp"  => $argv[4],
+            "schema_version"               => 2,
+            "db_name"                      => $argv[1],
+            "installation_id"              => $argv[2],
+            "settings_enc_key_fingerprint" => $argv[3] === "" ? "" : substr(hash("sha256", "rivetit-settings-key-fingerprint|v1|" . $argv[3]), 0, 16),
+            "backup_timestamp"             => $argv[4],
         ];
         file_put_contents($argv[5], json_encode($data, JSON_PRETTY_PRINT));
     ' -- "${DB_NAME}" "${INSTALLATION_ID}" "${SETTINGS_ENC_KEY}" "${timestamp}" "${manifest_file}"
 
+    # Table snapshot for the restore drill (names + counts only); the backup is complete without it.
+    local snapshot_file="${DEST}/table-snapshot.json"
+    register_tmpfile "${snapshot_file}"
+    local -a snapshot_member=()
+    if backup_make_snapshot "${snapshot_file}"; then snapshot_member=("$(basename "${snapshot_file}")"); fi
+
     info "Bundling the database dump with ${APP_DIR}/uploads into ${combined}..."
-    local -a tar_members=(-C "$(dirname "${sql_file}")" "$(basename "${sql_file}")" "$(basename "${manifest_file}")")
+    local -a tar_members=(-C "$(dirname "${sql_file}")" "$(basename "${sql_file}")" "$(basename "${manifest_file}")" "${snapshot_member[@]}")
     if [[ -d "${APP_DIR}/uploads" ]]; then
         tar_members+=(-C "${APP_DIR}" uploads)
     else
@@ -248,7 +309,10 @@ EOF
     success "Archive bundled ($(du -h "${combined}" | awk '{print $1}'))."
 
     info "Encrypting archive..."
-    if ! openssl enc -aes-256-cbc -pbkdf2 -salt \
+    # -iter 600000: PBKDF2 work factor for the passphrase (the OpenSSL default is
+    # 10000). deploy/restore.sh tries this count first and falls back to the old
+    # default, so archives written by earlier versions still restore.
+    if ! openssl enc -aes-256-cbc -pbkdf2 -iter "${BACKUP_PBKDF2_ITER}" -salt \
         -in "${combined}" -out "${encrypted}" \
         -pass file:"${PASSPHRASE_FILE}"; then
         rm -f "${encrypted}"
@@ -262,11 +326,14 @@ EOF
     chmod 600 "${encrypted}"
     chown root:root "${encrypted}"
 
+    write_settings_key_file "${keyfile}"
+
     end_ts="$(date +%s)"
     duration=$(( end_ts - start_ts ))
     local size_human
     size_human="$(du -h "${encrypted}" | awk '{print $1}')"
 
+    BACKUP_RESULT_FILE="${encrypted}"
     success "Backup complete: ${encrypted} (${size_human}, ${duration}s)"
     log "BACKUP OK database=${DB_NAME} file=${encrypted} size=${size_human} duration=${duration}s"
 
@@ -291,7 +358,12 @@ main() {
     # keeps normal `set -e` propagation intact for the whole function, and
     # do_backup's own die() calls already log a specific, actionable message
     # for every failure that matters before this script exits non-zero.
+    register_exit_hook backup_exit_hook
     do_backup
+    backup_post_steps
 }
 
-main "$@"
+# Run only when executed, not when sourced (tests/backup_passphrase.php sources this file to exercise its functions).
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

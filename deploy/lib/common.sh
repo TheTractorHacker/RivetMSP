@@ -167,12 +167,12 @@ command_exists() {
 # trusted snippet that requires app_dir/config.php and echoes the values it
 # defines. Shared by backup.sh (to capture INSTALLATION_ID/SETTINGS_ENC_KEY
 # into its backup manifest) and restore.sh (to find the target database and
-# re-apply the encryption key). SETTINGS_ENC_KEY is commonly empty here —
-# scripts/setup_cli.php does not currently generate one, so
-# $config_settings_enc_key is simply undefined on most instances, and
-# functions.php's encryptSettingsValue()/decryptSettingsValue() already
-# no-op when it's empty. Still captured/restored defensively in case an
-# instance set one by hand. Deliberately NOT parsed out of config.php with
+# re-apply the encryption key). SETTINGS_ENC_KEY is empty only on an
+# instance set up before the key existed: setup (web and scripts/setup_cli.php)
+# now generates $config_settings_enc_key, deploy/update.sh adds one to an older
+# instance, and encryptSetting() fails closed without it (it no longer stores a
+# secret in cleartext). Captured and restored so a restore onto a fresh box
+# keeps every wrapped secret readable. Deliberately NOT parsed out of config.php with
 # grep/sed (its values go through var_export(), so they can contain escaped
 # quotes, unicode, etc. — a text-munging parse would be fragile) and
 # deliberately NOT eval'd as arbitrary PHP from an untrusted source —
@@ -256,8 +256,18 @@ register_tmpfile() {
     _ITFLOW_TMPFILES+=("$1")
 }
 
+# register_exit_hook <function>: run <function> <exit-code> from the same single EXIT trap, before temp files are shredded. Used by
+# backup.sh to report a failed run (die() exits through here). Hooks must not fail the script: errors are ignored.
+declare -a _ITFLOW_EXIT_HOOKS=()
+register_exit_hook() {
+    _ITFLOW_EXIT_HOOKS+=("$1")
+}
+
 _cleanup_tmpfiles() {
-    local f
+    local _rc=$? h f
+    for h in "${_ITFLOW_EXIT_HOOKS[@]:-}"; do
+        [[ -n "${h}" ]] && { "${h}" "${_rc}" || true; }
+    done
     for f in "${_ITFLOW_TMPFILES[@]:-}"; do
         [[ -n "${f}" && -e "${f}" ]] || continue
         if [[ -d "${f}" ]]; then

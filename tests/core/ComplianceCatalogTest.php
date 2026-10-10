@@ -40,7 +40,7 @@ final class ComplianceCatalogTest extends TestCase
 
     private function results(array $settings = []): array
     {
-        $cat = new ComplianceCatalog($this->m, sys_get_temp_dir(), $settings + ['config_compliance_profile' => 'none', 'config_log_retention' => 90, 'config_audit_retention_days' => 365, 'config_login_session_lifetime' => 480]);
+        $cat = new ComplianceCatalog($this->m, sys_get_temp_dir(), $settings + ['config_compliance_profile' => 'none', 'config_log_retention' => 90, 'config_audit_retention_days' => 365, 'config_login_session_lifetime' => 10080]);
         $a = (new ComplianceAssessor($cat->checks(), $cat->manualItems(), ComplianceService::attestations($this->m), new SystemClock()))->assess();
 
         return array_column($a->automatic, null, 'id');

@@ -50,7 +50,7 @@ $config_invoice_late_fee_percent = floatval($row['config_invoice_late_fee_percen
 $config_smtp_provider = sanitizeInput($row['config_smtp_provider']);
 $config_smtp_host = $row['config_smtp_host'];
 $config_smtp_username = $row['config_smtp_username'];
-$config_smtp_password = $row['config_smtp_password'];
+$config_smtp_password = decryptSetting((string) ($row['config_smtp_password'] ?? ''));
 $config_smtp_port = intval($row['config_smtp_port']);
 $config_smtp_encryption = $row['config_smtp_encryption'];
 $config_mail_from_email = sanitizeInput($row['config_mail_from_email']);
@@ -130,8 +130,25 @@ mysqli_query($mysqli, "DELETE FROM notifications WHERE notification_dismissed_at
 // Clean-up mail queue
 mysqli_query($mysqli, "DELETE FROM email_queue WHERE email_queued_at < CURDATE() - INTERVAL 90 DAY");
 
+// Mail intake housekeeping: failure counters for messages that were never seen again, and old alert-dedupe rows.
+// Quarantined entries stay until an admin dismisses them.
+mysqli_query($mysqli, "DELETE FROM mail_intake_state WHERE intake_state = 'pending' AND COALESCE(intake_last_attempt_at, intake_first_seen_at) < NOW() - INTERVAL 30 DAY");
+mysqli_query($mysqli, "DELETE FROM mail_alerts WHERE alert_last_sent_at < NOW() - INTERVAL 90 DAY");
+
+// Mail intake health: poller silent, mailbox unreachable, outbound mail out of retries. Alerts are de-duplicated (6 h by
+// default) and this is deliberately independent of cron/ticket_email_parser.php, which is the thing that may have died.
+try {
+    \RivetMSP\Mail\MailHealth::runChecks($mysqli, $config_ticket_email_parse === 1);
+} catch (\Throwable $e) {
+    logApp("Cron", "warning", "Mail health check failed: " . $e->getMessage());
+}
+
 // Clean-up old remember me tokens
 mysqli_query($mysqli, "DELETE FROM remember_tokens WHERE remember_token_created_at < CURDATE() - INTERVAL $config_login_remember_me_expire DAY");
+
+// Sign-in sessions list (Account > Security > Active sessions): forget rows that ended or went quiet over 30 days ago
+require_once dirname(__DIR__) . '/includes/security_sessions.php';
+secSessionPurge($mysqli);
 
 // SLA: make every open ticket's pause match its status (waiting-on-customer/employee/vendor statuses flagged "Pauses SLA" stop the
 // clock). Status changes made by any path - kanban, API, automation, a customer reply - are repaired here at the latest.
@@ -1178,6 +1195,8 @@ $config_backup_s3_access_key = $settings_row['config_backup_s3_access_key'] ?? '
 $config_backup_s3_secret_key = decryptSetting($settings_row['config_backup_s3_secret_key'] ?? '');
 $config_backup_s3_path_style = intval($settings_row['config_backup_s3_path_style'] ?? 1);
 $config_backup_s3_prefix     = $settings_row['config_backup_s3_prefix'] ?? '';
+// The backup passphrase (required: build_backup() refuses to run without one, and the settings key goes only into the manifest it encrypts).
+$config_backup_passphrase    = decryptSetting($settings_row['config_backup_passphrase'] ?? '');
 
 if ($config_backup_auto_enabled) {
     $backup_dir   = dirname(__DIR__) . '/backups';
@@ -1209,14 +1228,40 @@ if ($config_backup_auto_enabled) {
             define('FROM_POST_HANDLER', true);
         }
         require_once dirname(__DIR__) . '/admin/post/backup.php';
-        $result = build_backup($mysqli, 'auto', $backup_dir);
-        prune_backups($backup_dir, $config_backup_retain_count);
-        logApp('Backup', 'info', "Auto-backup completed: {$result['name']}");
-        appNotify('Backup', "Auto-backup saved: {$result['name']}", '/admin/backup.php');
-        if (function_exists('backup_upload_to_s3')) {
-            backup_upload_to_s3($result['path'], $result['name']);
+        try {
+            $result = build_backup($mysqli, 'auto', $backup_dir);
+        } catch (BackupPassphraseRequired $e) {
+            // No usable backup passphrase: refuse loudly instead of writing a backup that cannot protect the settings key.
+            logApp('Backup', 'error', 'Auto-backup refused: ' . $e->getMessage());
+            appNotify('Backup', 'Automatic backup was NOT taken: set a backup passphrase (16+ characters) in Maintenance > Backup.', '/admin/backup.php');
+            echo gmdate('Y-m-d\\TH:i:s\\Z') . " cron: auto-backup refused (no backup passphrase)\n";
+            $result = null;
+        }
+        if ($result !== null) {
+            prune_backups($backup_dir, $config_backup_retain_count);
+            logApp('Backup', 'info', "Auto-backup completed: {$result['name']}");
+            appNotify('Backup', "Auto-backup saved: {$result['name']}", '/admin/backup.php');
+            if (function_exists('backup_upload_to_s3')) {
+                backup_upload_to_s3($result['path'], $result['name']);
+            }
         }
     }
+}
+
+/*
+ * ###############################################################################################################
+ *  RECOVERY WATCH
+ *  Alerts (in-app, email, event) for a stale or failed backup, a failing or stalled integration sync (RMM, UniFi)
+ *  and a restore drill that stopped running. De-duplicated to one alert per 6 hours each. See src/Recovery/RecoveryWatch.php.
+ * ###############################################################################################################
+ */
+try {
+    $recovery_found = \RivetMSP\Recovery\RecoveryWatch::run($mysqli, dirname(__DIR__), (bool) $config_backup_auto_enabled, (bool) intval($settings_row['config_module_enable_rmm'] ?? 0));
+    if (($recovery_found['backup'] ?? 'ok') === 'stale' || ($recovery_found['sync'] ?? []) !== [] || in_array($recovery_found['drill'] ?? 'ok', ['stale'], true)) {
+        echo gmdate('Y-m-d\TH:i:s\Z') . " cron: recovery watch found problems: " . json_encode($recovery_found) . "\n";
+    }
+} catch (\Throwable $e) {
+    logApp("Cron", "error", "Recovery watch failed: " . $e->getMessage());
 }
 
 /*
@@ -1554,13 +1599,23 @@ if ($config_module_enable_rmm) {
     $sql_rmm_integrations = mysqli_query($mysqli, "SELECT id, name FROM rmm_integrations WHERE enabled=1 AND type <> 'rivetit_agent'");
     while ($rmm_intg = mysqli_fetch_assoc($sql_rmm_integrations)) {
         $rmm_intg_id = intval($rmm_intg['id']);
+        $rmm_log_id = 0;
         try {
             $rmm_client = getRmmClient($rmm_intg_id);
             $rmm_mapper = new RmmAssetMapper($mysqli, $rmm_intg_id, 0, $rmm_client);
+            // A sync-log row per scheduled run (like UniFi already does) so the recovery watch can see a stalled or failing sync.
+            $rmm_log_id   = $rmm_mapper->startSyncLog();
 
             $agents       = $rmm_client->getAgents();
             $asset_stats  = $rmm_mapper->syncAgents($agents);
             $alert_stats  = $rmm_mapper->syncAlerts();
+            // A few bad devices must not make every scheduled run "failed" (and trip the watch): only a run where every device errored is.
+            $rmm_agent_errors = $asset_stats['errors'] ?? [];
+            $rmm_all_failed   = count($agents) > 0 && count($rmm_agent_errors) >= count($agents);
+            $rmm_mapper->finishSyncLog($rmm_log_id, ['errors' => $rmm_all_failed ? $rmm_agent_errors : []] + $asset_stats);
+            if (!$rmm_all_failed && $rmm_agent_errors) {
+                logApp("Cron", "warning", "RMM sync for '{$rmm_intg['name']}': " . count($rmm_agent_errors) . " device(s) skipped with errors, first: " . $rmm_agent_errors[0]);
+            }
 
             logApp("Cron", "info",
                 "RMM sync for '{$rmm_intg['name']}': assets {$asset_stats['created']} created, {$asset_stats['updated']} updated, {$asset_stats['matched']} matched, {$asset_stats['skipped']} skipped" .
@@ -1568,6 +1623,9 @@ if ($config_module_enable_rmm) {
             );
         } catch (RuntimeException $e) {
             logApp("Cron", "error", "RMM sync failed for '{$rmm_intg['name']}': " . $e->getMessage());
+            if ($rmm_log_id > 0) {
+                $rmm_mapper->finishSyncLog($rmm_log_id, ['created' => 0, 'updated' => 0, 'matched' => 0, 'skipped' => 0, 'errors' => [$e->getMessage()]]);
+            }
         }
     }
 }

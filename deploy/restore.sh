@@ -66,6 +66,7 @@ LOG_FILE="/var/log/itflow-restore.log"
 APP_DIR=""
 BACKUP_FILE=""
 PASSPHRASE_FILE=""
+SETTINGS_KEY_FILE=""
 CONFIRM_RESTORE=0
 NO_PRE_RESTORE_BACKUP_CONFIRMED=0
 UNATTENDED=0
@@ -79,8 +80,10 @@ INSTALLATION_ID=""
 SETTINGS_ENC_KEY=""
 EXTRACT_DIR=""
 SQL_FILE=""
+DECRYPTED_WITH=""
 MANIFEST_INSTALLATION_ID=""
 MANIFEST_SETTINGS_ENC_KEY=""
+MANIFEST_SETTINGS_ENC_KEY_FINGERPRINT=""
 
 print_help() {
     cat <<'EOF'
@@ -101,6 +104,12 @@ Required:
                               the target database and uploads/ entirely.
 
 Options:
+  --settings-key-file=<path>  File holding the original config_settings_enc_key
+                              (backup.sh writes <archive>.settings-key next to
+                              each archive; that sidecar is picked up automatically
+                              when it sits next to --backup). Archives made before
+                              the key moved out of the archive still carry it in
+                              their manifest and need no file.
   --no-pre-restore-backup-confirmed
                               Skip taking a safety backup of --app-dir's
                               current state before overwriting it.
@@ -111,10 +120,10 @@ Steps performed, in order: pre-restore safety backup (or confirmed skip) ->
 decrypt + extract --backup -> import its database dump -> replace
 --app-dir/uploads with its uploads/ -> restore ownership/permissions ->
 apply the backup's settings-encryption key to config.php, if its manifest
-has one (see backup.sh; backups taken before this existed have no manifest
-and print a warning instead - SMTP/IMAP/RMM/webhook secrets will need to be
-re-entered by hand in that case, IF the source instance had one set - most
-don't, since scripts/setup_cli.php doesn't currently generate one).
+has one, or from --settings-key-file / the archive's .settings-key sidecar
+(see backup.sh; backups taken before the manifest existed print a warning
+instead - SMTP/IMAP/RMM/webhook secrets, TOTP seeds and the vault master key
+need the original key).
 
 To test a backup without touching a real instance, point --app-dir at a
 disposable one instead (a second deploy/install.sh instance with a
@@ -129,6 +138,7 @@ parse_args() {
             --app-dir=*)              APP_DIR="${arg#*=}" ;;
             --backup=*)                BACKUP_FILE="${arg#*=}" ;;
             --passphrase-file=*)      PASSPHRASE_FILE="${arg#*=}" ;;
+            --settings-key-file=*)    SETTINGS_KEY_FILE="${arg#*=}" ;;
             --confirm-restore)         CONFIRM_RESTORE=1 ;;
             --no-pre-restore-backup-confirmed) NO_PRE_RESTORE_BACKUP_CONFIRMED=1 ;;
             --unattended)               UNATTENDED=1 ;;
@@ -205,12 +215,26 @@ decrypt_and_extract() {
     chmod 600 "${combined}"
     register_tmpfile "${combined}"
 
-    if ! openssl enc -d -aes-256-cbc -pbkdf2 \
-        -in "${BACKUP_FILE}" -out "${combined}" \
-        -pass file:"${PASSPHRASE_FILE}"; then
+    # Archives written by this version use 600000 PBKDF2 iterations; archives from before that used OpenSSL's
+    # default (10000). Try the new count first, then the old one. A wrong count or passphrase fails the openssl
+    # padding check (or, rarely, yields garbage that fails gzip -t), so both are checked before accepting a result.
+    local iter_label
+    DECRYPTED_WITH=""
+    for iter_label in 600000 default; do
+        local -a iter_args=()
+        [[ "${iter_label}" == "default" ]] || iter_args=(-iter "${iter_label}")
+        : > "${combined}"
+        if openssl enc -d -aes-256-cbc -pbkdf2 "${iter_args[@]}" \
+            -in "${BACKUP_FILE}" -out "${combined}" \
+            -pass file:"${PASSPHRASE_FILE}" 2>/dev/null && gzip -t "${combined}" 2>/dev/null; then
+            DECRYPTED_WITH="${iter_label}"
+            break
+        fi
+    done
+    if [[ -z "${DECRYPTED_WITH}" ]]; then
         die "Decryption failed. Either --passphrase-file doesn't match the passphrase ${BACKUP_FILE} was encrypted with, or the file is corrupt."
     fi
-    success "Decrypted OK."
+    success "Decrypted OK (PBKDF2 iterations: ${DECRYPTED_WITH})."
 
     EXTRACT_DIR="$(mktemp -d)"
     register_tmpfile "${EXTRACT_DIR}"
@@ -248,6 +272,7 @@ read_manifest() {
         $data = json_decode(file_get_contents($argv[1]), true);
         echo ($data["installation_id"] ?? "") . "\n";
         echo ($data["settings_enc_key"] ?? "") . "\n";
+        echo ($data["settings_enc_key_fingerprint"] ?? "") . "\n";
     ' -- "${manifest}")"; then
         warn "Failed to parse ${manifest} — proceeding without it."
         return 0
@@ -256,6 +281,40 @@ read_manifest() {
     mapfile -t lines <<< "${raw}"
     MANIFEST_INSTALLATION_ID="${lines[0]:-}"
     MANIFEST_SETTINGS_ENC_KEY="${lines[1]:-}"
+    MANIFEST_SETTINGS_ENC_KEY_FINGERPRINT="${lines[2]:-}"
+
+    if [[ -z "${MANIFEST_SETTINGS_ENC_KEY}" ]]; then
+        # Manifests written since the key moved out of the archive hold a fingerprint only. The operator supplies the key.
+        if [[ -n "${SETTINGS_KEY_FILE}" ]]; then
+            load_settings_key_file "${SETTINGS_KEY_FILE}" "${MANIFEST_SETTINGS_ENC_KEY_FINGERPRINT}"
+        elif [[ -n "${MANIFEST_SETTINGS_ENC_KEY_FINGERPRINT}" ]]; then
+            warn "backup-manifest.json does not contain the settings-encryption key (key fingerprint ${MANIFEST_SETTINGS_ENC_KEY_FINGERPRINT}). Supply it with --settings-key-file=<path> (the <archive>.settings-key file backup.sh wrote, or a file holding the original config.php's \$config_settings_enc_key). Without it SMTP/IMAP passwords, RMM/webhook secrets, TOTP seeds and the credential vault will not decrypt after this restore unless this config.php already has that key."
+        fi
+    fi
+}
+
+# load_settings_key_file(path, [fingerprint]): reads the original config_settings_enc_key from `path`
+# (the last line that is not a # comment; backup.sh writes <archive>.settings-key this way) into
+# MANIFEST_SETTINGS_ENC_KEY. When the manifest gave a fingerprint, the key must match it or this dies:
+# applying the wrong key would make every stored secret unreadable.
+load_settings_key_file() {
+    local path="$1" want_fp="${2:-}"
+    [[ -f "${path}" ]] || die "--settings-key-file '${path}' does not exist."
+    local perm
+    perm="$(stat -c '%a' "${path}")"
+    if [[ "${perm}" =~ [0-7][0-7][1-7]$ || "${perm}" =~ [0-7][1-7][0-7]$ ]]; then
+        warn "${path} has permissions ${perm}; it holds a secret and should be 600."
+    fi
+    local key
+    key="$(grep -v '^[[:space:]]*#' "${path}" | grep -v '^[[:space:]]*$' | tail -n 1 | tr -d '[:space:]')"
+    [[ "${key}" =~ ^[0-9a-fA-F]{32,128}$ ]] || die "${path} does not contain a hex settings-encryption key."
+    if [[ -n "${want_fp}" ]]; then
+        local got_fp
+        got_fp="$(php -r 'echo substr(hash("sha256", "rivetit-settings-key-fingerprint|v1|" . $argv[1]), 0, 16);' -- "${key}")"
+        [[ "${got_fp}" == "${want_fp}" ]] || die "The key in ${path} (fingerprint ${got_fp}) does not match this backup (fingerprint ${want_fp}). Refusing to apply it."
+    fi
+    MANIFEST_SETTINGS_ENC_KEY="${key}"
+    success "Settings-encryption key read from ${path}$( [[ -n "${want_fp}" ]] && printf ' (fingerprint matches the backup)' ) - will apply it to config.php after import."
 }
 
 import_database() {
@@ -327,7 +386,7 @@ restore_uploads() {
 # shell/sed escaping.
 apply_settings_enc_key() {
     if [[ -z "${MANIFEST_SETTINGS_ENC_KEY}" ]]; then
-        info "Backup's settings_enc_key is empty (the common case — most instances never set one) — nothing to change in config.php."
+        info "No settings_enc_key was recovered (empty in the backup, or only a fingerprint and no --settings-key-file) — config.php's key is left as it is."
         return 0
     fi
     if [[ "${SETTINGS_ENC_KEY}" == "${MANIFEST_SETTINGS_ENC_KEY}" ]]; then
@@ -372,6 +431,11 @@ main() {
     info "=== RivetMSP restore starting: ${BACKUP_FILE} -> ${APP_DIR} ==="
 
     read_app_config "${APP_DIR}"
+    # The key file backup.sh writes next to the archive is used automatically unless one was named.
+    if [[ -z "${SETTINGS_KEY_FILE}" && -f "${BACKUP_FILE%.tar.gz.enc}.settings-key" ]]; then
+        SETTINGS_KEY_FILE="${BACKUP_FILE%.tar.gz.enc}.settings-key"
+        info "Found the settings-key file next to the archive: ${SETTINGS_KEY_FILE}"
+    fi
     run_pre_restore_backup
     decrypt_and_extract
     read_manifest
@@ -384,4 +448,7 @@ main() {
     info "Reminder: credential vault data decrypts with each user's own password-derived key, not a separate secret in the dump. If the admin password changed after this backup was taken, that vault data will need the account's password reset to match, or recovery via whatever vault-recovery path the app provides."
 }
 
-main "$@"
+# Run only when executed, not when sourced (tests source this file to exercise its functions).
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

@@ -4,6 +4,12 @@
 $sql_settings = mysqli_query($mysqli, "SELECT * FROM settings WHERE company_id = 1");
 $row = mysqli_fetch_assoc($sql_settings);
 
+// Secrets that used to be stored in plaintext are wrapped here the first time they are read (see includes/security_crypto.php).
+require_once __DIR__ . '/security_crypto.php';
+if (is_array($row)) {
+    secLazyRewrapSettings($mysqli, $row);
+}
+
 // Database version
 DEFINE("CURRENT_DATABASE_VERSION", $row['config_current_database_version']);
 
@@ -149,9 +155,10 @@ $config_unifi_default_integration_id = intval($row['config_unifi_default_integra
 // Login
 $config_login_message = $row['config_login_message'];
 $config_login_key_required = $row['config_login_key_required'];
-$config_login_key_secret = $row['config_login_key_secret'];
+$config_login_key_secret = decryptSetting((string) ($row['config_login_key_secret'] ?? ''));
 $config_login_remember_me_expire = intval($row['config_login_remember_me_expire']);
-$config_login_session_lifetime = intval($row['config_login_session_lifetime'] ?? 480);
+// Absolute session lifetime in minutes (default 7 days, floor 60, cap 90 days). The idle timeout is a separate setting (security_settings).
+$config_login_session_lifetime = max(60, min(129600, intval($row['config_login_session_lifetime'] ?? 10080)));
 $config_log_retention = intval($row['config_log_retention']);
 $config_compliance_profile = (string) ($row['config_compliance_profile'] ?? 'none');
 $config_audit_retention_days = intval($row['config_audit_retention_days'] ?? 365);
@@ -166,6 +173,7 @@ $config_backup_s3_region      = $row['config_backup_s3_region'] ?? 'us-east-1';
 $config_backup_s3_bucket      = $row['config_backup_s3_bucket'] ?? '';
 $config_backup_s3_access_key  = $row['config_backup_s3_access_key'] ?? '';
 $config_backup_s3_secret_key  = decryptSetting($row['config_backup_s3_secret_key'] ?? '');
+$config_backup_passphrase     = decryptSetting($row['config_backup_passphrase'] ?? '');
 $config_backup_s3_path_style  = intval($row['config_backup_s3_path_style'] ?? 1);
 $config_backup_s3_prefix      = $row['config_backup_s3_prefix'] ?? '';
 // Comet Backup

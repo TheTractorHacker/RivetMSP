@@ -27,7 +27,7 @@ $required_args = [
     'country'      => 'Company country (e.g. United States)',
     'user-name'    => 'Admin user full name',
     'user-email'   => 'Admin user email',
-    'user-password'=> 'Admin user password (min 8 chars)'
+    'user-password'=> 'Admin user password (min 12 chars)'
 ];
 
 // Additional optional arguments
@@ -67,7 +67,8 @@ $longopts = [
     "user-name:",
     "user-email:",
     "user-password:",
-    "non-interactive"
+    "non-interactive",
+    "settings-enc-key:"
 ];
 
 $options = getopt($shortopts, $longopts);
@@ -98,6 +99,9 @@ if (isset($options['help'])) {
         echo "  --$arg\t$desc\n";
     }
     echo "  --non-interactive\tRun in non-interactive mode (fail if required args missing)\n";
+    echo "  --settings-enc-key=<64 hex>\tUse this value for config.php's config_settings_enc_key instead of\n";
+    echo "  \t\t\t\tgenerating a new random one (a restore passes the key it recovered\n";
+    echo "  \t\t\t\tfrom a backup so restored secrets keep decrypting).\n";
     echo "  --help\t\tShow this help message\n\n";
     echo "If running interactively (without --non-interactive), any missing required arguments will be prompted.\n";
     echo "If running non-interactively, all required arguments must be provided.\n\n";
@@ -211,14 +215,19 @@ while (!filter_var($user_email, FILTER_VALIDATE_EMAIL)) {
     }
     $user_email = prompt("Email Address");
 }
-$user_password_plain = getOptionOrPrompt('user-password', "Password (at least 8 chars)", true);
-if (strlen($user_password_plain) < 8) {
+$user_password_plain = getOptionOrPrompt('user-password', "Password (at least 12 chars)", true);
+// Staff password policy (includes/security_policy.php): 12+ characters, not the name or email address.
+require_once __DIR__ . '/../includes/security_policy.php';
+$pw_error = secPasswordPolicyError($user_password_plain, ['name' => $user_name ?? '', 'email' => $user_email ?? '', 'username' => $user_email ?? '']);
+if ($pw_error !== null) {
     if ($non_interactive) {
-        die("Password must be at least 8 characters.\n");
+        fwrite(STDERR, $pw_error . "\n");
+        exit(1);
     }
-    while (strlen($user_password_plain) < 8) {
-        echo "Password too short. Try again.\n";
+    while ($pw_error !== null) {
+        echo $pw_error . " Try again.\n";
         $user_password_plain = prompt("Password");
+        $pw_error = secPasswordPolicyError($user_password_plain, ['name' => $user_name ?? '', 'email' => $user_email ?? '', 'username' => $user_email ?? '']);
     }
 }
 
@@ -234,6 +243,14 @@ if (!$conn) {
 
 $installation_id = randomString(32);
 
+// Per-installation key for encryptSetting()/decryptSetting(): the SMTP/IMAP passwords, OAuth and API keys, webhook secrets, TOTP seeds and the
+// credential-vault master key are all wrapped with it. It MUST exist before anything is stored: encryptSetting() refuses to write a secret
+// without one (it used to store cleartext). --settings-enc-key supplies an existing key (a restore); otherwise a fresh random one.
+$settings_enc_key = $options['settings-enc-key'] ?? bin2hex(random_bytes(32));
+if (!preg_match('/^[0-9a-f]{64}$/', (string) $settings_enc_key)) {
+    die("--settings-enc-key must be 64 lowercase hex characters (the value of config_settings_enc_key from the original config.php).\n");
+}
+
 $new_config = "<?php\n\n";
 $new_config .= "\$dbhost = " . var_export($host, true) . ";\n";
 $new_config .= "\$dbusername = " . var_export($username, true) . ";\n";
@@ -245,6 +262,7 @@ $new_config .= "\$config_base_url = '" . addslashes($base_url) . "';\n";
 $new_config .= "\$config_https_only = TRUE;\n";
 $new_config .= "\$repo_branch = 'master';\n";
 $new_config .= "\$installation_id = '$installation_id';\n";
+$new_config .= "\$config_settings_enc_key = '$settings_enc_key';\n";
 
 if (file_put_contents("../config.php", $new_config) === false) {
     die("Failed to write config.php. Check file permissions.\n");
@@ -276,7 +294,7 @@ foreach ($lines as $line) {
 echo "Database imported successfully.\n";
 
 // Create User
-$password_hash = password_hash(trim($user_password_plain), PASSWORD_DEFAULT);
+$password_hash = secPasswordHash(trim($user_password_plain));
 $site_encryption_master_key = randomString();
 $user_specific_encryption_ciphertext = setupFirstUserSpecificKey($user_password_plain, $site_encryption_master_key);
 

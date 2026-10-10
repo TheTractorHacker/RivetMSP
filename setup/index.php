@@ -72,6 +72,9 @@ if (isset($_POST['add_database'])) {
 
     $installation_id = randomString(32);
 
+    // Per-installation key for encryptSetting()/decryptSetting() (stored secrets, TOTP seeds, the vault master key). Must exist before anything is stored.
+    $settings_enc_key = bin2hex(random_bytes(32));
+
     // Ensure variables meet specific criteria (very basic examples)
     if (!preg_match('/^[a-zA-Z0-9.-]+$/', $host)) {
         die('Invalid host format.');
@@ -95,6 +98,7 @@ if (isset($_POST['add_database'])) {
     $new_config .= "\$config_https_only = TRUE;\n";
     $new_config .= "\$repo_branch = 'master';\n";
     $new_config .= "\$installation_id = '$installation_id';\n";
+    $new_config .= "\$config_settings_enc_key = '$settings_enc_key';\n";
 
     if (file_put_contents("../config.php", $new_config) !== false && file_exists('../config.php')) {
 
@@ -352,6 +356,19 @@ if (isset($_POST['restore'])) {
         die("Uploads restore appears empty after extraction.");
     }
 
+    // ---------- 5b) Recover settings_enc_key from the backup's manifest ----------
+    // See applyManifestSettingsEncKey()'s own doc comment (setup_functions.php) for why this
+    // matters: without it, a restore onto any config.php other than this backup's own original
+    // one leaves every encrypted settings column (SMTP/IMAP passwords, API keys, TOTP seeds, the
+    // wrapped credential-vault master key) permanently undecryptable, silently.
+    $configPath = __DIR__ . '/../config.php';
+    $manifestResult = applyManifestSettingsEncKey(
+        $tempDir,
+        trim($_POST['backup_passphrase'] ?? '') !== '' ? trim($_POST['backup_passphrase']) : null,
+        $configPath,
+        trim($_POST['settings_enc_key'] ?? '') !== '' ? trim($_POST['settings_enc_key']) : null
+    );
+
     // ---------- 6) Optional: version info ----------
     $versionTxt = "$tempDir/version.txt";
     if (file_exists($versionTxt)) {
@@ -365,13 +382,15 @@ if (isset($_POST['restore'])) {
     deleteDir($tempDir);
 
     // ---------- 8) Finalize setup flag (append safely) ----------
-    $configPath = __DIR__ . "/../config.php";
     $append = "\n\$config_enable_setup = 0;\n\n";
     if (!@file_put_contents($configPath, $append, FILE_APPEND | LOCK_EX)) {
         $_SESSION['alert_message'] = "Backup restored ($fileCount files, $dirCount folders), but couldn't update setup flag — please set \$config_enable_setup = 0 in config.php.";
     } else {
         $_SESSION['alert_message'] = "Full backup restored successfully ($fileCount files, $dirCount folders).";
     }
+    // The manifest outcome is appended as its own sentence either way, so a restore that recovers (or fails to recover) the
+    // settings key is exactly as visible as one that succeeds or fails the setup-flag write.
+    $_SESSION['alert_message'] .= ' ' . $manifestResult['message'];
 
     // ---------- 9) Done ----------
     header("Location: ../login.php");
@@ -393,7 +412,15 @@ if (isset($_POST['add_user'])) {
 
     $name = sanitizeInput($_POST['name']);
     $email = sanitizeInput($_POST['email']);
-    $password = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
+    // Staff password policy (includes/security_policy.php): 12+ characters, not the name or email address.
+    require_once __DIR__ . '/../includes/security_policy.php';
+    $pw_error = secPasswordPolicyError(trim((string) ($_POST['password'] ?? '')), ['name' => trim((string) ($_POST['name'] ?? '')), 'email' => trim((string) ($_POST['email'] ?? '')), 'username' => trim((string) ($_POST['email'] ?? ''))]);
+    if ($pw_error !== null) {
+        $_SESSION['alert_message'] = $pw_error;
+        header("Location: ?user");
+        exit;
+    }
+    $password = secPasswordHash(trim($_POST['password']));
 
     //Generate master encryption key
     $site_encryption_master_key = randomString();
@@ -1243,6 +1270,20 @@ if (isset($_POST['add_telemetry'])) {
                                 <form method="post" enctype="multipart/form-data" autocomplete="off">
                                     <label>Restore RivetMSP Backup (.zip)</label>
                                     <input type="file" name="backup_zip" accept=".zip" required>
+                                    <div class="form-group mt-3">
+                                        <label>Backup passphrase</label>
+                                        <input type="password" class="form-control" name="backup_passphrase" autocomplete="new-password"
+                                               placeholder="The passphrase set in Admin &rarr; Backup when this .zip was taken">
+                                        <p class="text-muted mt-1 mb-0"><small>The backup's manifest (<code>backup-manifest.json.enc</code>) is encrypted with it. Enter it so this
+                                        restore can recover <code>settings_enc_key</code> and keep SMTP/IMAP passwords, API keys, TOTP seeds and the credential vault
+                                        decrypting correctly. Not needed when restoring straight back onto this backup's own original config.php.</small></p>
+                                    </div>
+                                    <div class="form-group mt-3">
+                                        <label>Original settings key <span class="text-muted">(only for a backup whose manifest has no key)</span></label>
+                                        <input type="text" class="form-control font-monospace" name="settings_enc_key"
+                                               autocomplete="off" spellcheck="false" placeholder="the old config.php's $config_settings_enc_key value">
+                                        <p class="text-muted mt-1 mb-0"><small>Checked against the fingerprint stored in the backup before it is used.</small></p>
+                                    </div>
                                     <p class="text-muted mt-2 mb-0"><small>Large restores may take several minutes. Do not close this page.</small></p>
                                     <hr>
                                     <button type="submit" name="restore" class="btn btn-primary text-bold">
@@ -1288,7 +1329,7 @@ if (isset($_POST['add_telemetry'])) {
                                         <div class="input-group-prepend">
                                             <span class="input-group-text"><i class="fa fa-fw fa-lock"></i></span>
                                         </div>
-                                        <input type="password" class="form-control" data-toggle="password" name="password" placeholder="Enter a Password" autocomplete="new-password" required minlength="8">
+                                        <input type="password" class="form-control" data-toggle="password" name="password" placeholder="Enter a Password (12+ characters)" autocomplete="new-password" required minlength="12">
                                         <div class="input-group-append">
                                             <span class="input-group-text"><i class="fa fa-fw fa-eye"></i></span>
                                         </div>

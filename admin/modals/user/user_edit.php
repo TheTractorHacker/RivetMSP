@@ -1,6 +1,7 @@
 <?php
 
 require_once '../../../includes/modal_header.php';
+require_once '../../../includes/security_policy.php';
 
 $user_id = intval($_GET['id']);
 
@@ -116,7 +117,7 @@ ob_start();
                         <span class="input-group-text" title="Show password"><i class="fa fa-fw fa-eye"></i></span>
                         <button type="button" class="btn btn-outline-secondary js-generate-password" title="Generate a random password" aria-label="Generate a random password"><i class="fa fa-fw fa-dice"></i></button>
                     </div>
-                    <small class="form-text text-muted">Leave blank to keep the current password. Use at least 8 characters.</small>
+                    <small class="form-text text-muted">Leave blank to keep the current password. Use at least <?= secSettingInt('password_min_length') ?> characters.</small>
                 </div>
 
                 <div class="form-group">

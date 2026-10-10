@@ -6672,3 +6672,221 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.78'");
         }
     }
+    // Wave 1 security (DB 2.6.79). One idempotent step, gated on 2.6.78:
+    //   - security_settings (policy key/value), user_recovery_codes (hashed, single use), user_sessions (hashed session id, revocable)
+    //   - settings.config_backup_passphrase (the in-app backup passphrase, required, wraps the manifest that holds the settings key)
+    //   - software.software_key / software_keys.software_key become TEXT (a wrapped license key is longer than the old varchar(200)/(400))
+    //   - session lifetime: settings.config_login_session_lifetime is now the ABSOLUTE maximum (default 7 days, floor 60 minutes, cap 90 days)
+    //     and the idle timeout is security_settings.session_idle_minutes (default 8 hours, the old RivetMSP session length). An install that
+    //     had customised the old value (anything but the 480-minute default) keeps it as its idle timeout, so nobody is signed out sooner
+    //     or later than before; the absolute maximum is then at least that long.
+    //   - re-wrap every secret that was stored in plaintext because RivetMSP never had $config_settings_enc_key before: the settings
+    //     secrets (including the credential-vault master key), integration keys, license keys and the TOTP seeds (see
+    //     includes/security_crypto.php secRewrapTargets()). Only when $config_settings_enc_key is set - never when it is empty: then the rows
+    //     are left exactly as they are, this step still completes, and `php scripts/update_cli.php --rewrap_secrets` (or the next settings
+    //     read, for the settings row) wraps them once the key is in config.php. A row that already carries ENC:/ENC2: is left alone, so
+    //     running this twice changes nothing.
+    // Numbering: 2.6.78 is the MCP identity collation step (RivetCore 0017); this security step gates on it. 2.6.80 / 2.6.81 are the mail-intake and recovery steps, 2.6.82 the Core runner step.
+    if ($rivetit_db_version() == '2.6.78') {
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `security_settings` (
+          `setting_key` varchar(64) NOT NULL,
+          `setting_value` varchar(255) NOT NULL DEFAULT '',
+          `setting_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`setting_key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `user_recovery_codes` (
+          `code_id` int(11) NOT NULL AUTO_INCREMENT,
+          `code_user_id` int(11) NOT NULL,
+          `code_hash` varchar(255) NOT NULL,
+          `code_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `code_used_at` datetime DEFAULT NULL,
+          `code_used_ip` varchar(45) DEFAULT NULL,
+          PRIMARY KEY (`code_id`),
+          KEY `idx_recovery_codes_user` (`code_user_id`,`code_used_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `user_sessions` (
+          `session_row_id` bigint(20) NOT NULL AUTO_INCREMENT,
+          `session_user_id` int(11) NOT NULL,
+          `session_hash` char(64) NOT NULL,
+          `session_ip` varchar(64) DEFAULT NULL,
+          `session_user_agent` varchar(255) DEFAULT NULL,
+          `session_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `session_last_seen_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `session_revoked_at` datetime DEFAULT NULL,
+          `session_revoked_reason` varchar(40) DEFAULT NULL,
+          PRIMARY KEY (`session_row_id`),
+          UNIQUE KEY `uq_user_sessions_hash` (`session_hash`),
+          KEY `idx_user_sessions_user` (`session_user_id`,`session_revoked_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        // The backup encryption passphrase (encrypted at rest): required before the in-app backup builds anything; it encrypts the manifest
+        // that is the only place the settings key is written.
+        mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_backup_passphrase` text DEFAULT NULL AFTER `config_backup_s3_prefix`");
+
+        mysqli_query($mysqli, "ALTER TABLE `software` MODIFY COLUMN `software_key` text DEFAULT NULL");
+        if (mysqli_num_rows(mysqli_query($mysqli, "SHOW TABLES LIKE 'software_keys'")) > 0) {
+            mysqli_query($mysqli, "ALTER TABLE `software_keys` MODIFY COLUMN `software_key` text NOT NULL");
+        }
+
+        // Session lifetime: the old column value (minutes) becomes the idle timeout when it was customised, then the column turns absolute.
+        $sess_old_row = mysqli_fetch_row(mysqli_query($mysqli, "SELECT config_login_session_lifetime FROM settings WHERE company_id = 1 LIMIT 1"));
+        $sess_old     = (int) ($sess_old_row[0] ?? 480);
+        $sess_abs     = 10080;
+        if ($sess_old > 0 && $sess_old !== 480 && $sess_old !== 10080) {
+            $sess_idle = max(5, min(129600, $sess_old));
+            mysqli_query($mysqli, "INSERT IGNORE INTO `security_settings` (`setting_key`, `setting_value`) VALUES ('session_idle_minutes', '$sess_idle')");
+            $sess_abs = max($sess_abs, $sess_idle);
+        }
+        mysqli_query($mysqli, "ALTER TABLE `settings` MODIFY COLUMN `config_login_session_lifetime` int(11) NOT NULL DEFAULT 10080");
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_login_session_lifetime` = $sess_abs WHERE company_id = 1");
+
+        // Re-wrap the plaintext secrets. No key, no wrapping.
+        require_once dirname(__DIR__) . '/includes/security_crypto.php';
+        if (!secSettingsKeyAvailable()) {
+            echo "Database update 2.6.79: \$config_settings_enc_key is empty, so stored secrets were NOT re-wrapped. Add the key to config.php (deploy/update.sh does this for you), then run: php scripts/update_cli.php --rewrap_secrets\n";
+        } else {
+            $enc_result = secRewrapAll($mysqli);
+            if ($enc_result['skipped_too_long'] > 0) {
+                echo "WARNING: {$enc_result['skipped_too_long']} secret(s) left as-is - the encrypted value does not fit the column.\n";
+            }
+        }
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.79'");
+    }
+
+    if ($rivetit_db_version() == '2.6.79') {
+        // Mail intake reliability (Wave 1 INTAKE, ported from RivetIT 2.6.152): message-id threading and dedupe, poison-message quarantine, per-mailbox health,
+        // outbound queue hardening. Every statement is idempotent (IF NOT EXISTS), so a partial earlier run converges. Settings live in
+        // their own key/value table (mail_intake_settings), NOT as settings columns: `settings` is close to the row-size limit.
+        // Message-ids are stored normalised (lower case, no angle brackets), see RivetMSP\Mail\MessageId.
+        mysqli_query($mysqli, "ALTER TABLE `tickets` ADD COLUMN IF NOT EXISTS `ticket_mail_message_id` varchar(255) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `tickets` ADD INDEX IF NOT EXISTS `idx_ticket_mail_message_id` (`ticket_mail_message_id`)");
+        mysqli_query($mysqli, "ALTER TABLE `ticket_replies` ADD COLUMN IF NOT EXISTS `ticket_reply_mail_message_id` varchar(255) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `ticket_replies` ADD INDEX IF NOT EXISTS `idx_ticket_reply_mail_message_id` (`ticket_reply_mail_message_id`)");
+
+        mysqli_query($mysqli, "ALTER TABLE `mail_requests` ADD COLUMN IF NOT EXISTS `mail_request_message_id` varchar(255) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `mail_requests` ADD COLUMN IF NOT EXISTS `mail_request_reason` varchar(30) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `mail_requests` ADD INDEX IF NOT EXISTS `idx_mail_request_message_id` (`mail_request_message_id`)");
+
+        mysqli_query($mysqli, "ALTER TABLE `mailboxes` ADD COLUMN IF NOT EXISTS `mailbox_last_success_at` datetime DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `mailboxes` ADD COLUMN IF NOT EXISTS `mailbox_last_error` varchar(500) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `mailboxes` ADD COLUMN IF NOT EXISTS `mailbox_last_error_at` datetime DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `mailboxes` ADD COLUMN IF NOT EXISTS `mailbox_consecutive_failures` int(11) NOT NULL DEFAULT 0");
+
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD COLUMN IF NOT EXISTS `email_message_id` varchar(255) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD COLUMN IF NOT EXISTS `email_ticket_id` int(11) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD COLUMN IF NOT EXISTS `email_auto` tinyint(1) NOT NULL DEFAULT 1");
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD COLUMN IF NOT EXISTS `email_started_at` datetime DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD COLUMN IF NOT EXISTS `email_alerted_at` datetime DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD INDEX IF NOT EXISTS `idx_email_message_id` (`email_message_id`)");
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD INDEX IF NOT EXISTS `idx_email_status` (`email_status`,`email_queued_at`)");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `mail_intake_state` (
+          `intake_id` int(11) NOT NULL AUTO_INCREMENT,
+          `intake_mailbox_id` int(11) NOT NULL,
+          `intake_key` char(40) NOT NULL,
+          `intake_message_id` varchar(255) DEFAULT NULL,
+          `intake_from_email` varchar(200) DEFAULT NULL,
+          `intake_subject` varchar(500) DEFAULT NULL,
+          `intake_attempts` int(11) NOT NULL DEFAULT 0,
+          `intake_last_error` varchar(500) DEFAULT NULL,
+          `intake_state` varchar(12) NOT NULL DEFAULT 'pending',
+          `intake_first_seen_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `intake_last_attempt_at` datetime DEFAULT NULL,
+          `intake_quarantined_at` datetime DEFAULT NULL,
+          PRIMARY KEY (`intake_id`),
+          UNIQUE KEY `uq_intake_key` (`intake_mailbox_id`,`intake_key`),
+          KEY `idx_intake_state` (`intake_state`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `mail_intake_settings` (
+          `setting_key` varchar(64) NOT NULL,
+          `setting_value` varchar(255) NOT NULL DEFAULT '',
+          `setting_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`setting_key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `mail_alerts` (
+          `alert_key` varchar(120) NOT NULL,
+          `alert_last_sent_at` datetime NOT NULL,
+          `alert_last_detail` varchar(500) DEFAULT NULL,
+          `alert_count` int(11) NOT NULL DEFAULT 1,
+          PRIMARY KEY (`alert_key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.80'");
+    }
+
+    if ($rivetit_db_version() == '2.6.80') {
+        // Recovery (ported from RivetIT 2.6.153; platform gap analysis items 9, 11, 12): every backup run leaves a status record (backup_runs), the nightly restore drill
+        // leaves a result (restore_drill_log), alert de-duplication state (recovery_alerts) and a small key/value settings table
+        // (recovery_settings; a table, not settings columns, because settings is close to the row-size limit). All CREATE TABLE IF NOT
+        // EXISTS, so re-running is harmless. The drill is OFF until an admin configures the scoped drill_% database account.
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `backup_runs` (
+          `run_id` int(11) NOT NULL AUTO_INCREMENT,
+          `run_kind` varchar(20) NOT NULL DEFAULT 'app_manual',
+          `run_started_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `run_finished_at` datetime DEFAULT NULL,
+          `run_file` varchar(255) DEFAULT NULL,
+          `run_size` bigint(20) unsigned DEFAULT NULL,
+          `run_sha256` char(64) DEFAULT NULL,
+          `run_ok` tinyint(1) NOT NULL DEFAULT 0,
+          `run_error` text DEFAULT NULL,
+          `run_offsite_result` varchar(255) DEFAULT NULL,
+          PRIMARY KEY (`run_id`),
+          KEY `idx_backup_runs_started` (`run_started_at`),
+          KEY `idx_backup_runs_ok` (`run_ok`,`run_finished_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `restore_drill_log` (
+          `drill_id` int(11) NOT NULL AUTO_INCREMENT,
+          `drill_started_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `drill_finished_at` datetime DEFAULT NULL,
+          `drill_trigger` varchar(20) NOT NULL DEFAULT 'cron',
+          `drill_backup_kind` varchar(20) DEFAULT NULL,
+          `drill_backup_file` varchar(255) DEFAULT NULL,
+          `drill_status` varchar(20) NOT NULL DEFAULT 'running',
+          `drill_message` varchar(500) DEFAULT NULL,
+          `drill_restore_seconds` decimal(10,2) DEFAULT NULL,
+          `drill_total_seconds` decimal(10,2) DEFAULT NULL,
+          `drill_scratch_db` varchar(64) DEFAULT NULL,
+          `drill_cleanup_ok` tinyint(1) DEFAULT NULL,
+          `drill_checks` mediumtext DEFAULT NULL,
+          PRIMARY KEY (`drill_id`),
+          KEY `idx_restore_drill_started` (`drill_started_at`),
+          KEY `idx_restore_drill_status` (`drill_status`,`drill_finished_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `recovery_alerts` (
+          `alert_key` varchar(120) NOT NULL,
+          `alert_last_sent_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `alert_last_message` varchar(500) DEFAULT NULL,
+          `alert_send_count` int(11) NOT NULL DEFAULT 1,
+          PRIMARY KEY (`alert_key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `recovery_settings` (
+          `setting_key` varchar(60) NOT NULL,
+          `setting_value` text DEFAULT NULL,
+          `setting_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`setting_key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.81'");
+    }
+
+    if ($rivetit_db_version() == '2.6.81') {
+        // RivetCore 1.0.0-rc.7/rc.8: Migration0017McpIdentityBinaryCollation moves mcp_unlinked_identities.issuer and .subject to utf8mb4_bin (OIDC `iss` and
+        // `sub` are case-sensitive, trailing spaces count). An edition applies new Core migrations through its OWN step: the Core runner here is the only thing
+        // that runs them. Idempotent (an already-binary column and a missing table are left alone, and the runner records what it applied), so a fresh install
+        // (db.sql already has the binary columns and the 0017 row) passes straight through. Skipped (version NOT advanced, so it retries) until a package that
+        // ships the migration is installed.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Mcp\Migration\Migration0017McpIdentityBinaryCollation::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.82'");
+        }
+    }

@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 /*
  * The "Add device" installer flow of RivetMSP's RMM module, over real HTTP (php -S, the real front controller) on a scratch database:
  *   - agent/post/rmm_installer.php: the stamped Windows exe (MZ header, the published bytes, the InstallerStamp trailer with the client, the filename,

@@ -6,6 +6,10 @@
 
 defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 
+require_once __DIR__ . '/../../../includes/security_crypto.php';
+require_once __DIR__ . '/../../../includes/security_policy.php';
+require_once __DIR__ . '/../../../includes/security_sessions.php';
+
 if (isset($_POST['edit_your_user_details'])) {
 
     validateCSRFToken($_POST['csrf_token']);
@@ -130,6 +134,13 @@ if (isset($_POST['edit_your_user_password'])) {
         redirect('user_security.php');
     }
 
+    // Staff password policy (length, not the name / email, optional breach check)
+    $policy_error = secPasswordPolicyError($new_password, ['name' => $session_name, 'email' => $session_email, 'username' => $session_email], $mysqli);
+    if ($policy_error !== null) {
+        flash_alert($policy_error, 'error');
+        redirect('user_security.php');
+    }
+
     // Email notification when password or email is changed
     $user_sql = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_name, user_email FROM users WHERE user_id = $session_user_id"));
     $name = sanitizeInput($user_sql['user_name']);
@@ -161,10 +172,14 @@ if (isset($_POST['edit_your_user_password'])) {
     }
 
     $plain_new_password = $new_password;
-    $new_password = password_hash($new_password, PASSWORD_DEFAULT);
+    $new_password = mysqli_real_escape_string($mysqli, secPasswordHash($plain_new_password));
     $user_specific_encryption_ciphertext = encryptUserSpecificKey($plain_new_password);
     mysqli_query($mysqli,"UPDATE users SET user_password = '$new_password', user_specific_encryption_ciphertext = '$user_specific_encryption_ciphertext' WHERE user_id = $session_user_id");
     mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $session_user_id");
+
+    // A changed password signs the user out everywhere (this browser too: the page below logs out) and ends remember-me cookies.
+    $sessions_ended = secSessionsOnPasswordChange($mysqli, $session_user_id, null);
+    secAudit('auth.password_changed', $session_user_id, 'user', $session_user_id, 'success', "$session_name changed their password", ['sessions_revoked' => $sessions_ended]);
 
     logAction("User Account", "Edit", "$session_name changed their password");
 
@@ -233,8 +248,18 @@ if (isset($_POST['enable_mfa'])) {
     // Verify
     if (TokenAuth6238::verify($token, $verify_code)) {
 
-        // SUCCESS
-        mysqli_query($mysqli,"UPDATE users SET user_token = '$token' WHERE user_id = $session_user_id");
+        // SUCCESS - the seed is stored wrapped (encryptSetting); never in plaintext
+        try {
+            $token_stored = mysqli_real_escape_string($mysqli, secUserTotpStore($token));
+        } catch (\Throwable $e) {
+            flash_alert('Two-factor authentication could not be saved securely: the server has no settings encryption key.', 'error');
+            redirect('user_security.php');
+        }
+        mysqli_query($mysqli,"UPDATE users SET user_token = '$token_stored' WHERE user_id = $session_user_id");
+
+        // Ten single-use recovery codes, shown once on the Security page
+        $_SESSION['new_recovery_codes'] = secRecoveryCodesGenerate($mysqli, $session_user_id);
+        secAudit('auth.recovery_codes_generated', $session_user_id, 'user', $session_user_id, 'success', "$session_name turned on MFA and received recovery codes");
 
         // Delete any existing MFA tokens - these browsers should be re-validated
         mysqli_query($mysqli, "DELETE FROM remember_tokens WHERE remember_token_user_id = $session_user_id");
@@ -246,15 +271,8 @@ if (isset($_POST['enable_mfa'])) {
         // Clear the mfa_token from the session to avoid re-use.
         unset($_SESSION['mfa_token']);
 
-        // Check if the previous page is mfa_enforcement.php
-        if (isset($_SERVER['HTTP_REFERER'])) {
-            $previousPage = basename(parse_url($_SERVER['HTTP_REFERER'], PHP_URL_PATH));
-            if ($previousPage === 'mfa_enforcement.php') {
-                // Redirect back to mfa_enforcement.php
-                redirect("../$config_start_page");
-
-            }
-        }
+        // The recovery codes are shown once on the Security page, including after the enrolment page.
+        redirect("user_security.php");
 
     } else {
         // FAILURE
@@ -279,7 +297,8 @@ if (isset($_POST['enable_mfa'])) {
 
 if (isset($_GET['disable_mfa'])){
 
-    if ($session_user_config_force_mfa) {
+    // Required for this account by its own flag or by the global MFA policy: it cannot be turned off.
+    if ($session_user_config_force_mfa || secMfaEnforcementState($mysqli, $session_user_id)['applies']) {
         flash_alert("Multi-Factor authentication cannot be disabled for your account", 'error');
         redirect();
     }
@@ -287,6 +306,8 @@ if (isset($_GET['disable_mfa'])){
     validateCSRFToken($_GET['csrf_token']);
 
     mysqli_query($mysqli,"UPDATE users SET user_token = '' WHERE user_id = $session_user_id");
+    secRecoveryCodesDelete($mysqli, $session_user_id);
+    secAudit('auth.mfa_disabled', $session_user_id, 'user', $session_user_id, 'success', "$session_name turned off MFA");
 
     // API tokens minted under the old second factor are revoked too (nightly MSP-4)
     mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $session_user_id");
@@ -323,6 +344,59 @@ if (isset($_GET['disable_mfa'])){
 
     redirect();
 
+}
+
+// New set of recovery codes (the old ones stop working). The password is asked again.
+if (isset($_POST['regenerate_recovery_codes'])) {
+
+    validateCSRFToken($_POST['csrf_token']);
+
+    $own = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password, user_token FROM users WHERE user_id = $session_user_id"));
+    if (!$own || !password_verify((string) ($_POST['current_password'] ?? ''), (string) $own['user_password'])) {
+        flash_alert('Current password is incorrect', 'error');
+        redirect('user_security.php');
+    }
+    if (empty($own['user_token'])) {
+        flash_alert('Turn on two-factor authentication first; recovery codes belong to it.', 'error');
+        redirect('user_security.php');
+    }
+
+    $_SESSION['new_recovery_codes'] = secRecoveryCodesGenerate($mysqli, $session_user_id);
+    logAction("User Account", "Edit", "$session_name regenerated their MFA recovery codes");
+    secAudit('auth.recovery_codes_generated', $session_user_id, 'user', $session_user_id, 'regenerated', "$session_name regenerated their MFA recovery codes");
+
+    redirect('user_security.php');
+}
+
+// Active sessions: sign out one other browser
+if (isset($_POST['revoke_session'])) {
+
+    validateCSRFToken($_POST['csrf_token']);
+
+    $row_id = intval($_POST['session_row_id'] ?? 0);
+    if ($row_id === intval($_SESSION['sec_row'] ?? 0)) {
+        flash_alert('That is this browser. Use Sign out to end it.', 'error');
+        redirect('user_security.php');
+    }
+    if (secSessionRevoke($mysqli, $session_user_id, $row_id, 'revoked_by_user')) {
+        logAction("User Account", "Edit", "$session_name signed out one of their sessions");
+        secAudit('auth.session_revoked', $session_user_id, 'user', $session_user_id, 'success', "$session_name signed out session #$row_id");
+        flash_alert('Session signed out');
+    }
+    redirect('user_security.php');
+}
+
+// Active sessions: sign out everywhere, this browser included
+if (isset($_POST['sign_out_everywhere'])) {
+
+    validateCSRFToken($_POST['csrf_token']);
+
+    $ended = secSessionRevokeAll($mysqli, $session_user_id, null, 'sign_out_everywhere');
+    mysqli_query($mysqli, "DELETE FROM remember_tokens WHERE remember_token_user_id = $session_user_id");
+    logAction("User Account", "Edit", "$session_name signed out of every session ($ended)");
+    secAudit('auth.sign_out_everywhere', $session_user_id, 'user', $session_user_id, 'success', "$session_name signed out of every session", ['sessions' => $ended]);
+
+    redirect('post.php?logout');
 }
 
 if (isset($_POST['revoke_your_2fa_remember_tokens'])) {

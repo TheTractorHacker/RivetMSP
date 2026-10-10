@@ -92,7 +92,7 @@ $setEdition(1);
 
 // ============================================================ ON: enrollment, check-in, counters move
 $ok((string) $one('SELECT signing_public_key FROM endpoint_agent_settings') !== '' && (string) $one('SELECT signing_private_key_enc FROM endpoint_agent_settings') !== '', 'the first switch-on minted the signing key');
-$ok(strncmp((string) $one('SELECT signing_private_key_enc FROM endpoint_agent_settings'), 'ENC:', 4) === 0, 'the private signing key is stored as an ENC: ciphertext, never plaintext');
+$ok(strncmp((string) $one('SELECT signing_private_key_enc FROM endpoint_agent_settings'), 'ENC2:', 5) === 0, 'the private signing key is stored as an ENC2: ciphertext, never plaintext');
 $ok((int) $one("SELECT COUNT(*) FROM rmm_integrations WHERE type='rivetit_agent'") === 1, 'the synthetic rmm_integrations row (type rivetit_agent) exists');
 $tok = Enrollment_token($rmm, $admin);
 [$c, , $j] = ea_enroll($tok, ea_dev(['hostname' => 'MODULE-PC', 'serial' => 'MOD-SER-1']));
@@ -209,7 +209,7 @@ $wnb = "http://127.0.0.1:{$webNoKey['port']}";
 $ok($c === 200 && strpos($b, 'settings encryption key is not set') !== false && preg_match('/name="rmm_module_switch" value="on"[^>]*disabled/', $b) === 1, 'no $config_settings_enc_key: the page says so and the switch-on button is disabled');
 web($wnb, 'POST', '/admin/post.php', $sid, ['csrf_token' => 'csrftok1', 'rmm_module_switch' => 'on'], ['Referer: ' . $wnb . '/admin/settings_endpoint_agent.php']);
 $ok((int) $one('SELECT enabled FROM endpoint_agent_settings') === 0 && (int) $one('SELECT config_core_rmm_enabled FROM settings WHERE company_id=1') === 0 && (string) $one('SELECT COALESCE(signing_private_key_enc, \'\') FROM endpoint_agent_settings') !== 'x', 'and a forged POST cannot switch it on either (both switches stay off)');
-$ok(!preg_match('/^(?!ENC:).+$/', (string) $one('SELECT COALESCE(signing_private_key_enc, \'\') FROM endpoint_agent_settings')), 'no plaintext key is ever stored');
+$ok(!preg_match('/^(?!ENC2?:).+$/', (string) $one('SELECT COALESCE(signing_private_key_enc, \'\') FROM endpoint_agent_settings')), 'no plaintext key is ever stored');
 
 // ============================================================ fresh install vs upgraded install
 $mk = function (string $suffix, bool $withRmm) use ($db, $root): array {
@@ -253,8 +253,10 @@ $cu->query("INSERT INTO companies SET company_id = 1, company_name = 'x'"); $cu-
 $ok((int) $cu->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'settings' AND column_name = 'config_core_rmm_enabled'")->fetch_row()[0] === 0, 'UPGRADE precondition: no config_core_rmm_enabled column yet');
 $run = proc_open([PHP_BINARY, "$root/scripts/update_cli.php", '--update_db'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, "$root/scripts", array_merge(getenv(), ['RMM_TEST_DATABASE' => $up]));
 $updOut = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); proc_close($run);
-$ok(strpos($updOut, '2.6.78') !== false, 'UPGRADE: update_cli --update_db reports 2.6.78');
-$ok($cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0] === '2.6.78', 'UPGRADE: the database is at 2.6.78');
+// Later migrations (security 2.6.79, mail intake 2.6.80, recovery 2.6.81, ...) follow 2.6.77 in the same pass, so the pin is "at least 2.6.77", not "exactly 2.6.77".
+$ok(strpos($updOut, 'from version 2.6.76') !== false, 'UPGRADE: update_cli --update_db reports the update from 2.6.76');
+$ok(preg_match_all('/2\.6\.(\d+)/', $updOut, $um) > 0 && max(array_map('intval', $um[1])) >= 77, 'UPGRADE: update_cli --update_db reports 2.6.77 or later');
+$ok(version_compare((string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0], '2.6.77', '>='), 'UPGRADE: the database is at 2.6.77 or later');
 $ok($tableCount($cu) === 10 && (int) $cu->query('SELECT enabled FROM endpoint_agent_settings WHERE id=1')->fetch_row()[0] === 0 && (int) $cu->query('SELECT config_core_rmm_enabled FROM settings WHERE company_id=1')->fetch_row()[0] === 0, 'UPGRADE: the ten tables exist and the module is OFF (neither switch is turned on by the update)');
 $ok($shape($cf) === $shape($cu), 'UPGRADE: the upgraded schema equals a fresh install from db.sql (' . count($shape($cu)) . ' column/index facts compared)');
 $ok(is_file($sd . '/rmm_state.json') && ($state()['enabled'] ?? null) === false, 'UPGRADE: the updater wrote a state file that says disabled (the gate answers without the database from the first request)');

@@ -46,11 +46,11 @@ There is a single root-level `login.php` handling **both** agent and client logi
 
 Agent authentication factors:
 
-- **Password** — `password_verify()` against `users.user_password` (bcrypt).
-- **TOTP 2FA** — `plugins/totp/totp.php`; the secret is `users.user_token`. Can be forced per-user via `user_settings.user_config_force_mfa`, enforced by `agent/user/mfa_enforcement.php`.
+- **Password** — `password_verify()` against `users.user_password` (Argon2id since DB 2.6.79; older bcrypt hashes verify and are replaced at the next sign-in). Staff password rules: `includes/security_policy.php`.
+- **TOTP 2FA** — `plugins/totp/totp.php`; the secret is `users.user_token`, stored wrapped by `encryptSetting()` (`ENC2:`); read it through `secUserTotpSecret()`. Ten single-use recovery codes (`user_recovery_codes`, hashed) can replace the code at sign-in. Required per user via `user_settings.user_config_force_mfa` or for everyone / administrators via the Sign-in policy (`security_settings.mfa_policy`); `secMfaGate()` in `includes/check_login.php` confines an unenrolled, out-of-grace agent to `agent/user/*`.
 - **WebAuthn / passkeys** — a separate flow outside `login.php` (`passkey_auth_begin.php`, `passkey_auth_complete.php`, driven by `includes/webauthn.php` and `js/webauthn_signin.js`). Hard-restricted to `user_type = 1` — client contacts cannot use passkeys. A passkey is treated as sufficient on its own and bypasses TOTP.
 - **Optional shared "login key"** — `settings.config_login_key_required`/`config_login_key_secret`, an install-wide perimeter secret checked independently of the user's own credentials.
-- **Remember-me** — a hashed cookie in `remember_tokens` (agent-only) that both bypasses 2FA at login and silently re-establishes a session on later visits ("internet outages don't force re-login").
+- **Remember-me** — a hashed cookie in `remember_tokens` (agent-only) that bypasses 2FA at login and silently re-establishes a session on later visits ("internet outages don't force re-login"). It is refused for an administrator or a user with vault access who has MFA unless the Sign-in policy allows it.
 
 On success, `login.php` sets exactly:
 
@@ -61,13 +61,13 @@ $_SESSION['logged']     = true;
 session_regenerate_id(true);
 ```
 
-That is the entire session contract. Everything else — name, role, admin flag, permissions — is re-derived **per request**, not cached in the session, by the include chain below.
+`secSessionStart()` then records the idle / absolute clocks and a `user_sessions` row (`includes/security_sessions.php`; the idle timeout is `security_settings.session_idle_minutes`, the absolute maximum `settings.config_login_session_lifetime`), and `includes/auth_check.php` enforces both and revocation on every request. That is the entire session contract. Everything else — name, role, admin flag, permissions — is re-derived **per request**, not cached in the session, by the include chain below.
 
 ### The `includes/check_login.php` chain
 
 Every agent/admin page runs this orchestrator, which in turn requires:
 
-- **`includes/session_init.php`** — starts the session with `httponly`/`secure` cookies and a configurable lifetime (`settings.config_login_session_lifetime`, clamped 30 min–30 days).
+- **`includes/session_init.php`** — starts the session with `httponly`/`secure` cookies, strict mode and `SameSite=Lax`, the cookie lifetime being the absolute session maximum (`settings.config_login_session_lifetime`, default 7 days, clamped 60 min–90 days; `secSessionIniApply()` in `includes/security_sessions.php`). The idle timeout (default 8 h) is enforced per request by `includes/auth_check.php`.
 - **`includes/auth_check.php`** — the actual gate. If `$_SESSION['logged']` isn't set, tries to auto-restore from the `rememberme` cookie (rotating the token, single-use); otherwise redirects to `/login.php`.
 - **`includes/load_user_session.php`** — the important one. Re-verifies `user_type === 1`, `user_status === 1`, and not archived (killing a disabled/archived user's session on their very next request), and sets the request-scoped globals nearly everything else depends on:
   - `$session_user_role` — `users.user_role_id`
