@@ -197,6 +197,43 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
     </div>
 </div>
 
+<?php
+$ea_metric_devices = 0;
+if (($ea_q = @mysqli_query($mysqli, 'SELECT COUNT(*) FROM endpoint_agent_devices WHERE retired_at IS NULL AND revoked_at IS NULL')) instanceof mysqli_result) {
+    $ea_metric_devices = (int) (mysqli_fetch_row($ea_q)[0] ?? 0);
+}
+?>
+<div class="card mb-3" id="inventory">
+    <div class="card-header"><h4 class="card-title mb-0">Software inventory and history</h4></div>
+    <div class="card-body">
+        <p class="small text-muted">Agents of RivetCore 1.0.0-rc.9 or later can report the software installed on a device (registry uninstall entries on Windows; dpkg, rpm, snap and flatpak on Linux). Nothing is collected until this switch is on, and an agent only sends it after the server offers it, so the order of rollout is safe both ways. Switching it off makes agents stop within one check-in. The list shows on each device's asset page (Software tab) and feeds the fleet filters and the outdated-software report.</p>
+        <form action="post.php" method="post" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="form-check form-switch mb-3">
+                <input type="checkbox" class="form-check-input" id="ea_inv_sw" name="inventory_software" value="1" <?= !empty($cfg['features']['inventory_software']) ? 'checked' : '' ?>>
+                <label class="form-check-label" for="ea_inv_sw">Collect installed software (<code>inventory_software</code>)</label>
+                <div class="form-text">Off by default. Takes effect only while the RMM module itself is on.</div>
+            </div>
+            <div class="row g-3">
+                <div class="col-sm-6 col-lg-4"><label class="form-label" for="ea_chd">Check history retention (days)</label>
+                    <input type="number" class="form-control" id="ea_chd" name="check_history_days" min="0" max="365" value="<?= (int) ($cfg['limits']['check_history_days'] ?? 7) ?>" aria-describedby="ea_chd_h">
+                    <div class="form-text" id="ea_chd_h">How long each check keeps its status trend (the sparkline on the device page). 0 records none. Default 7.</div></div>
+                <div class="col-sm-6 col-lg-4"><label class="form-label" for="ea_shd">Software change history retention (days)</label>
+                    <input type="number" class="form-control" id="ea_shd" name="software_history_days" min="1" max="3650" value="<?= (int) ($cfg['limits']['software_history_days'] ?? 365) ?>" aria-describedby="ea_shd_h">
+                    <div class="form-text" id="ea_shd_h">How long installs, upgrades and removals are kept. Default 365.</div></div>
+            </div>
+            <div class="alert alert-info mt-3 mb-0" role="note" id="metric-history-note">
+                <i class="fas fa-database me-1" aria-hidden="true"></i><strong>History is stored in the database.</strong>
+                RivetMSP keeps CPU, memory, disk and network history for the Performance charts and the network bar: one summary row per metric per hour, and the newest reading of each, in <code>rmm_metric_hourly</code> and <code>rmm_metric_latest</code>.
+                It is kept <strong><?= (int) \RivetCore\Rmm\Support\DatabaseMetricSink::DEFAULT_RETENTION_DAYS ?> days</strong> (fixed in RivetCore; the daily housekeeping prunes older rows). Plan on about <strong>12 rows per device per hour</strong>
+                (roughly 290 a day, 4,000 per device at steady state, a few hundred KB). <?= $ea_metric_devices > 0 ? 'With ' . (int) $ea_metric_devices . ' enrolled device' . ($ea_metric_devices === 1 ? '' : 's') . ' that is about ' . number_format($ea_metric_devices * 290) . ' new rows a day and ' . number_format($ea_metric_devices * 4000) . ' at steady state.' : 'Enrolled devices are counted here once there are some.' ?>
+                Check history (above) and the software change log are separate tables with their own retention. Capacity figures and the load-shedding thresholds are in the RivetCore document <code>docs/rmm/CAPACITY.md</code>, section 11.
+            </div>
+            <button type="submit" name="save_inventory_settings" class="btn btn-primary mt-3"><i class="fas fa-save me-1"></i>Save software settings</button>
+        </form>
+    </div>
+</div>
+
 <div class="card mb-3" id="binaries">
     <div class="card-header"><h4 class="card-title mb-0">Agent binaries</h4></div>
     <div class="card-body">

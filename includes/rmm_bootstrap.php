@@ -20,6 +20,7 @@ use RivetMSP\Core\Adapter\Endpoint\EndpointAccessPolicy;
 use RivetMSP\Core\Adapter\Endpoint\EndpointAssets;
 use RivetMSP\Core\Adapter\Endpoint\EndpointAudit;
 use RivetMSP\Core\Adapter\Endpoint\EndpointBridge;
+use RivetMSP\Core\Adapter\Endpoint\EndpointEvents;
 use RivetMSP\Core\Adapter\Endpoint\EndpointModuleState;
 use RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox;
 use RivetMSP\Core\Adapter\Endpoint\EndpointTenancy;
@@ -61,6 +62,10 @@ function rivetRmmModule($mysqli = null): RmmModule
     if (defined('EA_BINARY_MAX_BYTES')) {
         $options['max_upload_bytes'] = (int) EA_BINARY_MAX_BYTES;
     }
+    // RivetMSP has no metrics subsystem: Core's DatabaseMetricSink keeps the latest reading and hourly rollups (RivetCore 1.0.0-rc.9, 14 days, pruned by
+    // housekeeping; about 12 rows an hour per typical device, see docs/rmm/CAPACITY.md). It is the sink AND the RmmMetricReaderInterface that the Performance
+    // charts and the network bar read; the module detects the reader by itself.
+    $metrics = new \RivetCore\Rmm\Support\DatabaseMetricSink($db, new \RivetCore\Support\SystemClock());
     $module = new RmmModule(
         $db,
         new \RivetCore\Support\SystemClock(),
@@ -69,16 +74,31 @@ function rivetRmmModule($mysqli = null): RmmModule
         new EndpointBridge($db, $mysqli),
         new EndpointSecretBox(),
         new EndpointAudit(),
-        new \RivetCore\Rmm\Support\NullRmmMetricSink(),   // RivetMSP has no metrics subsystem (decision D5): check-ins keep the last metrics on the device row
+        $metrics,
         new EndpointModuleState($db),
         $options,
         null,
         new EndpointAccessPolicy($db),
         rivetWebhookUrlPolicy($mysqli),
+        new EndpointEvents($mysqli),   // RivetCore 1.0.0-rc.9: rmm.* events onto the event bus (webhooks, event rules)
     );
     $built[$key] = [$mysqli, $module];
 
     return $module;
+}
+
+/**
+ * The module's metric history reader (the same Core DatabaseMetricSink the module writes through; it holds no state, so a second instance reads the
+ * same rows). Only call it once the module is known to be on: it is the one place besides the module that touches rmm_metric_*.
+ */
+function rivetRmmMetricReader($mysqli = null): \RivetCore\Rmm\Contracts\RmmMetricReaderInterface
+{
+    $mysqli ??= $GLOBALS['mysqli'] ?? null;
+    if (!$mysqli instanceof \mysqli) {
+        throw new \RuntimeException('The RMM module needs the database connection.');
+    }
+
+    return new \RivetCore\Rmm\Support\DatabaseMetricSink(rivetCoreDb($mysqli), new \RivetCore\Support\SystemClock());
 }
 
 /**

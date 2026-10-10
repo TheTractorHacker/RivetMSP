@@ -175,10 +175,75 @@
         });
     });
 
-    // ---- tab deep links (#rmm-overview, #rmm-inventory, #rmm-jobs)
+    // ---- performance history charts (data in the canvas' data-rmm-chart attribute, rendered by the server from the metric history; Chart.js ships with the app)
+    function drawCharts() {
+        var canvases = panel.ownerDocument.querySelectorAll('canvas[data-rmm-chart]');
+        if (!canvases.length || typeof Chart === 'undefined') { return; }
+        var colors = (window.itflowChartTheme && typeof window.itflowChartTheme.palette === 'function') ? window.itflowChartTheme.palette() : ['#0d9488', '#3b82f6', '#f59e0b', '#8b5cf6'];
+        Array.prototype.forEach.call(canvases, function (cv) {
+            var spec;
+            try { spec = JSON.parse(cv.getAttribute('data-rmm-chart')); } catch (e) { return; }
+            if (!spec || !spec.series) { return; }
+            var pct = spec.unit === 'percent';
+            var datasets = [];
+            spec.series.forEach(function (s, i) {
+                var c = colors[i % colors.length];
+                datasets.push({ label: s.label, data: s.points.map(function (p) { return { x: p.t * 1000, y: p.avg }; }), borderColor: c, backgroundColor: c, borderWidth: 2, pointRadius: 2, tension: 0.2 });
+                datasets.push({ label: s.label + ' (highest)', data: s.points.map(function (p) { return { x: p.t * 1000, y: p.max }; }), borderColor: c, backgroundColor: c, borderWidth: 1, borderDash: [4, 3], pointRadius: 0, tension: 0.2 });
+            });
+            function fmt(v) { return pct ? (Math.round(v * 10) / 10) + '%' : (Math.round(v * 8 / 10000) / 100) + ' Mbit/s'; }
+            new Chart(cv, {
+                type: 'line',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false, parsing: false, interaction: { mode: 'nearest', intersect: false },
+                    scales: {
+                        x: { type: 'linear', ticks: { maxTicksLimit: 6, callback: function (v) { var d = new Date(v); return ('0' + d.getUTCHours()).slice(-2) + ':00'; } } },
+                        y: { beginAtZero: true, suggestedMax: pct ? 100 : undefined, max: pct ? 100 : undefined, ticks: { callback: function (v) { return fmt(v); } } }
+                    },
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } }, tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } } } }
+                }
+            });
+        });
+    }
+    drawCharts();
+
+    // ---- tags (RivetCore 1.0.0-rc.9): add with the browser's own autocomplete (a datalist of the tags that exist), remove with the x on the chip
+    var tagForm = document.getElementById('rmm-tag-form');
+    if (tagForm) {
+        tagForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var input = document.getElementById('rmm-tag-input');
+            var name = (input.value || '').trim();
+            if (name === '') { say('Type a tag name first.', false); input.focus(); return; }
+            post('tag_add', { tag: name }).then(function (d) {
+                if (d.success) { window.location.reload(); } else { say(d.error || 'The tag was not added.', false); input.focus(); }
+            }).catch(function () { say('Network error.', false); });
+        });
+    }
+    Array.prototype.forEach.call(panel.ownerDocument.querySelectorAll('#rmm-tags .rmm-tag-x'), function (b) {
+        b.addEventListener('click', function () {
+            b.disabled = true;
+            post('tag_remove', { tag_id: b.getAttribute('data-tag-id') }).then(function (d) {
+                if (d.success) { window.location.reload(); } else { b.disabled = false; say(d.error || 'The tag was not removed.', false); }
+            }).catch(function () { b.disabled = false; say('Network error.', false); });
+        });
+    });
+
+    // ---- software: ask the device for a full list at its next check-in
+    ['rmm-act-sw-refresh', 'rmm-sw-refresh'].forEach(function (id) {
+        var b = document.getElementById(id);
+        if (!b) { return; }
+        b.addEventListener('click', function (e) {
+            e.preventDefault();
+            post('software_refresh', {}).then(function (d) { say(d.success ? d.message : (d.error || 'The request was not sent.'), !!d.success); }).catch(function () { say('Network error.', false); });
+        });
+    });
+
+    // ---- tab deep links (#rmm-overview, #rmm-inventory, #rmm-software, #rmm-jobs)
     function showHash() {
         var h = (window.location.hash || '').replace('#', '');
-        var m = /^rmm-(overview|inventory|jobs)$/.exec(h);
+        var m = /^rmm-(overview|inventory|software|jobs)$/.exec(h);
         if (!m || !window.bootstrap) { return; }
         var btn = document.getElementById('rmm-tab-' + m[1]);
         if (btn) { window.bootstrap.Tab.getOrCreateInstance(btn).show(); }

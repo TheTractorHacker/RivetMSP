@@ -65,6 +65,9 @@ if ($link === 'pending_approval') {
     $ok($r->ok, 'an administrator approves the pending device onto the MSP asset' . ($r->ok ? '' : ' [' . $r->message . ']'));
 }
 $ok((int) $one("SELECT asset_id FROM endpoint_agent_devices WHERE device_id = $devId") === $assetId && (int) $one("SELECT COUNT(*) FROM asset_rmm_links WHERE asset_id = $assetId") === 1, 'the device is linked to the asset and the MSP link row exists');
+// RivetCore 1.0.0-rc.9: the agent of this build announces software_inventory; the server offers it only while the sub-switch is on.
+$feat = $rmm->settings()->features(); $feat['inventory_software'] = true;
+$rmm->admin()->saveSettings($admin, ['features_json' => $feat]);
 $job = $rmm->technician()->submitJob($admin, $devId, ['type' => 'collect']);
 $ok($job->ok, 'a collect job is queued for the device');
 $jobId = (string) ($job->data['job_id'] ?? '');
@@ -74,11 +77,16 @@ $deadline = microtime(true) + 60;
 $done = false;
 while (microtime(true) < $deadline) {
     sleep(1);
-    if ((int) $one("SELECT COUNT(*) FROM endpoint_agent_checkins WHERE device_id = $devId") > 0 && $jobId !== '' && in_array((string) $one("SELECT state FROM endpoint_agent_jobs WHERE job_id = '$jobId'"), ['succeeded', 'failed'], true)) { $done = true; break; }
+    if ((int) $one("SELECT COUNT(*) FROM endpoint_agent_checkins WHERE device_id = $devId") > 0 && $jobId !== '' && in_array((string) $one("SELECT state FROM endpoint_agent_jobs WHERE job_id = '$jobId'"), ['succeeded', 'failed'], true)) { $done = true; if ($rmm->readModel()->softwareState($devId)['reported'] === true) { break; } }
 }
 proc_terminate($p); proc_close($p);
 $ok((int) $one("SELECT COUNT(*) FROM endpoint_agent_checkins WHERE device_id = $devId") > 0, 'the real agent checked in');
 $linkRow = $rows("SELECT * FROM asset_rmm_links WHERE asset_id = $assetId")[0] ?? [];
 $ok(($linkRow['rmm_status'] ?? '') === 'online' && strcasecmp((string) ($linkRow['os_name'] ?? ''), 'Linux') === 0, 'the MSP link row is online with the agent\'s own OS facts (' . ($linkRow['os_name'] ?? '?') . ' ' . ($linkRow['hostname'] ?? '') . ')');
 $ok($done && (string) $one("SELECT state FROM endpoint_agent_jobs WHERE job_id = '$jobId'") === 'succeeded', 'the real agent verified the signature, ran the collect job and reported success (job state ' . (string) $one("SELECT state FROM endpoint_agent_jobs WHERE job_id = '$jobId'") . ')');
+$sws = $rmm->readModel()->softwareState($devId);
+$ok($sws['capable'] === true, 'the real agent announced software_inventory');
+$ok($sws['reported'] === true && $sws['count'] > 0, 'the real agent reported its installed software (' . $sws['count'] . ' packages from dpkg/rpm/snap/flatpak)');
+$ok($rmm->readModel()->softwareFor($devId, ['limit' => 5])['total'] === $sws['count'], 'the software list can be read back page by page');
+$ok((int) $one("SELECT COUNT(*) FROM rmm_metric_latest WHERE asset_id = $assetId") > 0 && (int) $one("SELECT COUNT(*) FROM rmm_metric_hourly WHERE asset_id = $assetId") > 0, 'the real agent\'s metrics are in RivetMSP\'s history tables (rmm_metric_latest, rmm_metric_hourly)');
 echo "--- agent log (tail)\n" . substr((string) @file_get_contents("$state/run.log"), -600) . "\n";

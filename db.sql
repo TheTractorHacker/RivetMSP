@@ -1456,6 +1456,21 @@ CREATE TABLE `endpoint_agent_binaries` (
   UNIQUE KEY `uniq_version_arch` (`version`,`arch`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `endpoint_agent_check_history`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `endpoint_agent_check_history` (
+  `hist_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `device_id` int(11) NOT NULL,
+  `check_key` varchar(100) NOT NULL,
+  `status` varchar(10) NOT NULL,
+  `detail` varchar(200) NOT NULL DEFAULT '',
+  `reported_at` datetime NOT NULL,
+  PRIMARY KEY (`hist_id`),
+  KEY `idx_check_time` (`device_id`,`check_key`,`reported_at`),
+  KEY `idx_time` (`reported_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `endpoint_agent_checkins`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -3004,6 +3019,91 @@ CREATE TABLE `rmm_check_policies` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_device_software`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_device_software` (
+  `device_id` int(11) NOT NULL,
+  `software_key` char(40) NOT NULL,
+  `name` varchar(200) NOT NULL,
+  `source` varchar(12) NOT NULL,
+  `version` varchar(100) NOT NULL DEFAULT '',
+  `publisher` varchar(200) NOT NULL DEFAULT '',
+  `installed_on` date DEFAULT NULL,
+  `first_seen_at` datetime NOT NULL,
+  `last_seen_at` datetime NOT NULL,
+  `removed_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`device_id`,`software_key`),
+  KEY `idx_name` (`name`,`device_id`),
+  KEY `idx_removed` (`removed_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_device_state`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_device_state` (
+  `device_id` int(11) NOT NULL,
+  `platform` varchar(20) DEFAULT NULL,
+  `capabilities_json` text DEFAULT NULL,
+  `presence` varchar(8) DEFAULT NULL,
+  `presence_at` datetime DEFAULT NULL,
+  `software_hash` char(64) DEFAULT NULL,
+  `software_count` int(11) DEFAULT NULL,
+  `software_at` datetime DEFAULT NULL,
+  `software_full_at` datetime DEFAULT NULL,
+  `software_resync` tinyint(1) NOT NULL DEFAULT 0,
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`device_id`),
+  KEY `idx_presence` (`presence`,`presence_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_device_tags`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_device_tags` (
+  `device_id` int(11) NOT NULL,
+  `tag_id` int(11) NOT NULL,
+  `source` varchar(10) NOT NULL DEFAULT 'manual',
+  `created_by` int(11) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`device_id`,`tag_id`),
+  KEY `idx_tag` (`tag_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_group_devices`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_group_devices` (
+  `group_id` int(11) NOT NULL,
+  `device_id` int(11) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`group_id`,`device_id`),
+  KEY `idx_device` (`device_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_group_tags`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_group_tags` (
+  `group_id` int(11) NOT NULL,
+  `tag_id` int(11) NOT NULL,
+  PRIMARY KEY (`group_id`,`tag_id`),
+  KEY `idx_tag` (`tag_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_groups`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_groups` (
+  `group_id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(100) NOT NULL,
+  `description` varchar(200) NOT NULL DEFAULT '',
+  `created_by` int(11) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`group_id`),
+  UNIQUE KEY `uniq_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `rmm_integrations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -3020,6 +3120,36 @@ CREATE TABLE `rmm_integrations` (
   `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `created_by` int(11) DEFAULT 0,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_metric_hourly`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_metric_hourly` (
+  `asset_id` int(11) NOT NULL,
+  `metric_key` varchar(64) NOT NULL,
+  `instance` varchar(64) NOT NULL DEFAULT '',
+  `hour_start` datetime NOT NULL,
+  `samples` int(10) unsigned NOT NULL DEFAULT 0,
+  `sum_value` double NOT NULL DEFAULT 0,
+  `min_value` double NOT NULL,
+  `max_value` double NOT NULL,
+  PRIMARY KEY (`asset_id`,`metric_key`,`instance`,`hour_start`),
+  KEY `idx_hour` (`hour_start`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_metric_latest`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_metric_latest` (
+  `asset_id` int(11) NOT NULL,
+  `metric_key` varchar(64) NOT NULL,
+  `instance` varchar(64) NOT NULL DEFAULT '',
+  `value` double NOT NULL,
+  `label` varchar(64) DEFAULT NULL,
+  `sampled_at` datetime NOT NULL,
+  PRIMARY KEY (`asset_id`,`metric_key`,`instance`),
+  KEY `idx_sampled` (`sampled_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `rmm_remote_sessions`;
@@ -3077,6 +3207,26 @@ CREATE TABLE `rmm_scripts` (
   KEY `idx_integration_script` (`rmm_integration_id`,`tactical_script_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_software_history`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_software_history` (
+  `history_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `device_id` int(11) NOT NULL,
+  `software_key` char(40) NOT NULL,
+  `name` varchar(200) NOT NULL,
+  `source` varchar(12) NOT NULL,
+  `change_type` varchar(12) NOT NULL,
+  `old_version` varchar(100) DEFAULT NULL,
+  `new_version` varchar(100) DEFAULT NULL,
+  `publisher` varchar(200) NOT NULL DEFAULT '',
+  `occurred_at` datetime NOT NULL,
+  PRIMARY KEY (`history_id`),
+  KEY `idx_device_time` (`device_id`,`occurred_at`),
+  KEY `idx_device_key` (`device_id`,`software_key`),
+  KEY `idx_time` (`occurred_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `rmm_sync_log`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -3093,6 +3243,20 @@ CREATE TABLE `rmm_sync_log` (
   `errors` text DEFAULT NULL,
   `triggered_by` int(11) DEFAULT 0,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_tags`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_tags` (
+  `tag_id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(60) NOT NULL,
+  `color` varchar(7) NOT NULL DEFAULT '',
+  `description` varchar(200) NOT NULL DEFAULT '',
+  `created_by` int(11) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`tag_id`),
+  UNIQUE KEY `uniq_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `security_settings`;
@@ -4592,6 +4756,7 @@ INSERT INTO `rivet_core_migrations` VALUES ('0014_endpoint_agent_core','2026-10-
 INSERT INTO `rivet_core_migrations` VALUES ('0015_endpoint_agent_converge','2026-10-07 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0016_rmm_module_switches','2026-10-07 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0017_mcp_identity_binary_collation','2026-10-10 00:00:00');
+INSERT INTO `rivet_core_migrations` VALUES ('0018_rmm_inventory_foundation','2026-10-10 00:00:00');
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

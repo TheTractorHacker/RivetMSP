@@ -282,7 +282,8 @@ if (isset($_GET['asset_id'])) {
         $rmm_agent_ui = null;
         if ($config_core_rmm_enabled && lookupUserPermission('module_rmm') >= 1) {
             require_once dirname(__DIR__) . '/includes/rmm_ui_render.php';
-            $rmm_agent_ui = rivetRmmUiPanel($mysqli, $asset_id, (int) $session_user_id);
+            $rmm_agent_ui = rivetRmmUiPanel($mysqli, $asset_id, (int) $session_user_id, null, null, [   // the Software tab's search state
+                'swq' => is_string($_GET['swq'] ?? null) ? $_GET['swq'] : '', 'swp' => (int) ($_GET['swp'] ?? 1), 'swr' => !empty($_GET['swr'])]);
             if ($rmm_agent_ui !== null) {
                 $rmm_ui_scripts = true;   // includes/footer.php links js/rmm_panel.js only when this is set
             }
@@ -601,11 +602,10 @@ if (isset($_GET['asset_id'])) {
 
                 <?php
                 if ($rmm_agent_ui !== null) {
-                    // RivetMSP keeps no metric history (the RMM module runs with the null metric sink), so the Performance section says so; the gauges above it
-                    // are the latest check-in. Nothing here is drawn from invented numbers.
-                    $rmm_perf_note = '<p class="mb-1"><i class="fas fa-info-circle me-1 text-info" aria-hidden="true"></i><strong>No performance history in RivetMSP.</strong></p>'
-                        . '<p class="text-muted small mb-0">The gauges above are the latest reading the agent sent with its last check-in. RivetMSP does not store CPU, memory, '
-                        . 'disk or network history, so there are no charts to draw. Each check-in replaces the previous reading.'
+                    // The charts come from the metric history that Core's DatabaseMetricSink keeps in the database (rivetRmmUiPerformance); this note only covers the
+                    // case where the history could not be read at all. The gauges above are always the latest check-in.
+                    $rmm_perf_note = '<p class="mb-1"><i class="fas fa-info-circle me-1 text-info" aria-hidden="true"></i><strong>Performance history is unavailable right now.</strong></p>'
+                        . '<p class="text-muted small mb-0">The gauges above are the latest reading the agent sent with its last check-in.'
                         . ($rmm_link ? ' This asset is also managed by ' . nullable_htmlentities($rmm_provider_name) . ', whose own card below may keep history.' : '') . '</p>';
                     echo rivetRmmUiTabs($rmm_agent_ui, '', $rmm_perf_note, rivetRmmUiJobUserNames($mysqli, $rmm_agent_ui), (string) ($_SESSION['csrf_token'] ?? ''));
                 }
