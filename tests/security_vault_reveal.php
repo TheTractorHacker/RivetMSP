@@ -16,6 +16,7 @@ require_once "$root/includes/security_policy.php";
 require_once "$root/includes/vault_reveal.php";
 ob_start();   // generateUserSessionKey-style cookies and the audit writer must not trip over output having started
 
+$auditWas = (int) $one("SELECT config_core_audit_enabled FROM settings WHERE company_id=1");
 $q("DELETE FROM security_settings");
 $q("DELETE FROM credentials WHERE credential_name LIKE 'sec-vault-%'");
 $q("DELETE FROM audit_events WHERE event_type LIKE 'credential.%'");
@@ -203,11 +204,12 @@ $ok(stripos($hd, 'cache-control: no-store') !== false && stripos($hd, 'applicati
 $ok($c === 200 && (json_decode($body, true)['value'] ?? '') === 'alice@example.test', 'a copy request returns the username');
 $ok(count($lg('Reveal')) === 1 && count($lg('Copy')) === 1 && (int) $lg('Reveal')[0]['log_user_id'] === 701, 'both are in the Credential log with the right user and mode');
 // with the Core audit module on, the same entries are mirrored into the structured audit trail
+$q("DELETE FROM audit_events WHERE event_type LIKE 'credential.%'");
 $q("UPDATE settings SET config_core_audit_enabled=1 WHERE company_id=1");
 \RivetMSP\Core\CoreBridge::reset();
 [$c, $body] = sec_web($base, 'POST', '/agent/credential_reveal.php', $sid, ['credential_id' => $cA, 'field' => 'password', 'mode' => 'reveal', 'csrf_token' => $csrf], $ck);
 $ok($c === 200 && (int) $one("SELECT COUNT(*) FROM audit_events WHERE event_type='credential.reveal' AND actor_user_id=701 AND entity_id='$cA'") === 1, 'with the Core audit module on a reveal also lands in the audit trail as credential.reveal');
-$q("UPDATE settings SET config_core_audit_enabled=0 WHERE company_id=1");
+$q("UPDATE settings SET config_core_audit_enabled=$auditWas WHERE company_id=1");
 \RivetMSP\Core\CoreBridge::reset();
 [$c, $body] = sec_web($base, 'POST', '/agent/credential_reveal.php', $sid, ['credential_id' => $cA, 'field' => 'password', 'mode' => 'reveal', 'csrf_token' => $csrf], []);
 $ok(($c === 409) && (json_decode($body, true)['error'] ?? '') === 'vault_locked', 'without the vault-key cookie the endpoint says the vault is locked');

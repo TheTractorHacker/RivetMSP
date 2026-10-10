@@ -57,7 +57,7 @@ What "off" costs:
   device row and the link health columns; there is no history.
 
 **Prerequisite.** `$config_settings_enc_key` must be set in `config.php` (a long random string, kept with config.php's backups). The signing key is sealed with
-it; `encryptSetting()` would otherwise store the key in plaintext, so `EndpointSecretBox` refuses and the page keeps the switch disabled with the reason. A
+it; `encryptSetting()` fails closed without a key (it no longer stores cleartext) and `EndpointSecretBox` refuses with a clear message, so the page keeps the switch disabled with the reason (and every admin page shows a banner while the key is missing). New installs generate the key and `deploy/update.sh` adds one to an older instance. A
 RivetMSP `setup` does not generate this key today, **on purpose** (decision of the maintainer's default, 2026-10): the key protects every other encrypted setting too, a
 silently generated one would be lost with a restored `config.php`, and a silent change of it makes sealed values unreadable. The fix on an install without one is a
 single line in `config.php`, then reload the page:

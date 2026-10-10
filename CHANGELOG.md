@@ -4,6 +4,33 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [Unreleased] RivetMSP — Wave 1 security (DB 2.6.78)
+
+Ported from RivetIT 26.10.30, adapted to RivetMSP (clients, the RMM module, MSP's own login and session code). One idempotent database step, **2.6.78**, gated on 2.6.77: the security tables, `settings.config_backup_passphrase`, TEXT license keys, the session-length meaning, and the re-wrap of every plaintext secret (only when `$config_settings_enc_key` exists). `db.sql` matches; a fresh import and an install migrated from 2.6.76 end with identical schemas. 2.6.79 and 2.6.80 are reserved for the mail-intake and recovery work.
+
+**Deploy order and what to know**
+
+- **Add `$config_settings_enc_key` to `config.php` before updating.** RivetMSP never generated one, so every "encrypted" setting (SMTP/IMAP passwords, API keys, webhook secrets, the credential-vault master key) was stored in plaintext and `encryptSetting()` silently stored cleartext. It now fails closed (it throws instead). `deploy/update.sh` adds a key to an older instance automatically; `setup` and `scripts/setup_cli.php` generate one on every new install (`--settings-enc-key` for a restore). Without a key an administrator banner says so on every admin page, the RMM module card keeps its switch disabled, and the update leaves secrets as they are. After adding it run `php scripts/update_cli.php --rewrap_secrets` (also safe to repeat). Back the key up with `config.php`: it cannot be recovered.
+- **Settings cipher:** new values are AES-256-GCM (`ENC2:`); legacy `ENC:` (AES-128-CBC) and unprefixed plaintext stay readable. `EndpointSecretBox` (the RMM signing key) accepts both prefixes.
+- **Still plaintext on purpose:** `settings.config_mail_oauth_client_secret`, `config_mail_oauth_refresh_token` and `config_mail_oauth_access_token`. `cron/mail_queue.php` still reads them from the row without `decryptSetting()`; they are wrapped once that reader is changed (`secDeferredColumns()` in `includes/security_crypto.php` names them, and a save from Mail settings already wraps them). No Slack bot token or whitelabel key reader exists in RivetMSP.
+
+**Backups**
+
+- The in-app zip had no manifest at all, so a restore onto a new server lost every secret. It now refuses to build without a **backup passphrase** (16+ characters, Maintenance > Backup) and carries `backup-manifest.json.enc` (`openssl enc -aes-256-cbc -pbkdf2 -iter 600000`) holding the settings key plus a fingerprint; the key is never written anywhere else in the zip. The `/setup` restore asks for the passphrase (or the original key, checked against the fingerprint) and applies the key. Cron and the buttons handle the refusal.
+- `deploy/backup.sh`: `-iter 600000`, the settings key goes to a separate `0600` `<archive>.settings-key` file and the archive's manifest holds a fingerprint only. `deploy/restore.sh` tries 600000 iterations then the old default, reads `--settings-key-file` or the sidecar, and still restores archives made before this change.
+
+**Accounts**
+
+- **Staff passwords:** 12+ characters (Settings > Security > Sign-in policy), not equal to the name or email, optional Have I Been Pwned range check (off by default, fails open, URL vetted by RivetCore's `UrlPolicy`, only the 5-character SHA-1 prefix leaves the server), **Argon2id** (64 MiB, 3 passes) with a rehash at the next sign-in. A password change or administrator reset ends the user's other sessions and remember-me cookies.
+- **MFA:** TOTP seeds are stored wrapped; 10 single-use recovery codes (hashed, shown once, accepted at the web and mobile sign-in, audited and e-mailed); MFA policy off / administrators / all agents with a grace period, plus the per-user flag; a required, unenrolled, out-of-grace agent can only open the account pages. MFA cannot be turned off while required. (RivetMSP has no departments: the policy is global, by role (administrators) and per user.)
+- **Sessions:** the old *session lifetime* meant "minutes of inactivity" (default 480). It is now the **idle timeout** (default 8 hours; a customised old value is kept as the idle timeout by the update) and `settings.config_login_session_lifetime` is the **absolute maximum** (default 7 days, floor 60 minutes, cap 90 days). Strict session mode, a browser-session `SameSite=Strict` vault-key cookie, **Account > Security > Active sessions** with revoke and sign-out-everywhere, background polls do not extend idle, and **remember-me never replaces the second factor for an administrator or a user with vault access** (setting to allow it). The compliance "sessions are limited" check reads the absolute maximum.
+- **Vault list:** `agent/credentials.php` no longer puts any username or password in the page. The eye and copy buttons ask `agent/credential_reveal.php`, which checks client access, asks for the password again after 15 idle minutes (SSO accounts exempt), limits each user (default 30 per 10 minutes, counted from the activity log so it works while the Core audit module is off), notifies the administrators and logs every reveal and copy.
+
+**Other**
+
+- `db.sql` no longer carries `utf8mb4_uca1400_ai_ci` on nine tables (not portable to MariaDB 10.x); `setup_cli.php` crashed on the vault key seed once the cipher failed closed and now writes the key before anything is stored.
+- Tests: `tests/security_crypto.php`, `security_backup.php`, `security_passwords.php`, `security_mfa.php`, `security_sessions.php`, `security_vault_reveal.php`, `security_login_http.php` (scratch database only; `tests/support/security_lib.php`).
+
 ## [26.10.8] RivetMSP — Optional RMM module (the built-in endpoint agent), off by default
 
 Database migration 2.6.77 (RivetCore migrations 0014 to 0016 and `settings.config_core_rmm_enabled`). Pins `rivet/rivet-core` 1.0.0-rc.6. Nothing changes until an administrator switches the module on.

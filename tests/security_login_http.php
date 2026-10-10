@@ -17,6 +17,7 @@ $q("DELETE FROM users WHERE user_email LIKE 'sec-http-%'");
 $q("DELETE FROM user_roles WHERE role_id IN (85,86)");
 $q("INSERT INTO user_roles SET role_id=85, role_name='Sec HTTP Admin', role_is_admin=1, role_type=1");
 $q("INSERT INTO user_roles SET role_id=86, role_name='Sec HTTP Tech', role_is_admin=0, role_type=1");
+$auditWas = (int) $one("SELECT config_core_audit_enabled FROM settings WHERE company_id=1");
 $q("UPDATE settings SET config_client_portal_enable=0, config_login_key_required=0, config_login_session_lifetime=10080, config_core_audit_enabled=1 WHERE company_id=1");   // the Core audit module on: the structured events are asserted below
 
 $PW = 'Admin-Horse-Battery-77';
@@ -275,7 +276,7 @@ $ok(str_contains($body, 'value="MYKEY123"'), 'the login key secret shows decrypt
 
 // cleanup
 foreach (['user_sessions', 'remember_tokens', 'user_recovery_codes', 'security_settings'] as $t) { $q("DELETE FROM $t"); }
-$q("UPDATE settings SET config_login_key_secret='', config_login_session_lifetime=10080, config_core_audit_enabled=0 WHERE company_id=1");
+$q("UPDATE settings SET config_login_key_secret='', config_login_session_lifetime=10080, config_core_audit_enabled=$auditWas WHERE company_id=1");
 $q("DELETE FROM users WHERE user_email LIKE 'sec-http-%'");
 $q("DELETE FROM user_settings WHERE user_id IN ($admin,$tech,$plain)");
 $q("DELETE FROM user_roles WHERE role_id IN (85,86)");
