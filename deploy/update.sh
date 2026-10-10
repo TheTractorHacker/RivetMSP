@@ -192,6 +192,25 @@ run_git_pull() {
     fi
 }
 
+# ensure_settings_key(): an instance set up before the settings key existed has no $config_settings_enc_key in config.php, and the
+# database update that wraps stored secrets (2.6.78) leaves them as they are without one. Mint it here, once, before the migrations. An instance
+# that already has a key is never touched. Back config.php up with the key: it cannot be recovered.
+ensure_settings_key() {
+    local cfg="${APP_DIR}/config.php"
+    local q="'"
+    if grep -Eq "^\\\$config_settings_enc_key[[:space:]]*=[[:space:]]*[${q}\"][^${q}\"[:space:]]+[${q}\"]" "${cfg}"; then
+        return 0
+    fi
+    announce "config.php has no \$config_settings_enc_key; generating one (stored secrets are wrapped with it by the database update)."
+    local key
+    key="$(php -r 'echo bin2hex(random_bytes(32));')" || die "Could not generate a settings key."
+    [[ "${#key}" -eq 64 ]] || die "Generated settings key has the wrong length."
+    # Drop any empty definition first so the file never carries two.
+    sed -i -E -e "/^\\\$config_settings_enc_key[[:space:]]*=[[:space:]]*(${q}${q}|\"\")?[[:space:]]*;[[:space:]]*\$/d" "${cfg}"
+    printf "\n\$config_settings_enc_key = '%s';\n" "${key}" >> "${cfg}" || die "Could not append the settings key to ${cfg}."
+    success "Settings key added to ${cfg}. Keep it with your config.php backups."
+}
+
 run_db_migrations() {
     announce "Running scripts/update_cli.php --update_db as ${OWNER}."
     if ! sudo -u "${OWNER}" php "${APP_DIR}/scripts/update_cli.php" --update_db; then
@@ -252,6 +271,7 @@ main() {
     run_git_pull
     # Dependencies first (as RivetIT does): a migration step that needs a newer RivetCore skips itself until the package is present.
     run_composer_install
+    ensure_settings_key
     run_db_migrations
     reload_php_fpm
 

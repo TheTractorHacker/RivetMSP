@@ -8,7 +8,7 @@ use RivetCore\Rmm\Contracts\SecretBoxInterface;
 use RivetCore\Testing\SecretBoxConformanceTestCase;
 
 /**
- * EndpointSecretBox over the REAL encryptSetting()/decryptSetting() of functions.php ("ENC:" AES-128-CBC with $config_settings_enc_key). The file needs
+ * EndpointSecretBox over the REAL encryptSetting()/decryptSetting() of functions.php ("ENC2:" AES-256-GCM, legacy "ENC:" AES-128-CBC read-only, with $config_settings_enc_key). The file needs
  * a whole app bootstrap, so the two functions' source is extracted and defined under other names here (the stand-ins of the other test files use a
  * non-encrypting format). The box must also refuse to store a key in plaintext when the install has no encryption key.
  */
@@ -37,7 +37,7 @@ final class EndpointSecretBoxConformanceTest extends SecretBoxConformanceTestCas
     public function testTheApplicationCiphertextFormatIsUsedAndOtherTextIsNotAKey(): void
     {
         $box = $this->box();
-        $this->assertStringStartsWith('ENC:', $box->encrypt('signing-key-bytes'));
+        $this->assertStringStartsWith('ENC2:', $box->encrypt('signing-key-bytes'));
         $this->assertSame('signing-key-bytes', $box->decrypt($box->encrypt('signing-key-bytes')));
         // decryptSetting() hands unprefixed text back as it is (legacy plaintext); a signing key must never be taken from that.
         $this->assertSame('', $box->decrypt('plain legacy text without a prefix'));

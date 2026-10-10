@@ -189,7 +189,7 @@ if ($draft && (($draft['webhook_destination'] ?? '') !== $dest->id || (int) ($dr
 $extra = $existing ? (json_decode((string) $existing['webhook_extra'], true) ?: []) : [];
 $auth_old = $existing ? (json_decode(decryptSetting((string) $existing['webhook_auth_enc']), true) ?: []) : [];
 $stored_url = $existing ? decryptSetting((string) $existing['webhook_url']) : '';
-$url_hidden = $existing && str_starts_with((string) $existing['webhook_url'], 'ENC:');
+$url_hidden = $existing && (str_starts_with((string) $existing['webhook_url'], 'ENC2:') || str_starts_with((string) $existing['webhook_url'], 'ENC:'));
 $has_secret = $existing && decryptSetting((string) $existing['webhook_secret']) !== '';
 
 $v_name = $draft['webhook_name'] ?? ($existing['webhook_name'] ?? $dest->name);

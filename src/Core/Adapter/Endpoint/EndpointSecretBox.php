@@ -7,13 +7,13 @@ namespace RivetMSP\Core\Adapter\Endpoint;
 use RivetCore\Rmm\Contracts\SecretBoxInterface;
 
 /**
- * RivetMSP's settings encryption (encryptSetting / decryptSetting in functions.php, "ENC:" AES-128-CBC with the key
+ * RivetMSP's settings encryption (encryptSetting / decryptSetting in functions.php, "ENC2:" AES-256-GCM, legacy "ENC:" AES-128-CBC read-only, with the key
  * $config_settings_enc_key from config.php) for the RMM module's Ed25519 signing key and MeshCentral login key.
  *
  * Two differences from calling those functions directly, both because these are signing keys and not an SMTP password:
- *  - encrypt() REFUSES to run without $config_settings_enc_key. encryptSetting() silently returns the plaintext in that case, which would
- *    store the private signing key readable in the database.
- *  - decrypt() returns '' (not available) for anything that is not an "ENC:" ciphertext, and when no key is configured. decryptSetting()
+ *  - encrypt() REFUSES to run without $config_settings_enc_key (encryptSetting() now fails closed too; this guard keeps the clearer message
+ *    and the unit-test seam).
+ *  - decrypt() returns '' (not available) for anything that is not an "ENC2:" / "ENC:" ciphertext, and when no key is configured. decryptSetting()
  *    hands such text back as it is (legacy plaintext), and a key must never be taken from text that is not a ciphertext.
  */
 final class EndpointSecretBox implements SecretBoxInterface
@@ -39,7 +39,7 @@ final class EndpointSecretBox implements SecretBoxInterface
             throw new \RuntimeException('The settings encryption key ($config_settings_enc_key in config.php) is not set, so the RMM signing key cannot be stored safely.');
         }
         $out = $this->encrypt !== null ? ($this->encrypt)($plaintext) : encryptSetting($plaintext);
-        if ($plaintext !== '' && !str_starts_with($out, 'ENC:')) {
+        if ($plaintext !== '' && !self::isCiphertext($out)) {
             throw new \RuntimeException('The settings encryption did not produce a ciphertext.');
         }
 
@@ -48,7 +48,7 @@ final class EndpointSecretBox implements SecretBoxInterface
 
     public function decrypt(string $ciphertext): string
     {
-        if (!str_starts_with($ciphertext, 'ENC:') || !$this->hasKey()) {
+        if (!self::isCiphertext($ciphertext) || !$this->hasKey()) {
             return '';
         }
         try {
@@ -56,6 +56,11 @@ final class EndpointSecretBox implements SecretBoxInterface
         } catch (\Throwable) {
             return '';
         }
+    }
+
+    private static function isCiphertext(string $value): bool
+    {
+        return str_starts_with($value, 'ENC2:') || str_starts_with($value, 'ENC:');
     }
 
     private function hasKey(): bool

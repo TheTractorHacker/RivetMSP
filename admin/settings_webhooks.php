@@ -95,7 +95,7 @@ $wh_count = mysqli_num_rows($sql_wh);
                 $wid     = intval($wh['webhook_id']);
                 $wname   = nullable_htmlentities($wh['webhook_name']);
                 $wurl_plain = decryptSetting((string) $wh['webhook_url']);
-                $wurl    = nullable_htmlentities(str_starts_with((string) $wh['webhook_url'], 'ENC:') ? rivetWebhookUrlMasked($wurl_plain) : $wurl_plain);
+                $wurl    = nullable_htmlentities((str_starts_with((string) $wh['webhook_url'], 'ENC2:') || str_starts_with((string) $wh['webhook_url'], 'ENC:')) ? rivetWebhookUrlMasked($wurl_plain) : $wurl_plain);
                 $wdest   = (string) $wh['webhook_destination'] !== '' ? \RivetCore\Webhooks\Destinations::get((string) $wh['webhook_destination']) : null;
                 $wenabled = intval($wh['webhook_enabled']);
                 $wevents = array_filter(array_map('trim', explode(',', $wh['webhook_events'])));
