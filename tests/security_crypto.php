@@ -69,10 +69,10 @@ $plain = [
     'config_login_key_secret' => 'MYSECRET', 'config_whitelabel_key' => 'wl-key-123', 'config_smtp_password' => 'smtp-pw',
     'config_azure_client_secret' => 'azure-secret', 'config_imap_password' => 'imap-pw', 'config_comet_admin_pass' => 'comet-pw',
     'config_vault_canonical_key' => 'vault-master-key-plain', 'config_backup_s3_secret_key' => 's3-secret',
+    // cron/mail_queue.php now reads these through decryptSetting(), so they are ordinary straggler columns
+    'config_mail_oauth_client_secret' => 'oauth-secret', 'config_mail_oauth_refresh_token' => 'refresh-token', 'config_mail_oauth_access_token' => 'access-token',
 ];
-// RivetMSP: cron/mail_queue.php still reads these three raw, so they stay legacy plaintext until the mail intake work moves it (secDeferredColumns)
-$deferred = ['config_mail_oauth_client_secret' => 'oauth-secret', 'config_mail_oauth_refresh_token' => 'refresh-token', 'config_mail_oauth_access_token' => 'access-token'];
-$set = []; foreach (array_merge($plain, $deferred) as $c => $v) { $set[] = "$c='" . $esc($v) . "'"; }
+$set = []; foreach ($plain as $c => $v) { $set[] = "$c='" . $esc($v) . "'"; }
 $q("UPDATE settings SET " . implode(',', $set) . " WHERE company_id=1");
 $q("DELETE FROM software WHERE software_name='sec-crypto'");
 $q("INSERT INTO software SET software_name='sec-crypto', software_key='LICENSE-AAAA-BBBB', software_client_id=0");
@@ -171,12 +171,12 @@ file_put_contents("$root/config.php", $cfgOrig2);
 $ok($c !== 0 && str_contains($o, 'missing from config.php') && $one("SELECT config_imap_password FROM settings WHERE company_id=1") === 'cli-plain-2', 'without a key it refuses and changes nothing');
 secRewrapAll($db);
 
-// the deferred columns (cron/mail_queue.php reads them raw) are NOT wrapped by the step, the lazy re-wrap or secRewrapAll
+// the mail OAuth columns are wrapped like every other straggler (cron/mail_queue.php reads them through decryptSetting())
 $row = $rows("SELECT * FROM settings WHERE company_id=1")[0];
-$defOk = true; foreach ($deferred as $c2 => $v) { $defOk = $defOk && $row[$c2] === $v; }
-$ok($defOk, 'config_mail_oauth_* stay legacy plaintext (their raw reader is cron/mail_queue.php), and decryptSetting still reads them');
-$ok(!in_array('config_mail_oauth_access_token', secStragglerColumns()['settings'][1], true), 'config_mail_oauth_* are not in the wrapped list');
-$ok(array_keys(secDeferredColumns()['settings'][1]) === [0, 1, 2], 'secDeferredColumns names the three columns');
+$mailOk = true; foreach (['config_mail_oauth_client_secret' => 'oauth-secret', 'config_mail_oauth_refresh_token' => 'refresh-token', 'config_mail_oauth_access_token' => 'access-token'] as $c2 => $v) { $mailOk = $mailOk && secIsWrapped($row[$c2]) && decryptSetting($row[$c2]) === $v; }
+$ok($mailOk, 'config_mail_oauth_* are wrapped by the re-wrap and decrypt back');
+$ok(in_array('config_mail_oauth_access_token', secStragglerColumns()['settings'][1], true), 'config_mail_oauth_* are in the wrapped list');
+$ok(secDeferredColumns() === [] && !array_intersect(['config_mail_oauth_client_secret', 'config_mail_oauth_refresh_token', 'config_mail_oauth_access_token'], secDeferredColumns()['settings'][1] ?? []), 'secDeferredColumns no longer names the mail OAuth columns');
 
 // the admin warning banner text: only while the key is missing
 $ok(secKeyMissingNotice() === null, 'no banner text while the key is set');

@@ -6744,3 +6744,121 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.78'");
     }
+
+    if ($rivetit_db_version() == '2.6.78') {
+        // Mail intake reliability (Wave 1 INTAKE, ported from RivetIT 2.6.152): message-id threading and dedupe, poison-message quarantine, per-mailbox health,
+        // outbound queue hardening. Every statement is idempotent (IF NOT EXISTS), so a partial earlier run converges. Settings live in
+        // their own key/value table (mail_intake_settings), NOT as settings columns: `settings` is close to the row-size limit.
+        // Message-ids are stored normalised (lower case, no angle brackets), see RivetMSP\Mail\MessageId.
+        mysqli_query($mysqli, "ALTER TABLE `tickets` ADD COLUMN IF NOT EXISTS `ticket_mail_message_id` varchar(255) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `tickets` ADD INDEX IF NOT EXISTS `idx_ticket_mail_message_id` (`ticket_mail_message_id`)");
+        mysqli_query($mysqli, "ALTER TABLE `ticket_replies` ADD COLUMN IF NOT EXISTS `ticket_reply_mail_message_id` varchar(255) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `ticket_replies` ADD INDEX IF NOT EXISTS `idx_ticket_reply_mail_message_id` (`ticket_reply_mail_message_id`)");
+
+        mysqli_query($mysqli, "ALTER TABLE `mail_requests` ADD COLUMN IF NOT EXISTS `mail_request_message_id` varchar(255) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `mail_requests` ADD COLUMN IF NOT EXISTS `mail_request_reason` varchar(30) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `mail_requests` ADD INDEX IF NOT EXISTS `idx_mail_request_message_id` (`mail_request_message_id`)");
+
+        mysqli_query($mysqli, "ALTER TABLE `mailboxes` ADD COLUMN IF NOT EXISTS `mailbox_last_success_at` datetime DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `mailboxes` ADD COLUMN IF NOT EXISTS `mailbox_last_error` varchar(500) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `mailboxes` ADD COLUMN IF NOT EXISTS `mailbox_last_error_at` datetime DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `mailboxes` ADD COLUMN IF NOT EXISTS `mailbox_consecutive_failures` int(11) NOT NULL DEFAULT 0");
+
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD COLUMN IF NOT EXISTS `email_message_id` varchar(255) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD COLUMN IF NOT EXISTS `email_ticket_id` int(11) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD COLUMN IF NOT EXISTS `email_auto` tinyint(1) NOT NULL DEFAULT 1");
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD COLUMN IF NOT EXISTS `email_started_at` datetime DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD COLUMN IF NOT EXISTS `email_alerted_at` datetime DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD INDEX IF NOT EXISTS `idx_email_message_id` (`email_message_id`)");
+        mysqli_query($mysqli, "ALTER TABLE `email_queue` ADD INDEX IF NOT EXISTS `idx_email_status` (`email_status`,`email_queued_at`)");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `mail_intake_state` (
+          `intake_id` int(11) NOT NULL AUTO_INCREMENT,
+          `intake_mailbox_id` int(11) NOT NULL,
+          `intake_key` char(40) NOT NULL,
+          `intake_message_id` varchar(255) DEFAULT NULL,
+          `intake_from_email` varchar(200) DEFAULT NULL,
+          `intake_subject` varchar(500) DEFAULT NULL,
+          `intake_attempts` int(11) NOT NULL DEFAULT 0,
+          `intake_last_error` varchar(500) DEFAULT NULL,
+          `intake_state` varchar(12) NOT NULL DEFAULT 'pending',
+          `intake_first_seen_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `intake_last_attempt_at` datetime DEFAULT NULL,
+          `intake_quarantined_at` datetime DEFAULT NULL,
+          PRIMARY KEY (`intake_id`),
+          UNIQUE KEY `uq_intake_key` (`intake_mailbox_id`,`intake_key`),
+          KEY `idx_intake_state` (`intake_state`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `mail_intake_settings` (
+          `setting_key` varchar(64) NOT NULL,
+          `setting_value` varchar(255) NOT NULL DEFAULT '',
+          `setting_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`setting_key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `mail_alerts` (
+          `alert_key` varchar(120) NOT NULL,
+          `alert_last_sent_at` datetime NOT NULL,
+          `alert_last_detail` varchar(500) DEFAULT NULL,
+          `alert_count` int(11) NOT NULL DEFAULT 1,
+          PRIMARY KEY (`alert_key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.79'");
+    }
+
+    if ($rivetit_db_version() == '2.6.79') {
+        // Recovery (ported from RivetIT 2.6.153; platform gap analysis items 9, 11, 12): every backup run leaves a status record (backup_runs), the nightly restore drill
+        // leaves a result (restore_drill_log), alert de-duplication state (recovery_alerts) and a small key/value settings table
+        // (recovery_settings; a table, not settings columns, because settings is close to the row-size limit). All CREATE TABLE IF NOT
+        // EXISTS, so re-running is harmless. The drill is OFF until an admin configures the scoped drill_% database account.
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `backup_runs` (
+          `run_id` int(11) NOT NULL AUTO_INCREMENT,
+          `run_kind` varchar(20) NOT NULL DEFAULT 'app_manual',
+          `run_started_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `run_finished_at` datetime DEFAULT NULL,
+          `run_file` varchar(255) DEFAULT NULL,
+          `run_size` bigint(20) unsigned DEFAULT NULL,
+          `run_sha256` char(64) DEFAULT NULL,
+          `run_ok` tinyint(1) NOT NULL DEFAULT 0,
+          `run_error` text DEFAULT NULL,
+          `run_offsite_result` varchar(255) DEFAULT NULL,
+          PRIMARY KEY (`run_id`),
+          KEY `idx_backup_runs_started` (`run_started_at`),
+          KEY `idx_backup_runs_ok` (`run_ok`,`run_finished_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `restore_drill_log` (
+          `drill_id` int(11) NOT NULL AUTO_INCREMENT,
+          `drill_started_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `drill_finished_at` datetime DEFAULT NULL,
+          `drill_trigger` varchar(20) NOT NULL DEFAULT 'cron',
+          `drill_backup_kind` varchar(20) DEFAULT NULL,
+          `drill_backup_file` varchar(255) DEFAULT NULL,
+          `drill_status` varchar(20) NOT NULL DEFAULT 'running',
+          `drill_message` varchar(500) DEFAULT NULL,
+          `drill_restore_seconds` decimal(10,2) DEFAULT NULL,
+          `drill_total_seconds` decimal(10,2) DEFAULT NULL,
+          `drill_scratch_db` varchar(64) DEFAULT NULL,
+          `drill_cleanup_ok` tinyint(1) DEFAULT NULL,
+          `drill_checks` mediumtext DEFAULT NULL,
+          PRIMARY KEY (`drill_id`),
+          KEY `idx_restore_drill_started` (`drill_started_at`),
+          KEY `idx_restore_drill_status` (`drill_status`,`drill_finished_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `recovery_alerts` (
+          `alert_key` varchar(120) NOT NULL,
+          `alert_last_sent_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `alert_last_message` varchar(500) DEFAULT NULL,
+          `alert_send_count` int(11) NOT NULL DEFAULT 1,
+          PRIMARY KEY (`alert_key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `recovery_settings` (
+          `setting_key` varchar(60) NOT NULL,
+          `setting_value` text DEFAULT NULL,
+          `setting_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`setting_key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.80'");
+    }

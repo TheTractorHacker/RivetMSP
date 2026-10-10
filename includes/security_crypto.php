@@ -50,7 +50,7 @@ if (!function_exists('secIsWrapped')) {
      * The secret columns that were written in plaintext on an install that never had $config_settings_enc_key (every MSP install until now),
      * as table => [primary key, [columns]]. One list for the migration, the CLI and the lazy re-wrap, so they cannot drift apart.
      * Every reader of every column below goes through decryptSetting(); a column whose reader still reads the raw value belongs in
-     * secDeferredColumns() instead.
+     * secDeferredColumns() instead (currently none).
      *
      * @return array<string, array{0:string, 1:string[]}>
      */
@@ -70,6 +70,10 @@ if (!function_exists('secIsWrapped')) {
                 'config_redis_password',
                 'config_login_key_secret',
                 'config_whitelabel_key',
+                // Wrapped now that cron/mail_queue.php (the last raw reader) goes through decryptSetting() and stores refreshed tokens wrapped.
+                'config_mail_oauth_client_secret',
+                'config_mail_oauth_refresh_token',
+                'config_mail_oauth_access_token',
             ]],
             'payment_providers'       => ['payment_provider_id', ['payment_provider_private_key', 'payment_provider_webhook_secret']],
             'ai_providers'            => ['ai_provider_id', ['ai_provider_api_key']],
@@ -86,22 +90,15 @@ if (!function_exists('secIsWrapped')) {
     }
 
     /**
-     * Columns that are written by encryptSetting() on a save but are NOT re-wrapped yet, because cron/mail_queue.php (the RivetMSP mail
-     * queue) still reads them from the row without decryptSetting(). Wrapping them now would break outgoing mail over OAuth. The mail
-     * intake work moves that reader to decryptSetting(); this list then folds into secStragglerColumns(). Until then they stay
-     * legacy plaintext, which decryptSetting() reads transparently (a new save already wraps them).
+     * Columns that are written by encryptSetting() on a save but are NOT re-wrapped yet, because a reader still reads the raw value.
+     * The three mail OAuth columns lived here until cron/mail_queue.php (the last raw reader) moved to decryptSetting() with the mail
+     * intake work; they are in secStragglerColumns() now. Empty on purpose: a future raw reader goes here until it is fixed.
      *
      * @return array<string, array{0:string, 1:string[]}>
      */
     function secDeferredColumns(): array
     {
-        return [
-            'settings' => ['company_id', [
-                'config_mail_oauth_client_secret',
-                'config_mail_oauth_refresh_token',
-                'config_mail_oauth_access_token',
-            ]],
-        ];
+        return [];
     }
 
     /** The whole list (what the migration and secRewrapAll walk). */

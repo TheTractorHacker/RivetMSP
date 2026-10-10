@@ -130,6 +130,19 @@ mysqli_query($mysqli, "DELETE FROM notifications WHERE notification_dismissed_at
 // Clean-up mail queue
 mysqli_query($mysqli, "DELETE FROM email_queue WHERE email_queued_at < CURDATE() - INTERVAL 90 DAY");
 
+// Mail intake housekeeping: failure counters for messages that were never seen again, and old alert-dedupe rows.
+// Quarantined entries stay until an admin dismisses them.
+mysqli_query($mysqli, "DELETE FROM mail_intake_state WHERE intake_state = 'pending' AND COALESCE(intake_last_attempt_at, intake_first_seen_at) < NOW() - INTERVAL 30 DAY");
+mysqli_query($mysqli, "DELETE FROM mail_alerts WHERE alert_last_sent_at < NOW() - INTERVAL 90 DAY");
+
+// Mail intake health: poller silent, mailbox unreachable, outbound mail out of retries. Alerts are de-duplicated (6 h by
+// default) and this is deliberately independent of cron/ticket_email_parser.php, which is the thing that may have died.
+try {
+    \RivetMSP\Mail\MailHealth::runChecks($mysqli, $config_ticket_email_parse === 1);
+} catch (\Throwable $e) {
+    logApp("Cron", "warning", "Mail health check failed: " . $e->getMessage());
+}
+
 // Clean-up old remember me tokens
 mysqli_query($mysqli, "DELETE FROM remember_tokens WHERE remember_token_created_at < CURDATE() - INTERVAL $config_login_remember_me_expire DAY");
 
@@ -1237,6 +1250,22 @@ if ($config_backup_auto_enabled) {
 
 /*
  * ###############################################################################################################
+ *  RECOVERY WATCH
+ *  Alerts (in-app, email, event) for a stale or failed backup, a failing or stalled integration sync (RMM, UniFi)
+ *  and a restore drill that stopped running. De-duplicated to one alert per 6 hours each. See src/Recovery/RecoveryWatch.php.
+ * ###############################################################################################################
+ */
+try {
+    $recovery_found = \RivetMSP\Recovery\RecoveryWatch::run($mysqli, dirname(__DIR__), (bool) $config_backup_auto_enabled, (bool) intval($settings_row['config_module_enable_rmm'] ?? 0));
+    if (($recovery_found['backup'] ?? 'ok') === 'stale' || ($recovery_found['sync'] ?? []) !== [] || in_array($recovery_found['drill'] ?? 'ok', ['stale'], true)) {
+        echo gmdate('Y-m-d\TH:i:s\Z') . " cron: recovery watch found problems: " . json_encode($recovery_found) . "\n";
+    }
+} catch (\Throwable $e) {
+    logApp("Cron", "error", "Recovery watch failed: " . $e->getMessage());
+}
+
+/*
+ * ###############################################################################################################
  *  COMET BACKUP — SESSION KEY REFRESH
  * ###############################################################################################################
  */
@@ -1570,13 +1599,23 @@ if ($config_module_enable_rmm) {
     $sql_rmm_integrations = mysqli_query($mysqli, "SELECT id, name FROM rmm_integrations WHERE enabled=1 AND type <> 'rivetit_agent'");
     while ($rmm_intg = mysqli_fetch_assoc($sql_rmm_integrations)) {
         $rmm_intg_id = intval($rmm_intg['id']);
+        $rmm_log_id = 0;
         try {
             $rmm_client = getRmmClient($rmm_intg_id);
             $rmm_mapper = new RmmAssetMapper($mysqli, $rmm_intg_id, 0, $rmm_client);
+            // A sync-log row per scheduled run (like UniFi already does) so the recovery watch can see a stalled or failing sync.
+            $rmm_log_id   = $rmm_mapper->startSyncLog();
 
             $agents       = $rmm_client->getAgents();
             $asset_stats  = $rmm_mapper->syncAgents($agents);
             $alert_stats  = $rmm_mapper->syncAlerts();
+            // A few bad devices must not make every scheduled run "failed" (and trip the watch): only a run where every device errored is.
+            $rmm_agent_errors = $asset_stats['errors'] ?? [];
+            $rmm_all_failed   = count($agents) > 0 && count($rmm_agent_errors) >= count($agents);
+            $rmm_mapper->finishSyncLog($rmm_log_id, ['errors' => $rmm_all_failed ? $rmm_agent_errors : []] + $asset_stats);
+            if (!$rmm_all_failed && $rmm_agent_errors) {
+                logApp("Cron", "warning", "RMM sync for '{$rmm_intg['name']}': " . count($rmm_agent_errors) . " device(s) skipped with errors, first: " . $rmm_agent_errors[0]);
+            }
 
             logApp("Cron", "info",
                 "RMM sync for '{$rmm_intg['name']}': assets {$asset_stats['created']} created, {$asset_stats['updated']} updated, {$asset_stats['matched']} matched, {$asset_stats['skipped']} skipped" .
@@ -1584,6 +1623,9 @@ if ($config_module_enable_rmm) {
             );
         } catch (RuntimeException $e) {
             logApp("Cron", "error", "RMM sync failed for '{$rmm_intg['name']}': " . $e->getMessage());
+            if ($rmm_log_id > 0) {
+                $rmm_mapper->finishSyncLog($rmm_log_id, ['created' => 0, 'updated' => 0, 'matched' => 0, 'skipped' => 0, 'errors' => [$e->getMessage()]]);
+            }
         }
     }
 }

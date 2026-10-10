@@ -291,6 +291,8 @@ $backup_passphrase_ready = strlen((string) $config_backup_passphrase) >= 16;
     </div>
 </div>
 
+<?php require __DIR__ . '/backup_recovery_panel.php'; ?>
+
 <!-- ── Backup history ─────────────────────────────────────────────────────── -->
 <div class="card card-dark">
     <div class="card-header py-2 d-flex align-items-center">
