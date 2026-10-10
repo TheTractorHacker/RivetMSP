@@ -4,6 +4,12 @@
 $sql_settings = mysqli_query($mysqli, "SELECT * FROM settings WHERE company_id = 1");
 $row = mysqli_fetch_assoc($sql_settings);
 
+// Secrets that used to be stored in plaintext are wrapped here the first time they are read (see includes/security_crypto.php).
+require_once __DIR__ . '/security_crypto.php';
+if (is_array($row)) {
+    secLazyRewrapSettings($mysqli, $row);
+}
+
 // Database version
 DEFINE("CURRENT_DATABASE_VERSION", $row['config_current_database_version']);
 
@@ -149,7 +155,7 @@ $config_unifi_default_integration_id = intval($row['config_unifi_default_integra
 // Login
 $config_login_message = $row['config_login_message'];
 $config_login_key_required = $row['config_login_key_required'];
-$config_login_key_secret = $row['config_login_key_secret'];
+$config_login_key_secret = decryptSetting((string) ($row['config_login_key_secret'] ?? ''));
 $config_login_remember_me_expire = intval($row['config_login_remember_me_expire']);
 $config_login_session_lifetime = intval($row['config_login_session_lifetime'] ?? 480);
 $config_log_retention = intval($row['config_log_retention']);

@@ -72,6 +72,9 @@ if (isset($_POST['add_database'])) {
 
     $installation_id = randomString(32);
 
+    // Per-installation key for encryptSetting()/decryptSetting() (stored secrets, TOTP seeds, the vault master key). Must exist before anything is stored.
+    $settings_enc_key = bin2hex(random_bytes(32));
+
     // Ensure variables meet specific criteria (very basic examples)
     if (!preg_match('/^[a-zA-Z0-9.-]+$/', $host)) {
         die('Invalid host format.');
@@ -95,6 +98,7 @@ if (isset($_POST['add_database'])) {
     $new_config .= "\$config_https_only = TRUE;\n";
     $new_config .= "\$repo_branch = 'master';\n";
     $new_config .= "\$installation_id = '$installation_id';\n";
+    $new_config .= "\$config_settings_enc_key = '$settings_enc_key';\n";
 
     if (file_put_contents("../config.php", $new_config) !== false && file_exists('../config.php')) {
 

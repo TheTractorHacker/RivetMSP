@@ -12,6 +12,14 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/top_nav.php';
 require_once 'includes/side_nav.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/inc_wrapper.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/inc_alert_feedback.php';
+// Stored secrets are not encrypted, and new ones cannot be saved, while config.php has no $config_settings_enc_key. Say so on every admin page.
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/security_crypto.php';
+if (($sec_key_notice = secKeyMissingNotice()) !== null) { ?>
+    <div class="alert alert-danger mb-3" role="alert" id="settings-key-missing-banner">
+        <i class="fas fa-fw fa-exclamation-triangle me-1" aria-hidden="true"></i><strong>Settings encryption key missing.</strong>
+        <?php echo nullable_htmlentities($sec_key_notice); ?>
+    </div>
+<?php }
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/filter_header.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/app_version.php';
 

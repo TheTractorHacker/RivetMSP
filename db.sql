@@ -710,7 +710,7 @@ CREATE TABLE `comet_backup_alerts` (
   `alert_resolved_at` datetime DEFAULT NULL,
   PRIMARY KEY (`alert_id`),
   KEY `alert_lookup` (`alert_comet_username`,`alert_device_name`,`alert_resolved_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `comet_client_map`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -723,7 +723,7 @@ CREATE TABLE `comet_client_map` (
   PRIMARY KEY (`map_id`),
   UNIQUE KEY `map_client_id` (`map_client_id`),
   KEY `map_comet_username` (`map_comet_username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `comet_session_cache`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -733,7 +733,7 @@ CREATE TABLE `comet_session_cache` (
   `config_value` varchar(500) NOT NULL DEFAULT '',
   `config_expires` datetime NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `companies`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -963,7 +963,7 @@ CREATE TABLE `contract_documents` (
   `doc_uploaded_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`doc_id`),
   KEY `doc_contract_id` (`doc_contract_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `contract_templates`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -1053,7 +1053,7 @@ CREATE TABLE `credential_history` (
   `history_created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`history_id`),
   KEY `history_credential_id` (`history_credential_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `credential_restore_staging`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -2829,7 +2829,7 @@ CREATE TABLE `rivet_core_migrations` (
   `migration_id` varchar(100) NOT NULL,
   `applied_at` datetime NOT NULL,
   PRIMARY KEY (`migration_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `rmm_alerts`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -2980,6 +2980,16 @@ CREATE TABLE `rmm_sync_log` (
   `errors` text DEFAULT NULL,
   `triggered_by` int(11) DEFAULT 0,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `security_settings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `security_settings` (
+  `setting_key` varchar(64) NOT NULL,
+  `setting_value` varchar(255) NOT NULL DEFAULT '',
+  `setting_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`setting_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `service_assets`;
@@ -3170,7 +3180,7 @@ CREATE TABLE `settings` (
   `config_login_key_secret` varchar(255) DEFAULT NULL,
   `config_login_remember_me_expire` int(11) NOT NULL DEFAULT 3,
   `config_log_retention` int(11) NOT NULL DEFAULT 90,
-  `config_login_session_lifetime` int(11) NOT NULL DEFAULT 480,
+  `config_login_session_lifetime` int(11) NOT NULL DEFAULT 10080,
   `config_backup_auto_enabled` tinyint(1) NOT NULL DEFAULT 0,
   `config_backup_frequency` varchar(20) NOT NULL DEFAULT 'daily',
   `config_backup_retain_count` int(11) NOT NULL DEFAULT 7,
@@ -3345,7 +3355,7 @@ CREATE TABLE `software` (
   `software_version` varchar(200) DEFAULT NULL,
   `software_type` varchar(200) NOT NULL,
   `software_license_type` varchar(200) DEFAULT NULL,
-  `software_key` varchar(200) DEFAULT NULL,
+  `software_key` text DEFAULT NULL,
   `software_seats` int(11) DEFAULT NULL,
   `software_purchase_reference` varchar(200) DEFAULT NULL,
   `software_purchase` date DEFAULT NULL,
@@ -3453,7 +3463,7 @@ DROP TABLE IF EXISTS `software_keys`;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `software_keys` (
   `software_key_id` int(11) NOT NULL AUTO_INCREMENT,
-  `software_key` varchar(400) NOT NULL,
+  `software_key` text NOT NULL,
   `software_key_software_id` int(11) NOT NULL,
   PRIMARY KEY (`software_key_id`),
   KEY `software_key_software_id` (`software_key_software_id`),
@@ -4074,7 +4084,21 @@ CREATE TABLE `user_passkeys` (
   PRIMARY KEY (`passkey_id`),
   KEY `passkey_user_id` (`passkey_user_id`),
   KEY `passkey_credential_id` (`passkey_credential_id`(255))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `user_recovery_codes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `user_recovery_codes` (
+  `code_id` int(11) NOT NULL AUTO_INCREMENT,
+  `code_user_id` int(11) NOT NULL,
+  `code_hash` varchar(255) NOT NULL,
+  `code_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `code_used_at` datetime DEFAULT NULL,
+  `code_used_ip` varchar(45) DEFAULT NULL,
+  PRIMARY KEY (`code_id`),
+  KEY `idx_recovery_codes_user` (`code_user_id`,`code_used_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `user_role_permissions`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -4098,6 +4122,24 @@ CREATE TABLE `user_roles` (
   `role_updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
   `role_archived_at` datetime DEFAULT NULL,
   PRIMARY KEY (`role_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `user_sessions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `user_sessions` (
+  `session_row_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `session_user_id` int(11) NOT NULL,
+  `session_hash` char(64) NOT NULL,
+  `session_ip` varchar(64) DEFAULT NULL,
+  `session_user_agent` varchar(255) DEFAULT NULL,
+  `session_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `session_last_seen_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `session_revoked_at` datetime DEFAULT NULL,
+  `session_revoked_reason` varchar(40) DEFAULT NULL,
+  PRIMARY KEY (`session_row_id`),
+  UNIQUE KEY `uq_user_sessions_hash` (`session_hash`),
+  KEY `idx_user_sessions_user` (`session_user_id`,`session_revoked_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `user_settings`;
@@ -4276,7 +4318,7 @@ CREATE TABLE `webhook_queue` (
   PRIMARY KEY (`queue_id`),
   KEY `queue_status_next` (`queue_status`,`queue_next_attempt_at`),
   KEY `queue_webhook_id` (`queue_webhook_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `webhooks`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -4297,7 +4339,7 @@ CREATE TABLE `webhooks` (
   `webhook_enabled` tinyint(1) NOT NULL DEFAULT 1,
   `webhook_created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`webhook_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `workflow_run_tasks`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;

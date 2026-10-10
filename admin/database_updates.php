@@ -6659,3 +6659,83 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             }
         }
     }
+
+    // Wave 1 security (DB 2.6.78). One idempotent step, gated on 2.6.77:
+    //   - security_settings (policy key/value), user_recovery_codes (hashed, single use), user_sessions (hashed session id, revocable)
+    //   - software.software_key / software_keys.software_key become TEXT (a wrapped license key is longer than the old varchar(200)/(400))
+    //   - session lifetime: settings.config_login_session_lifetime is now the ABSOLUTE maximum (default 7 days, floor 60 minutes, cap 90 days)
+    //     and the idle timeout is security_settings.session_idle_minutes (default 8 hours, the old RivetMSP session length). An install that
+    //     had customised the old value (anything but the 480-minute default) keeps it as its idle timeout, so nobody is signed out sooner
+    //     or later than before; the absolute maximum is then at least that long.
+    //   - re-wrap every secret that was stored in plaintext because RivetMSP never had $config_settings_enc_key before: the settings
+    //     secrets (including the credential-vault master key), integration keys, license keys and the TOTP seeds (see
+    //     includes/security_crypto.php secRewrapTargets()). Only when $config_settings_enc_key is set - never when it is empty: then the rows
+    //     are left exactly as they are, this step still completes, and `php scripts/update_cli.php --rewrap_secrets` (or the next settings
+    //     read, for the settings row) wraps them once the key is in config.php. A row that already carries ENC:/ENC2: is left alone, so
+    //     running this twice changes nothing.
+    // Numbering: 2.6.79 / 2.6.80 are the mail-intake and recovery steps on their own branches; they gate on 2.6.78.
+    if ($rivetit_db_version() == '2.6.77') {
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `security_settings` (
+          `setting_key` varchar(64) NOT NULL,
+          `setting_value` varchar(255) NOT NULL DEFAULT '',
+          `setting_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`setting_key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `user_recovery_codes` (
+          `code_id` int(11) NOT NULL AUTO_INCREMENT,
+          `code_user_id` int(11) NOT NULL,
+          `code_hash` varchar(255) NOT NULL,
+          `code_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `code_used_at` datetime DEFAULT NULL,
+          `code_used_ip` varchar(45) DEFAULT NULL,
+          PRIMARY KEY (`code_id`),
+          KEY `idx_recovery_codes_user` (`code_user_id`,`code_used_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `user_sessions` (
+          `session_row_id` bigint(20) NOT NULL AUTO_INCREMENT,
+          `session_user_id` int(11) NOT NULL,
+          `session_hash` char(64) NOT NULL,
+          `session_ip` varchar(64) DEFAULT NULL,
+          `session_user_agent` varchar(255) DEFAULT NULL,
+          `session_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `session_last_seen_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `session_revoked_at` datetime DEFAULT NULL,
+          `session_revoked_reason` varchar(40) DEFAULT NULL,
+          PRIMARY KEY (`session_row_id`),
+          UNIQUE KEY `uq_user_sessions_hash` (`session_hash`),
+          KEY `idx_user_sessions_user` (`session_user_id`,`session_revoked_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "ALTER TABLE `software` MODIFY COLUMN `software_key` text DEFAULT NULL");
+        if (mysqli_num_rows(mysqli_query($mysqli, "SHOW TABLES LIKE 'software_keys'")) > 0) {
+            mysqli_query($mysqli, "ALTER TABLE `software_keys` MODIFY COLUMN `software_key` text NOT NULL");
+        }
+
+        // Session lifetime: the old column value (minutes) becomes the idle timeout when it was customised, then the column turns absolute.
+        $sess_old_row = mysqli_fetch_row(mysqli_query($mysqli, "SELECT config_login_session_lifetime FROM settings WHERE company_id = 1 LIMIT 1"));
+        $sess_old     = (int) ($sess_old_row[0] ?? 480);
+        $sess_abs     = 10080;
+        if ($sess_old > 0 && $sess_old !== 480 && $sess_old !== 10080) {
+            $sess_idle = max(5, min(129600, $sess_old));
+            mysqli_query($mysqli, "INSERT IGNORE INTO `security_settings` (`setting_key`, `setting_value`) VALUES ('session_idle_minutes', '$sess_idle')");
+            $sess_abs = max($sess_abs, $sess_idle);
+        }
+        mysqli_query($mysqli, "ALTER TABLE `settings` MODIFY COLUMN `config_login_session_lifetime` int(11) NOT NULL DEFAULT 10080");
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_login_session_lifetime` = $sess_abs WHERE company_id = 1");
+
+        // Re-wrap the plaintext secrets. No key, no wrapping.
+        require_once dirname(__DIR__) . '/includes/security_crypto.php';
+        if (!secSettingsKeyAvailable()) {
+            echo "Database update 2.6.78: \$config_settings_enc_key is empty, so stored secrets were NOT re-wrapped. Add the key to config.php (deploy/update.sh does this for you), then run: php scripts/update_cli.php --rewrap_secrets\n";
+        } else {
+            $enc_result = secRewrapAll($mysqli);
+            if ($enc_result['skipped_too_long'] > 0) {
+                echo "WARNING: {$enc_result['skipped_too_long']} secret(s) left as-is - the encrypted value does not fit the column.\n";
+            }
+        }
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.78'");
+    }
