@@ -76,6 +76,7 @@ COMPANY_EMAIL=""
 WEBSITE=""
 RESTORE_FROM=""
 RESTORE_PASSPHRASE_FILE=""
+INSTALL_BACKUP_TIMERS=0
 
 # Populated later in main(), after DOMAIN/PROXY_MODE/SKIP_TLS are known.
 NEED_CERTBOT=0
@@ -115,6 +116,15 @@ Deployment options:
                             serve a self-signed cert directly and leave real
                             TLS for you to configure later (e.g. no public
                             DNS yet). Implies --email is not required.
+  --install-backup-timers    Also install systemd timers for the encrypted
+                            backup (deploy/backup.sh, 02:30) and its restore
+                            drill (deploy/restore_drill.sh, 03:30), creating
+                            /etc/itflow/backup-passphrase if it does not exist
+                            (COPY IT OFFLINE: without it the archives cannot be
+                            opened). Off by default. Off-site copies switch on
+                            by creating /etc/itflow/offsite.conf from
+                            deploy/etc/offsite.conf.example. See
+                            docs/RECOVERY_RUNBOOK.md.
   --skip-firewall            Do not touch ufw.
   --skip-fail2ban             Do not touch fail2ban.
   --non-interactive           Fail instead of prompting for anything missing.
@@ -184,6 +194,7 @@ parse_args() {
             --proxy-mode)               PROXY_MODE=1 ;;
             --default-vhost)            DEFAULT_VHOST=1 ;;
             --skip-tls)                 SKIP_TLS=1 ;;
+            --install-backup-timers)    INSTALL_BACKUP_TIMERS=1 ;;
             --skip-firewall)             SKIP_FIREWALL=1 ;;
             --skip-fail2ban)              SKIP_FAIL2BAN=1 ;;
             --non-interactive)             NON_INTERACTIVE=1 ;;
@@ -639,10 +650,59 @@ install_cron() {
     local cron_file="/etc/cron.d/itflow-$(printf '%s' "${DOMAIN}" | tr -cd 'a-zA-Z0-9_-')"
     cat > "${cron_file}" <<EOF
 */5 * * * * www-data /usr/bin/php ${APP_DIR}/cron/cron.php >> /var/log/itflow-cron.log 2>&1
+# Nightly restore drill of the newest in-app backup zip. Does nothing until an admin enables it (Admin > Backup > Restore drill).
+45 3 * * * www-data /usr/bin/php ${APP_DIR}/cron/restore_drill.php >> /var/log/itflow-restore-drill-cron.log 2>&1
 EOF
+    # cron's ">>" cannot create a file in /var/log as www-data; a missing log file silently stops the job.
+    for _log in /var/log/itflow-cron.log /var/log/itflow-restore-drill-cron.log; do
+        [[ -f "${_log}" ]] || install -m 640 -o www-data -g adm /dev/null "${_log}"
+    done
     chmod 644 "${cron_file}"
     chown root:root "${cron_file}"
     info "Cron entry installed at ${cron_file} (runs every 5 minutes; inert until enabled in the app's own Settings)."
+}
+
+# ---------------------------------------------------------------------------
+# 7b. Backup + restore-drill systemd timers (opt-in: --install-backup-timers)
+# ---------------------------------------------------------------------------
+# Renders deploy/templates/itflow-backup.{service,timer} and itflow-restore-drill.{service,timer} for THIS instance under a name
+# that carries the domain (two instances on one box need distinct unit names), generates the passphrase file if there is none, and
+# enables the timers. Skipped when a backup unit for this app directory already exists (an older hand-installed itflow-backup.*),
+# so a box is never backed up twice. The off-site copy is NOT set up here: it switches on when /etc/itflow/offsite.conf exists.
+install_backup_timers() {
+    if [[ "${INSTALL_BACKUP_TIMERS}" -ne 1 ]]; then
+        info "Skipping backup timers (pass --install-backup-timers to install them; see docs/RECOVERY_RUNBOOK.md)."
+        return 0
+    fi
+    local safe_name unit_dir="/etc/systemd/system" tpl="${SCRIPT_DIR}/templates" pass_file="/etc/itflow/backup-passphrase" f
+    safe_name="$(printf '%s' "${DOMAIN}" | tr -c 'a-zA-Z0-9' '-')"
+
+    for f in "${unit_dir}"/itflow-backup*.service "${unit_dir}"/rivetmsp-backup*.service; do
+        [[ -f "${f}" ]] || continue
+        if grep -Fq -- "--app-dir=${APP_DIR}" "${f}"; then
+            warn "A backup unit for ${APP_DIR} already exists (${f}); leaving the backup timers as they are."
+            return 0
+        fi
+    done
+
+    install -d -m 700 -o root -g root /etc/itflow
+    if [[ ! -f "${pass_file}" ]]; then
+        openssl rand -base64 48 > "${pass_file}"
+        chmod 600 "${pass_file}"; chown root:root "${pass_file}"
+        warn "Created ${pass_file}. COPY IT TO AN OFFLINE PLACE NOW (password manager vault + a printed sealed copy): every encrypted backup is unreadable without it."
+    fi
+
+    local unit
+    for unit in backup restore-drill; do
+        sed "s|\${APP_DIR}|${APP_DIR}|g" "${tpl}/itflow-${unit}.service" > "${unit_dir}/rivetmsp-${unit}-${safe_name}.service"
+        sed "s|\${APP_DIR}|${APP_DIR}|g" "${tpl}/itflow-${unit}.timer"   > "${unit_dir}/rivetmsp-${unit}-${safe_name}.timer"
+        chmod 644 "${unit_dir}/rivetmsp-${unit}-${safe_name}.service" "${unit_dir}/rivetmsp-${unit}-${safe_name}.timer"
+        # A timer fires the service of the same name.
+    done
+    systemctl daemon-reload
+    systemctl enable --now "rivetmsp-backup-${safe_name}.timer" "rivetmsp-restore-drill-${safe_name}.timer"
+    success "Installed backup timers: rivetmsp-backup-${safe_name}.timer (02:30) and rivetmsp-restore-drill-${safe_name}.timer (03:30)."
+    info "Next: create /etc/itflow/offsite.conf for an off-site copy, and the drill_% database account for the restore drill (docs/RECOVERY_RUNBOOK.md)."
 }
 
 # ---------------------------------------------------------------------------
@@ -816,6 +876,7 @@ main() {
     configure_fail2ban
 
     install_cron
+    install_backup_timers
 
     if [[ -n "${RESTORE_FROM}" ]]; then
         run_restore_setup

@@ -11,6 +11,7 @@ company's instance alongside the first, on the same box.
 | `install.sh` | Stand up a brand-new instance end to end: packages, code, database, TLS/vhost, hardening, firewall, cron, and the app's own first-run setup (or restore an existing backup onto the new box — see `--restore-from`). |
 | `harden.sh` | A standalone, idempotent, re-runnable hardening pass — the fuller superset of what `install.sh` applies inline during a fresh install. |
 | `backup.sh` (+ systemd timer) | Encrypted, scheduled backups of the database and `uploads/`. |
+| `restore_drill.sh` | Root-side restore drill for the encrypted archives: checks the `.sha256`, decrypts to a private directory, restores into a scratch `drill_*` database with the scoped drill account, verifies and drops it. Setup, off-site copies (`etc/offsite.conf.example`) and the full recovery order: [`docs/RECOVERY_RUNBOOK.md`](../docs/RECOVERY_RUNBOOK.md). |
 | `restore.sh` | Decrypt and restore a `backup.sh` archive onto an already-installed instance — the disaster-recovery counterpart `backup.sh` never had. |
 | `update.sh` | Pull application updates and run any pending database migrations. |
 | `lib/common.sh` | Shared helpers (logging, `gen_secret`, OS detection, service checks, `read_app_config`) — sourced by every script above, never run directly. |
