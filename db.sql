@@ -729,7 +729,7 @@ CREATE TABLE `comet_backup_alerts` (
   `alert_resolved_at` datetime DEFAULT NULL,
   PRIMARY KEY (`alert_id`),
   KEY `alert_lookup` (`alert_comet_username`,`alert_device_name`,`alert_resolved_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `comet_client_map`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -742,7 +742,7 @@ CREATE TABLE `comet_client_map` (
   PRIMARY KEY (`map_id`),
   UNIQUE KEY `map_client_id` (`map_client_id`),
   KEY `map_comet_username` (`map_comet_username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `comet_session_cache`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -752,7 +752,7 @@ CREATE TABLE `comet_session_cache` (
   `config_value` varchar(500) NOT NULL DEFAULT '',
   `config_expires` datetime NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `companies`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -778,7 +778,6 @@ CREATE TABLE `companies` (
   PRIMARY KEY (`company_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
 DROP TABLE IF EXISTS `compliance_attestations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -797,7 +796,30 @@ CREATE TABLE `compliance_attestations` (
   KEY `idx_compliance_attestations_subject` (`subject_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
+DROP TABLE IF EXISTS `compliance_responsibilities`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compliance_responsibilities` (
+  `assign_key` varchar(120) NOT NULL,
+  `party_ref` int(11) DEFAULT NULL,
+  `party_name` varchar(200) NOT NULL,
+  `updated_by` int(11) DEFAULT NULL,
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`assign_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `compliance_shared_report`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compliance_shared_report` (
+  `shared_id` tinyint(4) NOT NULL,
+  `snapshot_id` int(11) NOT NULL,
+  `note` text DEFAULT NULL,
+  `published_by` int(11) DEFAULT NULL,
+  `published_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`shared_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `compliance_snapshots`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -815,7 +837,6 @@ CREATE TABLE `compliance_snapshots` (
   KEY `idx_compliance_snapshots_subject` (`subject_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
-
 DROP TABLE IF EXISTS `compliance_subjects`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -828,32 +849,6 @@ CREATE TABLE `compliance_subjects` (
   `shared_at` datetime DEFAULT NULL,
   `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`subject_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
-DROP TABLE IF EXISTS `compliance_responsibilities`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
-CREATE TABLE `compliance_responsibilities` (
-  `assign_key` varchar(120) NOT NULL,
-  `party_ref` int(11) DEFAULT NULL,
-  `party_name` varchar(200) NOT NULL,
-  `updated_by` int(11) DEFAULT NULL,
-  `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`assign_key`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
-DROP TABLE IF EXISTS `compliance_shared_report`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
-CREATE TABLE `compliance_shared_report` (
-  `shared_id` tinyint(4) NOT NULL,
-  `snapshot_id` int(11) NOT NULL,
-  `note` text DEFAULT NULL,
-  `published_by` int(11) DEFAULT NULL,
-  `published_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`shared_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `contact_assets`;
@@ -982,7 +977,7 @@ CREATE TABLE `contract_documents` (
   `doc_uploaded_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`doc_id`),
   KEY `doc_contract_id` (`doc_contract_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `contract_templates`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -1072,7 +1067,7 @@ CREATE TABLE `credential_history` (
   `history_created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`history_id`),
   KEY `history_credential_id` (`history_credential_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `credential_restore_staging`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -2116,8 +2111,8 @@ DROP TABLE IF EXISTS `mcp_unlinked_identities`;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `mcp_unlinked_identities` (
   `mcp_unlinked_id` int(11) NOT NULL AUTO_INCREMENT,
-  `issuer` varchar(255) NOT NULL,
-  `subject` varchar(255) NOT NULL,
+  `issuer` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `subject` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
   `email` varchar(200) DEFAULT NULL,
   `display_name` varchar(200) DEFAULT NULL,
   `attempts` int(11) NOT NULL DEFAULT 1,
@@ -2947,7 +2942,7 @@ CREATE TABLE `rivet_core_migrations` (
   `migration_id` varchar(100) NOT NULL,
   `applied_at` datetime NOT NULL,
   PRIMARY KEY (`migration_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `rmm_alerts`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -4207,7 +4202,7 @@ CREATE TABLE `user_passkeys` (
   PRIMARY KEY (`passkey_id`),
   KEY `passkey_user_id` (`passkey_user_id`),
   KEY `passkey_credential_id` (`passkey_credential_id`(255))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `user_recovery_codes`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -4441,7 +4436,7 @@ CREATE TABLE `webhook_queue` (
   PRIMARY KEY (`queue_id`),
   KEY `queue_status_next` (`queue_status`,`queue_next_attempt_at`),
   KEY `queue_webhook_id` (`queue_webhook_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `webhooks`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -4462,7 +4457,7 @@ CREATE TABLE `webhooks` (
   `webhook_enabled` tinyint(1) NOT NULL DEFAULT 1,
   `webhook_created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`webhook_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `workflow_run_tasks`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -4596,9 +4591,9 @@ INSERT INTO `rivet_core_migrations` VALUES ('0013_retention_indexes','2026-10-06
 INSERT INTO `rivet_core_migrations` VALUES ('0014_endpoint_agent_core','2026-10-07 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0015_endpoint_agent_converge','2026-10-07 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0016_rmm_module_switches','2026-10-07 00:00:00');
+INSERT INTO `rivet_core_migrations` VALUES ('0017_mcp_identity_binary_collation','2026-10-10 00:00:00');
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
-
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
@@ -4606,4 +4601,3 @@ INSERT INTO `rivet_core_migrations` VALUES ('0016_rmm_module_switches','2026-10-
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
-

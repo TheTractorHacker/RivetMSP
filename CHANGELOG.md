@@ -4,6 +4,17 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [Unreleased] RivetMSP — Wave 1 integration (security + mail intake + recovery, RivetCore rc.8)
+
+The three Wave 1 branches on one tree. Database chain: **2.6.78** security, **2.6.79** mail intake, **2.6.80** recovery, **2.6.81** RivetCore migration 0017. `db.sql` is regenerated from a clean install plus every step (no `utf8mb4_uca1400_ai_ci`, explicit `utf8mb4_general_ci`), and a database migrated from 2.6.77 has the same schema as a fresh import.
+
+- **Pins `rivet/rivet-core` 1.0.0-rc.8** (`^1.0.0-rc.8`; composer.json, lock and the tracked `vendor/` agree). rc.7/rc.8 bring CORE-1 (RMM enrollment is bound to the token's client: a machine identity that exists under another client creates a new pending device instead of reusing it), CORE-2, F8 (migration 0017) and F10. **Database step 2.6.81** (gated on 2.6.80, idempotent) runs the Core migration runner so `mcp_unlinked_identities.issuer/subject` become `utf8mb4_bin`; an edition applies new Core migrations through its own step, the package alone never does.
+- **Mail OAuth secrets are wrapped.** `cron/mail_queue.php` reads `config_mail_oauth_client_secret`, `config_mail_oauth_refresh_token` and `config_mail_oauth_access_token` through `decryptSetting()` and stores refreshed tokens with `encryptSetting()`, so the three columns moved from `secDeferredColumns()` to `secStragglerColumns()` and the 2.6.78 step wraps them.
+- **Sign-in codes are single use.** `TokenAuth6238::verifyOnce()` (ported from RivetIT): +/-1 step window, and a step that is not newer than the last accepted one for that secret is refused, so an observed code cannot be replayed. Used by `login.php` and the mobile `api/v1/auth.php`; the setup-time check in the profile still uses `verify()`. The state is a small per-secret file in the system temp directory (no schema change). Tests: `tests/totp_replay.php`, `tests/api_auth_hardening.php`, `tests/security_login_http.php`.
+- **`deploy/install.sh` schedules the mail jobs.** `cron/cron.php` does not run `cron/mail_queue.php` or `cron/ticket_email_parser.php`, and the installer only scheduled `cron.php` (plus the restore drill), so a fresh install sent no mail and read no mailbox. `install_cron` now adds both every minute (as the existing installs do) with log files created up front, and `docker/supervisord.conf` runs them too.
+- The Ticketing directory page no longer builds the Mailboxes tile inside the array literal (the navigation coverage test could not read it).
+- Tests: `tests/wave1_integration.php` (step chain, db.sql, rc.8 pin, mail OAuth, fingerprint constant, cron, TOTP wiring) and `tests/recovery_integration.php` (the restore drill against backups made by the hardened in-app builder and by `deploy/backup.sh`, end to end).
+
 ## [Unreleased] RivetMSP — Wave 1 security (DB 2.6.78)
 
 Ported from RivetIT 26.10.30, adapted to RivetMSP (clients, the RMM module, MSP's own login and session code). One idempotent database step, **2.6.78**, gated on 2.6.77: the security tables, `settings.config_backup_passphrase`, TEXT license keys, the session-length meaning, and the re-wrap of every plaintext secret (only when `$config_settings_enc_key` exists). `db.sql` matches; a fresh import and an install migrated from 2.6.76 end with identical schemas. 2.6.79 (mail intake) and 2.6.80 (recovery) follow it; see below.

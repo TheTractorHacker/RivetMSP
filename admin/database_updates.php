@@ -6862,3 +6862,19 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.80'");
     }
+
+    if ($rivetit_db_version() == '2.6.80') {
+        // RivetCore 1.0.0-rc.7/rc.8: Migration0017McpIdentityBinaryCollation moves mcp_unlinked_identities.issuer and .subject to utf8mb4_bin (OIDC `iss` and
+        // `sub` are case-sensitive, trailing spaces count). An edition applies new Core migrations through its OWN step: the Core runner here is the only thing
+        // that runs them. Idempotent (an already-binary column and a missing table are left alone, and the runner records what it applied), so a fresh install
+        // (db.sql already has the binary columns and the 0017 row) passes straight through. Skipped (version NOT advanced, so it retries) until a package that
+        // ships the migration is installed.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Mcp\Migration\Migration0017McpIdentityBinaryCollation::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.81'");
+        }
+    }

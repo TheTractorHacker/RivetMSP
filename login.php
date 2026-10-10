@@ -411,7 +411,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                     }
 
                     // Validate MFA code
-                    if (!$mfa_is_complete && !empty($current_code) && TokenAuth6238::verify($token, $current_code)) {
+                    if (!$mfa_is_complete && !empty($current_code) && TokenAuth6238::verifyOnce($token, $current_code)) {
                         $mfa_is_complete = true;
                         $extended_log    = 'with MFA';
                         secUserTotpRewrap($mysqli, $user_id, $selectedRow['user_token'] ?? null);   // lazily wrap a legacy plaintext seed

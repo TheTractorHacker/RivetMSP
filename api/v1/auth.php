@@ -257,7 +257,7 @@ if (!empty($totp_secret)) {
         secAudit('auth.recovery_code_used', $uid, 'user', $uid, 'success', "{$user['user_name']} used a MFA recovery code (mobile API)");
     }
     // +/-1 time step (30 s either side) instead of the web default of +/-3
-    if (!$totp_via_recovery && !TokenAuth6238::verify($totp_secret, intval($totp), 1)) {
+    if (!$totp_via_recovery && !TokenAuth6238::verifyOnce($totp_secret, $totp, 1)) {
         mysqli_query($mysqli,
             "UPDATE users SET
                 user_failed_login_count = user_failed_login_count + 1,

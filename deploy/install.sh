@@ -648,18 +648,23 @@ EOF
 # ---------------------------------------------------------------------------
 install_cron() {
     local cron_file="/etc/cron.d/itflow-$(printf '%s' "${DOMAIN}" | tr -cd 'a-zA-Z0-9_-')"
+    # cron/cron.php does NOT call the mail scripts: outbound mail (mail_queue.php) and email-to-ticket (ticket_email_parser.php) are their own
+    # jobs, every minute like upstream ITFlow and the existing RivetMSP installs. Each one checks its own feature setting and stays idle until
+    # an admin turns the feature on. The mail health alerts assume both run (docs/MAIL_INTAKE.md).
     cat > "${cron_file}" <<EOF
 */5 * * * * www-data /usr/bin/php ${APP_DIR}/cron/cron.php >> /var/log/itflow-cron.log 2>&1
+* * * * * www-data /usr/bin/php ${APP_DIR}/cron/mail_queue.php >> /var/log/itflow-mail-queue-cron.log 2>&1
+* * * * * www-data /usr/bin/php ${APP_DIR}/cron/ticket_email_parser.php >> /var/log/itflow-mail-parser-cron.log 2>&1
 # Nightly restore drill of the newest in-app backup zip. Does nothing until an admin enables it (Admin > Backup > Restore drill).
 45 3 * * * www-data /usr/bin/php ${APP_DIR}/cron/restore_drill.php >> /var/log/itflow-restore-drill-cron.log 2>&1
 EOF
     # cron's ">>" cannot create a file in /var/log as www-data; a missing log file silently stops the job.
-    for _log in /var/log/itflow-cron.log /var/log/itflow-restore-drill-cron.log; do
+    for _log in /var/log/itflow-cron.log /var/log/itflow-mail-queue-cron.log /var/log/itflow-mail-parser-cron.log /var/log/itflow-restore-drill-cron.log; do
         [[ -f "${_log}" ]] || install -m 640 -o www-data -g adm /dev/null "${_log}"
     done
     chmod 644 "${cron_file}"
     chown root:root "${cron_file}"
-    info "Cron entry installed at ${cron_file} (runs every 5 minutes; inert until enabled in the app's own Settings)."
+    info "Cron entries installed at ${cron_file} (cron.php every 5 minutes, mail queue and parser every minute, restore drill nightly; inert until enabled in the app's own Settings)."
 }
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,21 @@
 
 All notable changes to RivetCore. Semantic versioning.
 
+## 1.0.0-rc.8
+CI-only follow-up to rc.7; no change to `src/`. The golden RMM transcripts are re-recorded for the five files whose recorded answer the CORE-1 fix changed on purpose (`04-enroll-flows`, `05-checkin`, `06-jobs`, `08-installer`, `09-rate-limits`; one cross-client enrollment now creates a new device instead of reusing another client's). The pre-fix recordings of those five files are kept in `tests/Fixtures/rmm/golden-original/` with `expected-deltas.json`, and `tests/Unit/Rmm/GoldenDeltaTest.php` fails on any difference that is not declared and explained there, so everything else stays byte-compatible with the original wire protocol. Editions that replay Core's fixtures (RivetIT's `tests/endpoint_agent_golden.php`) must run rc.7 or later server code against them.
+
+## 1.0.0-rc.7
+Security fixes from the 2026-10-08 nightly review: CORE-1 and CORE-2 (RMM enrollment and token revocation are scoped to the token's client), F8 (migration 0017, case-sensitive MCP identity keys) and F10 (automation placeholders fill only allowlisted free-text keys). Details are in the "Security: nightly review 2026-10-08" entry under Unreleased. Editions on rc.6 must run migration 0017 (CoreMigrations) after updating.
+
 ## Unreleased
+
+### Security: nightly review 2026-10-08 (CORE-1, CORE-2, F8, F10)
+
+- **CORE-1, RMM enrollment is bound to the token's client.** A reinstall lookup by `machine_guid` or serial now only matches devices of the enrollment token's client, and an `install_id` held by another client is a 409 `conflict`. A machine identity that exists under another client creates a NEW device in the token's client, `pending_approval`, `match_reason = cross_client_identity`, never auto-linked or auto-created. The other client's device keeps its credential and asset link. Behaviour change only for cross-client enrollments (cloned images, or an attempted takeover); same-client reinstalls are unchanged. Documented in `docs/rmm/PROTOCOL.md`.
+- **CORE-2, `TechnicianActions::revokeToken`** no longer tells a missing token from another client's: both are 404 (a caller without `rmm.token.manage` still gets 403).
+- **F8, migration `0017_mcp_identity_binary_collation`** (idempotent, additive in effect): `mcp_unlinked_identities.issuer` and `.subject` become `utf8mb4_bin`, so OIDC subjects that differ in case or trailing spaces are different identities. Editions that store their own linked-identity column should use a binary collation too.
+- **F10, `AutomationExecutor::interpolate()`** is now an allowlist (`AutomationExecutor::FREE_TEXT_KEYS`: subject, details, message, title, body, description, text, name, note, notes, comment, summary, label). Other action-config keys are used verbatim. Rules that placed a `{placeholder}` in another key (for example `email` or `to`) no longer get it filled.
+- Not changed: F11 (`DatabaseContractTestCase` stays in `src/Testing`, it is part of the documented conformance kit, ADR-009) and CORE-3 (`mesh_token_ttl_s` is still not applied to the MeshCentral login cookie; the server-side cookie window needs a live MeshCentral to verify).
 
 ### RMM module: the endpoint agent moves into Core (`RivetCore\Rmm`)
 

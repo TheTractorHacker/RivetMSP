@@ -62,7 +62,12 @@ $login = function (Browser $b, string $tag, string $pw = null) use ($PW) {
     return $b->go('POST', '/login.php', ['email' => "sec-http-$tag@example.test", 'password' => $pw ?? $PW, 'login' => '1']);
 };
 $mfaToken = fn(string $body) => preg_match('/name="pending_mfa_token"\s+value="([0-9a-f]+)"/', $body, $m) ? $m[1] : '';
-$code = function (string $seed) { return TokenAuth6238::getTokenCode($seed); };
+// The sign-in accepts a TOTP code once (TokenAuth6238::verifyOnce keeps the last accepted step per secret in the system temp dir). The test signs in many
+// times inside one 30 second step, so each fresh code clears that state first, as if the previous login were a step ago. The replay itself is tested below.
+$code = function (string $seed) {
+    @unlink(sys_get_temp_dir() . '/rivetmsp_totp_replay/' . hash('sha256', $seed));
+    return TokenAuth6238::getTokenCode($seed);
+};
 
 // ============================================================ password sign-in, MFA step, recovery code
 $b = new Browser($base);
@@ -273,6 +278,20 @@ $ok(str_starts_with($stored, 'ENC2:') && decryptSetting($stored) === 'MYKEY123',
 $ok((int) $one("SELECT config_login_session_lifetime FROM settings WHERE company_id=1") === 480, 'and a 480 minute session lifetime is accepted (no 30-day minimum)');
 [$c, $body] = $ba->go('GET', '/admin/settings_security.php');
 $ok(str_contains($body, 'value="MYKEY123"'), 'the login key secret shows decrypted on the settings page');
+
+// ============================================================ a TOTP code signs in once (replay refused)
+$replayCode = (string) $code($seedA);   // clears the replay state, then returns the current code
+$r1 = new Browser($base);
+[$c, $body] = $login($r1, 'admin');
+$r1->go('POST', '/login.php', ['mfa_login' => '1', 'pending_mfa_token' => $mfaToken($body), 'current_code' => $replayCode]);
+[$c, $body] = $r1->go('GET', '/admin/settings_security.php');
+$ok($c === 200, 'a fresh authenticator code signs the administrator in');
+$r2 = new Browser($base);
+[$c, $body] = $login($r2, 'admin');
+[$c, $body] = $r2->go('POST', '/login.php', ['mfa_login' => '1', 'pending_mfa_token' => $mfaToken($body), 'current_code' => $replayCode]);
+$ok($c !== 302 && str_contains($body, 'valid 2FA code or recovery code'), 'the same code, replayed in the same 30 second step, is refused');
+[$c, $body] = $r2->go('GET', '/admin/settings_security.php');
+$ok($c !== 200, 'and the replaying browser is not signed in');
 
 // ============================================================ the missing settings key banner (config.php without $config_settings_enc_key)
 $ba2 = new Browser($base);
