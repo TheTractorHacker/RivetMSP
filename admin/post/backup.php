@@ -414,6 +414,9 @@ if (isset($_POST['backup_s3_test'])) {
     redirect();
 }
 
+// ── Recovery settings + "Run drill now" (restore drill, backup/sync alerts) ───
+require_once __DIR__ . '/backup_recovery.php';
+
 // ── Master key reveal ─────────────────────────────────────────────────────────
 if (isset($_POST['backup_master_key'])) {
     validateCSRFToken($_POST['csrf_token']);
