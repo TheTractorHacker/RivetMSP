@@ -146,9 +146,9 @@
             'dev_requirement' => false,
         ),
         'rivet/rivet-core' => array(
-            'pretty_version' => 'v1.0.0-rc.13',
-            'version' => '1.0.0.0-RC13',
-            'reference' => '7dbf040d098532fc49f17c8ab53b1b4af10eed05',
+            'pretty_version' => 'v1.0.0-rc.14',
+            'version' => '1.0.0.0-RC14',
+            'reference' => 'fae6d98e63669294ed1bbf6719d082b1bedeb600',
             'type' => 'library',
             'install_path' => __DIR__ . '/../rivet/rivet-core',
             'aliases' => array(),

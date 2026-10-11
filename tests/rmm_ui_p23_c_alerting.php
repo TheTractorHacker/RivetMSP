@@ -372,6 +372,45 @@ foreach (['/agent/rmm_agent_alerts.php', '/agent/rmm_maintenance.php', '/agent/r
 $ok(in_array($c, [403, 404], true) && $one("SELECT COUNT(*) FROM rmm_maintenance_windows WHERE name='ALR off'") === '0', 'module off: the handler refuses (' . $c . ')');
 $rmm->admin()->enable($admin); $fresh();
 
+// ============================================================ regression (Core rc.14): a device on the DEFAULT checks (no checks_json stored) must load the thresholds
+// Core rc.13 and older kept pending_reboot's empty params as \stdClass inside the module, so reading $def['params']['thresholds'] threw
+// "Cannot use object of type stdClass as array" and the asset page's thresholds part failed silently. Every earlier test stored a list through json_encode first.
+$ok($rmm->settings()->update(['checks_json' => '']) === [], 'default checks: checks_json cleared so the built-in list applies');
+$fresh();
+$q("INSERT INTO assets SET asset_type='Laptop', asset_name='ALRD', asset_make='Dell', asset_serial='SER-ALRD', asset_client_id=1, asset_status='Active'");
+$alrdAsset = (int) $db->insert_id;
+[$c, , $j] = ea_enroll($S['enroll']['A'], ea_dev(['serial' => 'SER-ALRD', 'hostname' => 'ALRD']));
+$alrdDev = (int) ($j['device_id'] ?? 0);
+$alrdTok = (string) ($j['device_token'] ?? '');
+$ok($c === 201 && $alrdDev > 0, 'default checks: ALRD enrolled through the real endpoint');
+$logBefore = (string) @file_get_contents($web['log']);
+$defKeys = [];
+foreach ($rmm->settings()->checks() as $def) { $defKeys[] = (string) $def['key']; $ok(is_array($def['params']), 'default checks: params of ' . $def['key'] . ' is an array inside the module'); }
+$ok($defKeys === ['disk_c', 'pending_reboot', 'svc_eventlog'], 'default checks: disk_c, pending_reboot and svc_eventlog are the built-in list');
+// the four checks a real agent reports on a default install (agent_update is the agent's own, not in the global list)
+[$c] = ea_checkin($alrdTok, ['checks' => [
+    ['key' => 'disk_c', 'status' => 'ok', 'detail' => 'C: 42% used', 'value' => 42.0],
+    ['key' => 'pending_reboot', 'status' => 'ok', 'detail' => 'no reboot pending'],
+    ['key' => 'svc_eventlog', 'status' => 'ok', 'detail' => 'running'],
+    ['key' => 'agent_update', 'status' => 'ok', 'detail' => 'current'],
+]]);
+$ok($c === 200, 'default checks: ALRD reports the four checks (' . $c . ')');
+$fresh();
+foreach (['disk_c', 'pending_reboot', 'svc_eventlog'] as $dk) {
+    $t = rivetRmmAutoApi($db, 1, 'admin', 'GET', [$alrdDev, 'checks', $dk, 'thresholds']);
+    $ok($t['ok'] === true, "default checks: GET checks/$dk/thresholds answers (no stdClass error)" . ($t['ok'] ? '' : ' ' . json_encode($t)));
+}
+[$c, $body] = web($wb, 'GET', '/agent/asset_details.php?asset_id=' . $alrdAsset, $SS['admin']);
+$logNew = substr((string) @file_get_contents($web['log']), strlen($logBefore));
+$ok($c === 200 && str_contains($body, 'id="rmm-pane-alerting"') && str_contains($body, 'Thresholds'), 'default checks: the asset page loads with its Alerting tab (' . $c . ')');
+foreach (['disk_c', 'pending_reboot', 'svc_eventlog', 'agent_update'] as $dk) {
+    $ok(str_contains($body, '<code class="rmm-mono">' . $dk . '</code>'), "default checks: the thresholds part lists $dk");
+}
+[$c, $body2] = web($wb, 'GET', '/admin/settings_endpoint_agent.php', $SS['admin']);
+$ok($c === 200 && str_contains($body2, '&quot;params&quot;: {}') && !str_contains($body2, '&quot;params&quot;: []'), 'default checks: the admin checks editor still shows an empty params as {} (wire shape, not [])' . ($c === 200 ? '' : " ($c)"));
+$ok(substr_count($body, 'This check declares no thresholds') >= 3, 'default checks: the thresholds part renders one entry per check (the defaults declare no thresholds, so each says so)');
+$ok(!preg_match('/stdClass|Cannot use object|PHP Fatal|Uncaught|AlertingActions/', $logNew), 'default checks: nothing logged by the server while loading the Alerting tab' . ($logNew !== '' ? ': ' . substr(preg_replace('/\s+/', ' ', $logNew), 0, 600) : ''));
+
 // ---- restore what this fragment changed in the shared settings
 $rmm->settings()->update(['checks_json' => json_encode($alrOrigChecks), 'failure_debounce' => (int) $alrOrigSettings['failure_debounce'], 'recovery_debounce' => (int) $alrOrigSettings['recovery_debounce']]);
 $fresh();
