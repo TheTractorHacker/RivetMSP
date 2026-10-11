@@ -122,6 +122,11 @@ if (isset($_POST['edit_user'])) {
         }
     }
 
+    // Before the edit: the client access this user has now, for the audit trail's access change event below.
+    $audit_old_clients = [];
+    $audit_res = mysqli_query($mysqli, "SELECT client_id FROM user_client_permissions WHERE user_id = $user_id ORDER BY client_id");
+    while ($audit_res && ($audit_row = mysqli_fetch_row($audit_res))) { $audit_old_clients[] = intval($audit_row[0]); }
+
     // Update Client Access
     mysqli_query($mysqli,"DELETE FROM user_client_permissions WHERE user_id = $user_id");
     if (isset($_POST['clients'])) {
@@ -199,6 +204,23 @@ if (isset($_POST['edit_user'])) {
     mysqli_query($mysqli, "UPDATE user_settings SET user_config_force_mfa = $force_mfa WHERE user_id = $user_id");
 
     logAction("User", "Edit", "$session_name edited user $name", 0, $user_id);
+
+    // Role and client-access changes get their own audit events (who, from what, to what). Recorded while audit recording is on.
+    try {
+        require_once __DIR__ . '/../../includes/event_bus.php';
+        if ($previous_role_id !== intval($role)) {
+            rivetAudit('user.role_changed', intval($session_user_id) ?: null, 'user', $user_id, 'update', "Role of $name changed",
+                ['user_id' => $user_id, 'role_before' => $previous_role_id, 'role_after' => intval($role), 'role_before_name' => getFieldById('user_roles', $previous_role_id, 'role_name', 'raw'), 'role_after_name' => getFieldById('user_roles', intval($role), 'role_name', 'raw')]);
+        }
+        $audit_new_clients = array_values(array_unique(array_map('intval', $_POST['clients'] ?? [])));
+        sort($audit_new_clients);
+        if ($audit_old_clients !== $audit_new_clients) {
+            rivetAudit('user.client_access_changed', intval($session_user_id) ?: null, 'user', $user_id, 'update', "Client access of $name changed",
+                ['user_id' => $user_id, 'before' => $audit_old_clients, 'after' => $audit_new_clients, 'note' => 'empty = every client']);
+        }
+    } catch (\Throwable $e) {
+        // auditing never breaks the action
+    }
 
     flash_alert("User <strong>$name</strong> updated" . $extended_alert_description);
 

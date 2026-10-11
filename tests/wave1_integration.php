@@ -21,9 +21,9 @@ $read = fn(string $f): string => (string) file_get_contents("$root/$f");
 $upd = $read('admin/database_updates.php');
 preg_match_all('/if \(\$rivetit_db_version\(\) == \'(2\.6\.\d+)\'\) \{/', $upd, $gates);
 $gates = $gates[1];
-$ok(array_slice($gates, -8) === ['2.6.76', '2.6.77', '2.6.78', '2.6.79', '2.6.80', '2.6.81', '2.6.82', '2.6.83'], 'the last steps run from 2.6.76, 77, 78, 79, 80, 81, 82 and 83 (to 2.6.84), in that order (' . implode(', ', array_slice($gates, -8)) . ')');
+$ok(array_slice($gates, -11) === ['2.6.76', '2.6.77', '2.6.78', '2.6.79', '2.6.80', '2.6.81', '2.6.82', '2.6.83', '2.6.84', '2.6.85'] || array_slice($gates, -10) === ['2.6.76', '2.6.77', '2.6.78', '2.6.79', '2.6.80', '2.6.81', '2.6.82', '2.6.83', '2.6.84', '2.6.85'], 'the steps run from 2.6.76 to 2.6.85 in order (to 2.6.86) (' . implode(', ', array_slice($gates, -10)) . ')');
 $ok(count($gates) === count(array_unique($gates)), 'no step is gated twice');
-foreach (['2.6.77' => '2.6.78', '2.6.78' => '2.6.79', '2.6.79' => '2.6.80', '2.6.80' => '2.6.81', '2.6.81' => '2.6.82', '2.6.82' => '2.6.83', '2.6.83' => '2.6.84'] as $gate => $next) {
+foreach (['2.6.77' => '2.6.78', '2.6.78' => '2.6.79', '2.6.79' => '2.6.80', '2.6.80' => '2.6.81', '2.6.81' => '2.6.82', '2.6.82' => '2.6.83', '2.6.83' => '2.6.84', '2.6.84' => '2.6.85', '2.6.85' => '2.6.86'] as $gate => $next) {
     $a = strpos($upd, "if (\$rivetit_db_version() == '$gate') {");
     $b = strpos($upd, "if (\$rivetit_db_version() == '$next') {");
     $end = $b === false ? strlen($upd) : $b;

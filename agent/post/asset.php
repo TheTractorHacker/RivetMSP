@@ -23,6 +23,7 @@ if (isset($_POST['add_asset'])) {
     mysqli_query($mysqli,"INSERT INTO assets SET asset_name = '$name', asset_tag = '$asset_tag', asset_description = '$description', asset_type = '$type', asset_make = '$make', asset_model = '$model', asset_serial = '$serial', asset_os = '$os', asset_uri = '$uri', asset_uri_2 = '$uri_2', asset_uri_client = '$uri_client', asset_location_id = $location, asset_vendor_id = $vendor, asset_contact_id = $contact, asset_status = '$status', asset_purchase_reference = '$purchase_reference', asset_purchase_date = $purchase_date, asset_warranty_expire = $warranty_expire, asset_install_date = $install_date, asset_physical_location = '$physical_location', asset_notes = '$notes', asset_favorite = $favorite, asset_client_id = $client_id");
 
     $asset_id = mysqli_insert_id($mysqli);
+    (new \RivetMSP\Links\VendorRoles($mysqli))->mirrorPrimary('asset', intval($asset_id));
 
     // Add Tags
     if (isset($_POST['tags'])) {
@@ -96,7 +97,9 @@ if (isset($_POST['edit_asset'])) {
 
     enforceClientAccess();
 
+    $old_primary_vendor = intval(getFieldById('assets', $asset_id, 'asset_vendor_id'));
     mysqli_query($mysqli,"UPDATE assets SET asset_name = '$name', asset_tag = '$asset_tag', asset_description = '$description', asset_type = '$type', asset_make = '$make', asset_model = '$model', asset_serial = '$serial', asset_os = '$os', asset_uri = '$uri', asset_uri_2 = '$uri_2', asset_uri_client = '$uri_client', asset_location_id = $location, asset_vendor_id = $vendor, asset_contact_id = $contact, asset_status = '$status', asset_purchase_reference = '$purchase_reference', asset_purchase_date = $purchase_date, asset_warranty_expire = $warranty_expire, asset_install_date = $install_date, asset_physical_location = '$physical_location', asset_notes = '$notes', asset_favorite = $favorite WHERE asset_id = $asset_id");
+    (new \RivetMSP\Links\VendorRoles($mysqli))->mirrorPrimary('asset', $asset_id, $old_primary_vendor);
 
     $sql_interfaces = mysqli_query($mysqli, "SELECT * FROM asset_interfaces WHERE interface_asset_id = $asset_id AND interface_primary = 1");
 

@@ -320,6 +320,7 @@ switch ($resource) {
         break;
     case 'contacts':      require __DIR__ . '/contacts.php';      break;
     case 'assets':        require __DIR__ . '/assets.php';        break;
+    case 'relationships': require __DIR__ . '/relationships.php'; break;
     case 'credentials':
         if ($legacy_api_key_auth) { api_error(403, 'Credentials endpoint requires a user API token'); }
         require __DIR__ . '/credentials.php'; break;

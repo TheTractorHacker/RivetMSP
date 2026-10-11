@@ -91,6 +91,12 @@ ob_start();
         </div>
     </div>
 
+    <?php
+    // Relationships card: the vendor lists open this pop-up, so the Link item form is inline here (agent/vendor_details.php shows the same card).
+    $rel_type = 'vendor'; $rel_id = $vendor_id; $rel_in_modal = true;
+    require __DIR__ . '/../../../includes/relationships_card.php';
+    ?>
+
 </div>
 
 <?php

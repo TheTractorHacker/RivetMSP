@@ -1795,6 +1795,8 @@ if (isset($_GET['asset_id'])) {
 
         </div><!-- /#asset-details-content -->
 
+        <?php $rel_type = 'asset'; $rel_id = $asset_id; require __DIR__ . '/../includes/relationships_card.php'; ?>
+
         <?php
 
         require_once "modals/share_modal.php";

@@ -327,6 +327,9 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                             data-modal-url="modals/domain/domain_edit.php?<?= $client_url ?>&id=<?= $domain_id ?>">
                                             <i class="fas fa-fw fa-edit me-2"></i>Edit
                                         </a>
+                                        <a class="dropdown-item ajax-modal" href="#" data-modal-url="modals/relationships/relationships.php?type=domain&id=<?= $domain_id ?>">
+                                            <i class="fas fa-fw fa-project-diagram me-2"></i>Relationships
+                                        </a>
                                         <?php if ($session_user_role == 3) { ?>
                                             <?php if ($domain_archived_at) { ?>
                                             <div class="dropdown-divider"></div>
