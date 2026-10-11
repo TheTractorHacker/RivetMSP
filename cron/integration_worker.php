@@ -12,9 +12,18 @@ require_once "../includes/inc_set_timezone.php";
 require_once "../functions.php";
 require_once "../vendor/autoload.php";
 
-// One worker at a time (claim() is safe for concurrent workers, but a slow run should not stack up).
+// One worker by default (the guard keeps a slow run from stacking up). RivetCore 1.0.0-rc.11 made claim() safe for any number of concurrent workers (SKIP LOCKED on MariaDB 10.6+ and
+// MySQL 8.0.1+, a conditional-UPDATE lease elsewhere; docs/RMM_MODULE.md "Several queue workers"), so a busy install may run N copies, each with its own number:
+//   * * * * * php cron/integration_worker.php --worker=2      (worker 1 is the one without the option)
+// The recommended N is shown in the Performance and capacity panel of Endpoints > Agent Fleet.
 require_once "../includes/redis_guards.php";
-rivetCronGuard('integration_worker', 300);
+$worker_no = 1;
+foreach (array_slice($argv ?? [], 1) as $arg) {
+    if (preg_match('/^--worker=([0-9]{1,2})$/', (string) $arg, $wm) === 1 && (int) $wm[1] >= 1 && (int) $wm[1] <= 32) {
+        $worker_no = (int) $wm[1];
+    }
+}
+rivetCronGuard($worker_no === 1 ? 'integration_worker' : 'integration_worker_' . $worker_no, 300);
 
 // Runs every queued job: webhook deliveries (signed, retried with backoff), event-rule actions, and anything else registered in
 // includes/event_bus.php.

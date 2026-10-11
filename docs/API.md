@@ -407,6 +407,8 @@ Only when the RMM module is switched on (Administration > Settings > Endpoint ag
 | POST | `/agent_checkin` | Device-facing (per-device credential). |
 | GET, POST | `/agent_jobs` | Device-facing: signed job offer (long poll) and job report. |
 | GET | `/agent_update` | Device-facing: hosted agent update download. |
+| GET, POST | `/agent_transfer` | Device-facing (RivetCore rc.11, file transfer switch): raw chunks of at most 1 MiB with the one-time `X-Transfer-Token` header. |
+| POST | `/agent_logs` | Device-facing (RivetCore rc.11, log collection switch): batches of at most 200 events and 256 KiB. |
 | GET | `/endpoint_devices`, `/endpoint_devices/{id}`, `/endpoint_devices/{id}/jobs` | User token only (the legacy `X-Api-Key` is refused). Role `module_rmm`; devices outside the caller's clients are a 404. |
 | POST | `/endpoint_devices/{id}/jobs`, `/endpoint_devices/{id}/jobs/{job_id}/cancel`, `/endpoint_devices/{id}/remote` | Needs `module_rmm_scripts` / `module_rmm_remote_connect`; a reboot needs `"confirm": true`. |
 

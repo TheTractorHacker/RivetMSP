@@ -83,6 +83,25 @@ foreach (array_merge(secStragglerColumns(), secDeferredColumns()) as $table => [
 $ok($uncovered === [], 'every secStragglerColumns()/secDeferredColumns() column is in the rewrap registry' . ($uncovered ? ': ' . implode(', ', $uncovered) : ''));
 $ok(in_array('rmm_job_extra.secret_params_enc', $regNames, true) && in_array('rmm_custom_field_values.value_enc', $regNames, true) && in_array('endpoint_agent_settings.signing_private_key_enc', $regNames, true) && in_array('endpoint_agent_settings.mesh_login_key_enc', $regNames, true), 'the RMM module columns (signing key, Mesh login key, job secrets, secret custom fields) are in the registry');
 
+$ok(in_array('settings.config_rmm_extstore_write_url', $regNames, true) && in_array('settings.config_rmm_extstore_read_url', $regNames, true) && in_array('settings.config_rmm_extstore_token', $regNames, true), 'the RMM external metric store settings (rc.11) are in the registry');
+// Schema-wide: a column that looks like it holds an encryptSetting() value (name ends in _enc, or is a named secret/token/key column of the settings row or an integrations table) must be in
+// the registry or in the short list of columns that use another envelope on purpose. A NEW secret column added to the schema without a registry line fails here, and a rotation would
+// have silently skipped it.
+$otherEnvelope = [   // table.column => why it is not in the registry
+    'credential_versions.version_previous_username_enc' => 'credential vault (VaultV3)', 'credential_versions.version_previous_password_enc' => 'credential vault (VaultV3)',
+    'settings.config_backup_s3_access_key' => 'an access key ID is an identifier, not a secret (the secret key is registered)',
+    'users.user_passkey_enc_ciphertext' => 'passkey wrap, derived from the user\'s password (not encryptSetting)', 'users.user_passkey_enc_iv' => 'passkey wrap IV (not a secret value)',
+];
+$scan = $rows("SELECT TABLE_NAME t, COLUMN_NAME c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND DATA_TYPE IN ('varchar','text','mediumtext','longtext','tinytext','char')
+    AND (COLUMN_NAME LIKE '%\\_enc' OR (TABLE_NAME = 'settings' AND (COLUMN_NAME LIKE 'config\\_%secret' OR COLUMN_NAME LIKE 'config\\_%password' OR COLUMN_NAME LIKE 'config\\_%\\_token' OR COLUMN_NAME LIKE 'config\\_%\\_key' OR COLUMN_NAME LIKE 'config\\_%passphrase' OR COLUMN_NAME LIKE 'config\\_%\\_pass')))");
+$missing = [];
+foreach ($scan as $r) {
+    $n = $r['t'] . '.' . $r['c'];
+    if (!in_array($n, $regNames, true) && !isset($otherEnvelope[$n])) { $missing[] = $n; }
+}
+$ok($missing === [], 'no secret-looking column is missing from the rewrap registry (schema scan of *_enc and settings secret/password/token/key columns)' . ($missing ? ': ' . implode(', ', $missing) : ''));
+$ok(array_filter($scan, fn ($r) => $r['t'] . '.' . $r['c'] === 'settings.config_rmm_extstore_token') !== [], 'the schema scan sees the external store token column, so removing it from the registry would fail the check above');
+
 // ------------------------------------------------------------------ key file, stage on
 KeyAdmin::generate($kf);
 $use($kf);

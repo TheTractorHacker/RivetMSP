@@ -7064,3 +7064,34 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.87'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.87') {
+        // DB 2.6.88: RivetCore 1.0.0-rc.11 Migration0021ScaleStorage + Migration0022RemoteAndLogs (RMM scale S3 to S8, remote tools, log collection): ten new tables
+        // (rmm_metric_daily, rmm_storage_state, rmm_cache, rmm_metric_outbox, rmm_token_buckets; endpoint_agent_remote_settings, endpoint_agent_transfers,
+        // endpoint_agent_log_events, endpoint_agent_log_state, endpoint_agent_log_rules), all CREATE TABLE IF NOT EXISTS, nothing existing altered. Core owns the DDL, so
+        // this step runs the Core runner (idempotent: it skips applied ids). Nothing is switched on: the remote, filetransfer and logs sub-switches, partitioning, the
+        // cache's herd controls and the external metric store are all off until an administrator turns them on. Small settings of our own: who may use the remote
+        // tools (an administrator always; a role with RMM scripts level 3 and remote access only while config_rmm_remote_manage_lvl3 = 1, off by default) and the external
+        // metric store (config_rmm_extstore_*, off; the three values are sealed with encryptSetting(), so TEXT). The transfer folder (backups/endpoint-transfer, inside the
+        // denied backups/ area) is created here when this process owns backups/ (so the web user can use it); otherwise the first transfer creates it, or Administration >
+        // Endpoint agent shows a button. Skipped (version NOT advanced, so it retries) until a package that ships both migrations is installed. Run it before, or right
+        // after, the new code is live.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Rmm\Migration\Migration0022RemoteAndLogs::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "ALTER TABLE `settings`
+                ADD COLUMN IF NOT EXISTS `config_rmm_remote_manage_lvl3` tinyint(1) NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS `config_rmm_extstore_enabled` tinyint(1) NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS `config_rmm_extstore_write_url` text DEFAULT NULL,
+                ADD COLUMN IF NOT EXISTS `config_rmm_extstore_read_url` text DEFAULT NULL,
+                ADD COLUMN IF NOT EXISTS `config_rmm_extstore_token` text DEFAULT NULL");
+            $rivetmsp_transfer_dir = dirname(__DIR__) . '/backups/endpoint-transfer';
+            if (!is_dir($rivetmsp_transfer_dir) && is_dir(dirname($rivetmsp_transfer_dir)) && function_exists('posix_geteuid') && @fileowner(dirname($rivetmsp_transfer_dir)) === posix_geteuid()) {
+                @mkdir($rivetmsp_transfer_dir, 0750);
+            }
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.88'");
+        }
+    }

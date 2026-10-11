@@ -66,4 +66,4 @@ The database columns are added by migration 2.6.74 (`config_redis_username`, `co
 * * * * * www-data /usr/bin/php <app>/cron/integration_worker.php >> /var/log/itflow-cron.log 2>&1
 ```
 
-`cron/cron.php` also makes a bounded pass every five minutes, so jobs are never lost without it, only slower to retry. A Redis lock (`cron:integration_worker`) stops two copies overlapping.
+`cron/cron.php` also makes a bounded pass every five minutes, so jobs are never lost without it, only slower to retry. A Redis lock (`cron:integration_worker`) stops two copies overlapping. Since RivetCore 1.0.0-rc.11 job claiming is safe for any number of workers (`SKIP LOCKED`), so a busy install can add `--worker=2` ... `--worker=N` cron lines (each number has its own lock; see docs/RMM_MODULE.md section 5 for how to read the recommended N from the Performance and capacity panel). With Redis available the RMM read cache and per-client token buckets also live in it.

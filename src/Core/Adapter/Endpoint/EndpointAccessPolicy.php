@@ -9,7 +9,7 @@ use RivetCore\Database\DatabaseInterface;
 use RivetCore\Rmm\Authz\RmmAbility;
 
 /**
- * Maps the eleven rmm.* abilities onto RivetMSP's role model: the permission level of a role for a module (user_role_permissions joined to
+ * Maps the twelve rmm.* abilities onto RivetMSP's role model: the permission level of a role for a module (user_role_permissions joined to
  * modules, the lookup lookupUserPermission() does for the signed-in user, here keyed by user id) and the administrator flag
  * (user_roles.role_is_admin). Same matrix as RivetIT minus module-only logins, which RivetMSP does not have:
  *
@@ -24,6 +24,11 @@ use RivetCore\Rmm\Authz\RmmAbility;
  *                                            of an approval is a second person, so it is not handed to everyone who may run scripts).
  *   rmm.alert.manage (RMM Phase 3)           role_is_admin, or module_rmm >= 2 (write): acknowledge/resolve alerts, maintenance windows of one client or
  *                                            device, a device's parent. A role with module_rmm 1 keeps view only.
+ *   rmm.remote.manage (RMM Phase 6)          role_is_admin; plus a role with module_rmm_scripts >= 3 AND module_rmm_remote_connect >= 1 ONLY while the administrator has switched on
+ *                                            "RMM level 3 users with remote access may use the remote tools" (settings.config_rmm_remote_manage_lvl3, off by default):
+ *                                            the service and process managers, downloading a file from a device and the Mesh terminal and files views. A stronger
+ *                                            grant than rmm.remote.launch, so it is not handed to everyone who may open a desktop session. Sending a file TO a device
+ *                                            and the remote-tools settings stay rmm.admin (administrators only).
  *
  * An administrator holds every module at full access (as lookupUserPermission() does). Only active agents (staff, users.user_type 1) hold
  * anything: a client-portal contact, a disabled or an archived account is denied every ability, whatever role row it carries. The client
@@ -78,9 +83,18 @@ final class EndpointAccessPolicy implements AccessPolicyInterface
             RmmAbility::JOB_RUN_SAVED, RmmAbility::JOB_REBOOT => $this->level($roleId, 'module_rmm_scripts') >= 2,
             RmmAbility::REMOTE_LAUNCH => $this->level($roleId, 'module_rmm_remote_connect') >= 1,
             RmmAbility::ALERT_MANAGE => $this->level($roleId, 'module_rmm') >= 2,
+            RmmAbility::REMOTE_MANAGE => $this->level($roleId, 'module_rmm_scripts') >= 3 && $this->level($roleId, 'module_rmm_remote_connect') >= 1 && $this->level3MayManageRemote(),
             RmmAbility::JOB_APPROVE => $this->level($roleId, 'module_rmm_scripts') >= 3 && $this->level3MayApprove(),
             default => false,
         };
+    }
+
+    /** The administrator's switch for the remote tools (Administration > Endpoint agent > Remote tools). A missing column (code newer than the schema) means off. */
+    private function level3MayManageRemote(): bool
+    {
+        $r = $this->database->fetchOne('SELECT config_rmm_remote_manage_lvl3 AS v FROM settings WHERE company_id = 1');
+
+        return $r !== null && (int) $r['v'] === 1;
     }
 
     /** The administrator's switch for level 3 script users (Administration > Endpoint agent > Approvals). A missing column (code newer than the schema) means off. */

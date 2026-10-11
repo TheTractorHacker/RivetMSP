@@ -143,7 +143,7 @@ $drill = fn (array $extra = [], string $pass = '') => sec_sh($env . ' DRILL_LOG_
     . ' --app-dir=' . escapeshellarg($root) . ' --passphrase-file=' . escapeshellarg($pass ?: "$tmp/pass") . ' --dest=' . escapeshellarg("$tmp/enc") . ' ' . implode(' ', $extra));
 $q("DELETE FROM restore_drill_log");
 [$c, $out] = $drill();
-if ($c !== 0) { echo substr($out, -2500) . "\n"; }
+if ($c !== 0 || !str_contains($out, 'restore_drill: pass')) { echo substr($out, -2500) . "\n"; }
 $ok($c === 0 && str_contains($out, 'restore_drill: pass'), 'deploy/restore_drill.sh decrypts the 600000-iteration archive and the drill passes');
 $ok(preg_match('/\bPASS\s+Settings key for this backup\s+the supplied settings-key file matches this archive/', $out) === 1, 'it picked up the .settings-key file next to the archive and matched it to the manifest fingerprint');
 $row = $rows("SELECT * FROM restore_drill_log ORDER BY drill_id DESC LIMIT 1")[0] ?? [];

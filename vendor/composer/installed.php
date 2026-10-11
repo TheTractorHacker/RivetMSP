@@ -1,9 +1,9 @@
 <?php return array(
     'root' => array(
         'name' => '__root__',
-        'pretty_version' => 'v26.10.10',
-        'version' => '26.10.10.0',
-        'reference' => 'ce17a38838aae2a6b74a0c55eab79b57feca009c',
+        'pretty_version' => 'v26.10.14',
+        'version' => '26.10.14.0',
+        'reference' => '252d31be4693ed08759f329b2bfcd53169e7f2ff',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -11,9 +11,9 @@
     ),
     'versions' => array(
         '__root__' => array(
-            'pretty_version' => 'v26.10.10',
-            'version' => '26.10.10.0',
-            'reference' => 'ce17a38838aae2a6b74a0c55eab79b57feca009c',
+            'pretty_version' => 'v26.10.14',
+            'version' => '26.10.14.0',
+            'reference' => '252d31be4693ed08759f329b2bfcd53169e7f2ff',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
@@ -146,9 +146,9 @@
             'dev_requirement' => false,
         ),
         'rivet/rivet-core' => array(
-            'pretty_version' => 'v1.0.0-rc.10',
-            'version' => '1.0.0.0-RC10',
-            'reference' => '4a7869c8b156d8ed2a6d84c68f205fac73a8e393',
+            'pretty_version' => 'v1.0.0-rc.11',
+            'version' => '1.0.0.0-RC11',
+            'reference' => 'febf9881f62e596a13d8254301eae898918b5a8b',
             'type' => 'library',
             'install_path' => __DIR__ . '/../rivet/rivet-core',
             'aliases' => array(),

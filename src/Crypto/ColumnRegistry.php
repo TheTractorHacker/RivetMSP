@@ -47,6 +47,8 @@ final class ColumnRegistry
             'config_mail_oauth_client_secret', 'config_mail_oauth_refresh_token', 'config_mail_oauth_access_token',
             'config_outlook_cal_client_secret', 'config_imap_password', 'config_backup_s3_secret_key', 'config_backup_passphrase',
             'config_comet_admin_pass', 'config_comet_totp_secret', 'config_comet_webhook_secret', 'config_redis_password',
+            // The RMM external metric store (RivetCore 1.0.0-rc.11, off by default): the endpoint URLs and the bearer token, sealed with encryptSetting().
+            'config_rmm_extstore_write_url', 'config_rmm_extstore_read_url', 'config_rmm_extstore_token',
         ] as $c) {
             $specs[] = new ColumnSpec('settings', 'company_id', $c, 'settings', $wrap('settings', $c));
         }

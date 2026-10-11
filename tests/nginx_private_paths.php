@@ -11,7 +11,13 @@ foreach (['deploy/templates/itflow-locations.conf', 'docker/nginx.conf'] as $rel
     $ok(strpos($s, 'location ~ ^/(tests|vendor|src|includes|odoo_addons|mcp_server|setup/setup_functions\\.php) {') !== false, "$rel denies tests/vendor/src/includes");
     $ok(strpos($s, 'location ~* ^/[^/]+\\.(md|lock|sql|yml|yaml)$ {') !== false, "$rel denies *.md/lock/sql/yml at root");
     $ok(strpos($s, 'location = /composer.json') !== false, "$rel denies composer.json");
+    // RivetCore 1.0.0-rc.11 stores file transfers from devices in backups/endpoint-transfer (includes/rmm_bootstrap.php, EA_TRANSFER_DIR): they are served by nobody but the technician download
+    $ok(preg_match('/location \^~ \/backups\/ \{\s*deny all;/', $s) === 1, "$rel denies /backups/ (and with it backups/endpoint-transfer, backups/endpoint-agent, backups/rmm-state)");
 }
+$boot = file_get_contents(__DIR__ . '/../includes/rmm_bootstrap.php');
+$ok(strpos($boot, "\$root . '/backups/endpoint-transfer'") !== false, 'the default transfer folder of the RMM module is inside the denied backups/ area');
+$mig = file_get_contents(__DIR__ . '/../admin/database_updates.php');
+$ok(strpos($mig, "dirname(__DIR__) . '/backups/endpoint-transfer'") !== false, 'the DB update creates the same folder (inside backups/)');
 $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(__DIR__, FilesystemIterator::SKIP_DOTS));
 $n = 0;
 foreach ($it as $f) {

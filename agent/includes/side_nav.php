@@ -20,7 +20,9 @@ $section_pages = [
     'finance'       => ['payments.php', 'vendors.php', 'expenses.php', 'recurring_expenses.php', 'accounts.php', 'transfers.php', 'trips.php'],
     'endpoint'      => ['rmm_dashboard.php', 'rmm_fleet.php', 'rmm_assets.php', 'rmm_asset.php', 'rmm_alerts.php', 'rmm_scripts.php', 'rmm_checks.php', 'network.php', 'firewalls.php',
         // RMM Phase 2 and 3 pages (shown only while the module and the sub-switch are on)
-        'rmm_policies.php', 'rmm_script_library.php', 'rmm_schedules.php', 'rmm_approvals.php', 'rmm_fields.php', 'rmm_agent_alerts.php', 'rmm_maintenance.php', 'rmm_escalations.php'],
+        'rmm_policies.php', 'rmm_script_library.php', 'rmm_schedules.php', 'rmm_approvals.php', 'rmm_fields.php', 'rmm_agent_alerts.php', 'rmm_maintenance.php', 'rmm_escalations.php',
+        // RMM Phase 8 (sub-switch `logs`)
+        'rmm_logs.php', 'rmm_log_rules.php'],
     'backups'       => ['backups.php'],
 ];
 $section_open = [];
@@ -348,7 +350,7 @@ foreach ($section_pages as $key => $pages) {
                             <span class="text-truncate">Add device</span>
                         </a>
                         <?php } ?>
-                        <?php foreach (rivetRmmAutoNav() as $nav_auto) { // policies / scripts / alerting sub-switches (state file; no query) ?>
+                        <?php foreach (rivetRmmAutoNav((int) $session_user_id) as $nav_auto) { // policies / scripts / alerting sub-switches (state file; no query) ?>
                         <a href="<?php echo nullable_htmlentities($nav_auto['href']); ?>" class="dropdown-item<?php if (in_array($current_page, $nav_auto['pages'], true)) { echo ' active'; } ?>">
                             <span class="dropdown-item-icon"><i class="fas <?php echo nullable_htmlentities($nav_auto['icon']); ?>"></i></span>
                             <span class="text-truncate"><?php echo nullable_htmlentities($nav_auto['label']); ?></span>

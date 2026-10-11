@@ -615,12 +615,12 @@ $ok(str_contains($offNet, 'rmm-dim'), 'network tile: dimmed with the rest while 
 // ---- the page: tabs, deep link, no-JS server-rendered content
 [$c, $body] = $get('admin');
 $ok(substr_count($body, 'role="tab"') === 4 && preg_match('/id="rmm-tab-software"[^>]*aria-controls="rmm-pane-software"/', $body) === 1, 'asset page: four tabs (Overview, Inventory, Software, Jobs), the Software tab is wired to its pane');
-$ok(str_contains(file_get_contents($root . '/js/rmm_panel.js'), 'overview|inventory|software|jobs|policy|alerting'), 'the tab deep link handler knows #rmm-software');
+$ok(str_contains(file_get_contents($root . '/js/rmm_panel.js'), 'overview|inventory|software|jobs|policy|alerting|remote|logs'), 'the tab deep link handler knows #rmm-software');
 $ok(str_contains($body, 'Trend (') && str_contains($body, 'id="rmm-net"'), 'asset page: trend column and the network card');
 
 // ---- events: catalog entries (RivetMSP's picker reads RivetCore's EventCatalog) and the adapter
 $all = RivetCore\Rmm\RmmEvent::all();
-$ok(count($all) === 19, 'RivetCore defines nineteen rmm.* events (nine of Phase 1, ten of Phase 2 and 3)');
+$ok(count($all) === 21 && in_array('rmm.file.transferred', $all, true) && in_array('rmm.log.rule_matched', $all, true), 'RivetCore defines twenty-one rmm.* events (nine of Phase 1, ten of Phase 2 and 3, rmm.file.transferred and rmm.log.rule_matched of Phase 6 and 8)');
 require_once "$root/includes/event_picker.php";
 $cat = json_decode(eventPickerCatalogJson(), true);
 $pickerIds = array_column($cat['events'], 'i');
@@ -699,4 +699,13 @@ rmm_ui_seed_phase23($S);
 foreach (glob(__DIR__ . '/rmm_ui_p23_*.php') ?: [] as $__p23) {
     echo "---- " . basename($__p23) . "\n";
     require $__p23;
+}
+
+// ============================================================ RMM Phase 6 and 8 and the scale settings (RivetCore 1.0.0-rc.11): the sections live in tests/rmm_ui_p68_*.php
+// Same contract as the Phase 2 and 3 fragments above (shared variables, module on, run in file-name order). The remote, filetransfer and logs sub-switches are OFF at the start
+// of each fragment; a fragment switches on what it needs through RemoteActions::updateSettings() and puts it back.
+$rmm->admin()->enable($admin);
+foreach (glob(__DIR__ . '/rmm_ui_p68_*.php') ?: [] as $__p68) {
+    echo "---- " . basename($__p68) . "\n";
+    require $__p68;
 }

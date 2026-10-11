@@ -1637,6 +1637,92 @@ paths:
         '422': {description: "arch or version invalid", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
         '429': {description: "Rate limited", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
         '503': {description: "The stored binary is missing or failed its integrity check", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+  /agent_transfer:
+    get:
+      tags: [Endpoint agent]
+      summary: Read a range of a file the server holds for this device (device credential + one-time transfer token; file transfer switch)
+      description: >
+        Used by the agent while it runs a signed file_put job (RivetCore 1.0.0-rc.11). Needs the device credential AND the transfer's one-time token in the
+        X-Transfer-Token header (never in the URL), only for a transfer that belongs to this device and is unexpired. length is at most 1 MiB. The answer is the raw
+        bytes with X-Transfer-Size and X-Transfer-Sha256. While the file transfer sub-switch is off the answer is 503 feature_disabled; while the module is off 503 module_disabled.
+      security: [{deviceAuth: []}]
+      parameters:
+        - {name: transfer_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: offset, in: query, required: true, schema: {type: integer, minimum: 0}}
+        - {name: length, in: query, required: true, schema: {type: integer, minimum: 1, maximum: 1048576}}
+        - {name: X-Transfer-Token, in: header, required: true, schema: {type: string, pattern: '^[0-9a-f]{64}$'}}
+      responses:
+        '200': {description: The bytes, content: {application/octet-stream: {schema: {type: string, format: binary}}}}
+        '401': {description: "Credential invalid_token, revoked or expired", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '404': {description: "Unknown transfer, another device's transfer, a wrong token or the wrong direction (all the same not_found)", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '416': {description: "The range is outside the file", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '429': {description: "Rate limited (600 per 60 s per device)", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '503': {description: "module_disabled or feature_disabled", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+    post:
+      tags: [Endpoint agent]
+      summary: Send one chunk of a file to the server (device credential + one-time transfer token; file transfer switch)
+      description: >
+        Used by the agent while it runs a signed file_get job. Raw body of at most 1 MiB at offset; the final chunk carries X-Transfer-Last 1 and X-Transfer-Sha256 of the
+        whole file, which the server compares with the SHA-256 of what it stored before it keeps the file (mismatch: 422 checksum_mismatch and the bytes are deleted).
+        An offset gap is 409 conflict with received. The running total must stay within the transfer's size cap (413).
+      security: [{deviceAuth: []}]
+      parameters:
+        - {name: transfer_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: offset, in: query, required: true, schema: {type: integer, minimum: 0}}
+        - {name: X-Transfer-Token, in: header, required: true, schema: {type: string, pattern: '^[0-9a-f]{64}$'}}
+        - {name: X-Transfer-Last, in: header, required: false, schema: {type: string, enum: ['1']}}
+        - {name: X-Transfer-Sha256, in: header, required: false, schema: {type: string, pattern: '^[0-9a-f]{64}$'}}
+      requestBody:
+        required: true
+        content: {application/octet-stream: {schema: {type: string, format: binary}}}
+      responses:
+        '200': {description: Stored, content: {application/json: {schema: {type: object, properties: {ok: {type: boolean}, received: {type: integer}, complete: {type: boolean}}}}}}
+        '401': {description: "Credential invalid_token, revoked or expired", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '404': {description: "Unknown transfer, another device's transfer, a wrong token or the wrong direction", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '409': {description: "conflict (the body carries received)", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '413': {description: "Over the transfer's size cap", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '422': {description: "checksum_mismatch or invalid", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '429': {description: "Rate limited (600 per 60 s per device)", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '503': {description: "module_disabled or feature_disabled", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+  /agent_logs:
+    post:
+      tags: [Endpoint agent]
+      summary: Ship a batch of collected log entries (device credential; log collection switch)
+      description: >
+        Sent only after a check-in response offered logs:collect (the agent announced that capability). At most 200 events and 262144 bytes per request; the server drops
+        what it cannot understand or what exceeds the device's per-minute budget, the device's row cap or the fleet cap and says so in dropped. An event stored before is counted in
+        duplicates, never stored twice, so resending a batch whose answer was lost is safe. Under load shedding (level 1 and up) the answer is 503 unavailable with a jittered Retry-After.
+        At most 30 per 60 s per device.
+      security: [{deviceAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  maxItems: 200
+                  items:
+                    type: object
+                    required: [ts, level, message]
+                    properties:
+                      ts: {type: string, format: date-time}
+                      level: {type: string, enum: [critical, error, warning, info, debug, verbose]}
+                      source: {type: string, maxLength: 100}
+                      event_id: {type: [integer, 'null']}
+                      message: {type: string, description: "Truncated to 1024 characters; credential-shaped text is redacted before it is stored"}
+                dropped: {type: integer, minimum: 0}
+                config_version: {type: string}
+      responses:
+        '200': {description: Processed, content: {application/json: {schema: {type: object, properties: {ok: {type: boolean}, accepted: {type: integer}, dropped: {type: integer}, duplicates: {type: integer}}}}}}
+        '401': {description: "Credential invalid_token, revoked or expired", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '413': {description: "Over 256 KiB", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '422': {description: "invalid", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '429': {description: "Rate limited", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
+        '503': {description: "module_disabled, feature_disabled or unavailable (load shedding)", content: {application/json: {schema: {$ref: '#/components/schemas/AgentError'}}}}
   /endpoint_devices:
     get:
       tags: [Endpoint agent]
