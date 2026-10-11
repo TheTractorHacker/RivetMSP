@@ -4,6 +4,45 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.12] RivetMSP — platform wave 2: relationships, search, inventory sync and a tamper-evident audit trail
+
+Ports RivetIT's wave 2 (RivetIT 26.10.33; gap analysis items 13, 14, 15 and 17; item 18, the Intune primary user, does not apply because RivetMSP has no Intune integration). **DB 2.6.85**: one idempotent step gated on 2.6.84 (`db.sql` carries it, a fresh import and a migrated install have identical schemas, checked column by column). 2.6.84 belongs to the RMM Phase 2/3 branch; a branch that does not carry it has a no-op 2.6.84 stub so the chain stays linear. Take a dump first. Nothing is switched on that was off: stale-asset auto-retire is off by default, the document reminder and the audit hash chain are on by default and only add rows or columns.
+
+### Relationships (item 13)
+
+- **Entity links.** A generic `entity_links` table (`link_id`, `client_id`, `src_type`/`src_id`, `dst_type`/`dst_id`, `link_type` depends_on / runs_on / supported_by / documented_by / related, `note`, `created_by`, `created_at`; unique on the five identity columns, indexed on the destination) and a `RivetMSP\Links\LinkService` over it. Thirteen record types: asset, software, vendor, document, KB article, service, network, domain, certificate, credential, contact, location, ticket.
+- **Rules (by client).** Both ends must belong to the same client unless one is kept in no client (a global vendor or KB article, client 0); creating a link needs change access to the source record's module and view access to the target's; unlinking needs change access to either end. A **client-restricted user does not reach client 0 records** here, matching RivetMSP's vendor and KB lists (which join clients) and `enforceClientAccess()`; administrators and users with no client restriction do. An API key limited to one client reaches that client only. Every create and delete writes an audit event (`entity_link.create` / `entity_link.delete`).
+- **Relationships card** (`includes/relationships_card.php`) on the asset, vendor, document, KB article and contact pages, and in a pop-up (row action "Relationships") for software, services, networks, domains, certificates, credentials, locations and the vendor details pop-up (RivetMSP has list pages, not detail pages, for domains and certificates). It shows the record's links, **Referenced by** (reverse lookups) and **Impact: what depends on this** (transitive over depends on / runs on / supported by, up to three levels, cycle safe, capped at 100 records; records the role cannot see are neither listed nor walked through), with an unlink action, and a shared **Link item** pop-up (type picker, live search scoped to the source record's client, relationship type, note). **KB articles link to assets** (and anything else) the same way.
+- **Nothing is copied.** The older link tables (`asset_documents`, `software_assets`, `service_assets`, `service_*`, `contact_*`, `vendor_*`, `ticket_assets`, asset location / contact / interface network, certificate domain, credential asset / software / vendor / contact) are read at query time and shown on the card as read-only "from ..." rows.
+- **Several vendors per asset and software title, each with a role** (support, reseller, manufacturer): `asset_vendors` / `software_vendors`. `asset_vendor_id` / `software_vendor_id` stay the primary and are mirrored as role support; the database step back-fills the mirror from the existing primaries. Add or remove vendors on the card.
+- **API:** `GET/POST /api/v1/relationships`, `DELETE /api/v1/relationships/{id}` (flat per-resource routing like every other resource; documented in `openapi.yaml`).
+
+### Search and document review (item 14)
+
+- Global search (page, live dropdown and `/api/v1/search`) now covers **software, networks and services**, shows **vendor roles** (how many assets and software titles each vendor supports, resells or makes; searching a role word such as "reseller" finds those vendors) and a **Linked records** section ("Runbook documents Asset srv-core"). The new sections are limited to the role's modules and clients.
+- **Document review date** (`documents.document_review_at`, set when adding or editing a document). On the date the team gets one notification and a `document.review_due` event; changing the date re-arms it. The cron does this once a day (`src/Platform/Nightly.php`).
+
+### Inventory sync (item 15)
+
+- **The asset's own fields are filled from the built-in agent and the vendor RMMs** (Tactical, Level, Action1 and Sophos Central share `RmmAssetMapper`; the agent goes through `EndpointBridge`): make, model, OS, CPU and RAM (new `assets.asset_cpu` / `asset_ram`) and the primary network adapter's IP and MAC. A field is written when it is blank or still holds exactly what the last sync wrote (`asset_sync_state`), so a hardware change flows through and **a human edit is never overwritten**. Unchanged reports cost one read.
+- **Per-integration client mapping** (`integration_client_map`): a saved mapping is used before the exact-name match. A client or group name that matches no client is no longer skipped silently; it waits in a **needs-mapping queue** (Administration > Integrations > RMM) where it is mapped to a client or ignored, and the next sync uses the answer.
+- **Auto-retire of stale RMM-linked assets** (off by default; Administration > Integrations > RMM > Stale assets): assets whose RMM links have been silent for N days are archived with status Retired and listed for review (Restore / Confirm); a device that reports in again is restored automatically.
+
+### Audit (item 17)
+
+- **Hash chain** on `audit_events` (`prev_hash`, `row_hash`; HMAC keyed from the settings key when the install has one), kept in the edition (`RivetMSP\Audit\AuditChain`, `ChainedAudit`) around RivetCore's `AuditService`: `CoreBridge` now hands out the chained service, so every audit writer is sealed as it is written; the cron seals anything else, and the **nightly verify** alerts on an edited, removed or reordered row. Retention of the old end is accepted. Administration > Audit trail shows the last result and has **Verify now**. RivetMSP's audit trail is still the Compliance "audit recording" switch: with it off, nothing is recorded (and nothing is chained).
+- **New events:** role created and **permission changes with before/after** (`role.permissions_changed`), a user's role (`user.role_changed`) and client access (`user.client_access_changed`), API token revoke, backup downloads / saves / deletes, the master key download, the RMM / firewall / UniFi settings pages and **every export** (all mirrored from the activity log), and entity links.
+- **Audit copy:** an optional JSON-lines file and/or syslog copy of every sealed event (Administration > Audit trail; off by default; the path must be outside the application folder).
+
+### Fixes found while porting
+
+- `agent/user/api_token_revoke.php` printed the page shell before its JSON (so the `Content-Type` header failed with "headers already sent" and the response was HTML followed by JSON); it now answers JSON only.
+- `agent/post.php` and `admin/post.php` no longer raise an undefined-index warning for a POST without a Referer.
+
+### Tests
+
+`tests/platform_migration.php` (migration gated on 2.6.84, idempotent, back-fill, fresh import equals migrated schema), `tests/entity_links.php`, `tests/platform_sync.php`, `tests/platform_search.php`, `tests/audit_chain.php` (including the CoreBridge path) and the browser smoke `tests/browser/relationships_smoke.mjs` (seed: `relationships_seed.php`). Not carried over: the Intune cases and the IT event-catalog extension (RivetMSP's picker lists RivetCore's catalog; the three new events appear as "other" ids).
+
 ## [26.10.11] RivetMSP — RMM Phase 1: software inventory, tags, groups, check history and performance history
 
 Adopts RivetCore **1.0.0-rc.9** (RMM Phase 1; `^1.0.0-rc.9`, the lock and the tracked `vendor/` agree). **DB 2.6.83** (one idempotent step gated on 2.6.82 that runs Core migration `0018_rmm_inventory_foundation` through the Core runner: eleven new tables, none of the ten `endpoint_agent_*` tables altered; `db.sql` carries them and a fresh import matches a migrated install). **Nothing is switched on by default.** Run the update before, or right after, the new code is live: until the tables exist a check-in that carries checks answers 500 and the agent retries by itself.

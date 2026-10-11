@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RivetMSP\Core;
 
 use RivetCore\Audit\AuditService;
+use RivetMSP\Audit\ChainedAudit;
 use RivetCore\Automation\AutomationRuleEvaluator;
 use RivetCore\Health\ReadinessChecker;
 use RivetCore\ITSM\ChangeService;
@@ -61,6 +62,7 @@ final class CoreBridge
         self::$database = null;
         self::$settings = null;
         self::$services = [];
+        ChainedAudit::reset();
     }
 
     // ---- audit (core.audit.enabled)
@@ -91,7 +93,7 @@ final class CoreBridge
             return;
         }
         try {
-            (new AuditService(self::database(), new ServerRequestContext(), self::auditListener()))->log(
+            self::chainedAudit()->log(
                 $event,
                 $userId > 0 ? $userId : null,
                 'user',
@@ -108,6 +110,8 @@ final class CoreBridge
     private const AUDITED_TYPES = [
         'Settings', 'User', 'User Account', 'Credential', 'API Key', 'Payment Provider', 'Mailbox',
         'SLA Policy', 'SLA Calendar', 'Role', 'Identity Provider', 'Backup', 'Integration', 'Endpoint Agent',
+        // Platform wave 2: role changes (logged as "User Role"), the integration pages' own settings types and the master key.
+        'User Role', 'RMM Settings', 'Firewall Settings', 'UniFi Settings', 'Master Key',
     ];
 
     /**
@@ -116,12 +120,16 @@ final class CoreBridge
      */
     public static function recordAction(string $logType, string $logAction, string $description, int $userId, int $entityId = 0, int $clientId = 0): void
     {
-        if (!in_array($logType, self::AUDITED_TYPES, true) || !self::enabled('core.audit.enabled')) {
+        // Also backup downloads / saves / deletes (logged under "System") and every export (a CSV or PDF leaving the application).
+        $audited = in_array($logType, self::AUDITED_TYPES, true)
+            || ($logType === 'System' && stripos($logAction, 'Backup') === 0)
+            || strcasecmp($logAction, 'Export') === 0;
+        if (!$audited || !self::enabled('core.audit.enabled')) {
             return;
         }
         $slug = static fn (string $v): string => trim((string) preg_replace('/[^a-z0-9]+/', '_', strtolower($v)), '_');
         try {
-            (new AuditService(self::database(), new ServerRequestContext(), self::auditListener()))->log(
+            self::chainedAudit()->log(
                 $slug($logType) . '.' . $slug($logAction),
                 $userId > 0 ? $userId : null,
                 $slug($logType),
@@ -139,19 +147,25 @@ final class CoreBridge
      * The audit service for recording other events (for example compliance changes), or null while the audit switch is off.
      * $force skips the switch: used to record the change that turns auditing off, which must itself be on the record.
      */
-    public static function audit(bool $force = false): ?AuditService
+    public static function audit(bool $force = false): ?ChainedAudit
     {
         if ($force) {
             try {
                 return class_exists(AuditService::class) && self::connection() instanceof \mysqli
-                    ? new AuditService(self::database(), new ServerRequestContext(), self::auditListener())
+                    ? self::chainedAudit()
                     : null;
             } catch (\Throwable) {
                 return null;
             }
         }
 
-        return self::service('core.audit.enabled', 'audit', static fn () => new AuditService(self::database(), new ServerRequestContext(), self::auditListener()));
+        return self::service('core.audit.enabled', 'audit', static fn () => self::chainedAudit());
+    }
+
+    /** RivetCore's audit service inside the edition's hash-chain wrapper (src/Audit/ChainedAudit.php): every audit writer goes through it. */
+    private static function chainedAudit(): ChainedAudit
+    {
+        return new ChainedAudit(new AuditService(self::database(), new ServerRequestContext(), self::auditListener()), self::connection());
     }
 
     // ---- redis (core.redis.enabled)

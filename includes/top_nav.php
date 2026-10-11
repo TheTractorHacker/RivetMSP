@@ -219,9 +219,13 @@ ob_start();
         quotes:   { label: 'Quotes',   icon: 'fa-file-invoice' },
         invoices: { label: 'Invoices', icon: 'fa-file-invoice-dollar' },
         assets:   { label: 'Assets',   icon: 'fa-desktop' },
+        software: { label: 'Software', icon: 'fa-cube' },
+        networks: { label: 'Networks', icon: 'fa-network-wired' },
+        services: { label: 'Services', icon: 'fa-concierge-bell' },
+        linked: { label: 'Linked records', icon: 'fa-project-diagram' },
         settings: { label: 'Settings', icon: 'fa-cog' }
     };
-    var GROUP_ORDER = ['clients', 'contacts', 'tickets', 'quotes', 'invoices', 'assets', 'settings'];
+    var GROUP_ORDER = ['clients', 'contacts', 'tickets', 'quotes', 'invoices', 'assets', 'software', 'networks', 'services', 'linked', 'settings'];
 
     function closePanel() {
         panel.classList.add('d-none');

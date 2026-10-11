@@ -258,6 +258,8 @@ if (isset($_GET['vendor_id'])) {
             </div>
         </div>
 
+        <?php $rel_type = 'vendor'; $rel_id = $vendor_id; require __DIR__ . '/../includes/relationships_card.php'; ?>
+
 <?php } ?>
 
 <?php

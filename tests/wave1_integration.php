@@ -21,7 +21,7 @@ $read = fn(string $f): string => (string) file_get_contents("$root/$f");
 $upd = $read('admin/database_updates.php');
 preg_match_all('/if \(\$rivetit_db_version\(\) == \'(2\.6\.\d+)\'\) \{/', $upd, $gates);
 $gates = $gates[1];
-$ok(array_slice($gates, -7) === ['2.6.76', '2.6.77', '2.6.78', '2.6.79', '2.6.80', '2.6.81', '2.6.82'], 'the last steps run from 2.6.76, 77, 78, 79, 80, 81 and 82 (to 2.6.83), in that order (' . implode(', ', array_slice($gates, -7)) . ')');
+$ok(array_slice($gates, -9) === ['2.6.76', '2.6.77', '2.6.78', '2.6.79', '2.6.80', '2.6.81', '2.6.82', '2.6.83', '2.6.84'], 'the last steps run from 2.6.76, 77, 78, 79, 80, 81, 82, 83 and 84 (to 2.6.85), in that order (' . implode(', ', array_slice($gates, -9)) . ')');
 $ok(count($gates) === count(array_unique($gates)), 'no step is gated twice');
 foreach (['2.6.77' => '2.6.78', '2.6.78' => '2.6.79', '2.6.79' => '2.6.80', '2.6.80' => '2.6.81', '2.6.81' => '2.6.82', '2.6.82' => '2.6.83'] as $gate => $next) {
     $a = strpos($upd, "if (\$rivetit_db_version() == '$gate') {");
