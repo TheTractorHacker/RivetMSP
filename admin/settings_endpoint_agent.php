@@ -2,6 +2,7 @@
 require_once "includes/inc_all_admin.php";
 
 require_once dirname(__DIR__) . '/includes/rmm_bootstrap.php';
+require_once dirname(__DIR__) . '/includes/rmm_mesh_admin.php';    // RivetCore 1.0.0-rc.12: the install settings of the optional MeshCentral agent
 require_once dirname(__DIR__) . '/includes/rmm_scale_cards.php';   // RivetCore 1.0.0-rc.11 cards (remote tools, file transfer, logs, scale, partitioning, external store)
 
 use RivetCore\Rmm\Binaries\BinaryStore;
@@ -462,6 +463,8 @@ echo rivetRmmUiScaleCards($scaleCtx);
             <div class="col-lg-1"><label class="form-label" for="dp_ttl">Hours</label><input type="number" class="form-control" id="dp_ttl" name="ttl_hours" min="1" max="<?= (int) $cfg['enroll_max_ttl_h'] ?>" value="<?= (int) min(72, $cfg['enroll_max_ttl_h']) ?>"></div>
             <div class="col-lg-1"><label class="form-label" for="dp_uses">Max uses</label><input type="number" class="form-control" id="dp_uses" name="max_uses" min="1" max="5000" value="25"></div>
             <div class="col-lg-2"><label class="form-label" for="dp_label">Label</label><input type="text" class="form-control" id="dp_label" name="label" maxlength="100"></div>
+            <?php $depMesh = rivetRmmUiInstallerMesh($rmm, true, $cfg); ?>
+            <?= rivetRmmUiInstallerMeshBox($depMesh) ?>
             <div class="col-12 d-flex flex-wrap gap-2 mt-2">
                 <button type="submit" name="download_installer" class="btn btn-primary"><i class="fas fa-download me-1"></i>Download installer</button>
                 <button type="submit" name="show_deploy_commands" class="btn btn-outline-primary"><i class="fas fa-terminal me-1"></i>Show deployment commands</button>
@@ -607,10 +610,21 @@ echo rivetRmmUiScaleCards($scaleCtx);
     </div>
 </div>
 
+<?php
+// RivetCore 1.0.0-rc.12: the install settings of the optional MeshCentral agent (device group, certificate pin, overwrite switch, table corrections). The pin probe's proposal is
+// shown once and never saved by the probe.
+$rmm_mesh_scripts = true;
+$meshWho = rivetRmmPrincipal((int) $session_user_id, (string) $session_name);
+[$meshMsg, $meshOld] = rivetRmmScaleTake('mesh');
+$meshProbe = $_SESSION['rmm_mesh_pin_probe'] ?? null;
+unset($_SESSION['rmm_mesh_pin_probe']);
+$meshCard = rivetRmmMeshInstallCard(rivetRmmMeshInstallView($rmm, $meshWho), $meshOld, is_array($meshProbe) ? $meshProbe : null, (string) $csrf, trim((string) $cfg['mesh_url']) !== '');
+?>
 <div class="card mb-3" id="mesh">
     <div class="card-header"><h4 class="card-title mb-0">MeshCentral remote access</h4></div>
     <div class="card-body">
         <p class="small text-muted">Technicians with the "RMM remote connect" permission can open a session from the device or asset page. RivetMSP signs a one-click MeshCentral login token for ONE limited MeshCentral account (no shared administrator credential) at the moment of the click; nothing is stored or logged. The login token key is the value printed by <code>node node_modules/meshcentral --loginTokenKey</code> on the MeshCentral server.</p>
+        <?= rivetRmmScaleMsgHtml($meshMsg) ?>
         <form action="post.php" method="post" autocomplete="off" class="row g-3">
             <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
             <div class="col-12"><div class="form-check form-switch"><input type="checkbox" class="form-check-input" id="mc_on" name="mesh_enabled" value="1" <?= $cfg['mesh_enabled'] ? 'checked' : '' ?>><label class="form-check-label" for="mc_on">Enable remote sessions through MeshCentral</label></div></div>
@@ -620,8 +634,10 @@ echo rivetRmmUiScaleCards($scaleCtx);
             <div class="col-lg-2"><label class="form-label" for="mc_pol">Session policy</label><select class="form-select" id="mc_pol" name="mesh_policy"><?php foreach (['unattended' => 'Unattended', 'attended' => 'Attended (user consent)', 'both' => 'Both'] as $k => $l) { echo '<option value="' . $k . '"' . ($cfg['mesh_policy'] === $k ? ' selected' : '') . '>' . $h($l) . '</option>'; } ?></select></div>
             <div class="col-lg-6"><label class="form-label" for="mc_key">Login token key <?= $cfg['mesh_login_key_set'] ? '<span class="badge bg-success">stored encrypted</span>' : '' ?></label><input type="password" class="form-control font-monospace" id="mc_key" name="mesh_login_key" autocomplete="new-password" placeholder="<?= $cfg['mesh_login_key_set'] ? 'Leave empty to keep the stored key' : 'Paste the hex key' ?>"><div class="form-text">Write-only. The consent prompt for attended access is enforced by the MeshCentral device group settings.</div></div>
             <div class="col-lg-3"><label class="form-label" for="mc_ttl">Token lifetime (s)</label><input type="number" class="form-control" id="mc_ttl" name="mesh_token_ttl_s" min="60" max="3600" value="<?= (int) $cfg['mesh_token_ttl_s'] ?>"><div class="form-text">Informational: MeshCentral applies its own login token timeout.</div></div>
+            <?= $meshCard['fields'] ?>
             <div class="col-12 d-flex gap-2"><button class="btn btn-primary" name="save_mesh_settings">Save</button><button class="btn btn-outline-secondary" name="test_mesh">Save and test connection</button></div>
         </form>
+        <?= $meshCard['probe_form'] ?>
     </div>
 </div>
 

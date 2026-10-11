@@ -620,7 +620,8 @@ $ok(str_contains($body, 'Trend (') && str_contains($body, 'id="rmm-net"'), 'asse
 
 // ---- events: catalog entries (RivetMSP's picker reads RivetCore's EventCatalog) and the adapter
 $all = RivetCore\Rmm\RmmEvent::all();
-$ok(count($all) === 21 && in_array('rmm.file.transferred', $all, true) && in_array('rmm.log.rule_matched', $all, true), 'RivetCore defines twenty-one rmm.* events (nine of Phase 1, ten of Phase 2 and 3, rmm.file.transferred and rmm.log.rule_matched of Phase 6 and 8)');
+$ok(count($all) === 24 && in_array('rmm.file.transferred', $all, true) && in_array('rmm.log.rule_matched', $all, true) && in_array('rmm.mesh.agent_installed', $all, true) && in_array('rmm.mesh.node_conflict', $all, true) && in_array('rmm.starter.installed', $all, true),
+    'RivetCore defines twenty-four rmm.* events (nine of Phase 1, ten of Phase 2 and 3, rmm.file.transferred and rmm.log.rule_matched of Phase 6 and 8, rmm.mesh.agent_installed and rmm.mesh.node_conflict of the Mesh agent, rmm.starter.installed of the starter pack)');
 require_once "$root/includes/event_picker.php";
 $cat = json_decode(eventPickerCatalogJson(), true);
 $pickerIds = array_column($cat['events'], 'i');
@@ -708,4 +709,12 @@ $rmm->admin()->enable($admin);
 foreach (glob(__DIR__ . '/rmm_ui_p68_*.php') ?: [] as $__p68) {
     echo "---- " . basename($__p68) . "\n";
     require $__p68;
+}
+
+// ============================================================ RMM optional MeshCentral agent (rc.12) and the starter pack (rc.13): the sections live in tests/rmm_ui_p1213_*.php
+// Same contract as the fragments above (shared variables, module on, run in file-name order). They configure what they need through the product and put it back.
+$rmm->admin()->enable($admin);
+foreach (glob(__DIR__ . '/rmm_ui_p1213_*.php') ?: [] as $__p1213) {
+    echo "---- " . basename($__p1213) . "\n";
+    require $__p1213;
 }

@@ -6,6 +6,8 @@ if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests 
  *
  *   RIVETMSP_TEST_DB=1 RIVETMSP_TEST_DB_NAME=rivetit_scratch_x ... php tests/real_agent_proof/setup.php <https service url>
  *
+ * Optional environment: PROOF_MESH_URL, PROOF_MESH_GROUP, PROOF_MESH_PIN (the mock Mesh server), PROOF_CA_FILE (the proof's CA, embedded in the install command).
+ *
  * Refuses anything but a database whose name contains "scratch" and a config.php that points at it. Never run against a live database.
  */
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
@@ -57,5 +59,27 @@ if (!$r->ok) { fwrite(STDERR, 'remote settings: ' . json_encode([$r->http, $r->c
 if ($rid === null) { fwrite(STDERR, implode("\n", $rerr) . "\n"); exit(1); }
 $tok = $rmm->technician()->createToken($who, 1, 0, 'stable', 24, 5, 'real agent proof');
 if (!$tok->ok) { fwrite(STDERR, 'enrollment token: ' . json_encode([$tok->http, $tok->code, $tok->message]) . "\n"); exit(1); }
+// RivetCore 1.0.0-rc.12 (the optional MeshCentral agent): when the proof names a (mock) Mesh server, switch Mesh on, save the install settings through the same call the
+// Administration page makes, and ask Core for the Linux install command with the Mesh box ticked. The Mesh server is tests/real_agent_proof/mock_mesh.py, never a real one.
+$meshCommand = null;
+if (($meshUrl = (string) getenv('PROOF_MESH_URL')) !== '') {
+    $r = $rmm->admin()->saveMesh($who, ['mesh_enabled' => 1, 'mesh_url' => $meshUrl, 'mesh_group_id' => (string) getenv('PROOF_MESH_GROUP'), 'mesh_server_cert_pin' => (string) getenv('PROOF_MESH_PIN'), 'mesh_auto_map_overwrite' => false]);
+    if (!$r->ok) { fwrite(STDERR, 'mesh settings: ' . json_encode([$r->http, $r->code, $r->message]) . "\n"); exit(1); }
+    if (($caFile = (string) getenv('PROOF_CA_FILE')) !== '') {
+        $r = $rmm->admin()->saveSettings($who, ['ca_pem' => (string) file_get_contents($caFile)]);   // the installer command carries the CA, as a real one would
+        if (!$r->ok) { fwrite(STDERR, 'ca: ' . json_encode([$r->http, $r->code, $r->message]) . "\n"); exit(1); }
+    }
+    // making an installer needs a current agent binary of the architecture on the server (a Windows executable); a placeholder is enough here, nothing runs it
+    $hdr = str_pad('MZ' . str_repeat("\0", 0x3A) . pack('V', 128), 128, "\0") . "PE\0\0" . pack('v', 0x8664) . pack('v', 3) . str_repeat("\0", 12) . pack('v', 0xE0) . pack('v', 0x0022);
+    $pe = $hdr . substr(str_repeat(hash('sha256', 'proof', true), intdiv(8192 - strlen($hdr), 32) + 1), 0, 8192 - strlen($hdr));
+    $peFile = sys_get_temp_dir() . '/proof_pe_' . bin2hex(random_bytes(3)) . '.exe';
+    file_put_contents($peFile, $pe);
+    $pub = $rmm->binaryStore()->publish($peFile, '1.1.0', 'amd64', 1, ['activate' => true]);
+    @unlink($peFile);
+    if (empty($pub['ok'])) { fwrite(STDERR, 'placeholder binary: ' . json_encode($pub) . "\n"); exit(1); }
+    $cmd = $rmm->admin()->deploymentCommands($who, 1, 0, 'stable', 24, 5, 'mesh proof', 'amd64', true);
+    if (!$cmd->ok) { fwrite(STDERR, 'deployment commands: ' . json_encode([$cmd->http, $cmd->code, $cmd->message]) . "\n"); exit(1); }
+    $meshCommand = (string) $cmd->data['commands']['linux'];
+}
 $rmm->syncState();
-echo json_encode(['token' => (string) $tok->data['token'], 'admin_api_token' => $admin, 'client_id' => 1, 'rule_id' => $rid]), "\n";
+echo json_encode(['mesh_command' => $meshCommand, 'token' => (string) $tok->data['token'], 'admin_api_token' => $admin, 'client_id' => 1, 'rule_id' => $rid]), "\n";

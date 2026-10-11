@@ -188,6 +188,25 @@ function rivetRmmAutoConfirmModal(): string
         . '<div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-primary" id="rmmAutoConfirmGo">Confirm</button></div></div></div></div>';
 }
 
+/**
+ * A policy draft from the starter pack ends its description with the marker ` [starter|<pack>|<item>|<version>|<hash>]` (RivetCore 1.0.0-rc.13). Show the description without it,
+ * and say whether the policy is a starter draft. The stored text is never changed here (the edit form keeps the marker, so editing does not lose it).
+ *
+ * @return array{0:string,1:bool} the description to show, and whether it is a starter draft
+ */
+function rivetRmmAutoStarterPolicy(string $description): array
+{
+    $clean = preg_replace('/ \[starter\|[a-z0-9-]+\|[a-z0-9-]+\|\d+\.\d+\.\d+\|[0-9a-f]{64}\]$/', '', $description, -1, $n);
+
+    return [$clean ?? $description, ($n ?? 0) === 1];
+}
+
+/** The marker suffix (` [starter|...]`) a starter policy draft's description ends with, or ''. */
+function rivetRmmAutoStarterMarker(string $description): string
+{
+    return preg_match('/ \[starter\|[a-z0-9-]+\|[a-z0-9-]+\|\d+\.\d+\.\d+\|[0-9a-f]{64}\]$/', $description, $m) === 1 ? $m[0] : '';
+}
+
 /** UTC time as text for tables ("2026-10-10 14:03 UTC"), or "never". Accepts RFC 3339 or SQL UTC. */
 function rivetRmmAutoUtc(?string $iso): string
 {

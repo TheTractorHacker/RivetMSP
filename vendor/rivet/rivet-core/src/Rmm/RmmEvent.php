@@ -63,12 +63,22 @@ final class RmmEvent
     /** A log rule matched on a device and raised or kept its alert (Phase 8, `logs` switch). Fields: rule_id, rule_name, match_count, sample (the first matching message, at most 200 characters), alert_check_key. */
     public const LOG_RULE_MATCHED = 'rmm.log.rule_matched';
 
+    /**
+     * Starter pack content was installed, updated, parked for review or removed (Phase 2 starter pack). Not about one device: device_id is 0, asset_id null,
+     * hostname empty, client_id 0. Fields: action ("install" or "uninstall"), pack_id, added, updated, staged, removed, skipped, user_id. Never a script text.
+     */
+    public const STARTER_INSTALLED = 'rmm.starter.installed';
+    /** The MeshCentral agent was found installed on a device that had not reported one (optional Mesh agent install). Fields: version (null when unknown), node_id (null when not yet known). */
+    public const MESH_AGENT_INSTALLED = 'rmm.mesh.agent_installed';
+    /** A device reported a MeshCentral node id that is already mapped to another live device, so it was NOT mapped. Fields: node_id, other_device_id. */
+    public const MESH_NODE_CONFLICT = 'rmm.mesh.node_conflict';
+
     /** @return list<string> */
     public static function all(): array
     {
         return [self::DEVICE_ENROLLED, self::DEVICE_OFFLINE, self::DEVICE_ONLINE, self::CHECK_FAILED, self::CHECK_RECOVERED,
             self::JOB_COMPLETED, self::JOB_FAILED, self::SOFTWARE_INSTALLED, self::SOFTWARE_REMOVED,
             self::ALERT_OPENED, self::ALERT_ESCALATED, self::ALERT_ACKNOWLEDGED, self::ALERT_RESOLVED, self::MAINTENANCE_STARTED, self::MAINTENANCE_ENDED,
-            self::POLICY_ASSIGNED, self::SCRIPT_RUN, self::APPROVAL_REQUESTED, self::APPROVAL_DECIDED, self::FILE_TRANSFERRED, self::LOG_RULE_MATCHED];
+            self::POLICY_ASSIGNED, self::SCRIPT_RUN, self::APPROVAL_REQUESTED, self::APPROVAL_DECIDED, self::FILE_TRANSFERRED, self::LOG_RULE_MATCHED, self::MESH_AGENT_INSTALLED, self::MESH_NODE_CONFLICT, self::STARTER_INSTALLED];
     }
 }

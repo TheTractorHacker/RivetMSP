@@ -256,8 +256,8 @@ function rivetRmmFeatureOn(string $feature, $mysqli = null): bool
 
 /**
  * The Endpoints menu entries of RMM Phase 2 and 3 (RivetCore 1.0.0-rc.10), each shown only while the module AND its sub-switch are on. Answered from the state
- * file: no database query, and no module is built, while anything is off. The caller has already checked the RMM module grant. With a user id the Logs entries
- * (the only ones that need an ability beyond viewing) are left out for a user who lacks it; that check builds the module, and only while the `logs` switch is on.
+ * file: no database query, and no module is built, while anything is off. The caller has already checked the RMM module grant. With a user id the Logs entries and the Starter
+ * pack (the only ones that need an ability beyond viewing) are left out for a user who lacks it; that check builds the module, and only while the `logs` switch is on.
  *
  * @return list<array{href:string,label:string,icon:string,pages:list<string>,group:string}>
  */
@@ -266,6 +266,8 @@ function rivetRmmAutoNav(?int $userId = null): array
     $all = [
         ['policies', '/agent/rmm_policies.php', 'Policies', 'fa-sliders-h', ['rmm_policies.php'], 'automation'],
         ['scripts', '/agent/rmm_script_library.php', 'Script library', 'fa-file-code', ['rmm_script_library.php'], 'automation'],
+        // RMM starter pack (RivetCore 1.0.0-rc.13): ready-made scripts, check sets and policy drafts. Administrators only (rmm.admin), shown with the script library's sub-switch.
+        ['scripts', '/agent/rmm_starter_pack.php', 'Starter pack', 'fa-box-open', ['rmm_starter_pack.php'], 'automation'],
         ['scripts', '/agent/rmm_schedules.php', 'Schedules', 'fa-clock', ['rmm_schedules.php'], 'automation'],
         ['scripts', '/agent/rmm_approvals.php', 'Approvals', 'fa-user-check', ['rmm_approvals.php'], 'automation'],
         ['scripts', '/agent/rmm_fields.php', 'Custom fields', 'fa-tags', ['rmm_fields.php'], 'automation'],
@@ -276,7 +278,8 @@ function rivetRmmAutoNav(?int $userId = null): array
         ['logs', '/agent/rmm_logs.php', 'Logs', 'fa-scroll', ['rmm_logs.php'], 'logs'],
         ['logs', '/agent/rmm_log_rules.php', 'Log rules', 'fa-bullhorn', ['rmm_log_rules.php'], 'logs'],
     ];
-    $abilities = ['/agent/rmm_logs.php' => \RivetCore\Rmm\Authz\RmmAbility::JOB_RUN_SAVED, '/agent/rmm_log_rules.php' => \RivetCore\Rmm\Authz\RmmAbility::ALERT_MANAGE];
+    $abilities = ['/agent/rmm_logs.php' => \RivetCore\Rmm\Authz\RmmAbility::JOB_RUN_SAVED, '/agent/rmm_log_rules.php' => \RivetCore\Rmm\Authz\RmmAbility::ALERT_MANAGE,
+        '/agent/rmm_starter_pack.php' => \RivetCore\Rmm\Authz\RmmAbility::ADMIN];
     $out = [];
     foreach ($all as [$feature, $href, $label, $icon, $pages, $group]) {
         if (rivetRmmFeatureOn($feature)) {

@@ -27,3 +27,7 @@
 #rem-xfer-table td:first-child { min-width: 13rem; }
 #rem-svc-table td:first-child, #rem-proc-table td:nth-child(2) { min-width: 11rem; }
 .rmm-rem-scroll .rmm-table-actions { min-width: 9rem; }
+
+/* the MeshCentral agent state of a device (RivetCore 1.0.0-rc.12): a node id has no break opportunities, so it must be allowed to wrap on a phone */
+.rmm-mesh-agent { overflow-wrap: anywhere; }
+.rmm-mesh-agent .alert > div, #mesh .alert > div { min-width: 0; overflow-wrap: anywhere; }

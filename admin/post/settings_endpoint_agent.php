@@ -315,7 +315,7 @@ if (isset($_POST['download_installer']) || isset($_POST['show_deploy_commands'])
     validateCSRFToken($_POST['csrf_token']);
     $arch = (string) ($_POST['arch'] ?? 'amd64');
     $args = [intval($_POST['client_id'] ?? 0), intval($_POST['location_id'] ?? 0), (string) ($_POST['ring'] ?? 'stable'), ea_post_int('ttl_hours', 1, 720, 72),
-        ea_post_int('max_uses', 1, 5000, 25), trim((string) ($_POST['label'] ?? '')), $arch];
+        ea_post_int('max_uses', 1, 5000, 25), trim((string) ($_POST['label'] ?? '')), $arch, ($_POST['install_mesh_agent'] ?? '') === '1'];   // the last one: also install the MeshCentral agent (rc.12), off unless ticked
     if (isset($_POST['show_deploy_commands'])) {
         $r = $ea_admin->deploymentCommands($ea_who, ...$args);
         if (!$r->ok) {
@@ -414,9 +414,31 @@ if (isset($_POST['save_mesh_settings']) || isset($_POST['test_mesh'])) {
         }
     }
     $in['mesh_enabled'] = isset($_POST['mesh_enabled']) ? 1 : 0;
-    $r = $ea_admin->saveMesh($ea_who, $in, isset($_POST['test_mesh']));
+    // RivetCore 1.0.0-rc.12: the install settings of the optional MeshCentral agent ride along when the form carries them (mesh_install_fields). Core validates them first and writes
+    // NOTHING when any is invalid; the refusal is shown in the MeshCentral card with what the person typed put back. The pin is never filled in by this handler.
+    require_once dirname(__DIR__, 2) . '/includes/rmm_mesh_admin.php';
+    require_once dirname(__DIR__, 2) . '/includes/rmm_scale_admin.php';   // rivetRmmScaleMsg()
+    [$ea_mesh_fields, $ea_mesh_errors, $ea_mesh_old] = rivetRmmMeshInstallRead($_POST);
+    if ($ea_mesh_errors !== []) {
+        rivetRmmScaleMsg('mesh', 'error', implode(' ', $ea_mesh_errors), $ea_mesh_old);
+        redirect('settings_endpoint_agent.php#mesh');
+    }
+    $r = $ea_admin->saveMesh($ea_who, $in + $ea_mesh_fields, isset($_POST['test_mesh']));
     $rmm->syncState();   // the remote sub-switch follows mesh_enabled
+    if (!$r->ok && $r->code === 'invalid' && $ea_mesh_old !== []) {
+        rivetRmmScaleMsg('mesh', 'error', $r->message, $ea_mesh_old);
+        redirect('settings_endpoint_agent.php#mesh');
+    }
     ea_flash_result($r);
+}
+
+// RivetCore 1.0.0-rc.12: "Read it from the server". Connects to the SAVED MeshCentral address through the network policy and only PROPOSES a pin (trust on first use): the
+// proposal is shown once on the next page load, and nothing is saved by this request (no setting, no field).
+if (isset($_POST['probe_mesh_pin'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $r = $rmm->remoteActions()->updateMeshSettings($ea_who, ['probe_pin' => true]);
+    $_SESSION['rmm_mesh_pin_probe'] = $r->ok && is_array($r->data['pin_probe'] ?? null) ? $r->data['pin_probe'] : ['ok' => false, 'error' => $r->ok ? 'The certificate could not be read.' : $r->message];
+    redirect('settings_endpoint_agent.php#mesh');
 }
 
 // ================================================================================================================================================================

@@ -1,0 +1,19 @@
+/* Starter pack page and the Starter marks in the script library (RivetCore 1.0.0-rc.13). Scoped under .rmm-*, built from the --if-* tokens, loaded after itflow_rmm_logs.css and before itflow.bind-tabler.css (see includes/header.php). */
+
+/* a visually-hidden caption is absolutely positioned; without a positioned ancestor it escapes the scroll container and widens the page on a phone */
+.rmm-starter-table, .rmm-starter-result, #starter-scripts .table-responsive, #starter-policies .table-responsive, #starter-result .table-responsive { position: relative; max-width: 100%; }
+.rmm-starter-table td, .rmm-starter-result td { vertical-align: top; }
+.rmm-starter-table td:nth-child(2) { min-width: 16rem; overflow-wrap: anywhere; }
+.rmm-starter-more > summary { cursor: pointer; color: var(--tblr-primary, var(--if-accent)); width: fit-content; }
+.rmm-starter-more > summary:focus-visible { outline: 2px solid var(--tblr-primary, var(--if-accent)); outline-offset: 2px; }
+.rmm-starter-more[open] { background: var(--if-bg); border: 1px solid var(--if-border); border-radius: var(--if-radius-sm); padding: .35rem .6rem; }
+.rmm-starter-actions { position: sticky; bottom: 0; z-index: 2; }
+
+/* the Starter marks in the script library list and on a script */
+.rmm-starter-badge { white-space: nowrap; }
+.rmm-starter-flags > * { margin: 0 .25rem .25rem 0; }
+
+@media (max-width: 575.98px) {
+    .rmm-starter-table td:nth-child(2) { min-width: 12rem; }
+    .rmm-starter-actions { position: static; }
+}

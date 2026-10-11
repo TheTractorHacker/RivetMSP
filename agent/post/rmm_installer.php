@@ -7,7 +7,7 @@ if (defined('FROM_POST_HANDLER')) return;
  * for the client; the token is revoked again when the file cannot be served), deploymentCommands() for Linux. Hiding the button is cosmetic.
  *
  * Fields: csrf_token, os=windows|linux, mode=download|commands (default by os), client_id, location_id, arch=amd64|arm64, ring=stable|pilot,
- * ttl_hours (default 24), multiple=1 (25 uses, else 1), label. A fetch request (X-Requested-With: fetch) gets JSON errors; a plain form post gets a
+ * ttl_hours (default 24), multiple=1 (25 uses, else 1), label, install_mesh_agent=1 (optional; also install the MeshCentral agent, RivetCore 1.0.0-rc.12). A fetch request (X-Requested-With: fetch) gets JSON errors; a plain form post gets a
  * flash message and a redirect back.
  */
 
@@ -70,8 +70,11 @@ $inst_rmm = rivetRmmModule();
 $inst_admin = $inst_rmm->admin();
 $inst_who = rivetRmmPrincipal((int) $session_user_id, (string) $session_name);
 $inst_ttl_max = max(1, (int) ($inst_rmm->readModel()->settingsSummary()['enroll_max_ttl_h'] ?? 720));
+// RivetCore 1.0.0-rc.12: the optional "Also install the MeshCentral agent" box. Off unless ticked; Core refuses it, creating nothing, when Mesh is not switched on and
+// configured (an https address and a device group id), and its sentence is what the person reads.
+$inst_mesh = ($_POST['install_mesh_agent'] ?? '') === '1';
 $inst_args = [intval($_POST['client_id'] ?? 0), intval($_POST['location_id'] ?? 0), $inst_ring, $inst_post_int('ttl_hours', 1, $inst_ttl_max, min(24, $inst_ttl_max)),
-    !empty($_POST['multiple']) ? 25 : 1, trim((string) ($_POST['label'] ?? '')), $inst_arch];
+    !empty($_POST['multiple']) ? 25 : 1, trim((string) ($_POST['label'] ?? '')), $inst_arch, $inst_mesh];
 
 if ($inst_mode === 'commands') {
     $r = $inst_admin->deploymentCommands($inst_who, ...$inst_args);
@@ -81,7 +84,7 @@ if ($inst_mode === 'commands') {
     header('Content-Type: application/json');
     header('Cache-Control: no-store');
     echo json_encode(['success' => true, 'linux' => $r->data['commands']['linux'], 'department' => $r->data['department'], 'expires_at' => str_replace('T', ' ', rtrim((string) $r->data['token']['expires_at'], 'Z')),
-        'max_uses' => (int) $r->data['token']['max_uses'], 'arch' => $inst_arch]);
+        'max_uses' => (int) $r->data['token']['max_uses'], 'arch' => $inst_arch, 'install_mesh_agent' => $inst_mesh]);
     exit;
 }
 

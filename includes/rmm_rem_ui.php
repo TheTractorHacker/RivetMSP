@@ -183,7 +183,7 @@ function rivetRmmRemPanelView(array $vm, \mysqli $mysqli): ?array
         $limits = $rmm->remoteSettings()->limits();
         $view = [
             'device_id' => $devId, 'asset_id' => (int) $vm['asset_id'], 'hostname' => (string) $vm['hostname'], 'platform' => (string) $vm['platform'], 'os' => $os, 'offline' => (bool) $vm['offline'],
-            'state' => (string) $vm['state'], 'caps' => $caps, 'admin' => $authz->allowed($uid, RmmAbility::ADMIN, $client), 'mesh' => $mesh->ok ? $mesh->data : ['configured' => false, 'mapped' => false, 'views' => []],
+            'state' => (string) $vm['state'], 'caps' => $caps, 'admin' => $authz->allowed($uid, RmmAbility::ADMIN, $client), 'mesh' => $mesh->ok ? $mesh->data : ['configured' => false, 'mapped' => false, 'views' => []], 'mesh_agent' => $vm['mesh_agent'] ?? null,
             'retention_days' => (int) ($rmm->settings()->get()['job_retention_days'] ?? 30), 'services' => $snap('services'), 'processes' => $snap('processes'),
             'files_on' => $filesOn, 'roots' => $filesOn ? $rmm->remoteSettings()->allowRootsFor($os) : [], 'limits' => $limits, 'transfers' => [], 'transfer_error' => null, 'names' => [],
             'upload_cap' => rivetRmmRemUploadCap((int) $limits['transfer_max_bytes']),
@@ -499,6 +499,12 @@ function rivetRmmRemPanelHtml(array $v): string
 
 /** @param array<string,mixed> $v */
 function rivetRmmRemMeshHtml(array $v): string
+{
+    return rivetRmmRemMeshButtonsHtml($v) . rivetRmmUiMeshAgentHtml($v['mesh_agent'] ?? null, !empty($v['admin']), true);
+}
+
+/** @param array<string,mixed> $v */
+function rivetRmmRemMeshButtonsHtml(array $v): string
 {
     $m = $v['mesh'];
     $views = (array) ($m['views'] ?? []);

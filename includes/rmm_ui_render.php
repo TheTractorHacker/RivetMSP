@@ -362,6 +362,44 @@ function rivetRmmUiAlertsCard(array $vm): string
         . '<h6 class="mb-0 me-auto"><i class="fas fa-bell me-2 text-warning" aria-hidden="true"></i>Alerts</h6>' . $head . '</div>' . $o . '</section></div>';
 }
 
+/**
+ * The MeshCentral agent state of a device (RivetCore 1.0.0-rc.12): installed with its version, or the install error; and what the server did with the reported node id.
+ * A `conflict` and a `kept_manual` carry a visible hint (an alert, not just a pill) because the technician has something to decide. Empty string for a device that never
+ * reported a Mesh agent. Server text (the error) is escaped here.
+ *
+ * @param array<string,mixed>|null $ma rivetRmmUiMeshAgent()
+ * @param bool $nested true inside an existing card body (the Remote tab), false as a block of its own in a card
+ */
+function rivetRmmUiMeshAgentHtml(?array $ma, bool $admin, bool $nested = false): string
+{
+    if ($ma === null) {
+        return '';
+    }
+    $head = $ma['installed'] ? rivetRmmUiPill('ok', 'MeshCentral agent installed') . ($ma['version'] !== null ? ' <span class="small text-muted">version ' . rmmH($ma['version']) . '</span>' : '')
+        : rivetRmmUiPill($ma['error'] !== null ? 'warn' : 'off', $ma['error'] !== null ? 'MeshCentral agent not installed' : 'No MeshCentral agent');
+    $o = '<div class="' . ($nested ? 'border-top pt-2 mt-3' : 'card-body border-top py-2') . ' rmm-mesh-agent" data-rmm-mesh-agent="' . ($ma['installed'] ? 'installed' : 'not_installed') . '" data-rmm-mesh-map="' . rmmH((string) $ma['map_state']) . '">'
+        . '<div class="d-flex flex-wrap align-items-center gap-2"><span class="small fw-semibold">MeshCentral agent</span>' . $head
+        . ($ma['reported_at'] !== null ? '<span class="small text-muted ms-auto">reported ' . rivetRmmUiTime((string) $ma['reported_at']) . '</span>' : '') . '</div>';
+    if ($ma['error'] !== null) {
+        $o .= '<p class="small mt-2 mb-0" role="status"><i class="fas fa-exclamation-triangle text-warning me-1" aria-hidden="true"></i>The installer could not install it: ' . rmmH($ma['error'])
+            . '. The RivetMSP agent itself is fine. Check the MeshCentral settings, then install it again.</p>';
+    }
+    if ($ma['installed'] && $ma['map_state'] === 'mapped') {
+        $o .= '<p class="small text-muted mt-2 mb-0">Its node is mapped to this device' . ($admin && $ma['node_id'] !== '' ? ' (' . rmmH($ma['node_id']) . ')' : '') . '.</p>';
+    } elseif ($ma['map_state'] === 'conflict') {
+        $other = $ma['conflict_device_id'] !== null && $ma['conflict_device_id'] > 0
+            ? 'another device of this client (<a href="/agent/rmm_agent_device.php?device_id=' . (int) $ma['conflict_device_id'] . '">device ' . (int) $ma['conflict_device_id'] . '</a>)' : 'another device';
+        $o .= '<div class="alert alert-warning py-2 mt-2 mb-0" role="alert" data-rmm-mesh-hint="conflict"><div><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i><strong>Not mapped.</strong> The MeshCentral node this device reported is already mapped to '
+            . $other . ', so nothing was moved. A machine cloned from an image carries the same node id. Check which machine really owns the node before mapping it by hand.</div></div>';
+    } elseif ($ma['map_state'] === 'kept_manual') {
+        $o .= '<div class="alert alert-info py-2 mt-2 mb-0" role="status" data-rmm-mesh-hint="kept_manual"><div><i class="fas fa-info-circle me-1" aria-hidden="true"></i><strong>Your mapping was kept.</strong> The agent reported a different node than the one an administrator mapped by hand'
+            . ($ma['node_id'] !== '' ? ' (' . rmmH($ma['node_id']) . ')' : '') . '. ' . ($admin ? 'To use the reported node, map it below, or turn on <em>Let the agent\'s node id replace a node mapped by hand</em> under <a href="/admin/settings_endpoint_agent.php#mesh">Administration &gt; Endpoint agent &gt; MeshCentral</a>.'
+                : 'An administrator can change the mapping.') . '</div></div>';
+    }
+
+    return $o . '</div>';
+}
+
 function rivetRmmUiRemoteCard(array $vm): string
 {
     $perm = $vm['perm'];
@@ -383,11 +421,11 @@ function rivetRmmUiRemoteCard(array $vm): string
     } else {
         $body .= '<p class="text-muted small mb-0">MeshCentral is not configured. An administrator can set it up under Administration, Endpoint agent.</p>';
     }
-    $body .= '</div>';
+    $body .= '</div>' . rivetRmmUiMeshAgentHtml($vm['mesh_agent'] ?? null, (bool) $perm['admin']);
     if ($perm['admin']) {
         $body .= '<div class="card-body border-top py-2"><form id="rmm-mesh-form" class="row g-2 align-items-end"><div class="col-12"><label class="form-label small mb-1" for="rmm-mesh-node">MeshCentral node id (administrators)</label>'
             . '<input class="form-control form-control-sm font-monospace" id="rmm-mesh-node" name="mesh_node_id" maxlength="200" value="' . rmmH($m['node_id']) . '" placeholder="node//AbCd...">'
-            . '</div><div class="col-12"><button class="btn btn-sm btn-outline-primary" type="submit">Save mapping</button> <span class="small text-muted">Leave empty to clear.</span></div></form></div>';
+            . '</div><div class="col-12"><button class="btn btn-sm btn-outline-primary" type="submit">Save mapping</button> <span class="small text-muted">Leave empty to clear. A node set here is kept when the Mesh agent reports a different one, unless the MeshCentral setting that lets the agent\'s node replace it is on.</span></div></form></div>';
     }
     if ($perm['remote'] && $m['configured']) {
         $body .= '<div class="card-header py-1 border-top"><span class="ifm-toolbar-label">Recent sessions</span></div><ul class="list-group list-group-flush">';
@@ -1173,14 +1211,59 @@ function rivetRmmUiInstallerNotice(array $ins): string
     $adminLink = $ins['can_publish'] ? ' <a href="/admin/settings_endpoint_agent.php#binaries">Upload it under Administration &gt; Endpoint agent &gt; Agent binaries</a>.'
         : ' An administrator can upload it under Administration &gt; Endpoint agent &gt; Agent binaries.';
     if ($ins['service_problem'] !== null) {
-        return '<div class="alert alert-warning py-2 mb-3" role="status" data-rmm-installer-notice="service"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' . rmmH($ins['service_problem'])
-            . ($ins['can_publish'] ? ' <a href="/admin/settings_endpoint_agent.php">Fix it in Administration &gt; Endpoint agent</a>.' : ' An administrator can fix it in Administration &gt; Endpoint agent.') . '</div>';
+        return '<div class="alert alert-warning py-2 mb-3" role="status" data-rmm-installer-notice="service"><div><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' . rmmH($ins['service_problem'])
+            . ($ins['can_publish'] ? ' <a href="/admin/settings_endpoint_agent.php">Fix it in Administration &gt; Endpoint agent</a>.' : ' An administrator can fix it in Administration &gt; Endpoint agent.') . '</div></div>';
     }
     if ($ins['windows']['amd64'] === null && $ins['windows']['arm64'] === null) {
-        return '<div class="alert alert-warning py-2 mb-3" role="status" data-rmm-installer-notice="binary"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>No Windows agent is uploaded yet, so a Windows installer cannot be built.' . $adminLink . '</div>';
+        return '<div class="alert alert-warning py-2 mb-3" role="status" data-rmm-installer-notice="binary"><div><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>No Windows agent is uploaded yet, so a Windows installer cannot be built.' . $adminLink . '</div></div>';
     }
 
     return '';
+}
+
+/**
+ * The optional "Also install the MeshCentral agent" box of the installer dialog (RivetCore 1.0.0-rc.12). `ready` is true only when Core would accept the request
+ * (Mesh switched on, an https address, a device group id); otherwise `refusal` is Core's own sentence (MeshAgentService::installRefusal()), shown next to the disabled box.
+ * A database that has not been updated yet (the Mesh tables are missing) reads as not ready, never as an error.
+ *
+ * @param array<string,mixed> $cfg RmmReadModel::settingsSummary()
+ * @return array{show:bool,ready:bool,refusal:?string,admin:bool}
+ */
+function rivetRmmUiInstallerMesh(\RivetCore\Rmm\RmmModule $rmm, bool $admin, array $cfg): array
+{
+    // The box is offered only once an administrator has switched MeshCentral on and given it an address (settings made on purpose); until then there is nothing to tick.
+    if ((int) ($cfg['mesh_enabled'] ?? 0) !== 1 || trim((string) ($cfg['mesh_url'] ?? '')) === '') {
+        return ['show' => false, 'ready' => false, 'refusal' => null, 'admin' => $admin];
+    }
+    try {
+        $refusal = $rmm->meshAgents()->installRefusal();
+    } catch (\Throwable) {
+        $refusal = 'Run the database update first (Administration, Updates): the MeshCentral agent tables are not there yet.';
+    }
+
+    return ['show' => true, 'ready' => $refusal === null, 'refusal' => $refusal, 'admin' => $admin];
+}
+
+/**
+ * The tick-box "Also install the MeshCentral agent" (RivetCore 1.0.0-rc.12). Off by default and never pre-ticked. Disabled, with Core's refusal sentence as its help text, while
+ * Mesh is not switched on and configured (an https address and a device group id): a disabled box is not submitted, and the server asks Core again anyway.
+ *
+ * @param array{show:bool,ready:bool,refusal:?string,admin:bool} $mesh
+ */
+function rivetRmmUiInstallerMeshBox(array $mesh): string
+{
+    if (empty($mesh['show'])) {
+        return '';
+    }
+    $ready = !empty($mesh['ready']);
+    $help = $ready
+        ? 'After the RivetMSP agent is in place, the installer downloads the MeshCentral agent from your own Mesh server (https only) and installs it, so remote desktop works without mapping a node by hand. A failure never fails the RivetMSP install.'
+        : (string) ($mesh['refusal'] ?? 'MeshCentral agent install is not available.');
+    $link = !$ready ? ($mesh['admin'] ? ' <a href="/admin/settings_endpoint_agent.php#mesh">Open the MeshCentral settings</a>.' : ' An administrator can set it up under Administration &gt; Endpoint agent.') : '';
+
+    return '<div class="col-12" data-rmm-inst-mesh="' . ($ready ? 'ready' : 'unavailable') . '"><div class="form-check"><input class="form-check-input" type="checkbox" id="rmm-inst-mesh" name="install_mesh_agent" value="1" aria-describedby="rmm-inst-mesh-help"'
+        . ($ready ? '' : ' disabled') . '><label class="form-check-label" for="rmm-inst-mesh">Also install the MeshCentral agent</label>'
+        . '<div class="form-text" id="rmm-inst-mesh-help">' . rmmH($help) . $link . '</div></div></div>';
 }
 
 /**
@@ -1222,6 +1305,7 @@ function rivetRmmUiInstallerModal(array $ins, string $csrf): string
         . '<div class="col-md-6"><label class="form-label" for="rmm-inst-arch">Architecture</label><select class="form-select" id="rmm-inst-arch" name="arch">'
         . $archOpt('amd64', 'x64 (Intel / AMD, most PCs)', $ins['windows']['amd64']) . $archOpt('arm64', 'ARM64', $ins['windows']['arm64']) . '</select></div>'
         . '<div class="col-md-6"><label class="form-label" for="rmm-inst-ring">Update ring</label><select class="form-select" id="rmm-inst-ring" name="ring"><option value="stable" selected>Stable (recommended)</option><option value="pilot">Pilot (early builds)</option></select></div>'
+        . rivetRmmUiInstallerMeshBox($ins['mesh'] ?? ['show' => false, 'ready' => false, 'refusal' => null, 'admin' => false])
         . '</div>'
         . '<p class="mt-3 mb-2"><button type="button" class="btn btn-link p-0" data-bs-toggle="collapse" data-bs-target="#rmm-inst-adv" aria-expanded="false" aria-controls="rmm-inst-adv"><i class="fas fa-sliders-h me-1" aria-hidden="true"></i>Advanced</button></p>'
         . '<div class="collapse" id="rmm-inst-adv"><div class="row g-3 mb-2">'

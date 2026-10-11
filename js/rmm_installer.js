@@ -88,7 +88,9 @@
     archSel.addEventListener('change', refresh);
 
     // Opening: preselect the client of the opener (the client page), reset the result area.
+    var meshBox = document.getElementById('rmm-inst-mesh');
     modal.addEventListener('show.bs.modal', function (ev) {
+        if (meshBox) { meshBox.checked = false; }   // off by default, every time the dialog opens
         var opener = ev.relatedTarget;
         var cid = opener && opener.getAttribute ? opener.getAttribute('data-client-id') : null;
         if (cid) { clientSel.value = cid; }
@@ -131,7 +133,7 @@
                     if (!d || !d.success) { return say((d && d.error) || 'The command could not be created.', 'danger'); }
                     cmdText.textContent = d.linux;
                     cmdBox.hidden = false;
-                    say('Install command created for ' + d.department + '. It is valid until ' + d.expires_at + ' UTC and works on ' + d.max_uses + ' machine' + (d.max_uses === 1 ? '' : 's') + '.', 'success');
+                    say('Install command created for ' + d.department + '. It is valid until ' + d.expires_at + ' UTC and works on ' + d.max_uses + ' machine' + (d.max_uses === 1 ? '' : 's') + '.' + (d.install_mesh_agent ? ' It also installs the MeshCentral agent after the RivetMSP agent.' : ''), 'success');
                     cmdText.focus();
                 });
             }
@@ -143,7 +145,8 @@
                 document.body.appendChild(a); a.click();
                 window.setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 4000);
                 [].forEach.call(modal.querySelectorAll('[data-rmm-inst-file]'), function (el) { el.textContent = name; });
-                say(name + ' was downloaded. Copy it to the PC, double-click it and accept the administrator prompt. For deployment tools run it with: ' + name + ' setup --silent', 'success');
+                say(name + ' was downloaded. Copy it to the PC, double-click it and accept the administrator prompt. For deployment tools run it with: ' + name + ' setup --silent'
+                    + (meshBox && meshBox.checked ? ' It also installs the MeshCentral agent after the RivetMSP agent; a Mesh problem never stops the RivetMSP install and shows on the device page.' : ''), 'success');
             });
         }).catch(function () {
             say('The request could not be sent. Check your connection and try again.', 'danger');

@@ -61,6 +61,8 @@ use RivetCore\Rmm\Logs\LogActions;
 use RivetCore\Rmm\Logs\LogRuleService;
 use RivetCore\Rmm\Logs\LogService;
 use RivetCore\Rmm\Maintenance\Housekeeping;
+use RivetCore\Rmm\Mesh\MeshAgentService;
+use RivetCore\Rmm\Mesh\MeshAgentSettings;
 use RivetCore\Rmm\Mesh\MeshService;
 use RivetCore\Rmm\Policy\EffectivePolicy;
 use RivetCore\Rmm\Policy\PolicyStore;
@@ -100,6 +102,10 @@ use RivetCore\Rmm\Technician\FieldActions;
 use RivetCore\Rmm\Technician\InventoryActions;
 use RivetCore\Rmm\Technician\PolicyActions;
 use RivetCore\Rmm\Technician\ScriptActions;
+use RivetCore\Rmm\Technician\StarterActions;
+use RivetCore\Rmm\Starter\StarterInstaller;
+use RivetCore\Rmm\Starter\StarterPack;
+use RivetCore\Rmm\Http\StarterApi;
 use RivetCore\Rmm\Technician\TechnicianActions;
 use RivetCore\Rmm\Update\UpdateService;
 use RivetCore\Webhooks\UrlPolicy;
@@ -143,6 +149,8 @@ final class RmmModule
     private ?RmmReadModel $readModel = null;
     private ?BinaryStore $binaryStore = null;
     private ?MeshService $mesh = null;
+    private ?MeshAgentSettings $meshAgentSettings = null;
+    private ?MeshAgentService $meshAgents = null;
     private ?InstallerService $installerService = null;
     private ?TechnicianActions $technician = null;
     private ?RmmAdmin $admin = null;
@@ -178,6 +186,9 @@ final class RmmModule
     private ?PolicyActions $policyActions = null;
     private ?ScriptActions $scriptActions = null;
     private ?FieldActions $fieldActions = null;
+    private ?StarterInstaller $starterInstaller = null;
+    private ?StarterActions $starterActions = null;
+    private ?StarterApi $starterApi = null;
     private ?ScheduleGateInterface $scheduleGate = null;
     private ?RemoteSettings $remoteSettings = null;
     private ?TransferService $transferService = null;
@@ -192,7 +203,7 @@ final class RmmModule
     private readonly RmmEventsInterface $events;
 
     /**
-     * @param array{binary_dir?:?string,transfer_dir?:?string,allow_insecure_http?:bool,allow_linux?:bool,host_fallback?:?string,integration_name?:string,installer_prefix?:string,max_upload_bytes?:?int,client_label?:string,denial_reasons?:array<string,string>,escalation?:RmmEscalationInterface,threshold_resolver?:ThresholdResolverInterface,cache?:\Psr\SimpleCache\CacheInterface,redis?:\RivetCore\Redis\RedisClientProviderInterface,metric_reader?:RmmMetricReaderInterface} $options
+     * @param array{binary_dir?:?string,transfer_dir?:?string,allow_insecure_http?:bool,allow_linux?:bool,host_fallback?:?string,integration_name?:string,installer_prefix?:string,max_upload_bytes?:?int,client_label?:string,denial_reasons?:array<string,string>,escalation?:RmmEscalationInterface,threshold_resolver?:ThresholdResolverInterface,cache?:\Psr\SimpleCache\CacheInterface,redis?:\RivetCore\Redis\RedisClientProviderInterface,metric_reader?:RmmMetricReaderInterface,starter_packs?:list<string>} $options
      */
     public function __construct(
         private readonly DatabaseInterface $database,
@@ -312,7 +323,7 @@ final class RmmModule
     /** Service and process managers, file transfer, Mesh view information and the remote-tools settings (shared by the REST API and the edition's pages). */
     public function remoteActions(): RemoteActions
     {
-        return $this->remoteActions ??= new RemoteActions($this->sql(), $this->devices(), $this->authorizer(), $this->settings(), $this->jobs(), $this->transfers(), $this->remoteSettings(), $this->mesh(), $this->audit);
+        return $this->remoteActions ??= new RemoteActions($this->sql(), $this->devices(), $this->authorizer(), $this->settings(), $this->jobs(), $this->transfers(), $this->remoteSettings(), $this->mesh(), $this->audit, $this->meshAgentSettings(), $this->meshAgents());
     }
 
     /** Reading collected logs and managing log rules. */
@@ -414,7 +425,7 @@ final class RmmModule
         return new CheckinService($this->sql(), $this->settings(), $this->devices(), $this->checks(), $this->jobs(), $this->updates(), $this->linker(), $this->assets, $this->metrics,
             function (array $work): void {
                 $this->ingestQueue()->enqueue($work);
-            }, $this->deviceState(), $this->software(), $this->eventPublisher(), $this->effectivePolicy(), $this->remoteSettings());
+            }, $this->deviceState(), $this->software(), $this->eventPublisher(), $this->effectivePolicy(), $this->remoteSettings(), $this->meshAgents());
     }
 
     /** Capabilities, presence and software bookkeeping of a device (table rmm_device_state). */
@@ -483,7 +494,7 @@ final class RmmModule
 
     public function installerDownload(): InstallerDownload
     {
-        return new InstallerDownload($this->sql(), $this->settings(), $this->updates(), $this->tenancy, $this->audit, $this->attempts(), $this->options['installer_prefix'] ?? RmmProtocol::INSTALLER_NAME_PREFIX, $this->clientLabel());
+        return new InstallerDownload($this->sql(), $this->settings(), $this->updates(), $this->tenancy, $this->audit, $this->attempts(), $this->options['installer_prefix'] ?? RmmProtocol::INSTALLER_NAME_PREFIX, $this->clientLabel(), $this->meshAgents());
     }
 
     public function housekeeping(): Housekeeping
@@ -676,6 +687,37 @@ final class RmmModule
         return $this->fieldActions ??= new FieldActions($this->authorizer(), $this->customFields(), $this->devices(), $this->audit, $this->tenancy);
     }
 
+    /**
+     * The starter pack installer: the bundled pack plus any pack folders listed in the `starter_packs` option (see docs/rmm/STARTER_PACK.md). No tables of
+     * its own; it installs through {@see scripts()} and {@see policyStore()}.
+     */
+    public function starterInstaller(): StarterInstaller
+    {
+        if ($this->starterInstaller === null) {
+            $packs = [StarterPack::bundled()];
+            foreach ((array) ($this->options['starter_packs'] ?? []) as $dir) {
+                if ($dir !== '') {
+                    $packs[] = StarterPack::fromDirectory($dir);
+                }
+            }
+            $this->starterInstaller = new StarterInstaller($this->sql(), $this->scripts(), $this->policyStore(), $this->settings(), $packs);
+        }
+
+        return $this->starterInstaller;
+    }
+
+    /** Browse, preview, install and remove starter pack content (administrators; needs the edition's AccessPolicy). */
+    public function starterActions(): StarterActions
+    {
+        return $this->starterActions ??= new StarterActions($this->authorizer(), $this->starterInstaller(), $this->audit, $this->eventPublisher());
+    }
+
+    /** The starter pack routes (mounted by {@see technicianApi()}). */
+    public function starterApi(): StarterApi
+    {
+        return $this->starterApi ??= new StarterApi($this->starterActions());
+    }
+
     // ------------------------------------------------------------------ technician and administration side
 
     /** Who may do what: the edition's AccessPolicy plus its tenancy scope, with the module switch. @throws \LogicException without a policy */
@@ -693,7 +735,7 @@ final class RmmModule
     {
         return $this->readModel ??= new RmmReadModel($this->sql(), $this->settings(), $this->devices(), $this->updates(), $this->binaryStore(),
             $this->assets instanceof RmmAssetNamesInterface ? $this->assets : null, $this->clientLabel(),
-            $this->policy === null ? null : $this->authorizer(), $this->tags(), $this->groups(), $this->metricReader(), $this->automationReader(), $this->cache(), $this->logService(), $this->transfers());
+            $this->policy === null ? null : $this->authorizer(), $this->tags(), $this->groups(), $this->metricReader(), $this->automationReader(), $this->cache(), $this->logService(), $this->transfers(), $this->meshAgents());
     }
 
     /** Hosted agent binaries: validate, store, publish, serve. */
@@ -708,10 +750,22 @@ final class RmmModule
         return $this->mesh ??= new MeshService($this->sql(), $this->settings(), $this->devices(), $this->box, $this->urlPolicy ?? new UrlPolicy(false), $this->options['allow_insecure_http'] ?? false);
     }
 
+    /** The install settings of the optional MeshCentral agent (device group, certificate pin, overwrite switch, table corrections). */
+    public function meshAgentSettings(): MeshAgentSettings
+    {
+        return $this->meshAgentSettings ??= new MeshAgentSettings($this->sql());
+    }
+
+    /** The optional MeshCentral agent: the installer's Mesh block, the device's report and the automatic node-id mapping. */
+    public function meshAgents(): MeshAgentService
+    {
+        return $this->meshAgents ??= new MeshAgentService($this->sql(), $this->settings(), $this->meshAgentSettings(), $this->devices(), $this->audit, $this->eventPublisher());
+    }
+
     /** Per-client installers and deployment snippets (the administrator side). */
     public function installerService(): InstallerService
     {
-        return $this->installerService ??= new InstallerService($this->sql(), $this->updates(), $this->installerDownload(), $this->enrollment(), $this->tenancy, $this->audit, $this->binaryStore(), $this->clientLabel());
+        return $this->installerService ??= new InstallerService($this->sql(), $this->updates(), $this->installerDownload(), $this->enrollment(), $this->tenancy, $this->audit, $this->binaryStore(), $this->clientLabel(), $this->meshAgents());
     }
 
     /** Technician and administrator actions on devices, shared by the web handlers and the REST API. */
@@ -725,13 +779,13 @@ final class RmmModule
     public function admin(): RmmAdmin
     {
         return $this->admin ??= new RmmAdmin($this->sql(), $this->settings(), $this->box, $this->authorizer(), $this->binaryStore(), $this->updates(), $this->mesh(),
-            $this->installerService(), $this->devices(), $this->audit);
+            $this->installerService(), $this->devices(), $this->audit, $this->meshAgentSettings());
     }
 
     /** The technician REST API handler (`endpoint_devices`): the edition authenticates and passes the principal. */
     public function technicianApi(): TechnicianApi
     {
-        return new TechnicianApi($this->authorizer(), $this->technician(), $this->readModel(), $this->inventory(), $this->policyActions(), $this->scriptActions(), $this->fieldActions(), $this->alertingApi(), $this->remoteApi());
+        return new TechnicianApi($this->authorizer(), $this->technician(), $this->readModel(), $this->inventory(), $this->policyActions(), $this->scriptActions(), $this->fieldActions(), $this->alertingApi(), $this->remoteApi(), $this->starterApi());
     }
 
     /** The alerts, maintenance windows, escalation policies and thresholds routes (mounted by {@see technicianApi()}). */

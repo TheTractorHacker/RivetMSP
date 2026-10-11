@@ -409,6 +409,8 @@ Only when the RMM module is switched on (Administration > Settings > Endpoint ag
 | GET | `/agent_update` | Device-facing: hosted agent update download. |
 | GET, POST | `/agent_transfer` | Device-facing (RivetCore rc.11, file transfer switch): raw chunks of at most 1 MiB with the one-time `X-Transfer-Token` header. |
 | POST | `/agent_logs` | Device-facing (RivetCore rc.11, log collection switch): batches of at most 200 events and 256 KiB. |
+| GET, PUT | `/endpoint_devices/remote/mesh` | RivetCore rc.12, `rmm.admin`: the optional MeshCentral agent install settings (group id, certificate pin, overwrite switch, tables); `probe_pin` proposes a pin and saves nothing. The device detail gains `mesh_agent` once the device has reported one. See Core's `docs/rmm/openapi-device.yaml`. |
+| GET, POST | `/endpoint_devices/starter/catalog`, `/starter/plan`, `/starter/install`, `/starter/uninstall` | RivetCore rc.13, `rmm.admin`: the starter pack (73 scripts, 3 check sets, 3 policy drafts). `plan` writes nothing; an empty selection means the whole pack. |
 | GET | `/endpoint_devices`, `/endpoint_devices/{id}`, `/endpoint_devices/{id}/jobs` | User token only (the legacy `X-Api-Key` is refused). Role `module_rmm`; devices outside the caller's clients are a 404. |
 | POST | `/endpoint_devices/{id}/jobs`, `/endpoint_devices/{id}/jobs/{job_id}/cancel`, `/endpoint_devices/{id}/remote` | Needs `module_rmm_scripts` / `module_rmm_remote_connect`; a reboot needs `"confirm": true`. |
 

@@ -42,6 +42,13 @@ switch ($action) {
             rivetRmmAutoDone($fail(implode(' ', array_slice($errors, 0, 4))), '', $back);
         }
         if ($pid > 0) {
+            // A starter-pack draft (RivetCore 1.0.0-rc.13) ends its description with a marker that tells the pack which policy it is. The editor does not show it, so put the stored one
+            // back: editing a draft must not turn it into "your own policy" by losing the marker. Core's limit is 300 characters, so the visible text gives way.
+            $cur = $call('GET', ['policies', $pid]);
+            $marker = $cur['ok'] ? rivetRmmAutoStarterMarker((string) ($cur['data']['policy']['description'] ?? '')) : '';
+            if ($marker !== '' && rivetRmmAutoStarterMarker($desc) === '') {
+                $desc = rtrim(mb_substr($desc, 0, 300 - strlen($marker))) . $marker;
+            }
             $r = $call('PUT', ['policies', $pid], ['name' => $name, 'description' => $desc, 'enabled' => $enabled, 'settings' => $settings]);
             if (!$r['ok']) {
                 $_SESSION['rmm_pol_draft'] = $draft;

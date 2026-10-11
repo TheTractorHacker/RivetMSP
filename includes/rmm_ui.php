@@ -287,6 +287,25 @@ function rivetRmmUiPerformance(\mysqli $mysqli, int $assetId, int $now): ?array
 // ------------------------------------------------------------------ the asset page's RMM panel
 
 /**
+ * What the device reported about its MeshCentral agent (RivetCore 1.0.0-rc.12; Core adds `mesh_agent` to a device's detail only once the device has reported one), as the
+ * pages show it. Null when it never reported one (nothing is rendered for those devices). The node id is for administrators only, like the mapping form it belongs to.
+ *
+ * @param array<string,mixed>|null $ma
+ * @return array{installed:bool,version:?string,node_id:string,error:?string,map_state:?string,conflict_device_id:?int,first_installed_at:?string,reported_at:?string}|null
+ */
+function rivetRmmUiMeshAgent(?array $ma, bool $admin): ?array
+{
+    if ($ma === null) {
+        return null;
+    }
+    $state = isset($ma['map_state']) && in_array($ma['map_state'], ['mapped', 'conflict', 'kept_manual'], true) ? (string) $ma['map_state'] : null;
+
+    return ['installed' => !empty($ma['installed']), 'version' => isset($ma['version']) && $ma['version'] !== '' ? (string) $ma['version'] : null,
+        'node_id' => $admin ? (string) ($ma['node_id'] ?? '') : '', 'error' => isset($ma['error']) && $ma['error'] !== '' ? (string) $ma['error'] : null, 'map_state' => $state,
+        'conflict_device_id' => isset($ma['conflict_device_id']) ? (int) $ma['conflict_device_id'] : null, 'first_installed_at' => $ma['first_installed_at'] ?? null, 'reported_at' => $ma['reported_at'] ?? null];
+}
+
+/**
  * The RMM device behind an asset, as a view-model, or null. Null means "render nothing": the module is off (answered from the state file with
  * no query), the asset has no agent device, the user may not view devices, or the device is outside the user's clients (the same answer for
  * "missing" and "not yours").
@@ -549,6 +568,7 @@ function rivetRmmUiPanel(\mysqli $mysqli, int $assetId, int $userId, ?int $devic
         'jobs' => (array) ($view['jobs'] ?? []),
         'mesh' => ['mapped' => !empty($view['mesh']['mapped']), 'source' => $view['mesh']['source'] ?? null, 'node_id' => $perm['admin'] ? ($view['mesh']['node_id'] ?? '') : '',
             'configured' => $meshConfigured],
+        'mesh_agent' => rivetRmmUiMeshAgent(is_array($view['mesh_agent'] ?? null) ? $view['mesh_agent'] : null, (bool) $perm['admin']),
         'remote_sessions' => $sessions,
         'saved_scripts' => $saved,
         'banners' => $banners,
@@ -790,7 +810,7 @@ function rivetRmmUiOpenAlertCount(\mysqli $mysqli, \RivetCore\Rmm\RmmModule $rmm
  *
  * @param int|null $onlyClientId a client page: the dialog offers just that client (no list is read)
  * @return array{clients:list<array{id:int,name:string}>,locations:array<int,list<array{id:int,name:string}>>,windows:array{amd64:?string,arm64:?string},
- *     service_problem:?string,max_ttl_h:int,can_publish:bool,selected:int,post_url:string}|null
+ *     service_problem:?string,max_ttl_h:int,can_publish:bool,selected:int,post_url:string,mesh:array{show:bool,ready:bool,refusal:?string,admin:bool}}|null
  */
 function rivetRmmUiInstaller(\mysqli $mysqli, int $userId, ?int $onlyClientId = null, ?int $selectedClientId = null): ?array
 {
@@ -844,5 +864,6 @@ function rivetRmmUiInstaller(\mysqli $mysqli, int $userId, ?int $onlyClientId = 
         'can_publish' => $authz->allowed($userId, RmmAbility::BINARY_PUBLISH, 0) || $authz->allowed($userId, RmmAbility::ADMIN, 0),
         'selected' => in_array($selected, array_column($clients, 'id'), true) ? $selected : 0,
         'post_url' => '/agent/post/rmm_installer.php',
+        'mesh' => rivetRmmUiInstallerMesh($rmm, $authz->allowed($userId, RmmAbility::ADMIN, 0), $cfg),
     ];
 }

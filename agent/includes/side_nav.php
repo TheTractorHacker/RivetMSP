@@ -20,7 +20,7 @@ $section_pages = [
     'finance'       => ['payments.php', 'vendors.php', 'expenses.php', 'recurring_expenses.php', 'accounts.php', 'transfers.php', 'trips.php'],
     'endpoint'      => ['rmm_dashboard.php', 'rmm_fleet.php', 'rmm_assets.php', 'rmm_asset.php', 'rmm_alerts.php', 'rmm_scripts.php', 'rmm_checks.php', 'network.php', 'firewalls.php',
         // RMM Phase 2 and 3 pages (shown only while the module and the sub-switch are on)
-        'rmm_policies.php', 'rmm_script_library.php', 'rmm_schedules.php', 'rmm_approvals.php', 'rmm_fields.php', 'rmm_agent_alerts.php', 'rmm_maintenance.php', 'rmm_escalations.php',
+        'rmm_policies.php', 'rmm_script_library.php', 'rmm_starter_pack.php', 'rmm_schedules.php', 'rmm_approvals.php', 'rmm_fields.php', 'rmm_agent_alerts.php', 'rmm_maintenance.php', 'rmm_escalations.php',
         // RMM Phase 8 (sub-switch `logs`)
         'rmm_logs.php', 'rmm_log_rules.php'],
     'backups'       => ['backups.php'],

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# REAL-agent proof of RivetMSP's RMM Phases 6 and 8 (remote tools, file transfer, log collection) through RivetMSP's own bridges.
+# REAL-agent proof of RivetMSP's RMM Phases 6 and 8 (remote tools, file transfer, log collection), of the optional MeshCentral agent install and node-id mapping (rc.12,
+# against a MOCK Mesh server) and of the starter pack (rc.13: installed through the API, a read-only script and a dry-run script run on the real agent), through RivetMSP's own bridges.
 #
 #   the Linux agent (the release build from RivetCore's `make dist`, endpoint-agent/dist) running under a REAL systemd in a privileged container
 #     <--TLS-->  nginx (host network, self-signed CA)  <--http-->  `php -S` serving RivetMSP's api/v1 front controller (tests/rmm_golden/router.php)
@@ -35,20 +36,34 @@ bad() { echo "FAIL: $*"; fail=1; }
 chk() { if eval "$2"; then ok "$1"; else bad "$1  [$2]"; fi; }
 wait_for() { local t=$1 c=$2 i=0; while ! eval "$c"; do i=$((i+1)); [ $i -ge $((t*2)) ] && return 1; sleep 0.5; done; return 0; }
 PHPPID=""
+MESHPID=""
 cleanup() {
-  docker rm -f "$NAME" "$NAME-nginx" >/dev/null 2>&1 || true
+  docker rm -f "$NAME" "$NAME-nginx" "$NAME-mesh" >/dev/null 2>&1 || true
   [ -n "$PHPPID" ] && kill "$PHPPID" 2>/dev/null || true
+  [ -n "$MESHPID" ] && kill "$MESHPID" 2>/dev/null || true
   rm -rf "$WORK"
 }
 trap cleanup EXIT
-cleanup_early() { docker rm -f "$NAME" "$NAME-nginx" >/dev/null 2>&1 || true; }; cleanup_early
+cleanup_early() { docker rm -f "$NAME" "$NAME-nginx" "$NAME-mesh" >/dev/null 2>&1 || true; }; cleanup_early
 
 echo "== scratch RivetMSP install and server"
 mkdir -p "$WORK/state" "$WORK/tls" "$WORK/transfer"; chmod 700 "$WORK/state"
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=rivetit-proof" -addext "subjectAltName=IP:$GATEWAY,IP:127.0.0.1,DNS:localhost" \
   -keyout "$WORK/tls/key.pem" -out "$WORK/tls/ca.pem" >/dev/null 2>&1
+# the MOCK Mesh server (tests/real_agent_proof/mock_mesh.py): its own self-signed certificate, whose SHA-384 is the pin the install command carries
+MESHPORT="${MESH_PORT:-8654}"
+MESHGROUP=4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9
+MESHNODE_RAW='AbCdEfGhIjKlMnOpQrStUvWxYz0123456789@$AbCdEfGhIjKlMnOpQrStUvWxYz01'
+openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=mock-meshcentral" -addext "subjectAltName=IP:$GATEWAY,IP:127.0.0.1" -keyout "$WORK/tls/mesh-key.pem" -out "$WORK/tls/mesh-cert.pem" >/dev/null 2>&1
+cat "$WORK/tls/mesh-key.pem" "$WORK/tls/mesh-cert.pem" >"$WORK/tls/mesh.pem"; chmod 600 "$WORK/tls/mesh.pem"
+MESHPIN="$(openssl x509 -in "$WORK/tls/mesh-cert.pem" -outform DER | openssl dgst -sha384 -hex | awk '{print $NF}')"
+: >"$WORK/mesh-events.log"
+python3 "$HERE/mock_mesh.py" "$WORK/tls/mesh.pem" "$MESHPORT" "$MESHGROUP" "$MESHNODE_RAW" "$WORK/mesh-events.log" >/dev/null 2>&1 &
+MESHPID=$!
+export PROOF_MESH_URL="https://$GATEWAY:$MESHPORT" PROOF_MESH_GROUP="$MESHGROUP" PROOF_MESH_PIN="$MESHPIN" PROOF_CA_FILE="$WORK/tls/ca.pem"
 export RMM_TEST_STATE_DIR="$WORK/state" RMM_GATE_STATE_DIR= EA_TEST_NON_WINDOWS=1 RIVETMSP_WEBHOOK_ALLOW_PRIVATE=1
 SETUP="$(cd "$REPO" && php "$HERE/setup.php" "https://$GATEWAY:$TLSPORT")" || { echo "setup failed: $SETUP"; exit 2; }
+MESHCMD="$(printf '%s' "$SETUP" | php -r 'echo json_decode(stream_get_contents(STDIN), true)["mesh_command"];')"
 TOKEN="$(printf '%s' "$SETUP" | php -r 'echo json_decode(stream_get_contents(STDIN), true)["token"];')"
 ADMIN="$(printf '%s' "$SETUP" | php -r 'echo json_decode(stream_get_contents(STDIN), true)["admin_api_token"];')"
 export RIVETMSP_SOCKET="$SOCKET"
@@ -185,6 +200,85 @@ q systemctl start rivetproof-noisy.service
 sleep 2
 ST="$(api GET "$DEV/logs/stats")"
 chk "storage figures are reported" 'printf "%s" "$ST" | grep -q device_max_rows'
+echo "== optional MeshCentral agent (rc.12): Core's install command, a MOCK Mesh server, a second machine"
+chk "Core's Linux install command carries the Mesh flags, the group id and the pin" 'printf "%s" "$MESHCMD" | grep -q -- "--install-mesh-agent" && printf "%s" "$MESHCMD" | grep -q -- "--mesh-url" && printf "%s" "$MESHCMD" | grep -q "$MESHGROUP" && printf "%s" "$MESHCMD" | grep -q "$MESHPIN"'
+chk "the mock Mesh server is up and has served nothing yet" '[ ! -s "$WORK/mesh-events.log" ] && kill -0 "$MESHPID"'
+M2="$NAME-mesh"
+docker run -d --name "$M2" --hostname proof-mesh-host --privileged --cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup:rw --tmpfs /tmp --tmpfs /run --tmpfs /run/lock "$IMG" >/dev/null
+for _ in $(seq 1 60); do docker exec "$M2" systemctl is-system-running 2>/dev/null | grep -Eq 'running|degraded' && break; sleep 0.5; done
+docker exec "$M2" mkdir -p /w /var/tmp
+# a second MACHINE: containers of one image share /etc/machine-id, which the agent uses as the machine identity
+docker exec "$M2" sh -c 'cat /proc/sys/kernel/random/uuid | tr -d - > /etc/machine-id'
+docker cp "$AGENT_BIN" "$M2:/w/rivetit-agent"; docker cp "$INSTALL_SH" "$M2:/w/install-linux.sh"; docker cp "$WORK/tls/ca.pem" "$M2:/w/ca.pem"
+printf '%s' "$TOKEN" | docker exec -i "$M2" sh -c 'cat >/w/enroll.token; chmod 600 /w/enroll.token'
+printf '%s\n' "$MESHCMD" | docker exec -i "$M2" sh -c 'cat >/w/mesh-install.sh'
+q2() { docker exec "$M2" "$@"; }
+BADPIN="$(printf 0%.0s $(seq 1 96))"
+echo "-- a pin that does not match: the RivetMSP agent installs, the Mesh agent does not, and the failure is reported"
+q2 bash -c "cd /w && ./install-linux.sh --server https://$GATEWAY:$TLSPORT --token-file /w/enroll.token --ca /w/ca.pem --install-mesh-agent --mesh-url $PROOF_MESH_URL --mesh-group-id $MESHGROUP --mesh-cert-pin $BADPIN" >"$WORK/mesh-install-bad.out" 2>&1
+RCB=$?
+chk "the install exits 0 although the Mesh part failed (a Mesh failure never fails the RivetMSP install)" '[ $RCB = 0 ]'
+chk "no Mesh agent exists on the machine and the mock server was never reached (the TLS handshake was refused)" '! q2 test -e /usr/local/mesh_services/meshagent/meshagent && [ ! -s "$WORK/mesh-events.log" ]'
+chk "the failure is on record on the machine and never holds the group id" 'q2 grep -q "\"installed\": false" /var/lib/rivetit-agent/mesh_agent.json && ! q2 grep -rqa "$MESHGROUP" /var/lib/rivetit-agent'
+wait_for 60 "[ \"\$(api GET '' | jget total)\" = 2 ]"
+DEV2="$(api GET '' | php -r '$d=json_decode(stream_get_contents(STDIN), true); foreach ($d["data"] as $x) { if ((int) $x["device_id"] !== (int) $argv[1]) { echo $x["device_id"]; } }' "$DEV")"
+chk "the second machine enrolled against RivetMSP and is a device ($DEV2)" '[ -n "$DEV2" ]'
+chk "its first check-in announced the capability mesh:nodeid" 'wait_for 60 "dbq \"SELECT capabilities_json FROM rmm_device_state WHERE device_id = $DEV2\" | grep -q mesh:nodeid"'
+chk "the technician API reports the failed install with its reason, and names no group id" 'wait_for 60 "A GET \"$DEV2\"; [ \"\$(printf %s \"\$R\" | jget mesh_agent.installed)\" = false ]" && printf "%s" "$R" | jget mesh_agent.error | grep -qi pinned && ! printf "%s" "$R" | grep -q "$MESHGROUP"'
+chk "nothing is mapped for it" '[ "$(dbq "SELECT COUNT(*) FROM endpoint_agent_mesh_nodes WHERE device_id = $DEV2")" = 0 ]'
+chk "audit: Mesh Agent Install Failed" '[ "$(dbq "SELECT COUNT(*) FROM logs WHERE log_action = \"Mesh Agent Install Failed\"")" -ge 1 ]'
+echo "-- the install command Core made (good pin): the Mesh agent is pulled from the mock server, installed, and its node is mapped automatically"
+q2 bash -c "cd /w && bash ./mesh-install.sh" >"$WORK/mesh-install-good.out" 2>&1
+RCG=$?
+chk "the install command exits 0" '[ $RCG = 0 ]'
+chk "downloaded from <mesh>/meshagents?id=6&meshid=<group>&installflags=0 (linux/amd64 = 6)" 'grep -q "MESH-DOWNLOAD id=6 meshid=$MESHGROUP installflags=0" "$WORK/mesh-events.log"'
+chk "the downloaded installer ran with -install and put the (fake) Mesh agent in place" 'q2 grep -q "installed by: .* -install" /var/tmp/mesh-installed.marker && q2 test -x /usr/local/mesh_services/meshagent/meshagent'
+chk "the install output says so, and the machine keeps one RivetMSP device (no second enrollment)" 'grep -q "MeshCentral agent: installed" "$WORK/mesh-install-good.out" && [ "$(api GET "" | jget total)" = 2 ]'
+chk "the check-in reports it and the server maps the node (installed, node//<id>, mapped)" 'wait_for 90 "A GET \"$DEV2\"; [ \"\$(printf %s \"\$R\" | jget mesh_agent.installed)\" = true ] && [ \"\$(printf %s \"\$R\" | jget mesh_agent.map_state)\" = mapped ]" && [ "$(printf %s "$R" | jget mesh_agent.node_id)" = "node//$MESHNODE_RAW" ]'
+chk "the mapping row says the agent set it, and the earlier error is gone" '[ "$(dbq "SELECT source FROM endpoint_agent_mesh_nodes WHERE device_id = $DEV2")" = agent ] && [ "$(printf %s "$R" | jget mesh_agent.error)" = null ]'
+chk "the device detail never holds the group id" '! printf "%s" "$R" | grep -q "$MESHGROUP"'
+chk "audit: Mesh Agent Installed and Mesh Node Mapped" '[ "$(dbq "SELECT COUNT(*) FROM logs WHERE log_action = \"Mesh Agent Installed\"")" -ge 1 ] && [ "$(dbq "SELECT COUNT(*) FROM logs WHERE log_action = \"Mesh Node Mapped\"")" -ge 1 ]'
+chk "the option was remembered for the enrollment token (installer options row)" '[ "$(dbq "SELECT COUNT(*) FROM endpoint_agent_installer_options WHERE install_mesh_agent = 1")" -ge 1 ]'
+chk "uninstalling the RivetMSP agent leaves the Mesh agent alone" 'q2 bash /w/install-linux.sh --uninstall --purge >"$WORK/mesh-uninstall.out" 2>&1; q2 test -x /usr/local/mesh_services/meshagent/meshagent'
+chk "and --remove-meshagent runs the Mesh agent's own uninstaller" 'q2 bash -c "cd /w && ./install-linux.sh --server https://$GATEWAY:$TLSPORT --token-file /w/enroll.token --ca /w/ca.pem >/dev/null 2>&1; ./install-linux.sh --uninstall --purge --remove-meshagent" >"$WORK/mesh-uninstall2.out" 2>&1; q2 test -e /var/tmp/mesh-uninstalled.marker && ! q2 test -e /usr/local/mesh_services/meshagent/meshagent'
+docker rm -f "$M2" >/dev/null 2>&1 || true
+
+echo "== starter pack (rc.13): installed through the API, a read-only script and a dry-run script run on the REAL Linux agent"
+A GET "starter/catalog"
+chk "catalog: 200, ready (signing key present), 73 scripts" '[ "$CODE" = 200 ] && [ "$(printf %s "$R" | jget data.ready)" = true ] || [ "$(printf %s "$R" | jget ready)" = true ]'
+A POST "starter/install" '{"ids":["lin-system-summary","lin-journal-vacuum","policy-linux-server"]}'
+chk "install of two Linux scripts and one policy draft: 200, three added" '[ "$CODE" = 200 ] && [ "$(printf %s "$R" | jget counts.added)" = 3 ]'
+A POST "starter/install" '{"ids":["lin-system-summary","lin-journal-vacuum","policy-linux-server"]}'
+chk "installing again changes nothing (idempotent): three unchanged" '[ "$CODE" = 200 ] && [ "$(printf %s "$R" | jget counts.unchanged)" = 3 ]'
+chk "the policy draft is switched off and assigned to nothing" '[ "$(dbq "SELECT enabled FROM rmm_policies WHERE description LIKE \"%[starter|%policy-linux-server%\"")" = 0 ] && [ "$(dbq "SELECT COUNT(*) FROM rmm_policy_assignments")" = 0 ]'
+A GET "scripts?tag=starter"
+SID1="$(printf %s "$R" | php -r '$d=json_decode(stream_get_contents(STDIN), true); foreach ($d["data"] as $x) { if (strpos($x["name"], "System summary") === 0) { echo $x["script_id"]; } }')"
+SID2="$(printf %s "$R" | php -r '$d=json_decode(stream_get_contents(STDIN), true); foreach ($d["data"] as $x) { if (strpos($x["name"], "Vacuum systemd journal") === 0) { echo $x["script_id"]; } }')"
+chk "the two scripts are in the library with the starter tag (ids $SID1 and $SID2)" '[ -n "$SID1" ] && [ -n "$SID2" ]'
+run_lib() { # run_lib SCRIPT_ID [params-json] -> sets JOBID once the job is queued, then waits for a final state and sets JSTATE / JOUT
+  local sid=$1 params="${2:-{\}}"
+  A POST "runs" "{\"library_script_id\":$sid,\"target\":{\"type\":\"device\",\"id\":$DEV},\"params\":$params}"
+  [ "$CODE" = 201 ] || { JSTATE="http $CODE"; return 1; }
+  local i=0; JSTATE=""
+  while [ $i -lt 120 ]; do
+    A GET "$DEV/jobs?limit=10"
+    JSTATE="$(printf %s "$R" | php -r '$d=json_decode(stream_get_contents(STDIN), true); foreach ($d["data"] as $j) { if ((int) ($j["library"]["script_id"] ?? 0) === (int) $argv[1]) { echo $j["state"]; exit; } }' "$sid")"
+    case "$JSTATE" in succeeded|failed|timed_out|cancelled|expired) break;; esac
+    i=$((i+1)); sleep 0.5
+  done
+  JOUT="$(printf %s "$R" | php -r '$d=json_decode(stream_get_contents(STDIN), true); foreach ($d["data"] as $j) { if ((int) ($j["library"]["script_id"] ?? 0) === (int) $argv[1]) { echo $j["output"] ?? ""; exit; } }' "$sid")"
+  return 0
+}
+run_lib "$SID1" '{}'
+chk "the read-only starter script ran on the real agent and succeeded (the agent verified the signed job)" '[ "$JSTATE" = succeeded ]'
+chk "its output is the system summary of the machine (kernel and uptime lines, no error)" 'printf %s "$JOUT" | grep -qi "kernel" && ! printf %s "$JOUT" | grep -qi "NOT AVAILABLE: sh"'
+run_lib "$SID2" '{}'
+chk "the dry-run starter script (changes the system, dry_run defaults to true) ran and says what it would do" '[ "$JSTATE" = succeeded ] && printf %s "$JOUT" | grep -qi "dry"'
+chk "the activity log has the starter lines and the script runs, and no script text" '[ "$(dbq "SELECT COUNT(*) FROM logs WHERE log_action = \"Starter Pack Installed\"")" -ge 1 ] && [ "$(dbq "SELECT COUNT(*) FROM logs WHERE log_action = \"Script Run\"")" -ge 2 ]'
+A POST "starter/uninstall" '{"ids":["lin-journal-vacuum"],"dry_run":true}'
+chk "an uninstall preview names the untouched script and changes nothing" '[ "$CODE" = 200 ] && printf %s "$R" | grep -q would_retire && [ "$(dbq "SELECT COUNT(*) FROM rmm_scripts_v2 WHERE retired_at IS NOT NULL")" = 0 ]'
+A POST "starter/plan" '{}'
+chk "an EMPTY selection through the API means the whole pack (Core's rule; the web page never sends one)" '[ "$CODE" = 200 ] && [ "$(printf %s "$R" | jget counts.add)" -gt 60 ]'
 echo "== audit"
 AUD="$(php -r 'mysqli_report(MYSQLI_REPORT_OFF); $m = new mysqli(null, getenv("RIVETMSP_TEST_DB_USER"), getenv("RIVETMSP_TEST_DB_PASS"), getenv("RIVETMSP_TEST_DB_NAME"), null, getenv("RIVETMSP_SOCKET")); $r = $m->query("SELECT log_action FROM logs WHERE log_type = \x27Endpoint Agent\x27"); $o = []; while ($r && ($x = $r->fetch_row())) { $o[] = $x[0]; } echo json_encode($o);')"
 chk "the activity log (type Endpoint Agent) has the service, process and file actions (queued, completed, downloaded)" 'for k in "Remote Tool Queued" "File Download Requested" "File Transfer Completed" "File Downloaded" "File Upload Queued"; do printf "%s" "$AUD" | grep -q "$k" || { echo "missing $k"; false; break; }; done'
