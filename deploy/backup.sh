@@ -287,8 +287,21 @@ EOF
             "settings_enc_key_fingerprint" => $argv[3] === "" ? "" : substr(hash("sha256", "rivetit-settings-key-fingerprint|v1|" . $argv[3]), 0, 16),
             "backup_timestamp"             => $argv[4],
         ];
+        // The Core key file (docs/KEY_MANAGEMENT.md): its keys by kid and fingerprint, never the keys. A restore needs the matching offline copy.
+        $cfg = (string) @file_get_contents($argv[6] . "/config.php");
+        $kf = preg_match("/^\$config_keyfile\s*=\s*\x27(.*)\x27;/m", $cfg, $m) ? $m[1] : "/etc/rivetmsp/keys.json";
+        if ($kf !== "" && is_file($kf) && is_file($argv[6] . "/vendor/autoload.php")) {
+            try {
+                require $argv[6] . "/vendor/autoload.php";
+                $ring = RivetCore\Crypto\KeyFile::ringFromJson((string) file_get_contents($kf));
+                foreach ($ring->kids() as $kid) { $data["keyring"][$kid] = $ring->fingerprint($kid); }
+                $data["keyring_active"] = $ring->activeKid();
+            } catch (Throwable $e) {
+                fwrite(STDERR, "WARNING: the key file " . $kf . " could not be read; the manifest has no key ring.\n");
+            }
+        }
         file_put_contents($argv[5], json_encode($data, JSON_PRETTY_PRINT));
-    ' -- "${DB_NAME}" "${INSTALLATION_ID}" "${SETTINGS_ENC_KEY}" "${timestamp}" "${manifest_file}"
+    ' -- "${DB_NAME}" "${INSTALLATION_ID}" "${SETTINGS_ENC_KEY}" "${timestamp}" "${manifest_file}" "${APP_DIR}"
 
     # Table snapshot for the restore drill (names + counts only); the backup is complete without it.
     local snapshot_file="${DEST}/table-snapshot.json"

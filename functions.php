@@ -442,13 +442,13 @@ function getCanonicalVaultKey($mysqli): ?string {
     $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT config_vault_canonical_key FROM settings WHERE company_id = 1"));
     $stored = $row['config_vault_canonical_key'] ?? '';
     if (empty($stored)) return null;
-    $key = decryptSetting($stored);
+    $key = decryptSetting($stored, \RivetMSP\Crypto\SettingsCrypto::VAULT_CANONICAL_KEY);
     return $key !== '' ? $key : null;
 }
 
 // Persists the canonical site encryption master key (admin-only action).
 function setCanonicalVaultKey($mysqli, string $master_key): void {
-    $esc = mysqli_real_escape_string($mysqli, encryptSetting($master_key));
+    $esc = mysqli_real_escape_string($mysqli, encryptSetting($master_key, \RivetMSP\Crypto\SettingsCrypto::VAULT_CANONICAL_KEY));
     mysqli_query($mysqli, "UPDATE settings SET config_vault_canonical_key = '$esc', config_vault_canonical_key_set_at = NOW() WHERE company_id = 1");
 }
 
@@ -472,7 +472,15 @@ function repairUserSpecificKey($mysqli, int $user_id, string $user_password): ?s
  * New Users: Requires the admin setting up their account have a Specific/Session key configured
  * Password Changes: Will use the current info in the session.
 */
-function encryptUserSpecificKey($user_password) {
+function encryptUserSpecificKey($user_password, $target_user_id = null, $old_password = null) {
+    // Credential vault v3: a user who already has a vw3 wrap keeps one (rewrapped with the old password, or made from the session data key
+    // by an administrator's reset). Flag off or no vw3 wrap: the legacy wrap below, exactly as before.
+    if ($target_user_id !== null && class_exists(\RivetMSP\Crypto\VaultV3::class) && isset($GLOBALS['mysqli'])) {
+        $v3_wrap = \RivetMSP\Crypto\VaultV3::wrapForPasswordChange($GLOBALS['mysqli'], (int) $target_user_id, (string) $user_password, $old_password === null ? null : (string) $old_password);
+        if ($v3_wrap !== null) {
+            return $v3_wrap;
+        }
+    }
     $iv = randomString();
     $salt = randomString();
 
@@ -496,6 +504,12 @@ function encryptUserSpecificKey($user_password) {
 // Ran at login, to facilitate generateUserSessionKey
 function decryptUserSpecificKey($user_encryption_ciphertext, $user_password)
 {
+    // A vw3: wrap (credential vault v3) holds the data key, not the legacy master key, and needs the user id as context: it is opened by
+    // RivetMSP\Crypto\VaultV3::resolveLogin(). Never "succeed" here without having verified the password.
+    if (is_string($user_encryption_ciphertext) && str_starts_with($user_encryption_ciphertext, 'vw3:')) {
+        return false;
+    }
+
     // V2 ciphertexts (produced by setupFirstUserSpecificKey / encryptUserSpecificKey after the
     // PBKDF2 fix) are prefixed with "V2:" and use raw-byte key derivation (128-bit entropy).
     // V1 (legacy) ciphertexts have no prefix and used a hex-string key (64-bit effective entropy).
@@ -532,6 +546,14 @@ function generateUserSessionKey($site_encryption_master_key)
     $_SESSION['user_encryption_session_ciphertext'] = $user_encryption_session_ciphertext;
     $_SESSION['user_encryption_session_iv'] = $user_encryption_session_iv;
 
+    // Credential vault v3 (flag off: nothing happens): the session also carries the data key, sealed with the same browser-held cookie key.
+    if (class_exists(\RivetMSP\Crypto\VaultV3::class) && isset($GLOBALS['mysqli']) && \RivetMSP\Crypto\VaultV3::enabled($GLOBALS['mysqli'])) {
+        $vault_dek = \RivetMSP\Crypto\VaultV3::instanceDek($GLOBALS['mysqli']);
+        if ($vault_dek !== null) {
+            \RivetMSP\Crypto\VaultV3::storeSessionDek($vault_dek, $user_encryption_session_key);
+        }
+    }
+
     // Give the user "their" key as a cookie
     include 'config.php';
 
@@ -543,6 +565,17 @@ function generateUserSessionKey($site_encryption_master_key)
         setcookie("user_encryption_session_key", $user_encryption_session_key, ['expires' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict']);
         $_SESSION['alert_message'] = "Unencrypted connection flag set: Using non-secure cookies.";
     }
+}
+
+/**
+ * The vault master key a password login unwraps from users.user_specific_encryption_ciphertext: a legacy wrap as always (and, with the vault v3
+ * flag on, the user's wrap is upgraded to vw3 on the way), or a vw3 wrap (the legacy key then comes from the canonical row). false/'' = none.
+ */
+function vaultLoginMasterKey($mysqli, int $user_id, $stored_wrap, $password)
+{
+    rivetEnsureAutoload();
+    $keys = \RivetMSP\Crypto\VaultV3::resolveLogin($mysqli, $user_id, (string) $stored_wrap, (string) $password);
+    return $keys['master'] ?? false;
 }
 
 // How long the user_passkey_enc_key cookie should last. Intentionally much longer
@@ -598,8 +631,22 @@ function repairUserSpecificKeyWithKnownKey($mysqli, int $user_id, string $user_p
 }
 
 // Decrypts an encrypted password (website/asset credentials), returns it as a string
-function decryptCredentialEntry($credential_password_ciphertext)
+function decryptCredentialEntry($credential_password_ciphertext, $credential_id = null, string $field = 'password')
 {
+    rivetEnsureAutoload();   // the v3 branch below needs RivetMSP\Crypto\VaultV3
+
+    // v3 field (credential vault v3, RivetCore\Crypto\VaultCipher): opened with the data key held in the session; the credential id and
+    // field are part of the authenticated data, so a caller that cannot name them cannot open it. Same sentinels as below: null = locked.
+    if (\RivetMSP\Crypto\VaultV3::isV3Field((string) $credential_password_ciphertext)) {
+        $dek = \RivetMSP\Crypto\VaultV3::sessionDek();
+        if ($dek === null) {
+            return null;
+        }
+        if ($credential_id === null) {
+            return false;
+        }
+        return \RivetMSP\Crypto\VaultV3::openField((string) $credential_password_ciphertext, $dek, $credential_id, $field);
+    }
 
     // Split the credential into IV and Ciphertext
     $credential_iv =  substr($credential_password_ciphertext, 0, 16);
@@ -662,8 +709,18 @@ function decryptCredentialEntryWithKey($credential_ciphertext, #[\SensitiveParam
     return openssl_decrypt($ciphertext, 'aes-128-cbc', $master_key, 0, $iv);
 }
 
-function apiDecryptCredentialEntry($credential_ciphertext, $api_key_decrypt_hash, #[\SensitiveParameter]$api_key_decrypt_password)
+function apiDecryptCredentialEntry($credential_ciphertext, $api_key_decrypt_hash, #[\SensitiveParameter]$api_key_decrypt_password, $credential_id = null, string $field = 'password')
 {
+    rivetEnsureAutoload();
+    if (\RivetMSP\Crypto\VaultV3::isV3Field((string) $credential_ciphertext)) {
+        global $mysqli;
+        $keys = \RivetMSP\Crypto\VaultV3::resolveApiKey($mysqli, (string) $api_key_decrypt_hash, (string) $api_key_decrypt_password);
+        if ($keys['dek'] === null || $credential_id === null) {
+            return false;
+        }
+        return \RivetMSP\Crypto\VaultV3::openField((string) $credential_ciphertext, $keys['dek'], $credential_id, $field);
+    }
+
     // Split the Credential entry (username/password) into IV and Ciphertext
     $credential_iv =  substr($credential_ciphertext, 0, 16);
     $credential_ciphertext = $salt = substr($credential_ciphertext, 16);
@@ -704,7 +761,14 @@ function encryptOtpSecret(string $otp_plain): string {
 
 // Decrypts an OTP secret. If the value does not have the 'enc:' prefix it is returned as-is
 // (backward-compatible with existing plaintext secrets).
-function decryptOtpSecret(string $otp_stored): string {
+function decryptOtpSecret(string $otp_stored, $credential_id = null): string {
+    rivetEnsureAutoload();
+    if (\RivetMSP\Crypto\VaultV3::isV3Field($otp_stored)) {
+        $dek = \RivetMSP\Crypto\VaultV3::sessionDek();
+        if ($dek === null || $credential_id === null) return '';
+        $plain = \RivetMSP\Crypto\VaultV3::openField($otp_stored, $dek, $credential_id, 'otp');
+        return $plain === false ? '' : $plain;
+    }
     if (empty($otp_stored) || !str_starts_with($otp_stored, 'enc:')) return $otp_stored;
     $payload = substr($otp_stored, 4);
     $iv = substr($payload, 0, 16);
@@ -5239,130 +5303,86 @@ function queueWebhookEvent($event, $data) {
 }
 
 // Encrypts a sensitive settings value (SMTP password, OAuth secret, RMM api_key_enc,
-// the canonical vault key, ...) using the per-installation key from config.php.
+// the canonical vault key, ...).
 //
-// Ciphertexts carry a prefix that names the scheme, so old values stay readable:
-//   ENC2:  base64(nonce[12] . tag[16] . ct)  aes-256-gcm  - what we write now
-//   ENC:   base64(iv[16] . ct)               aes-128-cbc  - legacy, read-only
-//   (no prefix)                              legacy plaintext, read-only
+// One implementation, in RivetCore\Crypto (ADR-011), reached through RivetMSP\Crypto\SettingsCrypto. What is stored:
+//   v3:<kid>:base64(nonce12 . tag16 . ct)  AES-256-GCM, key ring from the key file (or the legacy config.php key as kid k1), the
+//                                          $context bound in as AAD - what we write once the key file exists (see SettingsCrypto)
+//   ENC2:  base64(nonce[12] . tag[16] . ct) aes-256-gcm under sha256($config_settings_enc_key) - written until then, always readable
+//   ENC:   base64(iv[16] . ct)              aes-128-cbc  - legacy, read-only
+//   (no prefix)                             legacy plaintext, read-only
 //
-// FAIL CLOSED. This used to return $plaintext untouched when $config_settings_enc_key
-// was empty, and nothing in the codebase ever generated that variable - so on every
-// install ever made these "encrypted" columns were written in cleartext, including the
-// credential-vault MASTER KEY that setCanonicalVaultKey() parks in settings right next
-// to the ciphertexts it unlocks. Silently downgrading to plaintext is never the right
-// answer for a caller that asked for encryption: refuse the write instead, so the
-// failure is loud at configuration time rather than invisible forever. Setup now mints
-// $config_settings_enc_key, and DB update 2.6.79 re-wraps rows written without one.
-function encryptSetting(string $plaintext): string {
-    global $config_settings_enc_key;
-
-    // An empty value is not a secret - callers pass '' to mean "this field is blank".
-    if ($plaintext === '') return $plaintext;
-
-    if (empty($config_settings_enc_key)) {
-        throw new RuntimeException(
-            'Refusing to store a secret in cleartext: $config_settings_enc_key is missing from config.php. ' .
-            'Add  $config_settings_enc_key = bin2hex(random_bytes(32));  to config.php and re-run the database update.'
-        );
+// $context names what is encrypted; the default binds the whole settings family. A caller that stores the value in one known place
+// may pass a name of its own (it must then pass the same one to decryptSetting()).
+//
+// FAIL CLOSED. With no key at all encryptSetting() throws RuntimeException rather than store a secret in cleartext (it used to return the
+// plaintext untouched, and for years every "encrypted" column on every install was cleartext). decryptSetting() keeps returning ''
+// for a value it cannot open, and still hands legacy unprefixed text back as it is: reads must not fail the way writes do, or an upgrade
+// would take the whole app down.
+function encryptSetting(string $plaintext, string $context = 'generic'): string {
+    if (!class_exists(\RivetCore\Crypto\Envelope::class, false)) {
+        rivetEnsureAutoload();
     }
-
-    // aes-256-gcm rather than the old aes-128-cbc: CBC here was unauthenticated, so
-    // anyone who could write to the settings/integration tables could flip ciphertext
-    // bits and have us decrypt attacker-chosen garbage without noticing. GCM values get
-    // their own "ENC2:" prefix, so switching schemes costs nothing - the CBC reader
-    // below is untouched and existing "ENC:" rows are never rewritten.
-    $key   = hash('sha256', $config_settings_enc_key, true); // 32 raw bytes
-    $nonce = random_bytes(12);
-    $tag   = '';
-    $ct    = openssl_encrypt($plaintext, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $nonce, $tag);
-    if ($ct === false) {
-        throw new RuntimeException('Refusing to store a secret in cleartext: openssl_encrypt() failed.');
+    if (!class_exists(\RivetCore\Crypto\Envelope::class)) {
+        return rivetSettingsCipherFallback(true, $plaintext);   // between `git pull` and `composer install`: rivet/rivet-core is not on disk yet
     }
-
-    return 'ENC2:' . base64_encode($nonce . $tag . $ct);
+    return \RivetMSP\Crypto\SettingsCrypto::encrypt($plaintext, $context);
 }
 
-function decryptSetting(string $ciphertext): string {
-    global $config_settings_enc_key;
+/**
+ * @param (callable(string, string): void)|null $persist when given, called with (new v3 value, value as read) after a successful read of a
+ *        legacy or old-key value, so the caller can write it back (the lazy re-wrap): UPDATE t SET col = :new WHERE col = :previous
+ */
+function decryptSetting(string $ciphertext, string $context = 'generic', ?callable $persist = null): string {
+    if (!class_exists(\RivetCore\Crypto\Envelope::class, false)) {
+        rivetEnsureAutoload();
+    }
+    if (!class_exists(\RivetCore\Crypto\Envelope::class)) {
+        return rivetSettingsCipherFallback(false, $ciphertext);
+    }
+    return \RivetMSP\Crypto\SettingsCrypto::decrypt($ciphertext, $context, $persist);
+}
 
-    if ($ciphertext === '') return $ciphertext;
+/**
+ * Load Composer's autoloader when the entry point has not (a cron script that includes functions.php but never vendor/autoload.php): without it
+ * decryptSetting() could not reach RivetCore\Crypto and every v3 value would read as empty. Idempotent; a missing vendor/ is left to the fallback.
+ */
+function rivetEnsureAutoload(): void {
+    static $tried = false;
+    if ($tried) return;
+    $tried = true;
+    $auto = __DIR__ . '/vendor/autoload.php';
+    if (is_file($auto)) {
+        require_once $auto;
+    }
+}
 
-    $is_gcm = str_starts_with($ciphertext, 'ENC2:');
-    $is_cbc = str_starts_with($ciphertext, 'ENC:');
-
-    // LEGACY PLAINTEXT - must keep working forever, with or without a key. Every install
-    // that ran before $config_settings_enc_key existed stored these columns unprefixed
-    // and unencrypted, and DB update 2.6.79 deliberately leaves some of them that way
-    // (the columns that still have raw, non-decrypting readers). Reads must not fail
-    // closed the way writes do, or an upgrade would take the whole app down.
-    if (!$is_gcm && !$is_cbc) return $ciphertext;
-
-    // Prefixed, but no key to open it with (config.php lost or replaced). Handing the
-    // caller the raw "ENC2:..." string would be worse than useless - getCanonicalVaultKey()
-    // would take it for the vault master key and re-wrap that garbage into user accounts.
-    // Return '' so callers see "not configured" and the vault simply stays locked.
-    if (empty($config_settings_enc_key)) return '';
-
-    if ($is_gcm) {
-        $data = base64_decode(substr($ciphertext, 5), true);
+/**
+ * The pre-ADR-011 ENC2/ENC cipher, used only while rivet/rivet-core is missing from vendor/ (the minutes between a `git pull` and
+ * `composer install` during an update). v3 values cannot be read here and read as ''; nothing is ever written in cleartext.
+ */
+function rivetSettingsCipherFallback(bool $encrypt, string $value): string {
+    $legacy = (string) ($GLOBALS['config_settings_enc_key'] ?? '');
+    if ($value === '') return $value;
+    if ($encrypt) {
+        if ($legacy === '') throw new RuntimeException('Refusing to store a secret in cleartext: $config_settings_enc_key is missing from config.php.');
+        $nonce = random_bytes(12); $tag = '';
+        $ct = openssl_encrypt($value, 'aes-256-gcm', hash('sha256', $legacy, true), OPENSSL_RAW_DATA, $nonce, $tag);
+        if ($ct === false) throw new RuntimeException('Refusing to store a secret in cleartext: openssl_encrypt() failed.');
+        return 'ENC2:' . base64_encode($nonce . $tag . $ct);
+    }
+    $gcm = str_starts_with($value, 'ENC2:'); $cbc = str_starts_with($value, 'ENC:');
+    if (str_starts_with($value, 'v3:')) return '';
+    if (!$gcm && !$cbc) return $value;
+    if ($legacy === '') return '';
+    if ($gcm) {
+        $data = base64_decode(substr($value, 5), true);
         if ($data === false || strlen($data) <= 28) return '';
-        $key   = hash('sha256', $config_settings_enc_key, true);
-        $nonce = substr($data, 0, 12);
-        $tag   = substr($data, 12, 16);
-        $ct    = substr($data, 28);
-        // Explicit === false, not ?: - a secret that is literally "0" is falsy and the
-        // ?: idiom the CBC path used to carry would silently blank it out.
-        $pt = openssl_decrypt($ct, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $nonce, $tag);
+        $pt = openssl_decrypt(substr($data, 28), 'aes-256-gcm', hash('sha256', $legacy, true), OPENSSL_RAW_DATA, substr($data, 0, 12), substr($data, 12, 16));
         return $pt === false ? '' : $pt;
     }
-
-    // Legacy aes-128-cbc, written before the GCM switch - still readable, byte for byte
-    // the same code path as before.
-    $data = base64_decode(substr($ciphertext, 4));
+    $data = base64_decode(substr($value, 4));
     if (strlen($data) <= 16) return '';
-    $key = substr(hash('sha256', $config_settings_enc_key, true), 0, 16);
-    $iv  = substr($data, 0, 16);
-    $ct  = substr($data, 16);
-    $pt  = openssl_decrypt($ct, 'aes-128-cbc', $key, OPENSSL_RAW_DATA, $iv);
+    $pt = openssl_decrypt(substr($data, 16), 'aes-128-cbc', substr(hash('sha256', $legacy, true), 0, 16), OPENSSL_RAW_DATA, substr($data, 0, 16));
     return $pt === false ? '' : $pt;
 }
-
-// ── CRM / Sales helpers ────────────────────────────────────────────────────
-
-// Ordered list of pipeline stages with their suggested default win probability.
-// Won/Lost are terminal stages that also drive opportunity_status.
-function getOpportunityStages() {
-    return array(
-        'Qualification' => 20,
-        'Proposal'      => 40,
-        'Negotiation'   => 60,
-        'Won'           => 100,
-        'Lost'          => 0,
-    );
-}
-
-// Returns the Bootstrap contextual colour used for a given pipeline stage badge.
-function opportunityStageColor($stage) {
-    switch ($stage) {
-        case 'Won':          return 'success';
-        case 'Lost':         return 'danger';
-        case 'Negotiation':  return 'warning';
-        case 'Proposal':     return 'info';
-        case 'Qualification':
-        default:             return 'secondary';
-    }
-}
-
-// Maps a pipeline stage to the opportunity_status it should set.
-// Won/Lost are terminal; everything else keeps the deal open.
-function opportunityStatusForStage($stage) {
-    if ($stage === 'Won') {
-        return 'won';
-    }
-    if ($stage === 'Lost') {
-        return 'lost';
-    }
-    return 'open';
-}
-

@@ -67,6 +67,10 @@ APP_DIR=""
 BACKUP_FILE=""
 PASSPHRASE_FILE=""
 SETTINGS_KEY_FILE=""
+# Core crypto key file (RivetCore\Crypto, docs/KEY_MANAGEMENT.md): the offline copy of /etc/rivetmsp/keys.json, from --key-file; KEY_FILE_DEST is
+# where it is installed (--key-file-dest). The archive never carries it: without it the v3 secrets in a restored database do not open.
+KEY_FILE_RESTORE=""
+KEY_FILE_DEST="/etc/rivetmsp/keys.json"
 CONFIRM_RESTORE=0
 NO_PRE_RESTORE_BACKUP_CONFIRMED=0
 UNATTENDED=0
@@ -104,6 +108,9 @@ Required:
                               the target database and uploads/ entirely.
 
 Options:
+  --key-file=<path>           Offline copy of the Core crypto key file (keys.json). Installed at
+                              --key-file-dest (default /etc/rivetmsp/keys.json), 0640. The archive never
+                              contains it: keep it apart from the dump and the passphrase.
   --settings-key-file=<path>  File holding the original config_settings_enc_key
                               (backup.sh writes <archive>.settings-key next to
                               each archive; that sidecar is picked up automatically
@@ -139,6 +146,8 @@ parse_args() {
             --backup=*)                BACKUP_FILE="${arg#*=}" ;;
             --passphrase-file=*)      PASSPHRASE_FILE="${arg#*=}" ;;
             --settings-key-file=*)    SETTINGS_KEY_FILE="${arg#*=}" ;;
+            --key-file=*)             KEY_FILE_RESTORE="${arg#*=}" ;;
+            --key-file-dest=*)        KEY_FILE_DEST="${arg#*=}" ;;
             --confirm-restore)         CONFIRM_RESTORE=1 ;;
             --no-pre-restore-backup-confirmed) NO_PRE_RESTORE_BACKUP_CONFIRMED=1 ;;
             --unattended)               UNATTENDED=1 ;;
@@ -293,6 +302,28 @@ read_manifest() {
     fi
 }
 
+# install_key_file(src, dest): validates the key file with the app's own loader (no key material is printed), keeps any file already at dest as
+# <dest>.pre-restore-<ts>, and installs it 0640 root:www-data (when run as root and the group exists). The directory is created 0755: the web
+# user must be able to traverse it to reach the file (a 0750 root:root directory makes a readable key file unreadable to PHP).
+install_key_file() {
+    local src="$1" dest="$2"
+    [[ -f "${src}" ]] || die "--key-file '${src}' does not exist."
+    local kids
+    kids="$(php -r 'require $argv[1] . "/vendor/autoload.php"; try { $r = RivetCore\Crypto\KeyFile::ringFromJson((string) file_get_contents($argv[2])); echo implode(",", $r->kids()), " active=", $r->activeKid(); } catch (Throwable $e) { fwrite(STDERR, $e->getMessage()); exit(1); }' -- "${APP_DIR}" "${src}")" \
+        || die "${src} is not a usable key file."
+    if [[ -f "${dest}" ]] && ! cmp -s "${src}" "${dest}"; then
+        local keep="${dest}.pre-restore-$(date +%Y%m%d%H%M%S)"
+        cp -p "${dest}" "${keep}" && warn "A different key file was already at ${dest}; kept as ${keep}."
+    fi
+    install -d -m 0755 "$(dirname "${dest}")" || die "Cannot create $(dirname "${dest}")."
+    if [[ "$(id -u)" -eq 0 ]] && getent group www-data >/dev/null 2>&1; then
+        install -m 0640 -o root -g www-data "${src}" "${dest}"
+    else
+        install -m 0640 "${src}" "${dest}"
+    fi
+    success "Key file installed at ${dest} (keys: ${kids})."
+}
+
 # load_settings_key_file(path, [fingerprint]): reads the original config_settings_enc_key from `path`
 # (the last line that is not a # comment; backup.sh writes <archive>.settings-key this way) into
 # MANIFEST_SETTINGS_ENC_KEY. When the manifest gave a fingerprint, the key must match it or this dies:
@@ -442,6 +473,11 @@ main() {
     import_database
     restore_uploads
     apply_settings_enc_key
+    if [[ -n "${KEY_FILE_RESTORE}" ]]; then
+        install_key_file "${KEY_FILE_RESTORE}" "${KEY_FILE_DEST}"
+    else
+        warn "No --key-file given: if this install used the Core key file (/etc/rivetmsp/keys.json), put the offline copy back, or v3 secrets stay unreadable."
+    fi
 
     success "=== Restore complete: ${APP_DIR} now reflects ${BACKUP_FILE} ==="
     log "RESTORE OK app_dir=${APP_DIR} backup=${BACKUP_FILE} database=${DB_NAME}"

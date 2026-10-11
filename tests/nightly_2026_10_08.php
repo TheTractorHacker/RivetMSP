@@ -67,7 +67,7 @@ $ok(invoiceStatusAfterPayment(10.00, 9.50) === 'Partial' && invoiceStatusAfterPa
 
 // IT-7: share links (TOTP seed, never-expires) and the vendor page include
 $aj = $src('agent/ajax.php');
-$ok(preg_match('/SELECT credential_name, credential_username, credential_password, credential_otp_secret FROM credentials/', $aj) === 1, 'IT-7a: share query selects the OTP seed');
+$ok(preg_match('/SELECT (?:credential_id, )?credential_name, credential_username, credential_password, credential_otp_secret FROM credentials/', $aj) === 1, 'IT-7a: share query selects the OTP seed');
 $gv = $src('guest/guest_view_item.php');
 $ok(strpos($gv, 'get_totp_token') === false && strpos($gv, 'totp_secret') === false, 'IT-7a: the seed is never sent to the server (computed in the browser)');
 $ok(strpos($gv, "'HMAC'") !== false && strpos($gv, 'SHA-1') !== false, 'IT-7a: browser-side HMAC-SHA1 TOTP present');

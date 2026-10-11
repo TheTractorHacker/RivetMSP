@@ -92,7 +92,7 @@ $setEdition(1);
 
 // ============================================================ ON: enrollment, check-in, counters move
 $ok((string) $one('SELECT signing_public_key FROM endpoint_agent_settings') !== '' && (string) $one('SELECT signing_private_key_enc FROM endpoint_agent_settings') !== '', 'the first switch-on minted the signing key');
-$ok(strncmp((string) $one('SELECT signing_private_key_enc FROM endpoint_agent_settings'), 'ENC2:', 5) === 0, 'the private signing key is stored as an ENC2: ciphertext, never plaintext');
+$ok(strncmp((string) $one('SELECT signing_private_key_enc FROM endpoint_agent_settings'), 'ENC2:', 5) === 0 || strncmp((string) $one('SELECT signing_private_key_enc FROM endpoint_agent_settings'), 'v3:', 3) === 0, 'the private signing key is stored as an ENC2: or v3: ciphertext, never plaintext');
 $ok((int) $one("SELECT COUNT(*) FROM rmm_integrations WHERE type='rivetit_agent'") === 1, 'the synthetic rmm_integrations row (type rivetit_agent) exists');
 $tok = Enrollment_token($rmm, $admin);
 [$c, , $j] = ea_enroll($tok, ea_dev(['hostname' => 'MODULE-PC', 'serial' => 'MOD-SER-1']));
@@ -209,7 +209,7 @@ $wnb = "http://127.0.0.1:{$webNoKey['port']}";
 $ok($c === 200 && strpos($b, 'settings encryption key is not set') !== false && preg_match('/name="rmm_module_switch" value="on"[^>]*disabled/', $b) === 1, 'no $config_settings_enc_key: the page says so and the switch-on button is disabled');
 web($wnb, 'POST', '/admin/post.php', $sid, ['csrf_token' => 'csrftok1', 'rmm_module_switch' => 'on'], ['Referer: ' . $wnb . '/admin/settings_endpoint_agent.php']);
 $ok((int) $one('SELECT enabled FROM endpoint_agent_settings') === 0 && (int) $one('SELECT config_core_rmm_enabled FROM settings WHERE company_id=1') === 0 && (string) $one('SELECT COALESCE(signing_private_key_enc, \'\') FROM endpoint_agent_settings') !== 'x', 'and a forged POST cannot switch it on either (both switches stay off)');
-$ok(!preg_match('/^(?!ENC2?:).+$/', (string) $one('SELECT COALESCE(signing_private_key_enc, \'\') FROM endpoint_agent_settings')), 'no plaintext key is ever stored');
+$ok(!preg_match('/^(?!ENC2?:|v3:).+$/', (string) $one('SELECT COALESCE(signing_private_key_enc, \'\') FROM endpoint_agent_settings')), 'no plaintext key is ever stored');
 
 // ============================================================ fresh install vs upgraded install
 $mk = function (string $suffix, bool $withRmm) use ($db, $root): array {

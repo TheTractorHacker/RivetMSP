@@ -176,28 +176,28 @@ if (isset($_POST['restore_credential'])) {
         redirect();
     }
 
-    $pw_blob = $old['credential_password'];
-    $plain_password = '';
-    if ($pw_blob !== null && $pw_blob !== '') {
-        $iv = substr($pw_blob, 0, 16);
-        $ct = substr($pw_blob, 16);
-        $plain_password = openssl_decrypt($ct, 'aes-128-cbc', $master_key, 0, $iv);
-        if ($plain_password === false) {
-            flash_alert("Decryption failed - master key is incorrect", "error");
-            redirect();
+    // A field of a backup taken with the credential vault v3 flag on is a v3 value bound to this credential's id: it opens with the vault data key
+    // held in this administrator's session (the backup's master key is then not needed), never with the legacy master key.
+    $restore_open = function ($blob, string $field) use ($master_key, $credential_id) {
+        if ($blob === null || $blob === '') {
+            return '';
         }
-    }
+        if (\RivetMSP\Crypto\VaultV3::isV3Field((string) $blob)) {
+            $dek = \RivetMSP\Crypto\VaultV3::sessionDek();
+            return $dek === null ? false : \RivetMSP\Crypto\VaultV3::openField((string) $blob, $dek, $credential_id, $field);
+        }
+        return openssl_decrypt(substr($blob, 16), 'aes-128-cbc', $master_key, 0, substr($blob, 0, 16));
+    };
 
-    $user_blob = $old['credential_username'];
-    $plain_username = '';
-    if ($user_blob !== null && $user_blob !== '') {
-        $iv = substr($user_blob, 0, 16);
-        $ct = substr($user_blob, 16);
-        $plain_username = openssl_decrypt($ct, 'aes-128-cbc', $master_key, 0, $iv);
-        if ($plain_username === false) {
-            flash_alert("Decryption failed - master key is incorrect", "error");
-            redirect();
-        }
+    $plain_password = $restore_open($old['credential_password'], 'password');
+    if ($plain_password === false) {
+        flash_alert("Decryption failed - master key is incorrect (or this backup holds vault v3 values and your session does not hold the vault data key: sign in again with your password)", "error");
+        redirect();
+    }
+    $plain_username = $restore_open($old['credential_username'], 'username');
+    if ($plain_username === false) {
+        flash_alert("Decryption failed - master key is incorrect", "error");
+        redirect();
     }
 
     $new_ciphertext = encryptCredentialEntry($plain_password);
@@ -209,6 +209,7 @@ if (isset($_POST['restore_credential'])) {
     if ($live) {
 
         mysqli_query($mysqli, "UPDATE credentials SET credential_username = '$esc_username', credential_password = '$esc_password' WHERE credential_id = $credential_id");
+        \RivetMSP\Crypto\VaultV3::finalizeCredential($mysqli, $credential_id);   // vault v3 on: the fields just written become v3 (no-op otherwise)
 
     } else {
 
@@ -240,6 +241,7 @@ if (isset($_POST['restore_credential'])) {
             credential_software_id = " . intval($old['credential_software_id']) . ",
             credential_client_id = " . intval($old['credential_client_id']) . "
         ");
+        \RivetMSP\Crypto\VaultV3::finalizeCredential($mysqli, $credential_id);   // vault v3 on: the fields just written become v3 (no-op otherwise)
 
     }
 

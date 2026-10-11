@@ -599,6 +599,8 @@ if (!function_exists('applyManifestSettingsEncKey')) {
 
         $data = json_decode((string) file_get_contents($manifestFile), true);
         if ($decryptedTmp !== null) { @unlink($decryptedTmp); }
+        // The key file's keys (kid => fingerprint) the backup names, for manifestKeyringNote(); the keys themselves are never in a manifest.
+        $GLOBALS['setup_manifest_keyring'] = is_array($data) && isset($data['keyring']) && is_array($data['keyring']) ? $data['keyring'] : null;
 
         $key = is_array($data) ? (string) ($data['settings_enc_key'] ?? '') : '';
         if ($key === '') {
@@ -639,5 +641,38 @@ if (!function_exists('applyManifestSettingsEncKey')) {
         }
 
         return ['status' => 'applied', 'message' => "Settings-encryption key recovered from this backup's manifest and applied to config.php - SMTP/IMAP passwords, RMM/webhook secrets and the credential vault should decrypt normally."];
+    }
+}
+
+// ------------------------------
+// manifestKeyringNote
+// ------------------------------
+if (!function_exists('manifestKeyringNote')) {
+    /**
+     * After a setup-wizard restore: the sentence about the Core key file (docs/KEY_MANAGEMENT.md), or '' when the backup names no key ring.
+     * The archive never carries the key file; v3 secrets in the restored database open only with the matching copy at the key file path,
+     * which this process cannot create (it is root-owned, outside the web root). Uses the ring read by applyManifestSettingsEncKey().
+     */
+    function manifestKeyringNote(): string {
+        $want = $GLOBALS['setup_manifest_keyring'] ?? null;
+        if (is_array($want) && is_file(dirname(__DIR__) . '/vendor/autoload.php')) {
+            require_once dirname(__DIR__) . '/vendor/autoload.php';
+        }
+        if (!is_array($want) || $want === [] || !class_exists('RivetMSP\\Crypto\\KeyStore')) {
+            return '';
+        }
+        $state = \RivetMSP\Crypto\KeyStore::load();
+        $missing = [];
+        foreach ($want as $kid => $fp) {
+            if (!$state->ring->has((string) $kid) || !hash_equals((string) $fp, $state->ring->fingerprint((string) $kid))) {
+                $missing[] = (string) $kid;
+            }
+        }
+        if ($missing === []) {
+            return '';
+        }
+
+        return "This backup's secrets use the Core key file (key id(s) " . implode(', ', $missing) . '): put the offline copy of keys.json at '
+            . ($state->path ?? '/etc/rivetmsp/keys.json') . ' (owner root, group www-data, mode 0640, directory 0755), or those secrets stay unreadable (see docs/KEY_MANAGEMENT.md).';
     }
 }

@@ -22,6 +22,8 @@ if (!empty($_POST['api_key_decrypt_password']) && !empty($credential_id)) {
     // Check insert & get insert ID
     if ($update_sql) {
         $update_count = mysqli_affected_rows($mysqli);
+        $api_vault = \RivetMSP\Crypto\VaultV3::resolveApiKey($mysqli, (string) $api_key_decrypt_hash, (string) $api_key_decrypt_password);
+        \RivetMSP\Crypto\VaultV3::finalizeCredential($mysqli, (int) $credential_id, $api_vault['master'], $api_vault['dek']);
 
         if ($password_changed) {
             mysqli_query($mysqli, "UPDATE credentials SET credential_password_changed_at = NOW() WHERE credential_id = $credential_id LIMIT 1");

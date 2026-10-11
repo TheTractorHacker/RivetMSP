@@ -21,6 +21,9 @@ final class EndpointSecretBoxConformanceTest extends SecretBoxConformanceTestCas
             return;
         }
         $src = (string) file_get_contents(dirname(__DIR__, 2) . '/functions.php');
+        if (!function_exists('rivetEnsureAutoload')) {
+            eval('function rivetEnsureAutoload(): void { require_once ' . var_export(dirname(__DIR__, 2) . '/vendor/autoload.php', true) . '; }');   // the one helper the copied functions call
+        }
         foreach (['encryptSetting' => 'ea_conf_encrypt', 'decryptSetting' => 'ea_conf_decrypt'] as $from => $to) {
             if (preg_match('/^function ' . $from . '\(.*?^}/ms', $src, $m) !== 1) {
                 self::fail("$from not found in functions.php");

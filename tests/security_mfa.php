@@ -161,7 +161,7 @@ $ok(str_contains($login, 'secPasswordRehashIfNeeded('), 'login.php rehashes an o
 $api = file_get_contents("$root/api/v1/auth.php");
 $ok(str_contains($api, 'secUserTotpSecret($user[\'user_token\']') && str_contains($api, 'secRecoveryCodeConsume('), 'the mobile API login reads the wrapped seed and accepts a recovery code');
 $pf = file_get_contents("$root/agent/user/post/profile.php");
-$ok(str_contains($pf, 'secUserTotpStore($token)') && str_contains($pf, 'secRecoveryCodesGenerate($mysqli, $session_user_id)'), 'enabling MFA stores the seed wrapped and creates the recovery codes');
+$ok(str_contains($pf, 'secUserTotpStore($token, (int) $session_user_id)') && str_contains($pf, 'secRecoveryCodesGenerate($mysqli, $session_user_id)'), 'enabling MFA stores the seed wrapped and creates the recovery codes');
 
 // cleanup
 $q("DELETE FROM user_recovery_codes");

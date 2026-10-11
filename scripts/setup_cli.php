@@ -274,6 +274,16 @@ if (!file_exists('../config.php')) {
 
 require "../config.php";
 
+// The key file (RivetCore\Crypto, docs/KEY_MANAGEMENT.md): a fresh install starts on it, with the config.php key as kid k1. A restore
+// (setup with --settings-enc-key) gets the same, and deploy/restore.sh --key-file then puts the original key file over it.
+// deploy/install.sh sets RIVETMSP_SKIP_KEYFILE=1: this script runs as www-data there, which cannot create /etc/rivetmsp, so the installer creates the key
+// file afterwards as root (scripts/keys_cli.php generate).
+if (getenv('RIVETMSP_SKIP_KEYFILE') !== '1') {
+    require_once __DIR__ . '/../vendor/autoload.php';
+    $key_file_result = \RivetMSP\Crypto\KeyAdmin::createForInstall($settings_enc_key);
+    echo ($key_file_result['status'] === 'failed' ? "WARNING: " : "") . $key_file_result['message'] . "\n";
+}
+
 // Import DB Schema
 echo "Importing database schema...\n";
 $filename = '../db.sql';

@@ -22,6 +22,7 @@ if (isset($_POST['add_credential'])) {
     mysqli_query($mysqli,"INSERT INTO credentials SET credential_name = '$name', credential_description = '$description', credential_uri = '$uri', credential_uri_2 = '$uri_2', credential_username = '$username', credential_password = '$password', credential_otp_secret = '$otp_secret', credential_note = '$note', credential_favorite = $favorite, credential_folder_id = $folder_id, credential_contact_id = $contact_id, credential_asset_id = $asset_id, credential_client_id = $client_id");
 
     $credential_id = mysqli_insert_id($mysqli);
+    \RivetMSP\Crypto\VaultV3::finalizeCredential($mysqli, $credential_id);   // vault v3 on: the fields just written become v3 (no-op otherwise)
 
      // Add Tags
     if (isset($_POST['tags'])) {
@@ -58,8 +59,8 @@ if (isset($_POST['edit_credential'])) {
     $old_name_h        = $old_row['credential_name'];
     $old_description_h = $old_row['credential_description'];
     $old_uri_h         = $old_row['credential_uri'];
-    $old_username_h    = decryptCredentialEntry($old_row['credential_username']);
-    $old_password_h    = decryptCredentialEntry($old_row['credential_password']);
+    $old_username_h    = decryptCredentialEntry($old_row['credential_username'], $credential_id, 'username');
+    $old_password_h    = decryptCredentialEntry($old_row['credential_password'], $credential_id, 'password');
     $old_note_h        = $old_row['credential_note'];
 
     // Determine if the password has actually changed (salt is rotated on all updates, so have to dencrypt both and compare)
@@ -72,6 +73,7 @@ if (isset($_POST['edit_credential'])) {
 
     // Update the credential entry with the new details
     mysqli_query($mysqli,"UPDATE credentials SET credential_name = '$name', credential_description = '$description', credential_uri = '$uri', credential_uri_2 = '$uri_2', credential_username = '$username', credential_password = '$password', credential_otp_secret = '$otp_secret', credential_note = '$note', credential_favorite = $favorite, credential_contact_id = $contact_id, credential_asset_id = $asset_id WHERE credential_id = $credential_id");
+    \RivetMSP\Crypto\VaultV3::finalizeCredential($mysqli, $credential_id);   // vault v3 on: the fields just written become v3 (no-op otherwise)
 
     // Record history for each changed field
     $new_username_plain = decryptCredentialEntry($username);
@@ -579,9 +581,9 @@ if (isset($_POST['export_credentials_csv'])) {
 
         //output each row of the data, format line as csv and write to file pointer
         while($row = mysqli_fetch_assoc($sql)){
-            $credential_username = decryptCredentialEntry($row['credential_username']);
-            $credential_password = decryptCredentialEntry($row['credential_password']);
-            $lineData = array($row['credential_name'], $row['credential_description'], $credential_username, $credential_password, $row['credential_otp_secret'], $row['credential_uri']);
+            $credential_username = decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username');
+            $credential_password = decryptCredentialEntry($row['credential_password'], $row['credential_id'] ?? null, 'password');
+            $lineData = array($row['credential_name'], $row['credential_description'], $credential_username, $credential_password, decryptOtpSecret($row['credential_otp_secret'] ?? '', $row['credential_id'] ?? null), $row['credential_uri']);
             fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
         }
 
@@ -683,6 +685,7 @@ if (isset($_POST["import_credentials_csv"])) {
             if ($duplicate_detect == 0){
                 //Add
                 mysqli_query($mysqli,"INSERT INTO credentials SET credential_name = '$name', credential_description = '$description', credential_uri = '$uri', credential_username = '$username', credential_password = '$password', credential_otp_secret = '$totp', credential_client_id = $client_id");
+                \RivetMSP\Crypto\VaultV3::finalizeCredential($mysqli, mysqli_insert_id($mysqli));
                 $row_count = $row_count + 1;
             } else {
                 $duplicate_count = $duplicate_count + 1;

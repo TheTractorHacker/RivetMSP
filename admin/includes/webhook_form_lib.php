@@ -513,6 +513,12 @@ function rivetWebhookSubsFromRow(array $row, int $id): WebhookSubscription
     return $class::subscriptionFromRow($row + ['webhook_id' => $id]);
 }
 
+/** True when a stored webhook column holds a ciphertext (v3: from the Core envelope, ENC2: or ENC:) and not a legacy cleartext value. */
+function rivetWebhookValueSealed(string $stored): bool
+{
+    return str_starts_with($stored, 'v3:') || str_starts_with($stored, 'ENC2:') || str_starts_with($stored, 'ENC:');
+}
+
 /** A readable, secret-free description of an endpoint address: scheme://host[:port]/... */
 function rivetWebhookUrlMasked(string $url): string
 {

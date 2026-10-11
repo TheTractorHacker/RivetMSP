@@ -76,6 +76,7 @@ COMPANY_EMAIL=""
 WEBSITE=""
 RESTORE_FROM=""
 RESTORE_PASSPHRASE_FILE=""
+RESTORE_KEY_FILE=""
 INSTALL_BACKUP_TIMERS=0
 
 # Populated later in main(), after DOMAIN/PROXY_MODE/SKIP_TLS are known.
@@ -174,6 +175,10 @@ together; every company/localization/admin-user option above is ignored):
                             deploy/backup.sh.
   --restore-passphrase-file=<path>  600-permission file holding the
                             passphrase that backup was encrypted with.
+  --restore-key-file=<path>         Optional: the offline copy of the Core key
+                            file (keys.json) of the instance that was backed up
+                            (installed as /etc/rivetmsp/keys.json). Needed when
+                            that instance had a key file (docs/KEY_MANAGEMENT.md).
 
   --help                           Show this help and exit.
 
@@ -216,6 +221,7 @@ parse_args() {
             --website=*)                                      WEBSITE="${arg#*=}" ;;
             --restore-from=*)                                   RESTORE_FROM="${arg#*=}" ;;
             --restore-passphrase-file=*)                          RESTORE_PASSPHRASE_FILE="${arg#*=}" ;;
+            --restore-key-file=*)                                 RESTORE_KEY_FILE="${arg#*=}" ;;
             --help|-h)
                 print_help
                 exit 0
@@ -247,6 +253,7 @@ validate_args() {
             || die "--restore-from and --restore-passphrase-file must be given together."
         [[ -f "${RESTORE_FROM}" ]] || die "--restore-from '${RESTORE_FROM}' does not exist."
         [[ -f "${RESTORE_PASSPHRASE_FILE}" ]] || die "--restore-passphrase-file '${RESTORE_PASSPHRASE_FILE}' does not exist."
+        [[ -z "${RESTORE_KEY_FILE}" || -f "${RESTORE_KEY_FILE}" ]] || die "--restore-key-file '${RESTORE_KEY_FILE}' does not exist."
         local pf_perm
         pf_perm="$(stat -c '%a' "${RESTORE_PASSPHRASE_FILE}")"
         [[ "${pf_perm: -2}" == "00" ]] || die "--restore-passphrase-file '${RESTORE_PASSPHRASE_FILE}' has permissions ${pf_perm} (group/other can access it). Expected 600. Fix with: chmod 600 '${RESTORE_PASSPHRASE_FILE}'"
@@ -763,12 +770,25 @@ run_fresh_setup() {
     )
     [[ "${NON_INTERACTIVE}" -eq 1 ]] && setup_args+=(--non-interactive)
 
-    ( cd "${APP_DIR}/scripts" && sudo -u www-data env ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${ADMIN_PASSWORD}" php setup_cli.php "${setup_args[@]}" < /dev/null )
+    ( cd "${APP_DIR}/scripts" && sudo -u www-data env RIVETMSP_SKIP_KEYFILE=1 ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${ADMIN_PASSWORD}" php setup_cli.php "${setup_args[@]}" < /dev/null )
     verify_setup_completed
     success "Application setup complete."
+    create_key_file
 
     chmod 640 "${APP_DIR}/config.php"
     chown www-data:www-data "${APP_DIR}/config.php"
+}
+
+# create_key_file(): the Core key file (docs/KEY_MANAGEMENT.md). setup_cli.php runs as www-data and cannot write /etc, so this runs as root
+# after it: keys_cli.php generate creates /etc/rivetmsp 0755 (the web user must be able to traverse it) and keys.json root:www-data 0640, with the
+# config.php key as kid k1. A failure is not fatal: the install carries on with the config.php key and prints the command to run later.
+create_key_file() {
+    info "Creating the Core key file (/etc/rivetmsp/keys.json)..."
+    if ( cd "${APP_DIR}" && php scripts/keys_cli.php generate ); then
+        success "Key file created. Back it up OFFLINE, apart from the database dump and the backup passphrase (docs/KEY_MANAGEMENT.md)."
+    else
+        warn "The key file was not created; the install uses the config.php key. Later, as root: php ${APP_DIR}/scripts/keys_cli.php generate"
+    fi
 }
 
 # run_restore_setup(): writes config.php + a fresh db.sql schema via the
@@ -810,7 +830,7 @@ run_restore_setup() {
         --non-interactive
     )
 
-    ( cd "${APP_DIR}/scripts" && sudo -u www-data env ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${placeholder_password}" php setup_cli.php "${setup_args[@]}" < /dev/null )
+    ( cd "${APP_DIR}/scripts" && sudo -u www-data env RIVETMSP_SKIP_KEYFILE=1 ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${placeholder_password}" php setup_cli.php "${setup_args[@]}" < /dev/null )
     verify_setup_completed
     success "Placeholder setup complete."
 
@@ -818,9 +838,11 @@ run_restore_setup() {
     chown www-data:www-data "${APP_DIR}/config.php"
 
     announce "Running deploy/restore.sh to overwrite the placeholder instance with ${RESTORE_FROM}."
+    local -a restore_key_args=()
+    [[ -n "${RESTORE_KEY_FILE}" ]] && restore_key_args=(--key-file="${RESTORE_KEY_FILE}")
     if ! "${SCRIPT_DIR}/restore.sh" --app-dir="${APP_DIR}" --backup="${RESTORE_FROM}" \
         --passphrase-file="${RESTORE_PASSPHRASE_FILE}" --confirm-restore \
-        --no-pre-restore-backup-confirmed; then
+        --no-pre-restore-backup-confirmed "${restore_key_args[@]}"; then
         die "deploy/restore.sh failed (see its output above). ${APP_DIR}/config.php exists but points at a placeholder instance, not the restored one — fix the restore failure and re-run deploy/restore.sh directly against ${APP_DIR} (it no longer needs install.sh once config.php exists)."
     fi
     success "Restore onto the new instance complete."

@@ -28,7 +28,7 @@ A setting that the environment provides is shown read-only on the Redis page ("S
 
 PHP-FPM clears the environment of its workers and cron runs with a bare one, so a plain `export` does not reach the app. The app therefore also reads one file, `/etc/rivetmsp/redis.env` (override the path with `RIVETMSP_REDIS_ENV_FILE`). Format: one `KEY=VALUE` per line, `#` comments, optional quotes. Only `RIVETMSP_REDIS_*` keys are read. A key present in the real environment beats the same key in the file.
 
-The installer should write it (only when it sets up a non-default Redis), owned `root:www-data`, mode `0640`, directory `/etc/rivetmsp` mode `0750`:
+The installer should write it (only when it sets up a non-default Redis), owned `root:www-data`, mode `0640`, directory `/etc/rivetmsp` `root:www-data` mode `0750` or `0755` (the web user must be able to traverse it; the Core key file `keys.json` lives in the same directory, see `docs/KEY_MANAGEMENT.md`):
 
 ```
 RIVETMSP_REDIS_HOST=127.0.0.1

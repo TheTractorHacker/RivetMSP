@@ -18,6 +18,8 @@ if (!empty($api_key_decrypt_password) && !empty($name) && !(empty($password))) {
     // Check insert & get insert ID
     if ($insert_sql) {
         $insert_id = mysqli_insert_id($mysqli);
+        $api_vault = \RivetMSP\Crypto\VaultV3::resolveApiKey($mysqli, (string) $api_key_decrypt_hash, (string) $api_key_decrypt_password);
+        \RivetMSP\Crypto\VaultV3::finalizeCredential($mysqli, $insert_id, $api_vault['master'], $api_vault['dek']);
 
         // Logging
         logAction("Credential", "Create", "$name via API ($api_key_name)", $client_id, $insert_id);

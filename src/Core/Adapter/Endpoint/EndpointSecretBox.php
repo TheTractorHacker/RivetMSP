@@ -7,8 +7,8 @@ namespace RivetMSP\Core\Adapter\Endpoint;
 use RivetCore\Rmm\Contracts\SecretBoxInterface;
 
 /**
- * RivetMSP's settings encryption (encryptSetting / decryptSetting in functions.php, "ENC2:" AES-256-GCM, legacy "ENC:" AES-128-CBC read-only, with the key
- * $config_settings_enc_key from config.php) for the RMM module's Ed25519 signing key and MeshCentral login key.
+ * RivetMSP's settings encryption (encryptSetting / decryptSetting in functions.php: "v3:" RivetCore envelope once the key file exists, else "ENC2:" AES-256-GCM; legacy "ENC:"
+ * AES-128-CBC read-only; keys from the key file and/or $config_settings_enc_key in config.php) for the RMM module's Ed25519 signing key and MeshCentral login key.
  *
  * Two differences from calling those functions directly, both because these are signing keys and not an SMTP password:
  *  - encrypt() REFUSES to run without $config_settings_enc_key (encryptSetting() now fails closed too; this guard keeps the clearer message
@@ -32,7 +32,8 @@ final class EndpointSecretBox implements SecretBoxInterface
     /** True when the install has a settings encryption key (the RMM module cannot be switched on without one). */
     public static function keyConfigured(): bool
     {
-        return !empty($GLOBALS['config_settings_enc_key']);
+        return !empty($GLOBALS['config_settings_enc_key'])
+            || (class_exists(\RivetMSP\Crypto\KeyStore::class) && \RivetMSP\Crypto\KeyStore::load()->usable());
     }
 
     public function encrypt(string $plaintext): string
