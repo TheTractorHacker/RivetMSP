@@ -9,7 +9,7 @@ use RivetCore\Database\DatabaseInterface;
 use RivetCore\Rmm\Authz\RmmAbility;
 
 /**
- * Maps the nine rmm.* abilities onto RivetMSP's role model: the permission level of a role for a module (user_role_permissions joined to
+ * Maps the eleven rmm.* abilities onto RivetMSP's role model: the permission level of a role for a module (user_role_permissions joined to
  * modules, the lookup lookupUserPermission() does for the signed-in user, here keyed by user id) and the administrator flag
  * (user_roles.role_is_admin). Same matrix as RivetIT minus module-only logins, which RivetMSP does not have:
  *
@@ -18,6 +18,12 @@ use RivetCore\Rmm\Authz\RmmAbility;
  *   rmm.job.run_script                       view + module_rmm_scripts >= 3
  *   rmm.remote.launch                        view + module_rmm_remote_connect >= 1
  *   rmm.device.manage, rmm.token.manage, rmm.binary.publish, rmm.admin    role_is_admin
+ *
+ *   rmm.job.approve (RMM Phase 2)            role_is_admin; plus a role with module_rmm_scripts >= 3 ONLY while the administrator has switched on
+ *                                            "RMM scripts level 3 users may approve" (settings.config_rmm_approve_scripts_lvl3, off by default: the point
+ *                                            of an approval is a second person, so it is not handed to everyone who may run scripts).
+ *   rmm.alert.manage (RMM Phase 3)           role_is_admin, or module_rmm >= 2 (write): acknowledge/resolve alerts, maintenance windows of one client or
+ *                                            device, a device's parent. A role with module_rmm 1 keeps view only.
  *
  * An administrator holds every module at full access (as lookupUserPermission() does). Only active agents (staff, users.user_type 1) hold
  * anything: a client-portal contact, a disabled or an archived account is denied every ability, whatever role row it carries. The client
@@ -71,8 +77,18 @@ final class EndpointAccessPolicy implements AccessPolicyInterface
             RmmAbility::JOB_RUN_SCRIPT => $this->level($roleId, 'module_rmm_scripts') >= 3,
             RmmAbility::JOB_RUN_SAVED, RmmAbility::JOB_REBOOT => $this->level($roleId, 'module_rmm_scripts') >= 2,
             RmmAbility::REMOTE_LAUNCH => $this->level($roleId, 'module_rmm_remote_connect') >= 1,
+            RmmAbility::ALERT_MANAGE => $this->level($roleId, 'module_rmm') >= 2,
+            RmmAbility::JOB_APPROVE => $this->level($roleId, 'module_rmm_scripts') >= 3 && $this->level3MayApprove(),
             default => false,
         };
+    }
+
+    /** The administrator's switch for level 3 script users (Administration > Endpoint agent > Approvals). A missing column (code newer than the schema) means off. */
+    private function level3MayApprove(): bool
+    {
+        $r = $this->database->fetchOne('SELECT config_rmm_approve_scripts_lvl3 AS v FROM settings WHERE company_id = 1');
+
+        return $r !== null && (int) $r['v'] === 1;
     }
 
     private function level(int $roleId, string $module): int

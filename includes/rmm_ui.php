@@ -495,12 +495,17 @@ function rivetRmmUiPanel(\mysqli $mysqli, int $assetId, int $userId, ?int $devic
     } elseif ($state === 'stale') {
         $banners[] = ['kind' => 'off', 'text' => 'This device has been quiet for ' . rivetRmmUiDuration($st['age_s']) . '. Consider retiring it if it is gone.'];
     }
+    // The module is known to be on here (the gate above), so the sub-switches come from the settings row the module already holds: no further statement.
+    $featureSwitches = $rmm->settings()->features();
     $usable = $dev['revoked_at'] === null && $dev['retired_at'] === null && $dev['link_state'] === 'linked';
 
     return [
         'device_id' => $deviceId,
         'asset_id' => $assetId,
         'client_id' => $client,
+        'user_id' => $userId,
+        // RMM Phase 2 and 3 sub-switches (RivetCore 1.0.0-rc.10), from the module's state file: the asset page shows the Policy and Alerting tabs only for these
+        'features' => ['policies' => !empty($featureSwitches['policies']), 'scripts' => !empty($featureSwitches['scripts']), 'alerting' => !empty($featureSwitches['alerting'])],
         'hostname' => (string) $dev['hostname'],
         'platform' => $platform,
         'os_label' => (string) ($dev['os_version'] ?? ''),

@@ -73,7 +73,7 @@ read its own key. Core's catch covers the other admin paths (settings save that 
 
 ## 3. Permissions
 
-No new permission keys. The nine Core abilities map onto the existing RMM module grants (`user_role_permissions` joined to `modules`, `role_is_admin`) in
+No new permission keys. The eleven Core abilities map onto the existing RMM module grants (`user_role_permissions` joined to `modules`, `role_is_admin`) in
 `EndpointAccessPolicy`, the same matrix as RivetIT minus module-only logins (which RivetMSP does not have):
 
 | Ability | Needs |
@@ -83,6 +83,8 @@ No new permission keys. The nine Core abilities map onto the existing RMM module
 | `rmm.job.run_script` | view, `module_rmm_scripts` >= 3 |
 | `rmm.remote.launch` | view, `module_rmm_remote_connect` >= 1 |
 | `rmm.device.manage`, `rmm.token.manage`, `rmm.binary.publish`, `rmm.admin` | administrator (`role_is_admin`) |
+| `rmm.job.approve` (RMM Phase 2) | administrator; a role with `module_rmm_scripts` >= 3 only while Administration > Endpoint agent > "Technicians with RMM scripts level 3 may approve runs" is on (`settings.config_rmm_approve_scripts_lvl3`, off by default: an approval is a second person) |
+| `rmm.alert.manage` (RMM Phase 3) | administrator, or `module_rmm` >= 2 |
 
 Administrators hold everything. Only active **agents** (`users.user_type` 1) hold anything: client-portal contacts, disabled and archived accounts are denied every
 ability. Client scope (`EndpointTenancy`): administrators and users with no `user_client_permissions` rows see every client, otherwise only the listed ones; a device
@@ -140,6 +142,18 @@ headers of the test files). The golden runner records this install into a tempor
 ## 6a. Asset page panel and Agent Fleet (T10b)
 
 `includes/rmm_ui.php` (view-models, read-only, first call is the state file), `includes/rmm_ui_render.php` (HTML), `css/itflow_rmm.css`, `js/rmm_panel.js`, `agent/rmm_fleet.php`, `agent/rmm_job_output.php`, and the panel inside `agent/asset_details.php`. Actions are unchanged (`agent/post/rmm_agent.php`). RivetMSP specifics: clients (not departments); no Metrics subsystem, so the Performance section explains that the latest check-in is all that is kept; the Endpoints menu shows Agent Fleet whenever the module is on, even with the vendor RMM integrations off. Tests: `php tests/rmm_ui.php` (needs `EA_TEST_LINUX=1`) and `tests/browser/rmm_seed.php` + `tests/browser/rmm_smoke.mjs`.
+
+## 6b. Policies, scripts and alerting (RivetCore 1.0.0-rc.10, DB 2.6.84)
+
+Three sub-switches, all off by default (Administration > Endpoint agent > "Policies, scripts and alerting"): `policies`, `scripts` (script library, schedules, approvals, custom fields)
+and `alerting` (thresholds, flap detection, maintenance windows, escalation). The pages (`agent/rmm_policies.php`, `rmm_script_library.php`, `rmm_schedules.php`, `rmm_approvals.php`,
+`rmm_fields.php`, `rmm_agent_alerts.php`, `rmm_maintenance.php`, `rmm_escalations.php`) and the asset page tabs are rendered by `includes/rmm_automation.php` (shared layer),
+`rmm_pol_ui.php`, `rmm_scr_ui.php` and `rmm_alr_ui.php`; their forms post to `agent/post/rmm_automation_{pol,scr,alr}.php`. Every read and write is an in-process call into RivetCore's
+technician API as the signed-in user, so Core's 403/404 rules, client scoping and audit apply and a forged POST gets the REST API's answer. A page checks the module, then its sub-switch (both
+from the module's state file: no query while off), then the ability. Escalation is delivered by `src/Core/Adapter/Endpoint/EndpointEscalation.php` (in-app and email to users, roles and addresses;
+a critical alert opens or reuses a ticket through `createTicketFromRmmAlert()`; acknowledge and severity are mirrored onto `rmm_alerts`), and runs from the same `cron/cron.php` housekeeping call as
+everything else. DB 2.6.84 runs Core migrations 0019 and 0020 and adds `config_rmm_approve_scripts_lvl3` and `config_rmm_escalation_contact` to `settings`. Tests: `tests/rmm_ui_p23_*.php` (run by
+`tests/rmm_ui.php`), `tests/browser/rmm_p23_{a,b,c}_smoke.mjs`, `tests/core/EndpointEscalationConformanceTest.php`.
 
 ## 7. Not verified
 

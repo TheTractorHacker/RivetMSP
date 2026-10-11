@@ -185,6 +185,7 @@ function itflow_nav_icon_class($icon, $fallback = 'fa-link')
          since there is no itflow_metrics.css here). Built from --if-* tokens; must sit AFTER itflow_design.css and itflow_motion.css and BEFORE
          itflow.bind-tabler.css. -->
     <link rel="stylesheet" href="/css/itflow_rmm.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm.css') ?>">
+    <link rel="stylesheet" href="/css/itflow_rmm_automation.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_automation.css') ?>">
 
     <!-- --color-* -> --if-* alias. MUST come after BOTH itflow_custom.css (which
          declares --color-*) and itflow_design.css (which declares --if-*): it is a

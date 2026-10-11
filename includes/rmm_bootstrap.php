@@ -20,6 +20,7 @@ use RivetMSP\Core\Adapter\Endpoint\EndpointAccessPolicy;
 use RivetMSP\Core\Adapter\Endpoint\EndpointAssets;
 use RivetMSP\Core\Adapter\Endpoint\EndpointAudit;
 use RivetMSP\Core\Adapter\Endpoint\EndpointBridge;
+use RivetMSP\Core\Adapter\Endpoint\EndpointEscalation;
 use RivetMSP\Core\Adapter\Endpoint\EndpointEvents;
 use RivetMSP\Core\Adapter\Endpoint\EndpointModuleState;
 use RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox;
@@ -58,6 +59,9 @@ function rivetRmmModule($mysqli = null): RmmModule
         'allow_insecure_http' => defined('EA_ALLOW_INSECURE_HTTP') && EA_ALLOW_INSECURE_HTTP === true,
         'allow_linux' => defined('EA_ALLOW_NON_WINDOWS') && EA_ALLOW_NON_WINDOWS === true,
         'host_fallback' => (string) ($GLOBALS['config_base_url'] ?? ''),
+        // RivetCore 1.0.0-rc.10 (RMM Phase 3): who delivers escalation notices (in-app and email to people, a ticket for a critical alert). Housekeeping, run by cron,
+        // calls it; without it a due step would stay due and never be recorded as sent.
+        'escalation' => new EndpointEscalation($mysqli),
     ];
     if (defined('EA_BINARY_MAX_BYTES')) {
         $options['max_upload_bytes'] = (int) EA_BINARY_MAX_BYTES;
@@ -85,6 +89,16 @@ function rivetRmmModule($mysqli = null): RmmModule
     $built[$key] = [$mysqli, $module];
 
     return $module;
+}
+
+/**
+ * Drop the module's remembered access answers (RivetCore 1.0.0-rc.6: RmmAuthorizer memoizes policy and client-scope answers for the life of the
+ * object). The module is built once per request, so a page never needs this; call it after changing a role, a role permission or a user's client
+ * scope inside the same request (or in a long-lived process such as a test or a worker) when something later must see the change.
+ */
+function rivetRmmForgetAccess(?int $userId = null, $mysqli = null): void
+{
+    rivetRmmModule($mysqli)->authorizer()->forget($userId);
 }
 
 /**
@@ -120,6 +134,55 @@ function rivetRmmEnabled($mysqli = null): bool
     } catch (\Throwable) {
         return false;
     }
+}
+
+/**
+ * Is a sub-switch (`policies`, `scripts`, `alerting`, `inventory_software`, ...) on? True only while the module itself is on (the edition kill switch, already in
+ * memory on every page, comes first). Answered from the module's state file when it holds a valid verdict, so a page, a menu or the cron block asks the database
+ * NOTHING while the module is off; a missing or damaged file falls back to the settings row (a missing file is "unknown", never "off").
+ */
+function rivetRmmFeatureOn(string $feature, $mysqli = null): bool
+{
+    if (isset($GLOBALS['config_core_rmm_enabled']) && (int) $GLOBALS['config_core_rmm_enabled'] !== 1) {
+        return false;
+    }
+    $state = RmmStateFile::read(rivetRmmStateDir());
+    if ($state !== null) {
+        return $state['enabled'] && !empty($state['features'][$feature]);
+    }
+    try {
+        return rivetRmmModule($mysqli)->featureOn($feature);
+    } catch (\Throwable) {
+        return false;
+    }
+}
+
+/**
+ * The Endpoints menu entries of RMM Phase 2 and 3 (RivetCore 1.0.0-rc.10), each shown only while the module AND its sub-switch are on. Answered from the state
+ * file: no database query, and no module is built, while anything is off. The caller has already checked the RMM module grant.
+ *
+ * @return list<array{href:string,label:string,icon:string,pages:list<string>,group:string}>
+ */
+function rivetRmmAutoNav(): array
+{
+    $all = [
+        ['policies', '/agent/rmm_policies.php', 'Policies', 'fa-sliders-h', ['rmm_policies.php'], 'automation'],
+        ['scripts', '/agent/rmm_script_library.php', 'Script library', 'fa-file-code', ['rmm_script_library.php'], 'automation'],
+        ['scripts', '/agent/rmm_schedules.php', 'Schedules', 'fa-clock', ['rmm_schedules.php'], 'automation'],
+        ['scripts', '/agent/rmm_approvals.php', 'Approvals', 'fa-user-check', ['rmm_approvals.php'], 'automation'],
+        ['scripts', '/agent/rmm_fields.php', 'Custom fields', 'fa-tags', ['rmm_fields.php'], 'automation'],
+        ['alerting', '/agent/rmm_agent_alerts.php', 'Agent alerts', 'fa-bell', ['rmm_agent_alerts.php'], 'alerting'],
+        ['alerting', '/agent/rmm_maintenance.php', 'Maintenance windows', 'fa-wrench', ['rmm_maintenance.php'], 'alerting'],
+        ['alerting', '/agent/rmm_escalations.php', 'Escalation policies', 'fa-level-up-alt', ['rmm_escalations.php'], 'alerting'],
+    ];
+    $out = [];
+    foreach ($all as [$feature, $href, $label, $icon, $pages, $group]) {
+        if (rivetRmmFeatureOn($feature)) {
+            $out[] = ['href' => $href, 'label' => $label, 'icon' => $icon, 'pages' => $pages, 'group' => $group];
+        }
+    }
+
+    return $out;
 }
 
 /**

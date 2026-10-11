@@ -224,6 +224,10 @@ $mk = function (string $suffix, bool $withRmm) use ($db, $root): array {
         // RivetCore 1.0.0-rc.9 (0018) added eleven tables (one is endpoint_agent_check_history, dropped above): without their ledger row the runner creates them on the upgrade.
         $sql = (string) preg_replace('/DROP TABLE IF EXISTS `rmm_(device_software|device_state|device_tags|group_devices|group_tags|groups|metric_hourly|metric_latest|software_history|tags)`;\n.*?\/\*!40101 SET character_set_client = @saved_cs_client \*\/;\n/s', '', $sql);
         $sql = preg_replace("/INSERT INTO `rivet_core_migrations` VALUES \('0018_[a-z_]+','[^']+'\);\n/", '', $sql);
+        // RivetCore 1.0.0-rc.10 (0019 policies and scripts, 0020 alerting maturity): nineteen more tables, two ledger rows and the two settings columns of DB 2.6.84.
+        $sql = (string) preg_replace('/DROP TABLE IF EXISTS `rmm_(alert_meta|alerting_settings|approvals|check_eval|custom_field_values|custom_fields|device_parents|escalation_policies|escalation_steps|job_extra|maintenance_windows|policies|policy_assignments|policy_versions|schedule_runs|schedules|script_versions|scripts_v2|storm_summaries)`;\n.*?\/\*!40101 SET character_set_client = @saved_cs_client \*\/;\n/s', '', $sql);
+        $sql = preg_replace("/INSERT INTO `rivet_core_migrations` VALUES \('00(19|20)_[a-z_]+','[^']+'\);\n/", '', $sql);
+        $sql = str_replace(["  `config_rmm_approve_scripts_lvl3` tinyint(1) NOT NULL DEFAULT 0,\n", "  `config_rmm_escalation_contact` text DEFAULT NULL,\n"], '', $sql);
         $sql = str_replace("  `config_core_rmm_enabled` tinyint(1) NOT NULL DEFAULT 0,\n", '', $sql);
         $sql = preg_replace("/INSERT INTO `rivet_core_migrations` VALUES \('00(14|15|16)_[a-z_]+','[^']+'\);\n/", '', $sql);
         $sql = preg_replace('/INSERT IGNORE INTO `endpoint_agent_settings` \(`id`\) VALUES \(1\);\n/', '', $sql);

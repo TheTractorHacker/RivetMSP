@@ -7,6 +7,7 @@ namespace RivetCore\Rmm\Settings;
 use RivetCore\Rmm\Contracts\RmmBridgeInterface;
 use RivetCore\Rmm\Contracts\SecretBoxInterface;
 use RivetCore\Rmm\Crypto\Signer;
+use RivetCore\Rmm\Checks\CheckCatalog;
 use RivetCore\Rmm\RmmProtocol;
 use RivetCore\Rmm\Support\Sql;
 
@@ -46,7 +47,7 @@ final class RmmSettings
     public const MESH_TOKEN_TTL_DEFAULT_S = 300;
 
     /** Every feature a sub-switch may name (the first five are live in Phase 0; the rest are reserved for later phases). */
-    public const FEATURES = ['monitoring', 'metrics', 'jobs', 'remote', 'updates', 'inventory_software', 'policies', 'patching', 'software', 'logs', 'reports'];
+    public const FEATURES = ['monitoring', 'metrics', 'jobs', 'remote', 'updates', 'inventory_software', 'policies', 'scripts', 'patching', 'software', 'logs', 'reports', 'alerting'];
     /** What a NULL features_json means: today's behaviour. `remote` follows mesh_enabled. */
     public const LEGACY_FEATURES = ['monitoring', 'metrics', 'jobs', 'updates'];
 
@@ -73,6 +74,13 @@ final class RmmSettings
         'check_history_days' => [0, 365],
         'check_history_gap_s' => [60, 86400],
         'software_history_days' => [1, 3650],
+        // Phase 2: a run on more devices than approval_bulk_threshold needs a second user (0 = never, the default), an approval request
+        // lapses after approval_expiry_h hours, one scheduled run creates at most schedule_batch jobs per housekeeping pass (shed levels
+        // divide it), and one bulk run may target at most bulk_run_max devices.
+        'approval_bulk_threshold' => [0, 100000],
+        'approval_expiry_h' => [1, 720],
+        'schedule_batch' => [10, 5000],
+        'bulk_run_max' => [1, 100000],
     ];
     public const LIMIT_DEFAULTS = [
         'max_checkins_per_min' => 0,
@@ -90,6 +98,10 @@ final class RmmSettings
         'check_history_days' => 7,
         'check_history_gap_s' => 3600,
         'software_history_days' => 365,
+        'approval_bulk_threshold' => 0,
+        'approval_expiry_h' => 48,
+        'schedule_batch' => 200,
+        'bulk_run_max' => 1000,
     ];
 
     /** @var array<string,mixed>|null */
@@ -495,16 +507,47 @@ final class RmmSettings
         return $list;
     }
 
+    /** True when the configured check list contains a type the original agent does not know (Phase 3). */
+    public function hasExtendedChecks(): bool
+    {
+        foreach ($this->checks() as $c) {
+            if (!CheckCatalog::isLegacy((string) ($c['type'] ?? ''))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Check definitions as delivered to the agent, each signed (script checks execute code on the endpoint).
      *
+     * A Phase 3 check type is included only when $caps (the device's announced capabilities) lists `check:<type>`; the four original types
+     * are always included. With no capabilities (enrollment, an old agent) the list is therefore exactly what it always was.
+     *
+     * @param list<string>|null $caps
      * @return list<array<string,mixed>>
      */
-    public function signedChecks(): array
+    public function signedChecks(?array $caps = null): array
+    {
+        return $this->signCheckList($this->checks(), $caps);
+    }
+
+    /**
+     * Sign any list of check definitions exactly as {@see signedChecks()} does (the policy engine hands in the per-device list).
+     *
+     * @param list<array<string,mixed>> $checks
+     * @param list<string>|null $caps
+     * @return list<array<string,mixed>>
+     */
+    public function signCheckList(array $checks, ?array $caps = null): array
     {
         [$sec] = $this->signingKey();
         $out = [];
-        foreach ($this->checks() as $c) {
+        foreach ($checks as $c) {
+            if (!CheckCatalog::offeredTo((string) $c['type'], $caps)) {
+                continue;
+            }
             $item = [
                 'key' => (string) $c['key'],
                 'type' => (string) $c['type'],

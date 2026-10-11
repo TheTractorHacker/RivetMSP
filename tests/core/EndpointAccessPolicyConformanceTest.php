@@ -10,7 +10,7 @@ use RivetCore\Rmm\Authz\RmmAbility;
 use RivetCore\Testing\AccessPolicyConformanceTestCase;
 
 /**
- * EndpointAccessPolicy: the nine rmm.* abilities over RivetMSP's role model (user_role_permissions per module, user_roles.role_is_admin). Roles: an
+ * EndpointAccessPolicy: the eleven rmm.* abilities over RivetMSP's role model (user_role_permissions per module, user_roles.role_is_admin). Roles: an
  * administrator, a full technician (rmm 3, scripts 3, remote 1), a viewer (rmm 1), a reboot-only technician (scripts 2), and a stock technician
  * with NO rmm module rows (a fresh install has none, so only administrators hold RMM until an admin grants them). Client-portal contacts
  * (user_type 2), disabled and archived accounts hold nothing, whatever role row they carry.
@@ -60,6 +60,8 @@ final class EndpointAccessPolicyConformanceTest extends AccessPolicyConformanceT
             [$u['admin'], RmmAbility::ADMIN, 'client', 0], [$u['admin'], RmmAbility::BINARY_PUBLISH, 'client', 3], [$u['admin'], RmmAbility::JOB_RUN_SCRIPT, 'client', 3], [$u['admin'], RmmAbility::REMOTE_LAUNCH, 'client', 3],
             [$u['tech'], RmmAbility::DEVICE_VIEW, 'client', 3], [$u['tech'], RmmAbility::JOB_RUN_SCRIPT, 'client', 3], [$u['tech'], RmmAbility::JOB_REBOOT, 'client', 3], [$u['tech'], RmmAbility::REMOTE_LAUNCH, 'client', 3],
             [$u['viewer'], RmmAbility::DEVICE_VIEW, 'client', 3], [$u['reboot'], RmmAbility::JOB_REBOOT, 'client', 3], [$u['reboot'], RmmAbility::JOB_RUN_SAVED, 'client', 3],
+            // RMM Phase 2 and 3: administrators approve and manage alerts; a technician with RMM write manages alerts
+            [$u['admin'], RmmAbility::JOB_APPROVE, 'client', 3], [$u['admin'], RmmAbility::ALERT_MANAGE, 'client', 3], [$u['tech'], RmmAbility::ALERT_MANAGE, 'client', 3],
         ];
     }
 
@@ -72,6 +74,9 @@ final class EndpointAccessPolicyConformanceTest extends AccessPolicyConformanceT
             [$u['viewer'], RmmAbility::JOB_RUN_SAVED, 'client', 3], [$u['viewer'], RmmAbility::JOB_REBOOT, 'client', 3], [$u['viewer'], RmmAbility::REMOTE_LAUNCH, 'client', 3],
             [$u['reboot'], RmmAbility::JOB_RUN_SCRIPT, 'client', 3], [$u['reboot'], RmmAbility::REMOTE_LAUNCH, 'client', 3],
             [null, RmmAbility::DEVICE_VIEW, 'client', 3], [999999, RmmAbility::DEVICE_VIEW, 'client', 3],
+            // approval is a second person's grant: a level 3 script technician does NOT have it by default; alert management needs RMM write (module_rmm >= 2)
+            [$u['tech'], RmmAbility::JOB_APPROVE, 'client', 3], [$u['viewer'], RmmAbility::ALERT_MANAGE, 'client', 3], [$u['reboot'], RmmAbility::ALERT_MANAGE, 'client', 3],
+            [$u['disabled'], RmmAbility::ALERT_MANAGE, 'client', 3], [$u['portal'], RmmAbility::JOB_APPROVE, 'client', 3],
         ];
         // The stock technician (no rmm module rows), a client-portal contact, a disabled and an archived account: nothing at all.
         foreach (['stock', 'portal', 'disabled', 'archived'] as $who) {
@@ -81,5 +86,22 @@ final class EndpointAccessPolicyConformanceTest extends AccessPolicyConformanceT
         }
 
         return $denied;
+    }
+
+    public function testLevelThreeScriptRolesApproveOnlyWhileTheAdminSettingIsOn(): void
+    {
+        $policy = $this->policy();
+        $db = EndpointKit::db();
+        $tech = self::USERS['tech'];
+        $db->execute('UPDATE settings SET config_rmm_approve_scripts_lvl3 = 0 WHERE company_id = 1');
+        $this->assertFalse($policy->can($tech, RmmAbility::JOB_APPROVE, 'client', 3), 'off by default');
+        $db->execute('UPDATE settings SET config_rmm_approve_scripts_lvl3 = 1 WHERE company_id = 1');
+        $this->assertTrue($policy->can($tech, RmmAbility::JOB_APPROVE, 'client', 3), 'on: a level 3 script role may approve');
+        $this->assertFalse($policy->can(self::USERS['reboot'], RmmAbility::JOB_APPROVE, 'client', 3), 'on: level 2 still may not');
+        $this->assertFalse($policy->can(self::USERS['stock'], RmmAbility::JOB_APPROVE, 'client', 3), 'on: a technician with no RMM rows still may not');
+        $this->assertFalse($policy->can(self::USERS['portal'], RmmAbility::JOB_APPROVE, 'client', 3), 'on: a client-portal contact still may not');
+        $this->assertTrue($policy->can(self::USERS['admin'], RmmAbility::JOB_APPROVE, 'client', 3));
+        $db->execute('UPDATE settings SET config_rmm_approve_scripts_lvl3 = 0 WHERE company_id = 1');
+        $this->assertFalse($policy->can($tech, RmmAbility::JOB_APPROVE, 'client', 3));
     }
 }

@@ -20,6 +20,8 @@ use RivetCore\Rmm\Migration\Migration0014EndpointAgent;
 use RivetCore\Rmm\Migration\Migration0015EndpointAgentConverge;
 use RivetCore\Rmm\Migration\Migration0016ModuleSwitches;
 use RivetCore\Rmm\Migration\Migration0018InventoryFoundation;
+use RivetCore\Rmm\Migration\Migration0019PoliciesAndScripts;
+use RivetCore\Rmm\Migration\Migration0020AlertingMaturity;
 use RivetCore\Webhooks\Migration\Migration0005WebhookDeliveries;
 use RivetCore\Workflow\Migration\Migration0007WorkflowTables;
 
@@ -51,6 +53,8 @@ final class CoreMigrations
             new Migration0016ModuleSwitches(),
             new Migration0017McpIdentityBinaryCollation(),
             new Migration0018InventoryFoundation(),
+            new Migration0019PoliciesAndScripts(),
+            new Migration0020AlertingMaturity(),
         ];
     }
 }

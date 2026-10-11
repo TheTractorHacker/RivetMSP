@@ -157,7 +157,7 @@ $ok(!str_contains($jobsHtml, 'boom <script>') && !str_contains($jobsHtml, 'boom'
 // ============================================================ query budget
 $a = $questions(); $v = rivetRmmUiPanel($db, $A['WIN1'], 1, $D['WIN1']); $b = $questions();
 $added = $b - $a - $overhead;
-$ok($added <= 40, "view-model for an admin costs $added statements (informational ceiling 40)");
+$ok($added <= 42, "view-model for an admin costs $added statements (informational ceiling 42: 40 of RivetCore rc.9 plus the one read of the library jobs of rc.10)");
 $a = $questions(); $v = rivetRmmUiPanel($db, $A['WIN1'], 12, $D['WIN1']); $b = $questions();
 echo "INFO  panel statements: admin=$added, viewer=" . ($b - $a - $overhead) . "\n";
 
@@ -615,17 +615,17 @@ $ok(str_contains($offNet, 'rmm-dim'), 'network tile: dimmed with the rest while 
 // ---- the page: tabs, deep link, no-JS server-rendered content
 [$c, $body] = $get('admin');
 $ok(substr_count($body, 'role="tab"') === 4 && preg_match('/id="rmm-tab-software"[^>]*aria-controls="rmm-pane-software"/', $body) === 1, 'asset page: four tabs (Overview, Inventory, Software, Jobs), the Software tab is wired to its pane');
-$ok(str_contains(file_get_contents($root . '/js/rmm_panel.js'), 'overview|inventory|software|jobs'), 'the tab deep link handler knows #rmm-software');
+$ok(str_contains(file_get_contents($root . '/js/rmm_panel.js'), 'overview|inventory|software|jobs|policy|alerting'), 'the tab deep link handler knows #rmm-software');
 $ok(str_contains($body, 'Trend (') && str_contains($body, 'id="rmm-net"'), 'asset page: trend column and the network card');
 
 // ---- events: catalog entries (RivetMSP's picker reads RivetCore's EventCatalog) and the adapter
 $all = RivetCore\Rmm\RmmEvent::all();
-$ok(count($all) === 9, 'RivetCore defines nine rmm.* events');
+$ok(count($all) === 19, 'RivetCore defines nineteen rmm.* events (nine of Phase 1, ten of Phase 2 and 3)');
 require_once "$root/includes/event_picker.php";
 $cat = json_decode(eventPickerCatalogJson(), true);
 $pickerIds = array_column($cat['events'], 'i');
 $ok(array_diff($all, $pickerIds) === [], 'the shared event picker offers every rmm.* event');
-$ok(in_array('rmm', array_column($cat['groups'], 'k'), true) && count(array_filter($cat['events'], fn($e) => $e['g'] === 'rmm')) === 9, 'the picker has one "rmm" group with the nine events');
+$ok(in_array('rmm', array_column($cat['groups'], 'k'), true) && count(array_filter($cat['events'], fn($e) => $e['g'] === 'rmm')) === count($all), 'the picker has one "rmm" group with every rmm.* event (' . count($all) . ')');
 $ok(RivetMSP\Core\Adapter\Webhooks\WebhooksTableSubscriptions::class !== '' && in_array('rmm.software.installed', RivetCore\Webhooks\EventCatalog::matchPattern('rmm.*'), true), 'a webhook subscription to rmm.* matches the new events');
 // a check that opens an alert publishes rmm.check.failed
 $before = count(array_filter($evs(), fn($e) => $e === 'rmm.check.failed'));
@@ -690,3 +690,13 @@ $ok($rmm->featureOn('inventory_software') === false, 'inventory_software stays o
 $vm = $panel('WIN1');
 $ok($vm['software'] === null && !str_contains(rivetRmmUiTabs($vm, '', '', [], 'tok'), 'rmm-tab-software'), 'with the software switch off again the Software tab is gone (data is kept)');
 $ok($rmm->readModel()->softwareFor($W)['total'] === 4, 'switching the inventory off deletes nothing');
+
+// ============================================================ RMM Phase 2 and 3 (RivetCore 1.0.0-rc.10): the sections live in tests/rmm_ui_p23_*.php
+// Each fragment shares this file's variables ($ok $q $one $db $root $S $D $A $USER $SS $wb $rmm $admin $questions $overhead $fresh), starts from the seed below
+// (the three sub-switches on, module on) and must leave the module on. They run in file-name order.
+$rmm->admin()->enable($admin);
+rmm_ui_seed_phase23($S);
+foreach (glob(__DIR__ . '/rmm_ui_p23_*.php') ?: [] as $__p23) {
+    echo "---- " . basename($__p23) . "\n";
+    require $__p23;
+}

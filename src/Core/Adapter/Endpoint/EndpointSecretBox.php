@@ -13,8 +13,10 @@ use RivetCore\Rmm\Contracts\SecretBoxInterface;
  * Two differences from calling those functions directly, both because these are signing keys and not an SMTP password:
  *  - encrypt() REFUSES to run without $config_settings_enc_key (encryptSetting() now fails closed too; this guard keeps the clearer message
  *    and the unit-test seam).
- *  - decrypt() returns '' (not available) for anything that is not an "ENC2:" / "ENC:" ciphertext, and when no key is configured. decryptSetting()
- *    hands such text back as it is (legacy plaintext), and a key must never be taken from text that is not a ciphertext.
+ *  - decrypt() returns '' (not available) for anything that is not a "v3:" (the RivetCore envelope RivetMSP will adopt for settings), "ENC2:" or "ENC:"
+ *    ciphertext, and when no key is configured. decryptSetting() hands such text back as it is (legacy plaintext), and a key must never be taken from
+ *    text that is not a ciphertext. For the same reason a decryptor that gives back exactly what it was given (decryptSetting() does for a "v3:" value
+ *    until RivetMSP's settings move to the envelope) is "not available", never a key.
  */
 final class EndpointSecretBox implements SecretBoxInterface
 {
@@ -52,7 +54,9 @@ final class EndpointSecretBox implements SecretBoxInterface
             return '';
         }
         try {
-            return $this->decrypt !== null ? ($this->decrypt)($ciphertext) : decryptSetting($ciphertext);
+            $plain = $this->decrypt !== null ? ($this->decrypt)($ciphertext) : decryptSetting($ciphertext);
+
+            return $plain === $ciphertext ? '' : $plain;
         } catch (\Throwable) {
             return '';
         }
@@ -60,7 +64,7 @@ final class EndpointSecretBox implements SecretBoxInterface
 
     private static function isCiphertext(string $value): bool
     {
-        return str_starts_with($value, 'ENC2:') || str_starts_with($value, 'ENC:');
+        return str_starts_with($value, 'v3:') || str_starts_with($value, 'ENC2:') || str_starts_with($value, 'ENC:');
     }
 
     private function hasKey(): bool
