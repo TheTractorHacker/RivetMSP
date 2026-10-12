@@ -123,7 +123,7 @@ final class TechnicianApi
             if ($seg !== [] && $this->alerting !== null && in_array($seg[0], AlertingApi::FLEET, true)) {
                 return $this->alerting->fleet($req, $who, $seg);
             }
-            if ($seg !== [] && $this->remoteApi !== null && in_array($seg[0], RemoteApi::FLEET, true)) {
+            if ($seg !== [] && $this->remoteApi !== null && (in_array($seg[0], RemoteApi::FLEET, true) || in_array($seg[0], RemoteApi::MESH, true))) {
                 return $this->remoteApi->fleet($req, $who, $seg);
             }
             if ($seg !== [] && $this->starterApi !== null && in_array($seg[0], StarterApi::FLEET, true)) {
@@ -198,7 +198,7 @@ final class TechnicianApi
             return self::notFound();
         }
 
-        if ($this->remoteApi !== null && ($what !== 'remote' || $method !== 'POST' || $job !== null) && in_array($what, ['services', 'processes', 'files', 'logs', 'remote'], true)
+        if ($this->remoteApi !== null && ($what !== 'remote' || $method !== 'POST' || $job !== null) && in_array($what, ['services', 'processes', 'files', 'logs', 'remote', 'mesh'], true)
             && ($routed = $this->remoteApi->device($req, $who, $id, $seg)) !== null) {
             return $routed;
         }

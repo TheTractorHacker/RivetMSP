@@ -206,6 +206,14 @@ final class RmmReadModel
         if (($meshAgent = $this->meshAgents?->stateFor((int) $d['device_id'])) !== null) {
             $out['mesh_agent'] = $meshAgent;
         }
+        // Additive and only present while the MeshCentral agent install is available (Mesh enabled with an https address and a device group), so every other detail is byte
+        // for byte what it was: whether a pushed install can be offered for this device. `agent_supports` is whether its agent announced `job:mesh_install` (older agents
+        // must be updated first); `installed` is what the device last reported.
+        if ($this->meshAgents !== null && $this->meshAgents->installRefusal() === null) {
+            $caps = \RivetCore\Rmm\Device\DeviceState::capabilitiesOf($this->sql->one('SELECT capabilities_json FROM rmm_device_state WHERE device_id = ?', [$d['device_id']]));
+            $out['mesh_install'] = ['available' => true, 'agent_supports' => in_array(\RivetCore\Rmm\Remote\RemoteProtocol::CAP_MESH_INSTALL, $caps, true),
+                'installed' => ($out['mesh_agent']['installed'] ?? false) === true];
+        }
         $out['checks'] = array_map($richChecks ? self::richCheck(...) : self::shortCheck(...),
             $this->sql->all('SELECT * FROM endpoint_agent_checks WHERE device_id = ? ORDER BY check_key', [$d['device_id']]));
         $out['jobs'] = $this->jobs((int) $d['device_id'], $jobLimit, $showJobOutput);
@@ -281,7 +289,7 @@ final class RmmReadModel
             'finished_at' => Sql::iso($j['finished_at'] === null ? null : (string) $j['finished_at']), 'expires_at' => Sql::iso((string) $j['expires_at'])];
         // The output of a remote-tool job (service and process lists, file paths and checksums) is read through the remote endpoints, which need `rmm.remote.manage`;
         // a job list that only needs the saved-script grant never carries it.
-        if ($withOutput && !in_array($j['type'], \RivetCore\Rmm\Remote\RemoteProtocol::JOB_TYPES, true)) {
+        if ($withOutput && !\RivetCore\Rmm\Remote\RemoteProtocol::isToolJob($j['type'])) {
             $o['output'] = $j['output'];
             $o['output_truncated'] = (bool) $j['output_truncated'];
         }
@@ -320,7 +328,7 @@ final class RmmReadModel
         if (!$authz->allowed($who->userId, RmmAbility::JOB_RUN_SAVED, $client)) {
             return ActionResult::fail(403, 'forbidden', $authz->denial(RmmAbility::JOB_RUN_SAVED));
         }
-        $isRemote = in_array($row['type'], \RivetCore\Rmm\Remote\RemoteProtocol::JOB_TYPES, true);
+        $isRemote = \RivetCore\Rmm\Remote\RemoteProtocol::isToolJob($row['type']);
         if ($isRemote && !$authz->allowed($who->userId, RmmAbility::REMOTE_MANAGE, $client)) {
             return ActionResult::fail(403, 'forbidden', $authz->denial(RmmAbility::REMOTE_MANAGE));
         }
@@ -1017,6 +1025,24 @@ final class RmmReadModel
         return array_map(static fn (array $b): array => ['binary_id' => (int) $b['binary_id'], 'version' => $b['version'], 'arch' => $b['arch'], 'sha256' => $b['sha256'],
             'size_bytes' => (int) $b['size_bytes'], 'active' => (bool) $b['active'], 'is_current' => (bool) $b['is_current'], 'uploaded_by' => (int) $b['uploaded_by'], 'created_at' => Sql::iso((string) $b['created_at'])],
             $this->sql->all('SELECT * FROM endpoint_agent_binaries ORDER BY binary_id DESC LIMIT ' . max(1, min(200, $limit))));
+    }
+
+    /**
+     * The published MSI templates, newest first (1.0.0-rc.16). `arch_source` says whether the architecture was read from the package (`summary`) or only declared by whoever uploaded it.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function msiTemplates(int $limit = 40): array
+    {
+        try {
+            $rows = $this->sql->all('SELECT * FROM endpoint_agent_msi_templates ORDER BY template_id DESC LIMIT ' . max(1, min(200, $limit)));
+        } catch (\Throwable) {
+            return [];   // migration 0025 not applied yet
+        }
+
+        return array_map(static fn (array $t): array => ['template_id' => (int) $t['template_id'], 'version' => $t['version'], 'arch' => $t['arch'], 'sha256' => $t['sha256'],
+            'size_bytes' => (int) $t['size_bytes'], 'arch_source' => $t['arch_source'], 'active' => (bool) $t['active'], 'is_current' => (bool) $t['is_current'], 'uploaded_by' => (int) $t['uploaded_by'],
+            'created_at' => Sql::iso((string) $t['created_at'])], $rows);
     }
 
     /**

@@ -14,6 +14,9 @@
     var clientSel = document.getElementById('rmm-inst-client');
     var locSel = document.getElementById('rmm-inst-loc');
     var archSel = document.getElementById('rmm-inst-arch');
+    var fmtSel = document.getElementById('rmm-inst-format');
+    var fmtWrap = document.getElementById('rmm-inst-format-wrap');
+    var fmtHelp = document.getElementById('rmm-inst-format-help');
     var go = document.getElementById('rmm-inst-go');
     var goLabel = document.getElementById('rmm-inst-go-label');
     var msg = document.getElementById('rmm-inst-msg');
@@ -36,6 +39,19 @@
         var o = archSel.options[archSel.selectedIndex];
         return !!(o && o.getAttribute('data-win-version'));
     }
+    // RivetCore 1.0.0-rc.16: the MSI option exists only where an MSI template is published for the chosen architecture; the reason is shown in words. Windows only.
+    var fmtHelpDefault = fmtHelp ? fmtHelp.textContent : '';
+    function refreshFormat() {
+        if (!fmtSel) { return; }
+        var o = archSel.options[archSel.selectedIndex];
+        var reason = o ? (o.getAttribute('data-msi-reason') || '') : '';
+        var msiOpt = fmtSel.querySelector('option[value=msi]');
+        if (msiOpt) { msiOpt.disabled = reason !== ''; }
+        if (reason !== '' && fmtSel.value === 'msi') { fmtSel.value = 'exe'; }
+        if (fmtHelp) { fmtHelp.textContent = reason !== '' ? reason : (fmtHelpDefault.indexOf('No MSI template') === 0 ? 'The exe installs itself when double-clicked. The msi is for Intune, group policy and tools that deploy .msi files. The msi is unsigned and unverified on Windows; see MSI templates under Administration.' : fmtHelpDefault); }
+        if (fmtWrap) { fmtWrap.hidden = osField.value === 'linux'; }
+        if (goLabel && osField.value !== 'linux') { goLabel.textContent = fmtSel.value === 'msi' ? 'Download MSI' : 'Download installer'; }
+    }
     function refresh() {
         var os = osField.value;
         go.disabled = busy || !serviceReady || (os === 'windows' && (!winReady || !archHasWindows()));
@@ -44,7 +60,9 @@
             say('No installer is uploaded for ' + archSel.options[archSel.selectedIndex].text.split(' (')[0] + ' yet. Choose the other architecture, or upload it under Administration > Endpoint agent > Agent binaries.', 'warning');
         } else if (msg.getAttribute('data-kind') === 'arch') { clearMsg(); }
         msg.setAttribute('data-kind', os === 'windows' && winReady && !archHasWindows() ? 'arch' : '');
+        refreshFormat();
     }
+    // (called at the end of refresh, which every change of tab, architecture or format goes through)
 
     function setOs(os, focus) {
         osField.value = os;
@@ -86,6 +104,7 @@
     }
     clientSel.addEventListener('change', function () { filterLocations(); clearMsg(); });
     archSel.addEventListener('change', refresh);
+    if (fmtSel) { fmtSel.addEventListener('change', function () { clearMsg(); refresh(); }); }
 
     // Opening: preselect the client of the opener (the client page), reset the result area.
     var meshBox = document.getElementById('rmm-inst-mesh');
@@ -107,6 +126,7 @@
     function params() {
         var p = new URLSearchParams(new FormData(form));
         p.set('mode', osField.value === 'linux' ? 'commands' : 'download');
+        if (osField.value === 'linux') { p.delete('format'); }
         return p;
     }
     function fail(res) {
@@ -138,14 +158,16 @@
                 });
             }
             return res.blob().then(function (blob) {
-                var name = filenameOf(res, 'rivetit-agent.exe');
+                var isMsi = !!fmtSel && fmtSel.value === 'msi';
+                var name = filenameOf(res, isMsi ? 'rivetit-agent.msi' : 'rivetit-agent.exe');
                 var a = document.createElement('a');
                 var url = URL.createObjectURL(blob);
                 a.href = url; a.download = name; a.rel = 'noopener'; a.style.display = 'none';
                 document.body.appendChild(a); a.click();
                 window.setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 4000);
                 [].forEach.call(modal.querySelectorAll('[data-rmm-inst-file]'), function (el) { el.textContent = name; });
-                say(name + ' was downloaded. Copy it to the PC, double-click it and accept the administrator prompt. For deployment tools run it with: ' + name + ' setup --silent'
+                say(name + (isMsi ? ' was downloaded. Copy it to the PC and double-click it, or deploy it with: msiexec /i "' + name + '" /qn /norestart. It is unsigned, so SmartScreen may warn, and it has not been run on Windows yet (an administrator can check it first). The enrollment token inside is used once or until it expires.'
+                    : ' was downloaded. Copy it to the PC, double-click it and accept the administrator prompt. For deployment tools run it with: ' + name + ' setup --silent')
                     + (meshBox && meshBox.checked ? ' It also installs the MeshCentral agent after the RivetMSP agent; a Mesh problem never stops the RivetMSP install and shows on the device page.' : ''), 'success');
             });
         }).catch(function () {

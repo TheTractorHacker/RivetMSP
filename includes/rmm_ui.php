@@ -306,6 +306,22 @@ function rivetRmmUiMeshAgent(?array $ma, bool $admin): ?array
 }
 
 /**
+ * Whether a pushed MeshCentral agent install can be offered for a device (RivetCore 1.0.0-rc.16: `mesh_install` in the device detail, present only while Mesh is enabled with an
+ * https address and a device group). `agent_supports` is whether the device's agent announced `job:mesh_install`; older agents must be updated first. Null: offer nothing.
+ *
+ * @param array<string,mixed>|null $mi
+ * @return array{available:bool,agent_supports:bool,installed:bool}|null
+ */
+function rivetRmmUiMeshInstall(?array $mi): ?array
+{
+    if ($mi === null || empty($mi['available'])) {
+        return null;
+    }
+
+    return ['available' => true, 'agent_supports' => !empty($mi['agent_supports']), 'installed' => !empty($mi['installed'])];
+}
+
+/**
  * The RMM device behind an asset, as a view-model, or null. Null means "render nothing": the module is off (answered from the state file with
  * no query), the asset has no agent device, the user may not view devices, or the device is outside the user's clients (the same answer for
  * "missing" and "not yours").
@@ -569,6 +585,8 @@ function rivetRmmUiPanel(\mysqli $mysqli, int $assetId, int $userId, ?int $devic
         'mesh' => ['mapped' => !empty($view['mesh']['mapped']), 'source' => $view['mesh']['source'] ?? null, 'node_id' => $perm['admin'] ? ($view['mesh']['node_id'] ?? '') : '',
             'configured' => $meshConfigured],
         'mesh_agent' => rivetRmmUiMeshAgent(is_array($view['mesh_agent'] ?? null) ? $view['mesh_agent'] : null, (bool) $perm['admin']),
+        // RivetCore 1.0.0-rc.16: present in Core's device detail only while the pushed Mesh install is available (Mesh enabled, https address, device group); null otherwise.
+        'mesh_install' => rivetRmmUiMeshInstall(is_array($view['mesh_install'] ?? null) ? $view['mesh_install'] : null),
         'remote_sessions' => $sessions,
         'saved_scripts' => $saved,
         'banners' => $banners,
@@ -745,6 +763,83 @@ function rivetRmmUiFleet(\mysqli $mysqli, int $userId, array $filters = [], ?int
         'open_alerts' => rivetRmmUiOpenAlertCount($mysqli, $rmm, $visible),
         'capacity' => $capacity,
         'perm' => ['admin' => $isAdmin, 'manage' => $canManage],
+        'mesh_bulk' => rivetRmmUiMeshBulk($mysqli, $rmm, $authz, $userId, $visible, $tagList, $groupList),
+    ];
+}
+
+/**
+ * The current MSI template per architecture (RivetCore 1.0.0-rc.16, RmmReadModel::msiTemplates()): the version, or null when none is published and current for it. An MSI installer is
+ * a copy of that template with the per-client payload appended, so without one the Format selector offers no MSI. amd64 only is BUILT by Core's `make msi`; an arm64 template built
+ * elsewhere (WiX on Windows) is accepted, so arm64 is listed when one is there.
+ *
+ * @param list<array<string,mixed>> $templates RmmReadModel::msiTemplates()
+ * @return array{amd64:?string,arm64:?string}
+ */
+function rivetRmmUiMsiCurrent(array $templates): array
+{
+    $out = ['amd64' => null, 'arm64' => null];
+    foreach ($templates as $t) {
+        $arch = (string) ($t['arch'] ?? '');
+        if (array_key_exists($arch, $out) && $out[$arch] === null && !empty($t['active']) && !empty($t['is_current'])) {
+            $out[$arch] = (string) $t['version'];
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * Why the MSI format cannot be chosen for an architecture, in words, or null when it can.
+ *
+ * @param array{amd64:?string,arm64:?string} $msi
+ */
+function rivetRmmUiMsiReason(array $msi, string $arch): ?string
+{
+    if ($msi[$arch] !== null) {
+        return null;
+    }
+
+    return $arch === 'arm64'
+        ? 'No MSI template is published for ARM64. Core builds an x64 MSI only; an ARM64 PC uses the exe installer (or upload an ARM64 template built elsewhere under Administration > Endpoint agent > MSI templates).'
+        : 'No MSI template is published for x64 yet. An administrator uploads it under Administration > Endpoint agent > MSI templates.';
+}
+
+/**
+ * The "Install the MeshCentral agent on many devices" card of the fleet page (RivetCore 1.0.0-rc.16, `POST endpoint_devices/mesh/install`): the targets this user may pick, or null when
+ * the card is not offered (the remote-tools switch is off, the user holds no remote-management ability, or MeshCentral install is not set up). Cosmetic: Core checks everything again
+ * when the request arrives, per client.
+ *
+ * @param list<int>|null $visible
+ * @param list<array<string,mixed>> $tagList
+ * @param list<array<string,mixed>> $groupList
+ * @return array{clients:list<array{id:int,name:string}>,tags:list<array{id:int,name:string,n:int}>,groups:list<array{id:int,name:string}>}|null
+ */
+function rivetRmmUiMeshBulk(\mysqli $mysqli, \RivetCore\Rmm\RmmModule $rmm, $authz, int $userId, ?array $visible, array $tagList, array $groupList): ?array
+{
+    if (!$rmm->featureOn(\RivetCore\Rmm\Remote\RemoteProtocol::FEATURE_REMOTE_TOOLS) || !$authz->allowed($userId, RmmAbility::REMOTE_MANAGE, 0)) {
+        return null;
+    }
+    try {
+        if ($rmm->meshAgents()->installRefusal() !== null) {
+            return null;
+        }
+    } catch (\Throwable) {
+        return null;
+    }
+    $where = 'client_archived_at IS NULL';
+    if ($visible !== null) {
+        $where .= $visible === [] ? ' AND 1 = 0' : ' AND client_id IN (' . implode(',', array_map('intval', $visible)) . ')';
+    }
+    $clients = [];
+    $r = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients WHERE $where ORDER BY client_name LIMIT 1000");
+    while ($r && ($row = mysqli_fetch_assoc($r))) {
+        $clients[] = ['id' => (int) $row['client_id'], 'name' => (string) $row['client_name']];
+    }
+
+    return [
+        'clients' => $clients,
+        'tags' => array_map(static fn (array $t): array => ['id' => (int) ($t['tag_id'] ?? 0), 'name' => (string) ($t['name'] ?? ''), 'n' => (int) ($t['device_count'] ?? 0)], $tagList),
+        'groups' => array_map(static fn (array $g): array => ['id' => (int) ($g['group_id'] ?? 0), 'name' => (string) ($g['name'] ?? '')], $groupList),
     ];
 }
 
@@ -859,6 +954,7 @@ function rivetRmmUiInstaller(\mysqli $mysqli, int $userId, ?int $onlyClientId = 
         'clients' => $clients,
         'locations' => $locations,
         'windows' => ['amd64' => $cur['amd64']['version'] ?? null, 'arm64' => $cur['arm64']['version'] ?? null],
+        'msi' => rivetRmmUiMsiCurrent($read->msiTemplates(200)),   // RivetCore 1.0.0-rc.16: the MSI template new MSI installers are stamped from, per architecture
         'service_problem' => $problem,
         'max_ttl_h' => max(1, (int) ($cfg['enroll_max_ttl_h'] ?? 720)),
         'can_publish' => $authz->allowed($userId, RmmAbility::BINARY_PUBLISH, 0) || $authz->allowed($userId, RmmAbility::ADMIN, 0),

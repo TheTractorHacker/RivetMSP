@@ -7,7 +7,7 @@ if (defined('FROM_POST_HANDLER')) return;
  * for the client; the token is revoked again when the file cannot be served), deploymentCommands() for Linux. Hiding the button is cosmetic.
  *
  * Fields: csrf_token, os=windows|linux, mode=download|commands (default by os), client_id, location_id, arch=amd64|arm64, ring=stable|pilot,
- * ttl_hours (default 24), multiple=1 (25 uses, else 1), label, install_mesh_agent=1 (optional; also install the MeshCentral agent, RivetCore 1.0.0-rc.12). A fetch request (X-Requested-With: fetch) gets JSON errors; a plain form post gets a
+ * ttl_hours (default 24), multiple=1 (25 uses, else 1), label, install_mesh_agent=1 (optional; also install the MeshCentral agent, RivetCore 1.0.0-rc.12), format=exe|msi (optional, default exe, Windows only; RivetCore 1.0.0-rc.16). A fetch request (X-Requested-With: fetch) gets JSON errors; a plain form post gets a
  * flash message and a redirect back.
  */
 
@@ -73,8 +73,17 @@ $inst_ttl_max = max(1, (int) ($inst_rmm->readModel()->settingsSummary()['enroll_
 // RivetCore 1.0.0-rc.12: the optional "Also install the MeshCentral agent" box. Off unless ticked; Core refuses it, creating nothing, when Mesh is not switched on and
 // configured (an https address and a device group id), and its sentence is what the person reads.
 $inst_mesh = ($_POST['install_mesh_agent'] ?? '') === '1';
+// RivetCore 1.0.0-rc.16: `format` = exe (the default, byte for byte as before) or msi (a copy of the published MSI template with the same payload appended). Windows downloads only:
+// a Linux install command has no format. Core refuses an MSI whose template is not published, in words, and leaves no token behind.
+$inst_format = (string) ($_POST['format'] ?? 'exe');
+if (!in_array($inst_format, ['exe', 'msi'], true)) {
+    $inst_fail(422, 'invalid', 'Choose exe or msi.');
+}
+if ($inst_format === 'msi' && $inst_os !== 'windows') {
+    $inst_fail(422, 'invalid', 'The MSI format is for Windows only.');
+}
 $inst_args = [intval($_POST['client_id'] ?? 0), intval($_POST['location_id'] ?? 0), $inst_ring, $inst_post_int('ttl_hours', 1, $inst_ttl_max, min(24, $inst_ttl_max)),
-    !empty($_POST['multiple']) ? 25 : 1, trim((string) ($_POST['label'] ?? '')), $inst_arch, $inst_mesh];
+    !empty($_POST['multiple']) ? 25 : 1, trim((string) ($_POST['label'] ?? '')), $inst_arch, $inst_mesh, $inst_format];
 
 if ($inst_mode === 'commands') {
     $r = $inst_admin->deploymentCommands($inst_who, ...$inst_args);

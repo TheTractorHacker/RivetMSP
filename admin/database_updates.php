@@ -7126,3 +7126,19 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.90'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.90') {
+        // DB 2.6.91: RivetCore 1.0.0-rc.16 Migration0025MsiTemplates (the MSI installer format): ONE new table, endpoint_agent_msi_templates (CREATE TABLE IF NOT EXISTS,
+        // nothing existing altered; version and architecture unique, SHA-256 and size checked before every download). Core owns the DDL, so this step runs the Core runner
+        // (idempotent: it skips applied ids). Nothing is switched on: no MSI template exists until an administrator uploads one. Until this step runs everything works
+        // (the template list is empty); only publishing an MSI template needs the table. Skipped (version NOT advanced, so it retries) until a package that ships the
+        // migration is installed. Run it before, or right after, the new code is live.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Rmm\Migration\Migration0025MsiTemplates::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.91'");
+        }
+    }

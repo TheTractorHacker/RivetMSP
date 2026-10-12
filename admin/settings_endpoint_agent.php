@@ -50,6 +50,10 @@ $attempts = $read->recentFailedAttempts(15);
 $binaries = $read->binaries(40);
 $curBin = $read->currentBinaries();
 $uploadLimit = $read->uploadLimit();
+// RivetCore 1.0.0-rc.16: the MSI template store (migration 0025, DB 2.6.91). Until it is applied the list is empty and the card says so instead of failing.
+$msiReady = ($__r = mysqli_query($mysqli, "SHOW TABLES LIKE 'endpoint_agent_msi_templates'")) && mysqli_num_rows($__r) > 0;
+$msiTemplates = $msiReady ? $read->msiTemplates(40) : [];
+$msiCur = rivetRmmUiMsiCurrent($msiTemplates);
 $releases = $read->releases(30);
 $counts = $read->fleetCounts();
 $checksText = json_encode($cfg['checks'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
@@ -133,6 +137,20 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
             <li><strong>Group Policy:</strong> Computer Configuration, Policies, Windows Settings, Scripts, Startup, PowerShell Scripts: add the script from step 2. Startup scripts run as SYSTEM before logon. SYSVOL is readable by every domain user, so use a token with a small use count, or prefer Intune or your RMM, which keep the script private.</li>
             <li>The setup is idempotent: a machine that already has the agent keeps its identity. Windows PCs that do not trust your server certificate need the issuing CA in their store (or set the CA certificate in the service settings, which the installer embeds for the agent).</li>
         </ul>
+        <?php if (!empty($dep['commands']['msi'])) { $dm = $dep['commands']['msi']; ?>
+        <h6>MSI package (<?= $h($dm['filename']) ?>)</h6>
+        <div class="alert alert-warning small py-2" role="note"><div>The MSI is unsigned (SmartScreen and some policies warn or block it) and has <strong>not been run on Windows</strong>: whether msiexec accepts the appended payload, and what a repair or upgrade does, are unverified. Try it on one test PC before a rollout (the checklist is <code>docs/rmm/MSI_VERIFY.md</code> in RivetCore).</div></div>
+        <ul class="small mb-3">
+            <li><strong>Stamped file (the payload is inside it):</strong> <code class="text-break"><?= $h($dm['msiexec']) ?></code> Download the file with <strong>Download installer</strong> and Format msi.</li>
+            <li><strong>Unstamped template with properties</strong> (server and token on the command line): <code class="text-break"><?= $h($dm['properties']) ?></code></li>
+            <li><strong>Silent download and install</strong> for an RMM, Intune platform script or GPO startup script (it fetches the stamped MSI itself):
+                <?php if ((string) ($dm['powershell'] ?? '') === '') { ?><span class="text-danger">Set an https:// service URL first.</span><?php } else { ?>
+                <div class="my-1"><button type="button" class="btn btn-sm btn-outline-secondary" data-ea-copy-target="ea_msi_snippet">Copy script</button></div>
+                <textarea class="form-control font-monospace small" id="ea_msi_snippet" rows="12" readonly spellcheck="false"><?= $h((string) $dm['powershell']) ?></textarea><?php } ?></li>
+            <li><strong>Uninstall:</strong> <code class="text-break"><?= $h((string) $dm['uninstall']) ?></code> The MeshCentral agent stays unless <code>REMOVE_MESHAGENT=1</code> is appended to the msiexec arguments.</li>
+            <li><strong>Detection rule:</strong> product name <code><?= $h((string) ($dm['detection']['product_name'] ?? '')) ?></code>, UpgradeCode <code><?= $h((string) ($dm['detection']['upgrade_code'] ?? '')) ?></code> (or the service/file rule above).</li>
+        </ul>
+        <?php } ?>
         <h6>4. New agent versions</h6>
         <p class="small mb-0">The Windows agent is built and released from the RivetCore repository (<code>endpoint-agent/</code>, release tags <code>agent-v*</code>, see <code>docs/rmm/AGENT_BUILD.md</code> there). Download the release executables and upload <code>rivetit-agent-windows-amd64.exe</code> and <code>...-arm64.exe</code> under Agent binaries, or run <code>sudo -u www-data php scripts/endpoint_agent_publish.php rivetit-agent-windows-amd64.exe --version 1.2.0 --arch amd64 --activate [--release pilot --rollout 10]</code>. Installers created afterwards use the current binary; enrolled agents update through the release ring.</p>
     </div>
@@ -441,6 +459,48 @@ echo rivetRmmUiScaleCards($scaleCtx);
     </div>
 </div>
 
+<div class="card mb-3" id="msi-templates">
+    <div class="card-header"><h4 class="card-title mb-0">MSI templates</h4></div>
+    <div class="card-body">
+        <p class="small text-muted">Optional. An <strong>MSI installer</strong> (Deployment, Format msi) is a copy of the <em>current</em> MSI template for the architecture with the per-client payload (server address, one-time token, client) appended; the stored template is never modified. Upload the unstamped <code>rivetit-agent-windows-amd64.msi</code> built by RivetCore's <code>make msi</code> (release tag <code>agent-v*</code>, with <code>SHA256SUMS.msi</code>). The server checks that it is a Windows Installer file, within the size limit, not already stamped, and reads the platform from the package (x64 or ARM64; an Intel package is refused). Core builds <strong>x64 only</strong>; an ARM64 PC uses the exe.</p>
+        <div class="alert alert-warning small py-2" role="note"><div><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i><strong>Unsigned, and not yet verified on Windows.</strong> The package is built on Linux and table-checked, never run on Windows: whether <code>msiexec</code> accepts a package with the payload appended after the end of the file, what repair and upgrade do, and the whole custom-action flow are <strong>UNVERIFIED</strong> (RivetCore <code>docs/rmm/MSI_VERIFY.md</code> is the checklist). Windows SmartScreen and some policies warn about or block an unsigned installer. Test it on one PC before a rollout; the exe installer is unchanged and stays the default.</div></div>
+        <?php if (!$msiReady) { ?>
+        <div class="alert alert-info py-2 mb-0">Run the database update first (Administration &rarr; Updates; DB 2.6.91 adds the MSI template table), then reload this page.</div>
+        <?php } else { ?>
+        <form action="post.php" method="post" enctype="multipart/form-data" class="row g-2 align-items-end mb-3" autocomplete="off" id="msi_form">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="col-lg-4"><label class="form-label small" for="msi_file">MSI template (.msi)</label><input type="file" class="form-control form-control-sm" id="msi_file" name="msi_template" accept=".msi" required aria-describedby="msi_file_help"><div class="form-text" id="msi_file_help">Largest file: <?= $h(BinaryStore::human((int) $uploadLimit)) ?>.</div></div>
+            <div class="col-lg-2"><label class="form-label small" for="msi_version">Version</label><input class="form-control form-control-sm" id="msi_version" name="version" maxlength="40" placeholder="1.0.0-rc.16" required></div>
+            <div class="col-lg-2"><label class="form-label small" for="msi_arch">Architecture</label><select class="form-select form-select-sm" id="msi_arch" name="arch"><option value="amd64">Windows x64 (amd64)</option><option value="arm64">Windows ARM64</option></select></div>
+            <div class="col-lg-2"><div class="form-check"><input type="checkbox" class="form-check-input" id="msi_cur" name="activate" value="1" checked><label class="form-check-label small" for="msi_cur">Make current</label></div></div>
+            <div class="col-lg-2"><button class="btn btn-sm btn-primary w-100" name="upload_msi_template" id="msi_go"><i class="fas fa-upload me-1" aria-hidden="true"></i>Upload</button></div>
+        </form>
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+            <caption class="visually-hidden">MSI templates</caption>
+            <thead><tr><th scope="col">Version</th><th scope="col">Arch</th><th scope="col">Size</th><th scope="col">SHA-256</th><th scope="col">Platform read from</th><th scope="col">Uploaded (UTC)</th><th scope="col">State</th><th scope="col" class="position-relative"><span class="visually-hidden">Actions</span></th></tr></thead><tbody>
+            <?php foreach ($msiTemplates as $t) { ?>
+                <tr>
+                    <td><?= $h($t['version']) ?></td><td><?= $h($t['arch']) ?></td><td><?= $h(BinaryStore::human((int) $t['size_bytes'])) ?></td>
+                    <td class="small font-monospace text-break"><?= $h($t['sha256']) ?></td>
+                    <td class="small"><?= $t['arch_source'] === 'declared' ? '<span class="badge bg-warning text-dark" title="The package\'s own platform could not be read; the architecture is as you declared it.">declared by uploader</span>' : '<span class="badge bg-secondary">package summary</span>' ?></td>
+                    <td><?= $h($dt($t['created_at'])) ?></td>
+                    <td><?php if (!$t['active']) { echo '<span class="badge bg-secondary">Inactive</span>'; } elseif ($t['is_current']) { echo '<span class="badge bg-success">Current</span>'; } else { echo '<span class="badge bg-info text-dark">Available</span>'; } ?></td>
+                    <td class="text-nowrap">
+                        <form action="post.php" method="post" class="d-inline-flex gap-1"><input type="hidden" name="csrf_token" value="<?= $csrf ?>"><input type="hidden" name="template_id" value="<?= (int) $t['template_id'] ?>">
+                        <?php if ($t['active']) { ?>
+                            <?php if (!$t['is_current']) { ?><button class="btn btn-xs btn-outline-primary" name="msi_template_action" value="make_current">Make current</button><?php } ?>
+                            <button class="btn btn-xs btn-outline-danger" name="msi_template_action" value="deactivate" data-ea-confirm="Deactivate this MSI template? It stops being used for MSI installers. The file is kept.">Deactivate</button>
+                        <?php } else { ?><button class="btn btn-xs btn-outline-primary" name="msi_template_action" value="activate">Reactivate</button><?php } ?>
+                        </form>
+                    </td>
+                </tr>
+            <?php } if (!$msiTemplates) { echo '<tr><td colspan="8" class="text-muted">No MSI template uploaded yet. The Format selector offers the exe only until one is current.</td></tr>'; } ?>
+        </tbody></table></div>
+        <p class="small text-muted mt-2 mb-0">From a shell: <code>php scripts/endpoint_agent_publish.php rivetit-agent-windows-amd64.msi --msi --version 1.0.0 --arch amd64 --activate</code>.</p>
+        <?php } ?>
+    </div>
+</div>
+
 <div class="card mb-3" id="deployment">
     <div class="card-header"><h4 class="card-title mb-0">Deployment: per-client installer</h4></div>
     <div class="card-body">
@@ -463,6 +523,11 @@ echo rivetRmmUiScaleCards($scaleCtx);
             <div class="col-lg-1"><label class="form-label" for="dp_ttl">Hours</label><input type="number" class="form-control" id="dp_ttl" name="ttl_hours" min="1" max="<?= (int) $cfg['enroll_max_ttl_h'] ?>" value="<?= (int) min(72, $cfg['enroll_max_ttl_h']) ?>"></div>
             <div class="col-lg-1"><label class="form-label" for="dp_uses">Max uses</label><input type="number" class="form-control" id="dp_uses" name="max_uses" min="1" max="5000" value="25"></div>
             <div class="col-lg-2"><label class="form-label" for="dp_label">Label</label><input type="text" class="form-control" id="dp_label" name="label" maxlength="100"></div>
+            <div class="col-lg-3"><label class="form-label" for="dp_format">Format</label>
+                <select class="form-select" id="dp_format" name="format" aria-describedby="dp_format_help" data-msi-amd64="<?= $h($msiCur['amd64'] ?? '') ?>" data-msi-arm64="<?= $h($msiCur['arm64'] ?? '') ?>"
+                    data-msi-reason-amd64="<?= $h((string) rivetRmmUiMsiReason($msiCur, 'amd64')) ?>" data-msi-reason-arm64="<?= $h((string) rivetRmmUiMsiReason($msiCur, 'arm64')) ?>">
+                    <option value="exe" selected>exe: self-installing program</option><option value="msi"<?= ($msiCur['amd64'] ?? $msiCur['arm64']) === null ? ' disabled' : '' ?>>msi: Windows Installer package</option></select>
+                <div class="form-text" id="dp_format_help"><?= $h(($msiCur['amd64'] ?? $msiCur['arm64']) === null ? (string) rivetRmmUiMsiReason($msiCur, 'amd64') : 'An msi is the published MSI template with this client\'s payload appended (unsigned; unverified on Windows).') ?></div></div>
             <?php $depMesh = rivetRmmUiInstallerMesh($rmm, true, $cfg); ?>
             <?= rivetRmmUiInstallerMeshBox($depMesh) ?>
             <div class="col-12 d-flex flex-wrap gap-2 mt-2">
@@ -642,6 +707,7 @@ $meshCard = rivetRmmMeshInstallCard(rivetRmmMeshInstallView($rmm, $meshWho), $me
 </div>
 
 <script src="/js/rmm_binary_upload.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/js/rmm_binary_upload.js') ?>" defer></script>
+<script src="/js/rmm_msi_admin.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/js/rmm_msi_admin.js') ?>" defer></script>
 <script nonce="<?= $h($csp_nonce ?? '') ?>">
 document.querySelectorAll('form[data-ea-confirm]').forEach(function (f) {
     f.addEventListener('submit', function (e) { if (!confirm(f.getAttribute('data-ea-confirm'))) { e.preventDefault(); } });

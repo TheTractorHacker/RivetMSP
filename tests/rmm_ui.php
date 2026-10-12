@@ -718,3 +718,11 @@ foreach (glob(__DIR__ . '/rmm_ui_p1213_*.php') ?: [] as $__p1213) {
     echo "---- " . basename($__p1213) . "\n";
     require $__p1213;
 }
+
+// ============================================================ pushed MeshCentral agent install and the MSI installer format (rc.16): the sections live in tests/rmm_ui_p16_*.php
+// Same contract as the fragments above (shared variables, module on, run in file-name order). They configure what they need through the product and put it back.
+$rmm->admin()->enable($admin);
+foreach (glob(__DIR__ . '/rmm_ui_p16_*.php') ?: [] as $__p16) {
+    echo "---- " . basename($__p16) . "\n";
+    require $__p16;
+}

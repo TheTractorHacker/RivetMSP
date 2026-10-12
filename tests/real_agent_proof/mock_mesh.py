@@ -5,7 +5,7 @@
   mock_mesh.py <pem (certificate and key)> <port> <group, MeshCentral URL form> <node id raw> <events log>
 
 GET /meshagents?id=N&meshid=<64 characters, URL form>&installflags=F answers a tiny shell script that behaves like a MeshAgent for the commands the installer uses (-install, -nodeid,
--uninstall); a wrong meshid is a 404. Every request is appended to the events log as "MESH-DOWNLOAD id=.. meshid=.. installflags=..". Listens on all interfaces
+-uninstall); a wrong meshid is a 404; agent id 99 announces a body over the agent's 64 MiB cap (and sends none). Every request is appended to the events log as "MESH-DOWNLOAD id=.. meshid=.. installflags=..". Listens on all interfaces
 (the agent runs in a container and reaches the host through the docker gateway). Exits after 15 minutes."""
 import http.server, ssl, sys, time, urllib.parse
 
@@ -43,6 +43,13 @@ class H(http.server.BaseHTTPRequestHandler):
             f.write("MESH-DOWNLOAD id=%s meshid=%s installflags=%s\n" % (q.get('id', [''])[0], q.get('meshid', [''])[0], q.get('installflags', [''])[0]))
         if q.get('meshid', [''])[0] != group:
             self.send_error(404)
+            return
+        if q.get('id', [''])[0] == '99':
+            # RivetCore 1.0.0-rc.16: an agent id that answers an installer ANNOUNCED larger than the agent's 64 MiB cap: the agent must refuse it without reading a byte of it
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/octet-stream')
+            self.send_header('Content-Length', str(64 * 1024 * 1024 + 1))
+            self.end_headers()
             return
         body = SCRIPT.encode()
         self.send_response(200)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # REAL-agent proof of RivetMSP's RMM Phases 6 and 8 (remote tools, file transfer, log collection), of the optional MeshCentral agent install and node-id mapping (rc.12,
-# against a MOCK Mesh server) and of the starter pack (rc.13: installed through the API, a read-only script and a dry-run script run on the real agent), through RivetMSP's own bridges.
+# against a MOCK Mesh server), of the PUSHED Mesh install and removal on an agent enrolled without the Mesh option (rc.16, same mock server) and of the starter pack (rc.13: installed through the API, a read-only script and a dry-run script run on the real agent), through RivetMSP's own bridges.
 #
 #   the Linux agent (the release build from RivetCore's `make dist`, endpoint-agent/dist) running under a REAL systemd in a privileged container
 #     <--TLS-->  nginx (host network, self-signed CA)  <--http-->  `php -S` serving RivetMSP's api/v1 front controller (tests/rmm_golden/router.php)
@@ -244,6 +244,59 @@ chk "the option was remembered for the enrollment token (installer options row)"
 chk "uninstalling the RivetMSP agent leaves the Mesh agent alone" 'q2 bash /w/install-linux.sh --uninstall --purge >"$WORK/mesh-uninstall.out" 2>&1; q2 test -x /usr/local/mesh_services/meshagent/meshagent'
 chk "and --remove-meshagent runs the Mesh agent's own uninstaller" 'q2 bash -c "cd /w && ./install-linux.sh --server https://$GATEWAY:$TLSPORT --token-file /w/enroll.token --ca /w/ca.pem >/dev/null 2>&1; ./install-linux.sh --uninstall --purge --remove-meshagent" >"$WORK/mesh-uninstall2.out" 2>&1; q2 test -e /var/tmp/mesh-uninstalled.marker && ! q2 test -e /usr/local/mesh_services/meshagent/meshagent'
 docker rm -f "$M2" >/dev/null 2>&1 || true
+
+echo "== pushed MeshCentral agent (rc.16): mesh_install on the FIRST machine, enrolled WITHOUT the Mesh option, through RivetMSP's technician API (api/v1/endpoint_devices) and a MOCK Mesh server"
+MESHDIR=/usr/local/mesh_services/meshagent
+# the second machine's container is gone: retire its device (what an administrator does), so the fake node id its install reported can move to the machine that reports it now
+dbq "UPDATE endpoint_agent_devices SET retired_at = UTC_TIMESTAMP() WHERE device_id = $DEV2" >/dev/null
+chk "the second machine's device is retired (its container is gone)" '[ "$(dbq "SELECT COUNT(*) FROM endpoint_agent_devices WHERE device_id = $DEV2 AND retired_at IS NOT NULL")" = 1 ]'
+: >"$WORK/mesh-events.log"
+chk "the first machine never had a Mesh agent (it enrolled with a plain install-linux.sh) and the server has no Mesh state for it" '! q test -e $MESHDIR/meshagent && [ "$(dbq "SELECT COUNT(*) FROM endpoint_agent_mesh_agents WHERE device_id = $DEV AND installed = 1")" = 0 ]'
+chk "the agent announced job:mesh_install and job:mesh_uninstall" 'dbq "SELECT capabilities_json FROM rmm_device_state WHERE device_id = $DEV" | grep -q job:mesh_install && dbq "SELECT capabilities_json FROM rmm_device_state WHERE device_id = $DEV" | grep -q job:mesh_uninstall'
+A GET "$DEV"
+chk "the device detail offers it: mesh_install.available, agent_supports, not installed" '[ "$(printf "%s" "$R" | jget mesh_install.available)" = true ] && [ "$(printf "%s" "$R" | jget mesh_install.agent_supports)" = true ] && [ "$(printf "%s" "$R" | jget mesh_install.installed)" = false ]'
+A POST "$DEV/mesh/install" '{"url":"https://evil.example"}'
+chk "a body with anything but force is refused (422): the job carries only the stored settings" '[ "$CODE" = 422 ] && [ "$(dbq "SELECT COUNT(*) FROM endpoint_agent_jobs WHERE type = '\''mesh_install'\''")" = 0 ]'
+meshjob() { # meshjob "<json body>" -> sets J, MCODE, ST and RES after the job is final
+  A POST "$DEV/mesh/install" "$1"; J="$(printf '%s' "$R" | jget job_id)"; MCODE="$CODE"; ST="$(job_done $J 120)"; RES="$(api GET "$DEV/remote/jobs/$J")"; }
+A PUT "remote/mesh" "{\"mesh_server_cert_pin\":\"$(printf 'ab%.0s' $(seq 1 48))\"}"
+chk "a wrong certificate pin saved through the REST API" '[ "$CODE" = 200 ]'
+meshjob '{}'
+chk "wrong pin: queued (202), the job FAILED naming the pinned hash, no Mesh agent, the RivetMSP agent still active" '[ "$MCODE" = 202 ] && [ "$ST" = failed ] && printf "%s" "$RES" | grep -q "pinned hash" && ! q test -e $MESHDIR/meshagent && [ "$(q systemctl is-active rivetit-agent)" = active ]'
+chk "the job row holds the redacted placeholder, never the group id; the sealed value is wiped" '[ "$(dbq "SELECT COUNT(*) FROM endpoint_agent_jobs WHERE job_id = '\''$J'\'' AND params_json LIKE '\''%redacted:secret%'\''")" = 1 ] && ! dbq "SELECT params_json FROM endpoint_agent_jobs WHERE job_id = '\''$J'\''" | grep -qF -- "$MESHGROUP" && [ -z "$(dbq "SELECT secret_params_enc FROM rmm_job_extra WHERE job_id = '\''$J'\''")" ]'
+chk "the mock Mesh server was never reached (the TLS handshake was refused)" '[ ! -s "$WORK/mesh-events.log" ]'
+chk "the failure also reaches the device state through the check-in (mesh_agent.error)" 'wait_for 60 "[ \"\$(api GET \"$DEV\" | jget mesh_agent.installed)\" = false ] && api GET \"$DEV\" | grep -q pinned"'
+A PUT "remote/mesh" "{\"mesh_server_cert_pin\":\"$MESHPIN\",\"mesh_group_id\":\"$(head -c 48 /dev/urandom | base64 -w0 | tr '+/' '@$')\"}"
+chk "the right pin and an unknown device group saved" '[ "$CODE" = 200 ]'
+meshjob '{}'
+chk "unknown device group: HTTP 404 from the Mesh server, reported, agent unaffected" '[ "$ST" = failed ] && printf "%s" "$RES" | grep -q "HTTP 404" && ! q test -e $MESHDIR/meshagent && [ "$(q systemctl is-active rivetit-agent)" = active ]'
+A PUT "remote/mesh" "{\"mesh_group_id\":\"$MESHGROUP\",\"mesh_agent_ids\":{\"linux/amd64\":99}}"
+meshjob '{}'
+chk "an installer body over the 64 MiB cap (agent id 99) is refused by the agent, nothing runs" '[ "$ST" = failed ] && printf "%s" "$RES" | grep -q "larger than" && ! q test -e $MESHDIR/meshagent'
+A PUT "remote/mesh" '{"mesh_agent_ids":{}}'
+chk "the id table is back to the built-in one" '[ "$CODE" = 200 ]'
+: >"$WORK/mesh-events.log"
+meshjob '{}'
+chk "the good case: queued (202), SUCCEEDED, the fake meshagent installed, the node id in the job result" '[ "$MCODE" = 202 ] && [ "$ST" = succeeded ] && [ "$(printf "%s" "$RES" | jget result.node_id)" = "node//$MESHNODE_RAW" ] && q test -x $MESHDIR/meshagent'
+chk "it was downloaded from <mesh>/meshagents?id=6&meshid=<group>&installflags=0 and what the agent ran is the downloaded installer (the fake meshagent is in place)" 'grep -qF "MESH-DOWNLOAD id=6 meshid=$MESHGROUP installflags=0" "$WORK/mesh-events.log" && q grep -q "FAKE MeshAgent" $MESHDIR/meshagent'
+chk "the job result and the job row never carry the group id" '! printf "%s" "$RES" | grep -qF -- "$MESHGROUP" && ! dbq "SELECT params_json FROM endpoint_agent_jobs WHERE job_id = '\''$J'\''" | grep -qF -- "$MESHGROUP"'
+chk "the check-in reported the Mesh agent and the server mapped the node id to the device by itself (moved from the retired machine)" 'wait_for 60 "[ \"\$(dbq \"SELECT installed FROM endpoint_agent_mesh_agents WHERE device_id = $DEV\")\" = 1 ] && [ \"\$(dbq \"SELECT mesh_node_id FROM endpoint_agent_mesh_nodes WHERE device_id = $DEV\")\" = \"node//\$MESHNODE_RAW\" ]"'
+chk "the device detail shows mesh_agent installed, map_state mapped and mesh_install.installed" '[ "$(api GET "$DEV" | jget mesh_agent.map_state)" = mapped ] && [ "$(api GET "$DEV" | jget mesh_install.installed)" = true ]'
+A POST "$DEV/mesh/install" '{}'
+chk "idempotent: a device that already reports the agent is skipped (200 already_installed), no job" '[ "$CODE" = 200 ] && [ "$(printf "%s" "$R" | jget skipped)" = already_installed ]'
+A POST "mesh/install" '{"target":{"type":"all"}}'
+chk "the bulk call needs confirm (422) and tells how many devices it would reach" '[ "$CODE" = 422 ] && [ "$(printf "%s" "$R" | jget code)" = confirmation_required ] && [ "$(printf "%s" "$R" | jget device_count)" -ge 1 ]'
+NDEV="$(printf "%s" "$R" | jget device_count)"
+A POST "mesh/install" '{"target":{"type":"client","id":1},"confirm":true}'
+chk "bulk (client): nothing new is queued; every device is installed, queued or too old, and the counts add up to the $NDEV reached" '[ "$CODE" = 201 ] && [ "$(printf "%s" "$R" | jget created)" = 0 ] && [ "$(printf "%s" "$R" | jget device_count)" = "$NDEV" ] && [ "$(printf "%s" "$R" | jget skipped_installed)" -ge 1 ]'
+A POST "$DEV/mesh/install" '{"force":true}'; J="$(printf '%s' "$R" | jget job_id)"
+chk "force runs the installer again" '[ "$CODE" = 202 ] && [ "$(job_done $J 120)" = succeeded ]'
+A POST "$DEV/mesh/uninstall" '{}'
+chk "removal needs an explicit confirmation (422)" '[ "$CODE" = 422 ] && [ "$(printf "%s" "$R" | jget code)" = confirmation_required ]'
+A POST "$DEV/mesh/uninstall" '{"confirm":true}'; J="$(printf '%s' "$R" | jget job_id)"
+chk "mesh_uninstall succeeded: the Mesh agent is gone, the RivetMSP agent stays" '[ "$(job_done $J 120)" = succeeded ] && ! q test -e $MESHDIR/meshagent && [ "$(q systemctl is-active rivetit-agent)" = active ]'
+chk "the server's record follows the next check-in (installed = 0)" 'wait_for 60 "[ \"\$(dbq \"SELECT installed FROM endpoint_agent_mesh_agents WHERE device_id = $DEV\")\" = 0 ]"'
+chk "the activity log has Remote Tool Queued, Mesh Agent Installed, Install Failed, Bulk Install and Mesh Node Mapped" 'for k in "Remote Tool Queued" "Mesh Agent Installed" "Mesh Agent Install Failed" "Mesh Agent Bulk Install" "Mesh Node Mapped"; do [ "$(dbq "SELECT COUNT(*) FROM logs WHERE log_action = '\''$k'\''")" -ge 1 ] || { echo "missing $k"; false; break; }; done'
 
 echo "== starter pack (rc.13): installed through the API, a read-only script and a dry-run script run on the REAL Linux agent"
 A GET "starter/catalog"

@@ -183,7 +183,7 @@ function rivetRmmRemPanelView(array $vm, \mysqli $mysqli): ?array
         $limits = $rmm->remoteSettings()->limits();
         $view = [
             'device_id' => $devId, 'asset_id' => (int) $vm['asset_id'], 'hostname' => (string) $vm['hostname'], 'platform' => (string) $vm['platform'], 'os' => $os, 'offline' => (bool) $vm['offline'],
-            'state' => (string) $vm['state'], 'caps' => $caps, 'admin' => $authz->allowed($uid, RmmAbility::ADMIN, $client), 'mesh' => $mesh->ok ? $mesh->data : ['configured' => false, 'mapped' => false, 'views' => []], 'mesh_agent' => $vm['mesh_agent'] ?? null,
+            'state' => (string) $vm['state'], 'caps' => $caps, 'admin' => $authz->allowed($uid, RmmAbility::ADMIN, $client), 'mesh' => $mesh->ok ? $mesh->data : ['configured' => false, 'mapped' => false, 'views' => []], 'mesh_agent' => $vm['mesh_agent'] ?? null, 'mesh_install' => $vm['mesh_install'] ?? null,
             'retention_days' => (int) ($rmm->settings()->get()['job_retention_days'] ?? 30), 'services' => $snap('services'), 'processes' => $snap('processes'),
             'files_on' => $filesOn, 'roots' => $filesOn ? $rmm->remoteSettings()->allowRootsFor($os) : [], 'limits' => $limits, 'transfers' => [], 'transfer_error' => null, 'names' => [],
             'upload_cap' => rivetRmmRemUploadCap((int) $limits['transfer_max_bytes']),
@@ -500,7 +500,47 @@ function rivetRmmRemPanelHtml(array $v): string
 /** @param array<string,mixed> $v */
 function rivetRmmRemMeshHtml(array $v): string
 {
-    return rivetRmmRemMeshButtonsHtml($v) . rivetRmmUiMeshAgentHtml($v['mesh_agent'] ?? null, !empty($v['admin']), true);
+    return rivetRmmRemMeshButtonsHtml($v) . rivetRmmUiMeshAgentHtml($v['mesh_agent'] ?? null, !empty($v['admin']), true) . rivetRmmRemMeshPushHtml($v);
+}
+
+/**
+ * Push the MeshCentral agent to this enrolled device, or remove it (RivetCore 1.0.0-rc.16: `mesh_install` and `mesh_uninstall` jobs). The Mesh options live only in a stamped
+ * installer, so a device that enrolled without them has no Mesh agent until a technician pushes it. Core decides everything (ability `rmm.remote.manage`, the remote-tools switch,
+ * Mesh enabled and configured, an agent that announced `job:mesh_install`); the buttons here are cosmetic. The caller sends nothing but `force`: address, device group and pin are
+ * read from the saved Mesh settings by Core when the job is created.
+ *
+ * @param array<string,mixed> $v rivetRmmRemPanelView()
+ */
+function rivetRmmRemMeshPushHtml(array $v): string
+{
+    $mi = is_array($v['mesh_install'] ?? null) ? $v['mesh_install'] : null;
+    $ma = is_array($v['mesh_agent'] ?? null) ? $v['mesh_agent'] : null;
+    $installed = $ma !== null ? !empty($ma['installed']) : ($mi !== null && !empty($mi['installed']));
+    if ($mi === null && !$installed) {
+        return '';   // Mesh install is not set up and there is nothing to remove: no card section at all
+    }
+    $o = '<div class="border-top pt-2 mt-3" data-rem-mesh-push="' . ($installed ? 'installed' : 'not_installed') . '"><div class="small fw-semibold mb-1">Install or remove the MeshCentral agent on this device</div>';
+    $o .= '<p class="small text-muted mb-2">Pushes the same install an installer with the <em>Also install the MeshCentral agent</em> box does, as a signed job the RivetMSP agent runs. The MeshCentral address, device group and pin come from '
+        . ($v['admin'] ? '<a href="/admin/settings_endpoint_agent.php#mesh">the saved MeshCentral settings</a>' : 'the saved MeshCentral settings') . '; the RivetMSP agent itself is never touched.</p>';
+    $o .= '<div class="d-flex flex-wrap gap-2">';
+    if ($mi !== null && !$installed) {
+        $can = !empty($mi['agent_supports']);
+        $o .= '<button type="button" class="btn btn-primary btn-sm" data-rem-mesh-install="1"' . ($can ? '' : ' disabled aria-describedby="rem-mesh-push-help"') . '><i class="fas fa-download me-1" aria-hidden="true"></i>Install MeshCentral agent</button>';
+    } elseif ($mi !== null && $installed) {
+        $o .= '<button type="button" class="btn btn-outline-secondary btn-sm" data-rem-mesh-install="force"' . (!empty($mi['agent_supports']) ? '' : ' disabled aria-describedby="rem-mesh-push-help"') . '><i class="fas fa-redo me-1" aria-hidden="true"></i>Run the install again</button>';
+    }
+    if ($installed) {
+        $o .= '<button type="button" class="btn btn-outline-danger btn-sm" data-rem-mesh-uninstall="1"><i class="fas fa-trash-alt me-1" aria-hidden="true"></i>Remove MeshCentral agent</button>';
+    }
+    $o .= '</div>';
+    if ($mi !== null && empty($mi['agent_supports'])) {
+        $o .= '<p class="small text-muted mt-2 mb-0" id="rem-mesh-push-help"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>This device\'s agent is too old to take the install. Update the agent first (it announces <code>job:mesh_install</code> after the update), then try again.</p>';
+    }
+    if ($mi === null) {
+        $o .= '<p class="small text-muted mt-2 mb-0">Installing needs MeshCentral to be switched on with an https address and a device group under Administration &gt; Endpoint agent; removing does not.</p>';
+    }
+
+    return $o . '<div id="rem-mesh-push-status" class="small mt-2" role="status" aria-live="polite"></div><div id="rem-mesh-push-result" class="mt-2" role="status" aria-live="polite"></div></div>';
 }
 
 /** @param array<string,mixed> $v */

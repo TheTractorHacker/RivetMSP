@@ -250,10 +250,10 @@ function ea_uploaded_binaries(): array
     return $out;
 }
 
-/** The version in an agent file name (rivetit-agent-1.4.2-windows-amd64.exe, v1.4.2, 1.4.2-rc.1), or ''. */
+/** The version in an agent file name (rivetit-agent-1.4.2-windows-amd64.exe or .msi, v1.4.2, 1.4.2-rc.1), or ''. */
 function ea_detect_version(string $fileName): string
 {
-    return preg_match('/(?:^|[^0-9])v?(\d+\.\d+\.\d+(?:-(?:rc|alpha|beta|pre|dev)[.0-9]*)?)/i', preg_replace('/\.exe$/i', '', $fileName), $m) === 1 ? rtrim($m[1], '.') : '';
+    return preg_match('/(?:^|[^0-9])v?(\d+\.\d+\.\d+(?:-(?:rc|alpha|beta|pre|dev)[.0-9]*)?)/i', preg_replace('/\.(exe|msi)$/i', '', $fileName), $m) === 1 ? rtrim($m[1], '.') : '';
 }
 
 /** The architecture in an agent file name (amd64 / x64 / x86_64, arm64 / aarch64), or ''. */
@@ -311,11 +311,45 @@ if (isset($_POST['binary_action'])) {
     ea_flash_result($ea_admin->binaryAction($ea_who, intval($_POST['binary_id'] ?? 0), (string) $_POST['binary_action'], (string) ($_POST['release_ring'] ?? 'pilot'), ea_post_int('rollout_pct', 0, 100, 10)));
 }
 
+// MSI templates (RivetCore 1.0.0-rc.16): the unstamped Windows Installer package new MSI installers are built from (a COPY with the per-client payload appended, never the stored file).
+// RmmAdmin::uploadMsiTemplate() validates it (OLE compound file, size window, not already stamped, platform from its summary information) and audits; msiTemplateAction() changes one.
+if (isset($_POST['upload_msi_template'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $f = $_FILES['msi_template'] ?? null;
+    if (!is_array($f) || !isset($f['error'], $f['tmp_name']) || is_array($f['error']) || (int) $f['error'] === UPLOAD_ERR_NO_FILE) {
+        flash_alert('Choose the .msi template to upload.', 'error');
+        redirect();
+    }
+    if ((int) $f['error'] !== UPLOAD_ERR_OK || !is_uploaded_file((string) $f['tmp_name'])) {
+        $limit = $rmm->binaryStore()->effectiveUploadLimit();
+        flash_alert(in_array((int) $f['error'], [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+            ? 'The file is larger than the limit of ' . \RivetCore\Rmm\Binaries\BinaryStore::human($limit) . ' (PHP upload_max_filesize ' . ini_get('upload_max_filesize') . ', post_max_size ' . ini_get('post_max_size') . '). Raise them in php.ini, or use scripts/endpoint_agent_publish.php --msi.'
+            : 'The upload failed (PHP error ' . (int) $f['error'] . ').', 'error');
+        redirect();
+    }
+    $name = (string) ($f['name'] ?? '');
+    $version = trim((string) ($_POST['version'] ?? ''));
+    $version = $version !== '' ? $version : ea_detect_version($name);
+    $arch = (string) ($_POST['arch'] ?? '');
+    $arch = in_array($arch, ['amd64', 'arm64'], true) ? $arch : ea_detect_arch($name);
+    if ($version === '' || $arch === '') {
+        flash_alert('Could not tell the ' . ($version === '' ? 'version' : 'architecture') . ' from the file name. Enter it and upload again.', 'error');
+        redirect();
+    }
+    ea_flash_result($ea_admin->uploadMsiTemplate($ea_who, (string) $f['tmp_name'], $version, $arch, ['activate' => isset($_POST['activate'])]));
+}
+
+if (isset($_POST['msi_template_action'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    ea_flash_result($ea_admin->msiTemplateAction($ea_who, intval($_POST['template_id'] ?? 0), (string) $_POST['msi_template_action']));
+}
+
 if (isset($_POST['download_installer']) || isset($_POST['show_deploy_commands'])) {
     validateCSRFToken($_POST['csrf_token']);
     $arch = (string) ($_POST['arch'] ?? 'amd64');
     $args = [intval($_POST['client_id'] ?? 0), intval($_POST['location_id'] ?? 0), (string) ($_POST['ring'] ?? 'stable'), ea_post_int('ttl_hours', 1, 720, 72),
-        ea_post_int('max_uses', 1, 5000, 25), trim((string) ($_POST['label'] ?? '')), $arch, ($_POST['install_mesh_agent'] ?? '') === '1'];   // the last one: also install the MeshCentral agent (rc.12), off unless ticked
+        ea_post_int('max_uses', 1, 5000, 25), trim((string) ($_POST['label'] ?? '')), $arch, ($_POST['install_mesh_agent'] ?? '') === '1',   // also install the MeshCentral agent (rc.12), off unless ticked
+        (string) ($_POST['format'] ?? 'exe')];   // the installer format (rc.16): exe (default) or msi; Core refuses anything else, in words
     if (isset($_POST['show_deploy_commands'])) {
         $r = $ea_admin->deploymentCommands($ea_who, ...$args);
         if (!$r->ok) {

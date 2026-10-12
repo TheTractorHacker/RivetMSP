@@ -1,7 +1,7 @@
 <?php
 if (defined('FROM_POST_HANDLER')) return;
 /*
- * The Remote tab of the asset page (RMM Phase 6, RivetCore 1.0.0-rc.11): services, processes, files and the MeshCentral terminal / files / desktop launch.
+ * The Remote tab of the asset page (RMM Phase 6, RivetCore 1.0.0-rc.11): services, processes, files, the MeshCentral terminal / files / desktop launch and (rc.16) the pushed install / removal of the MeshCentral agent.
  * A direct JSON endpoint like agent/post/rmm_agent.php: one action per POST with the session CSRF token, answers {success, code, message|error, ...}.
  *
  * ONE AUTHORIZATION PATH. Every action is a call into RivetCore\Rmm\Remote\RemoteActions (the code behind the REST API) as the signed-in user: it checks the role,
@@ -244,6 +244,12 @@ switch ($action) {
         $reply(200, true, 'queued', $r2->message, ['transfer_id' => $tid, 'job_id' => $r2->data['job_id'] ?? null, 'sha256' => $sha, 'size_bytes' => $size]);
 
     // ---------------------------------------------------------------- MeshCentral
+    // RivetCore 1.0.0-rc.16: push the MeshCentral agent to this enrolled device, or remove it. Core checks rmm.remote.manage for the client, the remote-tools switch, that Mesh is
+    // enabled and configured (the caller supplies NOTHING but `force`: address, device group and pin come from the saved settings) and that the agent announced the job.
+    case 'mesh_install':
+        $fromCore($actions->installMeshAgent($who, $deviceId, $flag('force')), ['job_id', 'skipped', 'node_id']);
+    case 'mesh_uninstall':
+        $fromCore($actions->uninstallMeshAgent($who, $deviceId, $flag('confirm')), ['job_id']);
     case 'mesh':
         $view = $str('view', 12);
         $fromCore($rmm->technician()->launchRemote($who, $deviceId, $flag('force'), (string) ($_SERVER['REMOTE_ADDR'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), $view !== '' ? $view : 'desktop'), ['url', 'session_id']);

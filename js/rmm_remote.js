@@ -1,5 +1,5 @@
 /*
- * Remote tab of the asset page (RMM Phase 6): services, processes, files and the MeshCentral launch buttons. Markup and every fragment of HTML this file inserts:
+ * Remote tab of the asset page (RMM Phase 6): services, processes, files, the MeshCentral launch buttons and (rc.16) the pushed install / removal of the MeshCentral agent. Markup and every fragment of HTML this file inserts:
  * includes/rmm_rem_ui.php (escaped on the server). Linked by includes/footer.php only on a page that drew the tab, so with the module or the remote-tools switch
  * off this file is never requested.
  *
@@ -405,5 +405,44 @@
     root.addEventListener('click', function (e) {
         var b = e.target.closest('[data-rem-mesh]');
         if (b) { openMesh(b.getAttribute('data-rem-mesh'), false); }
+    });
+
+    // ---------------------------------------------------------------- push / remove the MeshCentral agent (RivetCore 1.0.0-rc.16)
+    var pushStatus = $('rem-mesh-push-status'), pushResult = $('rem-mesh-push-result');
+    function pushBusy(on) {
+        [].forEach.call(root.querySelectorAll('[data-rem-mesh-install],[data-rem-mesh-uninstall]'), function (b) {
+            if (on) { b.setAttribute('data-was-disabled', b.disabled ? '1' : '0'); b.disabled = true; } else { b.disabled = b.getAttribute('data-was-disabled') === '1'; }
+        });
+    }
+    function afterPush(d, what) {
+        pushBusy(false);
+        if (!d.success) { say(pushStatus, d.error || 'The request was refused.', 'danger'); return; }
+        if (d.skipped === 'already_installed') {
+            say(pushStatus, d.message || 'The MeshCentral agent is already installed on this device. Nothing was queued.', 'info');
+            return;
+        }
+        say(pushStatus, d.skipped === 'already_queued' ? 'A Mesh agent install is already queued or running for this device. Following it.' : 'Queued. The device does it at its next check-in; this page follows the result.', 'info');
+        if (d.job_id) { trackJob('meshpush', pushResult, d.job_id, 'The device reports its MeshCentral state at its next check-in; reload the page to see it under Remote access.'); }
+    }
+    root.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-rem-mesh-install]');
+        if (!b || b.disabled) { return; }
+        var force = b.getAttribute('data-rem-mesh-install') === 'force';
+        say(pushStatus, 'Asking the server...', 'info');
+        say(pushResult, '', '');
+        pushBusy(true);
+        post('mesh_install', { force: force ? '1' : '' }).then(function (d) { afterPush(d, 'install'); });
+    });
+    root.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-rem-mesh-uninstall]');
+        if (!b || b.disabled) { return; }
+        confirmDialog({ text: 'This runs the MeshCentral agent\'s own uninstaller on the device. Remote control through MeshCentral ends there until the agent is installed again. The RivetMSP agent is not touched. The job is offered to the device once and is not retried.',
+            target: 'Remove the MeshCentral agent from ' + hostname, checkLabel: 'I want to remove the MeshCentral agent from this device.', goLabel: 'Remove MeshCentral agent', goClass: 'btn-danger', fallback: 'rem-mesh-push-status',
+            onGo: function () {
+                say(pushStatus, 'Asking the server...', 'info');
+                say(pushResult, '', '');
+                pushBusy(true);
+                post('mesh_uninstall', { confirm: '1' }).then(function (d) { afterPush(d, 'uninstall'); });
+            } });
     });
 })();

@@ -230,8 +230,8 @@ $mk = function (string $suffix, bool $withRmm) use ($db, $root): array {
         // RivetCore 1.0.0-rc.11 (0021 scale storage, 0022 remote tools and logs): five rmm_* tables (the five endpoint_agent_* ones are dropped above), two ledger rows and the five settings columns of DB 2.6.88.
         $sql = (string) preg_replace('/DROP TABLE IF EXISTS `rmm_(cache|metric_daily|metric_outbox|storage_state|token_buckets)`;\n.*?\/\*!40101 SET character_set_client = @saved_cs_client \*\/;\n/s', '', $sql);
         $sql = preg_replace("/INSERT INTO `rivet_core_migrations` VALUES \('00(21|22)_[a-z_]+','[^']+'\);\n/", '', $sql);
-        // RivetCore 1.0.0-rc.12 (0023 the optional MeshCentral agent): three endpoint_agent_* tables (dropped above) and one ledger row; DB 2.6.89 runs the migration and adds no column. RivetCore 1.0.0-rc.15 (0024, the Mesh group id URL form) adds one column to a table dropped above and one ledger row (DB 2.6.90).
-        $sql = preg_replace("/INSERT INTO `rivet_core_migrations` VALUES \('002[34]_[a-z_]+','[^']+'\);\n/", '', $sql);
+        // RivetCore 1.0.0-rc.12 (0023 the optional MeshCentral agent): three endpoint_agent_* tables (dropped above) and one ledger row; DB 2.6.89 runs the migration and adds no column. RivetCore 1.0.0-rc.15 (0024, the Mesh group id URL form) adds one column to a table dropped above and one ledger row (DB 2.6.90). RivetCore 1.0.0-rc.16 (0025, the MSI template store) adds one table (endpoint_agent_msi_templates, dropped above) and one ledger row (DB 2.6.91).
+        $sql = preg_replace("/INSERT INTO `rivet_core_migrations` VALUES \('002[345]_[a-z_]+','[^']+'\);\n/", '', $sql);
         $sql = (string) preg_replace('/  `config_rmm_(remote_manage_lvl3|extstore_[a-z_]+)` [^\n]*,\n/', '', $sql);
         $sql = str_replace(["  `config_rmm_approve_scripts_lvl3` tinyint(1) NOT NULL DEFAULT 0,\n", "  `config_rmm_escalation_contact` text DEFAULT NULL,\n"], '', $sql);
         $sql = str_replace("  `config_core_rmm_enabled` tinyint(1) NOT NULL DEFAULT 0,\n", '', $sql);
@@ -250,14 +250,14 @@ $shape = function (mysqli $c): array {
     return $o;
 };
 [$fresh, $cf] = $mk('fresh', true);
-$ok($tableCount($cf) === 19, 'FRESH install (db.sql): the nineteen endpoint_agent_* tables exist (ten original ones, the check history of RivetCore rc.9, the five of rc.11: remote settings, transfers, log events, log state, log rules, and the three of rc.12: Mesh settings, Mesh agents, installer options)');
+$ok($tableCount($cf) === 20, 'FRESH install (db.sql): the twenty endpoint_agent_* tables exist (ten original ones, the check history of RivetCore rc.9, the five of rc.11: remote settings, transfers, log events, log state, log rules, the three of rc.12: Mesh settings, Mesh agents, installer options, and the MSI templates of rc.16)');
 $ok((int) $cf->query('SELECT COUNT(*) FROM endpoint_agent_settings')->fetch_row()[0] === 1 && (int) $cf->query('SELECT enabled FROM endpoint_agent_settings WHERE id=1')->fetch_row()[0] === 0, 'FRESH install: one settings row, master switch off');
 $ok((int) $cf->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'settings' AND column_name = 'config_core_rmm_enabled' AND column_default = '0' AND is_nullable = 'NO'")->fetch_row()[0] === 1, 'FRESH install: settings.config_core_rmm_enabled exists and defaults to 0');
 $cf->query("INSERT INTO companies SET company_id = 1, company_name = 'x'"); $cf->query("INSERT INTO settings SET company_id = 1, config_current_database_version = '2.6.77'");
 $ok((int) $cf->query('SELECT config_core_rmm_enabled FROM settings WHERE company_id=1')->fetch_row()[0] === 0, 'FRESH install: a new settings row has the edition flag off');
 $ok((int) $cf->query("SELECT COUNT(*) FROM rivet_core_migrations WHERE migration_id IN ('0014_endpoint_agent_core','0015_endpoint_agent_converge','0016_rmm_module_switches')")->fetch_row()[0] === 3, 'FRESH install: the three RMM migrations are recorded (tables and ledger rows travel together)');
 (new \RivetCore\Migration\MigrationRunner(new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($cf), \RivetCore\Migration\CoreMigrations::all(), new \RivetCore\Support\SystemClock()))->run();
-$ok($tableCount($cf) === 19 && (int) $cf->query('SELECT enabled FROM endpoint_agent_settings WHERE id=1')->fetch_row()[0] === 0, 'FRESH install: running the Core migrations again changes nothing (still off)');
+$ok($tableCount($cf) === 20 && (int) $cf->query('SELECT enabled FROM endpoint_agent_settings WHERE id=1')->fetch_row()[0] === 0, 'FRESH install: running the Core migrations again changes nothing (still off)');
 
 // the real updater (scripts/update_cli.php --update_db) on a 2.6.76-shaped install
 [$up, $cu] = $mk('upgrade', false);
@@ -270,24 +270,30 @@ $updOut = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); proc_
 $ok(strpos($updOut, 'from version 2.6.76') !== false, 'UPGRADE: update_cli --update_db reports the update from 2.6.76');
 $ok(preg_match_all('/2\.6\.(\d+)/', $updOut, $um) > 0 && max(array_map('intval', $um[1])) >= 77, 'UPGRADE: update_cli --update_db reports 2.6.77 or later');
 $ok(version_compare((string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0], '2.6.77', '>='), 'UPGRADE: the database is at 2.6.77 or later');
-$ok($tableCount($cu) === 19 && (int) $cu->query('SELECT enabled FROM endpoint_agent_settings WHERE id=1')->fetch_row()[0] === 0 && (int) $cu->query('SELECT config_core_rmm_enabled FROM settings WHERE company_id=1')->fetch_row()[0] === 0, 'UPGRADE: the nineteen tables exist and the module is OFF (neither switch is turned on by the update)');
+$ok($tableCount($cu) === 20 && (int) $cu->query('SELECT enabled FROM endpoint_agent_settings WHERE id=1')->fetch_row()[0] === 0 && (int) $cu->query('SELECT config_core_rmm_enabled FROM settings WHERE company_id=1')->fetch_row()[0] === 0, 'UPGRADE: the twenty tables exist and the module is OFF (neither switch is turned on by the update)');
 $ok($shape($cf) === $shape($cu), 'UPGRADE: the upgraded schema equals a fresh install from db.sql (' . count($shape($cu)) . ' column/index facts compared)');
 // the 2.6.88 step (rc.11) is idempotent: put the version back to 2.6.87 and run the real updater again on the upgraded database
 $tablesBefore = $tableCount($cu); $shapeBefore = $shape($cu);
 $cu->query("UPDATE settings SET config_current_database_version = '2.6.87' WHERE company_id = 1");
 $run = proc_open([PHP_BINARY, "$root/scripts/update_cli.php", '--update_db'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, "$root/scripts", array_merge(getenv(), ['RMM_TEST_DATABASE' => $up]));
 $updOut2 = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); proc_close($run);
-$ok(strpos($updOut2, 'from version 2.6.87 to 2.6.90') !== false && $tableCount($cu) === $tablesBefore && $shape($cu) === $shapeBefore && version_compare((string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0], '2.6.88', '>='), 'UPGRADE: running the 2.6.88 step a second time (version put back to 2.6.87) changes nothing and the updater runs on to 2.6.90');
+$ok(strpos($updOut2, 'from version 2.6.87 to 2.6.91') !== false && $tableCount($cu) === $tablesBefore && $shape($cu) === $shapeBefore && version_compare((string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0], '2.6.88', '>='), 'UPGRADE: running the 2.6.88 step a second time (version put back to 2.6.87) changes nothing and the updater runs on to 2.6.91');
 // the 2.6.89 step (rc.12, migration 0023) is idempotent too
 $cu->query("UPDATE settings SET config_current_database_version = '2.6.88' WHERE company_id = 1");
 $run = proc_open([PHP_BINARY, "$root/scripts/update_cli.php", '--update_db'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, "$root/scripts", array_merge(getenv(), ['RMM_TEST_DATABASE' => $up]));
 $updOut3 = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); proc_close($run);
-$ok(strpos($updOut3, 'from version 2.6.88 to 2.6.90') !== false && $tableCount($cu) === $tablesBefore && $shape($cu) === $shapeBefore && (string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0] === '2.6.90', 'UPGRADE: running the 2.6.89 step a second time (version put back to 2.6.88) changes nothing and ends at 2.6.90');
+$ok(strpos($updOut3, 'from version 2.6.88 to 2.6.91') !== false && $tableCount($cu) === $tablesBefore && $shape($cu) === $shapeBefore && (string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0] === '2.6.91', 'UPGRADE: running the 2.6.89 step a second time (version put back to 2.6.88) changes nothing and ends at 2.6.91');
 // the 2.6.90 step (rc.15, migration 0024: one ADD COLUMN, guarded) is idempotent too
 $cu->query("UPDATE settings SET config_current_database_version = '2.6.89' WHERE company_id = 1");
 $run = proc_open([PHP_BINARY, "$root/scripts/update_cli.php", '--update_db'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, "$root/scripts", array_merge(getenv(), ['RMM_TEST_DATABASE' => $up]));
 $updOut4 = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); proc_close($run);
-$ok(strpos($updOut4, 'from version 2.6.89 to 2.6.90') !== false && $tableCount($cu) === $tablesBefore && $shape($cu) === $shapeBefore && (string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0] === '2.6.90', 'UPGRADE: running the 2.6.90 step a second time (version put back to 2.6.89) changes nothing and ends at 2.6.90');
+$ok(strpos($updOut4, 'from version 2.6.89 to 2.6.91') !== false && $tableCount($cu) === $tablesBefore && $shape($cu) === $shapeBefore && (string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0] === '2.6.91', 'UPGRADE: running the 2.6.90 step a second time (version put back to 2.6.89) changes nothing and ends at 2.6.91');
+// the 2.6.91 step (rc.16, migration 0025: one new table) is idempotent too
+$cu->query("UPDATE settings SET config_current_database_version = '2.6.90' WHERE company_id = 1");
+$run = proc_open([PHP_BINARY, "$root/scripts/update_cli.php", '--update_db'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, "$root/scripts", array_merge(getenv(), ['RMM_TEST_DATABASE' => $up]));
+$updOut5 = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); proc_close($run);
+$ok(strpos($updOut5, 'from version 2.6.90 to 2.6.91') !== false && $tableCount($cu) === $tablesBefore && $shape($cu) === $shapeBefore && (string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0] === '2.6.91', 'UPGRADE: running the 2.6.91 step a second time (version put back to 2.6.90) changes nothing and ends at 2.6.91');
+$ok((int) $cu->query("SELECT COUNT(*) FROM rivet_core_migrations WHERE migration_id = '0025_rmm_msi_templates'")->fetch_row()[0] === 1 && (int) $cu->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'endpoint_agent_msi_templates'")->fetch_row()[0] === 1 && (int) $cu->query('SELECT COUNT(*) FROM endpoint_agent_msi_templates')->fetch_row()[0] === 0, 'UPGRADE: migration 0025 is recorded once, endpoint_agent_msi_templates exists and is empty (no MSI template is published by the update)');
 $ok((int) $cu->query("SELECT COUNT(*) FROM rivet_core_migrations WHERE migration_id = '0024_rmm_mesh_group_url'")->fetch_row()[0] === 1 && (int) $cu->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'endpoint_agent_mesh_settings' AND column_name = 'group_id_url'")->fetch_row()[0] === 1, 'UPGRADE: migration 0024 is recorded once and endpoint_agent_mesh_settings.group_id_url exists exactly once');
 $ok((int) $cu->query("SELECT COUNT(*) FROM rivet_core_migrations WHERE migration_id = '0023_rmm_mesh_agent'")->fetch_row()[0] === 1 && (int) $cu->query('SELECT COUNT(*) FROM endpoint_agent_mesh_settings')->fetch_row()[0] <= 1, 'UPGRADE: migration 0023 is recorded once, and no Mesh install setting is configured by the update');
 $ok(is_file($sd . '/rmm_state.json') && ($state()['enabled'] ?? null) === false, 'UPGRADE: the updater wrote a state file that says disabled (the gate answers without the database from the first request)');

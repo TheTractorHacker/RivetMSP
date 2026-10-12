@@ -1021,6 +1021,7 @@ function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null): 
     } else {
         $pager = '<div class="p-3 border-top small text-muted">' . (int) $f['list']['total'] . ' device' . ($f['list']['total'] === 1 ? '' : 's') . '</div>';
     }
+    $meshBulk = !empty($f['mesh_bulk']) ? rivetRmmUiMeshBulkCard($f['mesh_bulk'], $csrf) : '';
     $table = '<section class="card card-dark mb-3" id="rmm-devices"><div class="card-header py-2"><h6 class="mb-0"><i class="fas fa-desktop me-2" aria-hidden="true"></i>Devices</h6></div>' . $filter
         . '<div class="table-responsive"><table class="table table-hover table-sm mb-0"><caption class="visually-hidden">Agent devices</caption>' . rivetRmmUiThead(['Status', 'Device', 'Agent', 'Last check-in']) . '<tbody>' . $rows . '</tbody></table></div>' . $pager . '</section>';
 
@@ -1038,7 +1039,52 @@ function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null): 
         . '<div class="row mb-3">' . $kpi . '</div>'
         . '<div class="row"><div class="col-lg-7">' . $healthCard . '</div><div class="col-lg-5">' . $apCard . '</div></div>'
         . '<div class="row"><div class="col-lg-6">' . $offCard . '</div><div class="col-lg-6">' . $fCard . '</div></div>'
-        . $versionsCard . $swCard . $capacity . $table . ($installer !== null ? rivetRmmUiInstallerModal($installer, $csrf) : '');
+        . $versionsCard . $swCard . $capacity . $meshBulk . $table . ($installer !== null ? rivetRmmUiInstallerModal($installer, $csrf) : '');
+}
+
+/**
+ * The fleet page's bulk MeshCentral install (RivetCore 1.0.0-rc.16): pick a client, tag, group or everything, count what it reaches, confirm, install. The first call has no
+ * confirmation and Core answers with the device count (and the approval or size refusal when there is one); the second call, with the box ticked, queues the jobs and answers
+ * the skip counts. Markup only; js/rmm_mesh_bulk.js posts to agent/post/rmm_mesh_bulk.php, which calls RemoteActions::installMeshAgentBulk() as the signed-in user.
+ *
+ * @param array{clients:list<array{id:int,name:string}>,tags:list<array{id:int,name:string,n:int}>,groups:list<array{id:int,name:string}>} $mb
+ */
+function rivetRmmUiMeshBulkCard(array $mb, string $csrf): string
+{
+    $GLOBALS['rmm_mesh_bulk_scripts'] = true;   // includes/footer.php links js/rmm_mesh_bulk.js only when this is set
+    $sel = '<select class="form-select form-select-sm" id="rmm-mb-target" name="target"><option value="">Choose who gets it</option><option value="all:0">Every device I may manage</option>';
+    if ($mb['clients'] !== []) {
+        $sel .= '<optgroup label="A client">';
+        foreach ($mb['clients'] as $c) {
+            $sel .= '<option value="client:' . (int) $c['id'] . '">' . rmmH($c['name']) . '</option>';
+        }
+        $sel .= '</optgroup>';
+    }
+    if ($mb['tags'] !== []) {
+        $sel .= '<optgroup label="A tag">';
+        foreach ($mb['tags'] as $t) {
+            $sel .= '<option value="tag:' . (int) $t['id'] . '">' . rmmH($t['name']) . ' (' . (int) $t['n'] . ')</option>';
+        }
+        $sel .= '</optgroup>';
+    }
+    if ($mb['groups'] !== []) {
+        $sel .= '<optgroup label="A group">';
+        foreach ($mb['groups'] as $g) {
+            $sel .= '<option value="group:' . (int) $g['id'] . '">' . rmmH($g['name']) . '</option>';
+        }
+        $sel .= '</optgroup>';
+    }
+    $sel .= '</select>';
+
+    return '<section class="card card-dark mb-3" id="rmm-mesh-bulk" data-post-url="/agent/post/rmm_mesh_bulk.php" data-csrf="' . rmmH($csrf) . '"><details><summary class="card-header py-2 rmm-mb-summary"><h6 class="mb-0 d-inline"><i class="fas fa-network-wired me-2" aria-hidden="true"></i>Install the MeshCentral agent on many devices</h6></summary>'
+        . '<div class="card-body"><p class="small text-muted">Pushes the same install a stamped installer with <em>Also install the MeshCentral agent</em> does, as a signed job each agent runs, to every Windows or Linux device of the choice that you may manage. '
+        . 'Devices that already report the agent, already have an install queued, or run an agent too old to take it are skipped and counted, so it is safe to repeat. MeshCentral address, device group and pin come from the saved settings. The RivetMSP agent itself is never touched.</p>'
+        . '<form id="rmm-mb-form" class="row g-2 align-items-end" autocomplete="off"><div class="col-md-6"><label class="form-label small mb-1" for="rmm-mb-target">Install on</label>' . $sel . '</div>'
+        . '<div class="col-md-6"><div class="form-check"><input class="form-check-input" type="checkbox" id="rmm-mb-force" name="force" value="1"><label class="form-check-label small" for="rmm-mb-force">Run the installer again on devices that already report the agent</label></div></div>'
+        . '<div class="col-12"><button type="submit" class="btn btn-sm btn-primary" id="rmm-mb-count"><i class="fas fa-calculator me-1" aria-hidden="true"></i>Count the devices</button></div>'
+        . '<div class="col-12 d-none" id="rmm-mb-confirm-wrap"><div class="form-check"><input class="form-check-input" type="checkbox" id="rmm-mb-ok"><label class="form-check-label" for="rmm-mb-ok" id="rmm-mb-ok-label">I confirm.</label></div>'
+        . '<button type="button" class="btn btn-sm btn-danger mt-2" id="rmm-mb-go" disabled><i class="fas fa-download me-1" aria-hidden="true"></i>Install MeshCentral agent</button></div></form>'
+        . '<div id="rmm-mb-msg" class="small mt-2" role="status" aria-live="polite"></div></div></details></section>';
 }
 
 /**
@@ -1245,6 +1291,22 @@ function rivetRmmUiInstallerMesh(\RivetCore\Rmm\RmmModule $rmm, bool $admin, arr
 }
 
 /**
+ * The Format selector of the Add device dialog (RivetCore 1.0.0-rc.16): exe (default, the stamped self-installing exe) or msi (a copy of the published MSI template with the per-client
+ * payload appended). Windows only; js/rmm_installer.js disables the MSI option, with the reason shown, when no template is published for the chosen architecture and hides the
+ * field on the Linux tab. Without JavaScript the server refuses an MSI that cannot be made, in words.
+ *
+ * @param array{amd64:?string,arm64:?string} $msi
+ */
+function rivetRmmUiInstallerFormatField(array $msi, string $defaultArch): string
+{
+    $reason = (string) rivetRmmUiMsiReason($msi, $defaultArch);
+
+    return '<div class="col-md-6" id="rmm-inst-format-wrap"><label class="form-label" for="rmm-inst-format">Format</label><select class="form-select" id="rmm-inst-format" name="format" aria-describedby="rmm-inst-format-help">'
+        . '<option value="exe" selected>exe: self-installing program (recommended)</option><option value="msi"' . ($reason !== '' ? ' disabled' : '') . '>msi: Windows Installer package</option></select>'
+        . '<div class="form-text" id="rmm-inst-format-help">' . ($reason !== '' ? rmmH($reason) : 'The exe installs itself when double-clicked. The msi is for Intune, group policy and tools that deploy .msi files. The msi is unsigned and unverified on Windows; see MSI templates under Administration.') . '</div></div>';
+}
+
+/**
  * The tick-box "Also install the MeshCentral agent" (RivetCore 1.0.0-rc.12). Off by default and never pre-ticked. Disabled, with Core's refusal sentence as its help text, while
  * Mesh is not switched on and configured (an https address and a device group id): a disabled box is not submitted, and the server asks Core again anyway.
  *
@@ -1288,7 +1350,7 @@ function rivetRmmUiInstallerModal(array $ins, string $csrf): string
             $locOpts .= '<option value="' . (int) $l['id'] . '" data-client="' . (int) $cid . '" hidden disabled>' . rmmH($l['name']) . '</option>';
         }
     }
-    $archOpt = static fn (string $v, string $label, ?string $winVersion): string => '<option value="' . $v . '"' . ($v === $defaultArch ? ' selected' : '') . ' data-win-version="' . rmmH((string) $winVersion) . '">' . rmmH($label) . '</option>';
+    $archOpt = static fn (string $v, string $label, ?string $winVersion): string => '<option value="' . $v . '"' . ($v === $defaultArch ? ' selected' : '') . ' data-win-version="' . rmmH((string) $winVersion) . '" data-msi-version="' . rmmH((string) ($ins['msi'][$v] ?? '')) . '" data-msi-reason="' . rmmH((string) rivetRmmUiMsiReason($ins['msi'] ?? ['amd64' => null, 'arm64' => null], $v)) . '">' . rmmH($label) . '</option>';
     $m = RMM_INSTALLER_MODAL;
 
     return '<div class="modal fade" id="' . $m . '" tabindex="-1" aria-labelledby="' . $m . 'Title" aria-hidden="true" data-rmm-installer="1"' . (!empty($ins['autoopen']) ? ' data-autoopen="1"' : '') . '><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">'
@@ -1305,6 +1367,7 @@ function rivetRmmUiInstallerModal(array $ins, string $csrf): string
         . '<div class="col-md-6"><label class="form-label" for="rmm-inst-arch">Architecture</label><select class="form-select" id="rmm-inst-arch" name="arch">'
         . $archOpt('amd64', 'x64 (Intel / AMD, most PCs)', $ins['windows']['amd64']) . $archOpt('arm64', 'ARM64', $ins['windows']['arm64']) . '</select></div>'
         . '<div class="col-md-6"><label class="form-label" for="rmm-inst-ring">Update ring</label><select class="form-select" id="rmm-inst-ring" name="ring"><option value="stable" selected>Stable (recommended)</option><option value="pilot">Pilot (early builds)</option></select></div>'
+        . rivetRmmUiInstallerFormatField($ins['msi'] ?? ['amd64' => null, 'arm64' => null], $defaultArch)
         . rivetRmmUiInstallerMeshBox($ins['mesh'] ?? ['show' => false, 'ready' => false, 'refusal' => null, 'admin' => false])
         . '</div>'
         . '<p class="mt-3 mb-2"><button type="button" class="btn btn-link p-0" data-bs-toggle="collapse" data-bs-target="#rmm-inst-adv" aria-expanded="false" aria-controls="rmm-inst-adv"><i class="fas fa-sliders-h me-1" aria-hidden="true"></i>Advanced</button></p>'
