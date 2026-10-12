@@ -5,7 +5,7 @@ namespace RivetMSP\Recovery;
 /**
  * The recovery watcher run by cron/cron.php: stale-backup alert,
  * failed/stale integration-sync alerts, a "the restore drill has stopped running" alert, and housekeeping of the logs it owns.
- * Each alert is de-duplicated per 6 hours (RecoveryAlerts). Safe to call every cron tick; the work is a handful of indexed reads.
+ * Each alert is de-duplicated per alert_repeat_hours, default 24 (RecoveryAlerts). Safe to call every cron tick; the work is a handful of indexed reads.
  */
 final class RecoveryWatch
 {

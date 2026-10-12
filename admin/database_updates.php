@@ -7142,3 +7142,23 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.91'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.91') {
+        // DB 2.6.92: per-integration overrides for the integration sync watcher (src/Recovery/WatchOverrides.php): mute an integration, or declare how often an
+        // external sync script is really expected to run. ONE new table, CREATE TABLE IF NOT EXISTS (re-running is harmless, nothing existing is altered).
+        // Nothing is switched on: with no rows the watcher behaves as before except for the new dormant rule and the 24 h repeat window (recovery settings).
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `recovery_watch_overrides` (
+          `override_id` int(11) NOT NULL AUTO_INCREMENT,
+          `override_source` varchar(16) NOT NULL,
+          `override_integration_id` int(11) NOT NULL,
+          `override_muted` tinyint(1) NOT NULL DEFAULT 0,
+          `override_expected_interval_s` int(11) DEFAULT NULL,
+          `override_note` varchar(255) NOT NULL DEFAULT '',
+          `override_updated_by` int(11) NOT NULL DEFAULT 0,
+          `override_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`override_id`),
+          UNIQUE KEY `uq_watch_override` (`override_source`,`override_integration_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.92'");
+    }

@@ -10,6 +10,8 @@ use RivetMSP\Recovery\BackupStatus;
 use RivetMSP\Recovery\DrillVerifier;
 use RivetMSP\Recovery\RecoverySettings;
 use RivetMSP\Recovery\RestoreDrill;
+use RivetMSP\Recovery\SyncWatch;
+use RivetMSP\Recovery\WatchOverrides;
 
 $rec_ready = RecoverySettings::ready($mysqli);
 $rec_last_run = $rec_ready ? BackupStatus::last($mysqli) : null;
@@ -28,6 +30,9 @@ if ($rec_ready) {
 $rec_enabled = RecoverySettings::get($mysqli, 'drill_enabled') === '1';
 $rec_cfg = (new RestoreDrill($mysqli, dirname(__DIR__), ['live_user' => $dbusername ?? '']))->configuration();
 $rec_badge = fn (string $s) => ['pass' => 'success', 'warn' => 'warning', 'fail' => 'danger', 'error' => 'danger', 'not_configured' => 'secondary', 'running' => 'info', 'skip' => 'secondary'][$s] ?? 'secondary';
+$sw_rows = $rec_ready ? SyncWatch::snapshot($mysqli, (bool) intval($config_module_enable_rmm ?? 0)) : [];
+$sw_ready = WatchOverrides::ready($mysqli);
+$sw_badge = ['healthy' => 'success', 'failing' => 'danger', 'stale' => 'warning', 'dormant' => 'secondary', 'muted' => 'info'];
 $rec_ago = function (?int $sec): string {
     if ($sec === null) { return 'never'; }
     return $sec < 5400 ? max(1, (int) round($sec / 60)) . ' min ago' : ($sec < 172800 ? round($sec / 3600, 1) . ' h ago' : round($sec / 86400, 1) . ' days ago');
@@ -77,6 +82,80 @@ $rec_ago = function (?int $sec): string {
                     <?php endif; ?>
                 </div>
             </div>
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- ── Integration sync watcher ──────────────────────────────────────────── -->
+<div class="card mb-3" id="sync-watch">
+    <div class="card-header py-2">
+        <h3 class="card-title"><i class="fas fa-fw fa-sync-alt me-2"></i>Integration sync watcher</h3>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small">
+            Every enabled RMM and UniFi integration, as the watcher sees it. <strong>Failing</strong>: the last runs all ended in a real error.
+            <strong>Stale</strong>: no run in three times the expected interval. <strong>Dormant</strong>: no run for <?= (int) RecoverySettings::get($mysqli, 'sync_dormant_days') ?> days or more, so nothing is mailed.
+            <strong>Muted</strong>: you switched it off. If an external script syncs an integration (and does not write to <code>rmm_sync_log</code> / <code>unifi_sync_log</code>),
+            declare how often it runs, for example 24 hours. Endpoint agent devices (<code>rivetit_agent</code>) have no vendor sync and are not watched.
+        </p>
+        <?php if (!$sw_ready): ?>
+            <div class="alert alert-warning">The watcher override table is not in this database yet. Run the database update (Admin &gt; Update) to mute integrations or declare intervals.</div>
+        <?php endif; ?>
+        <?php if (!$sw_rows): ?>
+            <div class="text-muted">No watched integrations.</div>
+        <?php else: ?>
+        <div class="table-responsive">
+            <table class="table table-sm table-striped align-middle mb-0">
+                <thead><tr><th>Integration</th><th>State</th><th>Last run</th><th>Expected</th><th>Reason</th><th class="text-end">Actions</th></tr></thead>
+                <tbody>
+                <?php foreach ($sw_rows as $sw): $ov = $sw['override']; $sw_form = 'swf_' . $sw['source'] . '_' . $sw['id']; ?>
+                    <tr>
+                        <td><?= nullable_htmlentities($sw['name']) ?> <small class="text-muted"><?= nullable_htmlentities($sw['label']) ?></small></td>
+                        <td><span class="badge text-bg-<?= $sw_badge[$sw['state']] ?? 'secondary' ?>"><?= nullable_htmlentities($sw['state']) ?></span></td>
+                        <td class="text-nowrap"><?= $sw['last_ts'] === null ? 'never' : nullable_htmlentities(gmdate('Y-m-d H:i', $sw['last_ts'])) . ' UTC' ?></td>
+                        <td class="text-nowrap"><?= $sw['interval_s'] === null ? '<span class="text-muted">not watched</span>' : 'every ' . nullable_htmlentities(SyncWatch::humanInterval((int) $sw['interval_s'])) . ($ov && $ov['interval_s'] ? ' <small class="text-muted">(declared)</small>' : '') ?></td>
+                        <td class="small"><?= nullable_htmlentities($sw['detail']) ?><?= $ov && $ov['note'] !== '' ? '<br><span class="text-muted">' . nullable_htmlentities($ov['note']) . '</span>' : '' ?></td>
+                        <td class="text-end text-nowrap">
+                            <?php if ($sw_ready): ?>
+                            <form action="post.php" method="post" class="d-inline m-0">
+                                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                                <input type="hidden" name="watch_source" value="<?= nullable_htmlentities($sw['source']) ?>">
+                                <input type="hidden" name="watch_integration_id" value="<?= (int) $sw['id'] ?>">
+                                <?php if ($sw['state'] === 'muted'): ?>
+                                    <button type="submit" name="unmute_watch" formnovalidate class="btn btn-sm btn-outline-secondary">Unmute</button>
+                                <?php else: ?>
+                                    <button type="submit" name="mute_watch" formnovalidate class="btn btn-sm btn-outline-secondary">Mute</button>
+                                <?php endif; ?>
+                                <?php if ($sw['state'] === 'dormant'): ?>
+                                    <label class="small ms-1"><input type="checkbox" class="form-check-input" name="watch_confirm" value="1" required> remove old runs</label>
+                                    <button type="submit" name="forget_watch_history" class="btn btn-sm btn-outline-danger">Forget history</button>
+                                <?php endif; ?>
+                            </form>
+                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#<?= $sw_form ?>">Edit</button>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php if ($sw_ready): ?>
+                    <tr class="collapse" id="<?= $sw_form ?>">
+                        <td colspan="6">
+                            <form action="post.php" method="post" class="row g-2 align-items-end m-0">
+                                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                                <input type="hidden" name="watch_source" value="<?= nullable_htmlentities($sw['source']) ?>">
+                                <input type="hidden" name="watch_integration_id" value="<?= (int) $sw['id'] ?>">
+                                <div class="col-md-3"><label class="small" for="<?= $sw_form ?>_h">Expected to run every (hours, blank = default)</label>
+                                    <input type="number" step="0.01" min="0.02" max="720" class="form-control form-control-sm" id="<?= $sw_form ?>_h" name="watch_expected_hours" value="<?= $ov && $ov['interval_s'] ? nullable_htmlentities((string) round($ov['interval_s'] / 3600, 2)) : '' ?>" placeholder="24"></div>
+                                <div class="col-md-5"><label class="small" for="<?= $sw_form ?>_n">Note (for example: synced by /opt/scripts/unifi_itflow_sync.py)</label>
+                                    <input type="text" maxlength="255" class="form-control form-control-sm" id="<?= $sw_form ?>_n" name="watch_note" value="<?= $ov ? nullable_htmlentities($ov['note']) : '' ?>"></div>
+                                <div class="col-md-2"><div class="form-check"><input type="checkbox" class="form-check-input" id="<?= $sw_form ?>_m" name="watch_muted" value="1" <?= $ov && $ov['muted'] ? 'checked' : '' ?>><label class="form-check-label small" for="<?= $sw_form ?>_m">Muted</label></div></div>
+                                <div class="col-md-2"><button type="submit" name="save_watch_override" class="btn btn-sm btn-primary">Save</button></div>
+                            </form>
+                        </td>
+                    </tr>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
         <?php endif; ?>
     </div>
@@ -135,6 +214,10 @@ $rec_ago = function (?int $sec): string {
                     <input type="number" min="2" max="720" class="form-control form-control-sm" name="backup_stale_hours" value="<?= $rec_stale_h ?>"></div>
                 <div class="col-md-3 form-group"><label class="small">Failed sync runs in a row</label>
                     <input type="number" min="1" max="20" class="form-control form-control-sm" name="sync_error_threshold" value="<?= (int) RecoverySettings::get($mysqli, 'sync_error_threshold') ?>"></div>
+                <div class="col-md-3 form-group"><label class="small">Dormant after (days without a run, 0 = never)</label>
+                    <input type="number" min="0" max="365" class="form-control form-control-sm" name="sync_dormant_days" value="<?= (int) RecoverySettings::get($mysqli, 'sync_dormant_days') ?>"></div>
+                <div class="col-md-3 form-group"><label class="small">Repeat the same alert after (hours)</label>
+                    <input type="number" min="1" max="720" class="form-control form-control-sm" name="alert_repeat_hours" value="<?= (int) RecoverySettings::get($mysqli, 'alert_repeat_hours') ?>"></div>
                 <div class="col-md-6 form-group"><label class="small">Alert email (blank = every administrator)</label>
                     <input type="text" class="form-control form-control-sm" name="alert_email" value="<?= nullable_htmlentities(RecoverySettings::get($mysqli, 'alert_email')) ?>" placeholder="it-alerts@example.com"></div>
             </div>
@@ -144,7 +227,7 @@ $rec_ago = function (?int $sec): string {
                 <div class="col-md-6 form-group"><label class="small">UniFi sync interval (min, <code>auto</code>, 0 = off)</label>
                     <input type="text" class="form-control form-control-sm" name="sync_interval_unifi" value="<?= nullable_htmlentities(RecoverySettings::get($mysqli, 'sync_interval_unifi')) ?>"></div>
             </div>
-            <small class="text-muted d-block mb-2">A sync is reported as stopped after three times its interval with no run, and as failing after the number of errored runs above. Each alert repeats at most every 6 hours.</small>
+            <small class="text-muted d-block mb-2">A sync is reported as stopped after three times its interval with no run, and as failing after the number of errored runs above. A failed run counts only when it has a real error message. An integration with no run for the dormant period is listed as dormant instead of being mailed. Each alert repeats at most every <?= (int) RecoverySettings::get($mysqli, 'alert_repeat_hours') ?> hours, and a recovery is announced once.</small>
             <button type="submit" name="save_recovery_settings" class="btn btn-primary btn-sm" <?= $rec_ready ? '' : 'disabled' ?>><i class="fas fa-check me-1"></i>Save</button>
         </form>
 

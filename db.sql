@@ -3018,6 +3018,22 @@ CREATE TABLE `recovery_settings` (
   PRIMARY KEY (`setting_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `recovery_watch_overrides`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `recovery_watch_overrides` (
+  `override_id` int(11) NOT NULL AUTO_INCREMENT,
+  `override_source` varchar(16) NOT NULL,
+  `override_integration_id` int(11) NOT NULL,
+  `override_muted` tinyint(1) NOT NULL DEFAULT 0,
+  `override_expected_interval_s` int(11) DEFAULT NULL,
+  `override_note` varchar(255) NOT NULL DEFAULT '',
+  `override_updated_by` int(11) NOT NULL DEFAULT 0,
+  `override_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`override_id`),
+  UNIQUE KEY `uq_watch_override` (`override_source`,`override_integration_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `recurring_expenses`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;

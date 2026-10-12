@@ -22,6 +22,8 @@ final class RecoverySettings
         'sync_error_threshold'    => '3',       // alert after this many consecutive errored sync runs
         'sync_interval_rmm'        => '15',      // minutes; stale = no run in 3x. 0 turns the watch off for that source
         'sync_interval_unifi'      => 'auto',    // 'auto' = infer from its own scheduled runs; a number = minutes; 0 = off
+        'sync_dormant_days'        => '14',      // an integration whose newest run is older than this is "dormant": no email, shown as dormant (0 = never dormant)
+        'alert_repeat_hours'       => '24',      // the same problem is mailed at most once per this many hours (was a fixed 6)
         'alert_email'              => '',        // blank: every active administrator
     ];
 

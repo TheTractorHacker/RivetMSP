@@ -4,12 +4,21 @@ namespace RivetMSP\Recovery;
 
 /**
  * One way to raise a recovery alert: an in-app notification, an email to the administrator address, and (when the event bus is
- * loaded) a webhook/automation event. Alerts are de-duplicated per key for 6 hours so a backup that stays broken produces one
- * message per quarter-day, not one per cron tick.
+ * loaded) a webhook/automation event. Alerts are de-duplicated per key for alert_repeat_hours (recovery setting, default 24) so a
+ * problem that stays broken produces one message a day, not one per cron tick. The first occurrence is always immediate, and a
+ * recovery is announced once (recovered()).
  */
 final class RecoveryAlerts
 {
-    public const DEDUPE_HOURS = 6;
+    public const DEDUPE_HOURS = 24;   // the default; the live value is the recovery setting alert_repeat_hours
+
+    /** The configured repeat window in hours (1 to 720), falling back to the default when unset or invalid. */
+    public static function repeatHours(\mysqli $db): int
+    {
+        $h = RecoverySettings::int($db, 'alert_repeat_hours');
+
+        return $h >= 1 && $h <= 720 ? $h : self::DEDUPE_HOURS;
+    }
 
     /** Pure: may an alert whose last send was $lastSentTs be sent again at $nowTs? */
     public static function dueAgain(?int $lastSentTs, int $nowTs, int $dedupeHours = self::DEDUPE_HOURS): bool
@@ -21,13 +30,13 @@ final class RecoveryAlerts
      * Claims the right to send $key (atomic: only the caller whose UPDATE/INSERT changes the row proceeds), returning true when
      * this call should send. Fails open to "send" when the table is missing, so an alert is never lost to a missing migration.
      */
-    public static function claim(\mysqli $db, string $key, string $message): bool
+    public static function claim(\mysqli $db, string $key, string $message, ?int $dedupeHours = null): bool
     {
         $r = @mysqli_query($db, "SHOW TABLES LIKE 'recovery_alerts'");
         if (!$r || mysqli_num_rows($r) === 0) {
             return true;
         }
-        $hours = self::DEDUPE_HOURS;
+        $hours = $dedupeHours !== null ? max(1, $dedupeHours) : self::repeatHours($db);
         $k = mysqli_real_escape_string($db, substr($key, 0, 120));
         $m = mysqli_real_escape_string($db, substr($message, 0, 500));
         // First alert for this key.
@@ -43,10 +52,41 @@ final class RecoveryAlerts
     }
 
     /** Forget a key so the next failure alerts immediately (used when the condition clears). */
-    public static function clear(\mysqli $db, string $key): void
+    public static function clear(\mysqli $db, string $key): bool
     {
         $k = mysqli_real_escape_string($db, substr($key, 0, 120));
         @mysqli_query($db, "DELETE FROM recovery_alerts WHERE alert_key = '$k'");
+
+        return mysqli_affected_rows($db) > 0;
+    }
+
+    /**
+     * Announces a recovery once: only when an alert for $key had actually been raised (its de-dupe row exists), which is then
+     * removed so the next failure alerts immediately. In-app notification and email only (no event).
+     *
+     * @return bool true when a notice was sent
+     */
+    public static function recovered(\mysqli $db, string $key, string $subject, string $body, string $link = '/admin/backup.php'): bool
+    {
+        if (!self::clear($db, $key)) {
+            return false;
+        }
+        self::notify($db, $subject, $body, $link);
+
+        return true;
+    }
+
+    /** The in-app notification and the email, without any de-dupe (the caller decided). */
+    private static function notify(\mysqli $db, string $subject, string $body, string $link): void
+    {
+        if (function_exists('appNotify')) {
+            try {
+                appNotify('Recovery', $subject, $link);
+            } catch (\Throwable $e) {
+                error_log('RecoveryAlerts: appNotify failed: ' . $e->getMessage());
+            }
+        }
+        self::email($db, $subject, $body);
     }
 
     /** @return list<string> distinct recipient addresses */
@@ -80,19 +120,12 @@ final class RecoveryAlerts
      * @param array<string,mixed>  $payload event data
      * @return bool true when the alert was sent, false when suppressed by the de-dupe window
      */
-    public static function raise(\mysqli $db, string $key, string $subject, string $body, string $event, array $payload = [], string $link = '/admin/backup.php'): bool
+    public static function raise(\mysqli $db, string $key, string $subject, string $body, string $event, array $payload = [], string $link = '/admin/backup.php', ?int $dedupeHours = null): bool
     {
-        if (!self::claim($db, $key, $subject)) {
+        if (!self::claim($db, $key, $subject, $dedupeHours)) {
             return false;
         }
-        if (function_exists('appNotify')) {
-            try {
-                appNotify('Recovery', $subject, $link);
-            } catch (\Throwable $e) {
-                error_log('RecoveryAlerts: appNotify failed: ' . $e->getMessage());
-            }
-        }
-        self::email($db, $subject, $body);
+        self::notify($db, $subject, $body, $link);
         if (!function_exists('rivetEmitEvent') && is_file(dirname(__DIR__, 2) . '/includes/event_bus.php')) {
             require_once dirname(__DIR__, 2) . '/includes/event_bus.php';   // the same lazy load queueWebhookEvent() does
         }
@@ -126,7 +159,7 @@ final class RecoveryAlerts
             return;   // no sender configured: the in-app notification still went out
         }
         $fromName = (string) ($row['config_mail_from_name'] ?? '') ?: (defined('APP_NAME') ? APP_NAME : 'RivetMSP');
-        $html = '<p>' . nl2br(htmlspecialchars($body, ENT_QUOTES, 'UTF-8')) . '</p><p style="color:#888">Sent by the ' . (defined('APP_NAME') ? APP_NAME : 'RivetMSP') . ' recovery monitor. The same alert is not repeated for ' . self::DEDUPE_HOURS . ' hours.</p>';
+        $html = '<p>' . nl2br(htmlspecialchars($body, ENT_QUOTES, 'UTF-8')) . '</p><p style="color:#888">Sent by the ' . (defined('APP_NAME') ? APP_NAME : 'RivetMSP') . ' recovery monitor. The same alert is not repeated for ' . self::repeatHours($db) . ' hours.</p>';
         $queue = [];
         foreach ($to as $addr) {
             $queue[] = ['from' => $from, 'from_name' => $fromName, 'recipient' => $addr, 'recipient_name' => $addr,
