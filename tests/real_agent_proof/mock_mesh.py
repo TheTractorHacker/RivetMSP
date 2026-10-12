@@ -2,9 +2,9 @@
 """A stand-in for a MeshCentral server's agent download, for tests/real_agent_proof/run.sh. NOT MeshCentral: it proves RivetMSP's and the agent's side of the protocol
 (the download address, the certificate pin, running the downloaded installer, reporting and mapping the node id), not that a real Mesh server speaks it.
 
-  mock_mesh.py <pem (certificate and key)> <port> <group hex> <node id raw> <events log>
+  mock_mesh.py <pem (certificate and key)> <port> <group, MeshCentral URL form> <node id raw> <events log>
 
-GET /meshagents?id=N&meshid=HEX&installflags=F answers a tiny shell script that behaves like a MeshAgent for the commands the installer uses (-install, -nodeid,
+GET /meshagents?id=N&meshid=<64 characters, URL form>&installflags=F answers a tiny shell script that behaves like a MeshAgent for the commands the installer uses (-install, -nodeid,
 -uninstall); a wrong meshid is a 404. Every request is appended to the events log as "MESH-DOWNLOAD id=.. meshid=.. installflags=..". Listens on all interfaces
 (the agent runs in a container and reaches the host through the docker gateway). Exits after 15 minutes."""
 import http.server, ssl, sys, time, urllib.parse

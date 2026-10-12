@@ -1779,6 +1779,7 @@ DROP TABLE IF EXISTS `endpoint_agent_mesh_settings`;
 CREATE TABLE `endpoint_agent_mesh_settings` (
   `id` tinyint(4) NOT NULL DEFAULT 1,
   `group_id` varchar(128) NOT NULL DEFAULT '',
+  `group_id_url` varchar(64) NOT NULL DEFAULT '',
   `server_cert_pin` varchar(96) NOT NULL DEFAULT '',
   `auto_map_overwrite` tinyint(1) NOT NULL DEFAULT 0,
   `agent_ids_json` text DEFAULT NULL,
@@ -5473,6 +5474,7 @@ INSERT INTO `rivet_core_migrations` VALUES ('0020_rmm_alerting_maturity','2026-1
 INSERT INTO `rivet_core_migrations` VALUES ('0021_rmm_scale_storage','2026-10-11 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0022_rmm_remote_and_logs','2026-10-11 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0023_rmm_mesh_agent','2026-10-11 00:00:00');
+INSERT INTO `rivet_core_migrations` VALUES ('0024_rmm_mesh_group_url','2026-10-11 00:00:00');
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

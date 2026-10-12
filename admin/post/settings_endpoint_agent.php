@@ -429,6 +429,13 @@ if (isset($_POST['save_mesh_settings']) || isset($_POST['test_mesh'])) {
         rivetRmmScaleMsg('mesh', 'error', $r->message, $ea_mesh_old);
         redirect('settings_endpoint_agent.php#mesh');
     }
+    // RivetCore 1.0.0-rc.15: Core saved anyway but has something to say (today: a pasted download address for a host other than the saved MeshCentral address). Show it in the Mesh card.
+    $ea_mesh_warnings = $r->ok && is_array($r->data['warnings'] ?? null) ? array_values(array_filter($r->data['warnings'], 'is_string')) : [];
+    if ($ea_mesh_warnings !== []) {
+        rivetRmmScaleMsg('mesh', 'warning', 'Saved, with a warning: ' . implode(' ', $ea_mesh_warnings));
+        flash_alert(nullable_htmlentities($r->message), 'success');
+        redirect('settings_endpoint_agent.php#mesh');
+    }
     ea_flash_result($r);
 }
 

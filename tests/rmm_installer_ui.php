@@ -188,6 +188,7 @@ $ok($c === 200 && str_contains($b, 'id="bn_drop"') && str_contains($b, 'name="ag
 use RivetCore\Rmm\Installer\InstallerStamp;
 $mGroup = '4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9';
 $mPin = hash('sha384', 'mesh server certificate');
+$mGroupUrl = \RivetCore\Rmm\Mesh\MeshAgentCatalog::hexToUrl($mGroup);   // RivetCore 1.0.0-rc.15: the installer carries MeshCentral's own 64-character URL form, not hex
 $oldMembers = ['version', 'installer_id', 'server_url', 'enrollment_token', 'department', 'ca_pem', 'created_at', 'expires_at'];
 $stampOf = function (string $body): array { $r = InstallerStamp::read($body); return $r === null ? [] : $r['data']; };
 $optRows = fn() => (int) $one('SELECT COUNT(*) FROM endpoint_agent_installer_options');
@@ -238,7 +239,7 @@ foreach (['0', 'on', 'true', ''] as $v) {
 $d = $stampOf($withMesh);
 $ok($c === 200 && ($d['version'] ?? 0) === 1 && ($d['install_mesh_agent'] ?? null) === true && is_array($d['mesh'] ?? null), 'tick: 200, the payload version stays 1 and carries install_mesh_agent and mesh');
 $m = $d['mesh'] ?? [];
-$ok(($m['url'] ?? '') === 'https://mesh.example.test' && ($m['meshid'] ?? '') === $mGroup && ($m['pin'] ?? '') === $mPin, 'mesh: url, meshid (the group id) and the pin');
+$ok(($m['url'] ?? '') === 'https://mesh.example.test' && ($m['meshid'] ?? '') === $mGroupUrl && strlen((string) ($m['meshid'] ?? '')) === 64 && !preg_match('/^[0-9a-f]{64}$/', (string) ($m['meshid'] ?? '')) && ($m['pin'] ?? '') === $mPin, 'mesh: url, meshid (the group id in the URL form, 64 characters, derived from the stored hex) and the pin');
 $ok(($m['agent_ids']['windows/arm64'] ?? 0) === 40 && ($m['agent_ids']['windows/amd64'] ?? 0) === 4 && ($m['install_args']['windows'] ?? []) === ['-fullinstall'], 'mesh: the full agent-id table (the correction wins, the built-in ids fill the rest) and the install arguments');
 $ok(array_slice(array_keys($d), 0, 8) === $oldMembers && array_keys($d) === array_merge($oldMembers, ['install_mesh_agent', 'mesh']), 'the two new members follow expires_at and nothing else changed');
 $ok(!str_contains(json_encode($d), 'mesh_login_key') && !str_contains(json_encode($d), 'login_key'), 'the login token key is never in the installer');
@@ -251,19 +252,28 @@ $tokPlain = (string) ($d['enrollment_token'] ?? '');
 $gated = function () use ($wb, $tokPlain): array { $ch = curl_init("$wb/api/v1/agent_installer"); curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode(['token' => $tokPlain, 'arch' => 'amd64']), CURLOPT_HTTPHEADER => ['Content-Type: application/json'], CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60]); $b = (string) curl_exec($ch); $c = curl_getinfo($ch, CURLINFO_RESPONSE_CODE); curl_close($ch); return [$c, $b]; };
 [$c, $gb] = $gated();
 $gd = $stampOf($gb);
-$ok($c === 200 && ($gd['install_mesh_agent'] ?? null) === true && ($gd['mesh']['meshid'] ?? '') === $mGroup && ($gd['mesh']['pin'] ?? '') === $mPin, 'the scripted token-gated download serves the same Mesh block');
+$ok($c === 200 && ($gd['install_mesh_agent'] ?? null) === true && ($gd['mesh']['meshid'] ?? '') === $mGroupUrl && ($gd['mesh']['pin'] ?? '') === $mPin, 'the scripted token-gated download serves the same Mesh block');
 $rmm->settings()->set(['mesh_enabled' => 0]);
 [$c, $gb] = $gated();
 $ok($c === 200 && array_keys($stampOf($gb)) !== [] && !array_key_exists('mesh', $stampOf($gb)) && !array_key_exists('install_mesh_agent', $stampOf($gb)) && $audit('Installer Mesh Skipped') >= 1, 'Mesh switched off after issuing: the installer is served WITHOUT it and "Installer Mesh Skipped" is audited');
 $rmm->settings()->set(['mesh_enabled' => 1]);
 
+// RivetCore 1.0.0-rc.15: a pasted download address is saved as MeshCentral printed it and the installer carries that URL form VERBATIM (a fresh random id with both '@' and '$' in it, never committed)
+do { $rawId = random_bytes(48); $randUrl = strtr(base64_encode($rawId), ['+' => '@', '/' => '$']); } while (!str_contains($randUrl, '@') || !str_contains($randUrl, '$'));
+$ok($rmm->meshAgentSettings()->update(['mesh_group_id' => 'https://mesh.example.test/meshagents?id=4&meshid=' . $randUrl . '&installflags=0'], 1) === [] && $rmm->meshAgentSettings()->get()['group_id'] === bin2hex($rawId) && $rmm->meshAgentSettings()->get()['group_id_url'] === $randUrl, 'a pasted download address is saved: hex stored, the URL form kept verbatim');
+[$c, $b] = $post($sidAdmin, ['os' => 'windows', 'client_id' => 1, 'arch' => 'amd64', 'install_mesh_agent' => '1']);
+$ok($c === 200 && ($stampOf($b)['mesh']['meshid'] ?? '') === $randUrl, 'the installer payload decodes to the URL-form meshid exactly as pasted (with @ and $ literal)');
+[$c, $b] = $post($sidAdmin, ['os' => 'linux', 'client_id' => 1, 'arch' => 'amd64', 'install_mesh_agent' => '1']);
+$ok($c === 200 && str_contains((string) (json_decode($b, true)['linux'] ?? ''), $randUrl) && !str_contains((string) (json_decode($b, true)['linux'] ?? ''), bin2hex($rawId)), 'the Linux command carries the same URL form, not the hex');
+$ok($rmm->meshAgentSettings()->update(['mesh_group_id' => $mGroup], 1) === [], 'back to the hex group for the rest of the file');
+
 // Linux
 [$c, $b] = $post($sidAdmin, ['os' => 'linux', 'client_id' => 1, 'arch' => 'amd64', 'install_mesh_agent' => '1']);
 $j = json_decode($b, true);
-$ok($c === 200 && ($j['install_mesh_agent'] ?? null) === true && str_contains((string) $j['linux'], '--install-mesh-agent') && str_contains((string) $j['linux'], '--mesh-url') && str_contains((string) $j['linux'], 'https://mesh.example.test') && str_contains((string) $j['linux'], $mGroup), 'Linux with the tick: JSON says so and the command carries the Mesh flags');
+$ok($c === 200 && ($j['install_mesh_agent'] ?? null) === true && str_contains((string) $j['linux'], '--install-mesh-agent') && str_contains((string) $j['linux'], '--mesh-url') && str_contains((string) $j['linux'], 'https://mesh.example.test') && str_contains((string) $j['linux'], $mGroupUrl), 'Linux with the tick: JSON says so and the command carries the Mesh flags (the group id in the URL form)');
 [$c, $b] = $post($sidAdmin, ['os' => 'linux', 'client_id' => 1, 'arch' => 'amd64']);
 $j = json_decode($b, true);
-$ok($c === 200 && ($j['install_mesh_agent'] ?? null) === false && !str_contains((string) $j['linux'], '--install-mesh-agent') && !str_contains((string) $j['linux'], $mGroup), 'Linux without the tick: no Mesh flag and no group id in the command');
+$ok($c === 200 && ($j['install_mesh_agent'] ?? null) === false && !str_contains((string) $j['linux'], '--install-mesh-agent') && !str_contains((string) $j['linux'], $mGroupUrl) && !str_contains((string) $j['linux'], $mGroup), 'Linux without the tick: no Mesh flag and no group id in the command');
 
 // not an administrator: still refused, tick or not; and Administration > Deployment has the box too
 [$c, $b] = $post($sidTech, ['os' => 'windows', 'client_id' => 1, 'arch' => 'amd64', 'install_mesh_agent' => '1']);

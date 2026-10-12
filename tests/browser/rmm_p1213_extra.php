@@ -8,6 +8,7 @@ if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests 
  *   php tests/browser/rmm_p1213_extra.php binary                   publishes a (fake, test-only) agent binary 1.1.0 for amd64 so installers can be made
  *   php tests/browser/rmm_p1213_extra.php devices                  enrolls five devices (M1..M5) of Client A, prints {"dev":{...},"asset":{...}}
  *   php tests/browser/rmm_p1213_extra.php report <name> <json>     one check-in of that device with the given mesh_agent report
+ *   php tests/browser/rmm_p1213_extra.php payload <file>          decodes the payload stamped into an installer file (RivetCore 1.0.0-rc.15: the Mesh block's meshid is the URL form) and prints it as JSON
  *   php tests/browser/rmm_p1213_extra.php hostile                  installs one script and one policy of our own with markup in their names (escaping checks)
  *   php tests/browser/rmm_p1213_extra.php stage <script id>        parks a "starter-updated" version of an installed starter script (what Core does for an edited script)
  */
@@ -53,6 +54,9 @@ if ($mode === 'tls') {
     // every call is a new process, and the server treats a repeated (device, seq) as a replay: take a sequence number that only grows
     [$c] = ea_checkin($t, ['seq' => (int) (hrtime(true) / 1000), 'capabilities' => ['job:collect', 'mesh:nodeid'], 'mesh_agent' => $r]);
     echo json_encode(['status' => $c]), "\n";
+} elseif ($mode === 'payload') {
+    $r = \RivetCore\Rmm\Installer\InstallerStamp::read((string) @file_get_contents((string) ($argv[2] ?? '')));
+    echo json_encode(['ok' => $r !== null, 'mesh' => $r['data']['mesh'] ?? null, 'install_mesh_agent' => $r['data']['install_mesh_agent'] ?? null]), "\n";
 } elseif ($mode === 'hostile') {
     $rmm = rivetRmmModule($db);
     $rmm->scripts()->create(['name' => 'Hostile <b>name</b>', 'description' => '"><img src=x onerror=alert(1)>', 'language' => 'bash', 'body' => 'true', 'tags' => ['starter', 'risk:read_only'], 'params' => []], 1);
@@ -66,6 +70,6 @@ if ($mode === 'tls') {
     $v = $rmm->scripts()->stage($id, ['body' => "echo pack text v2\n", 'params' => [], 'note' => 'starter-updated|rivet-core-starter|' . $item['id'] . '|1.0.0|' . $item['content_hash']], 1);
     echo json_encode(['version' => $v]), "\n";
 } else {
-    fwrite(STDERR, "usage: tls | devices | report <name> <json> | hostile | stage <script id>\n");
+    fwrite(STDERR, "usage: tls | devices | report <name> <json> | payload <file> | hostile | stage <script id>\n");
     exit(2);
 }

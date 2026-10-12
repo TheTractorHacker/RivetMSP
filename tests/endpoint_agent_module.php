@@ -230,8 +230,8 @@ $mk = function (string $suffix, bool $withRmm) use ($db, $root): array {
         // RivetCore 1.0.0-rc.11 (0021 scale storage, 0022 remote tools and logs): five rmm_* tables (the five endpoint_agent_* ones are dropped above), two ledger rows and the five settings columns of DB 2.6.88.
         $sql = (string) preg_replace('/DROP TABLE IF EXISTS `rmm_(cache|metric_daily|metric_outbox|storage_state|token_buckets)`;\n.*?\/\*!40101 SET character_set_client = @saved_cs_client \*\/;\n/s', '', $sql);
         $sql = preg_replace("/INSERT INTO `rivet_core_migrations` VALUES \('00(21|22)_[a-z_]+','[^']+'\);\n/", '', $sql);
-        // RivetCore 1.0.0-rc.12 (0023 the optional MeshCentral agent): three endpoint_agent_* tables (dropped above) and one ledger row; DB 2.6.89 runs the migration and adds no column.
-        $sql = preg_replace("/INSERT INTO `rivet_core_migrations` VALUES \('0023_[a-z_]+','[^']+'\);\n/", '', $sql);
+        // RivetCore 1.0.0-rc.12 (0023 the optional MeshCentral agent): three endpoint_agent_* tables (dropped above) and one ledger row; DB 2.6.89 runs the migration and adds no column. RivetCore 1.0.0-rc.15 (0024, the Mesh group id URL form) adds one column to a table dropped above and one ledger row (DB 2.6.90).
+        $sql = preg_replace("/INSERT INTO `rivet_core_migrations` VALUES \('002[34]_[a-z_]+','[^']+'\);\n/", '', $sql);
         $sql = (string) preg_replace('/  `config_rmm_(remote_manage_lvl3|extstore_[a-z_]+)` [^\n]*,\n/', '', $sql);
         $sql = str_replace(["  `config_rmm_approve_scripts_lvl3` tinyint(1) NOT NULL DEFAULT 0,\n", "  `config_rmm_escalation_contact` text DEFAULT NULL,\n"], '', $sql);
         $sql = str_replace("  `config_core_rmm_enabled` tinyint(1) NOT NULL DEFAULT 0,\n", '', $sql);
@@ -277,12 +277,18 @@ $tablesBefore = $tableCount($cu); $shapeBefore = $shape($cu);
 $cu->query("UPDATE settings SET config_current_database_version = '2.6.87' WHERE company_id = 1");
 $run = proc_open([PHP_BINARY, "$root/scripts/update_cli.php", '--update_db'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, "$root/scripts", array_merge(getenv(), ['RMM_TEST_DATABASE' => $up]));
 $updOut2 = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); proc_close($run);
-$ok(strpos($updOut2, 'from version 2.6.87 to 2.6.89') !== false && $tableCount($cu) === $tablesBefore && $shape($cu) === $shapeBefore && version_compare((string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0], '2.6.88', '>='), 'UPGRADE: running the 2.6.88 step a second time (version put back to 2.6.87) changes nothing and the updater runs on to 2.6.89');
+$ok(strpos($updOut2, 'from version 2.6.87 to 2.6.90') !== false && $tableCount($cu) === $tablesBefore && $shape($cu) === $shapeBefore && version_compare((string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0], '2.6.88', '>='), 'UPGRADE: running the 2.6.88 step a second time (version put back to 2.6.87) changes nothing and the updater runs on to 2.6.90');
 // the 2.6.89 step (rc.12, migration 0023) is idempotent too
 $cu->query("UPDATE settings SET config_current_database_version = '2.6.88' WHERE company_id = 1");
 $run = proc_open([PHP_BINARY, "$root/scripts/update_cli.php", '--update_db'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, "$root/scripts", array_merge(getenv(), ['RMM_TEST_DATABASE' => $up]));
 $updOut3 = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); proc_close($run);
-$ok(strpos($updOut3, 'from version 2.6.88 to 2.6.89') !== false && $tableCount($cu) === $tablesBefore && $shape($cu) === $shapeBefore && (string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0] === '2.6.89', 'UPGRADE: running the 2.6.89 step a second time (version put back to 2.6.88) changes nothing and ends at 2.6.89');
+$ok(strpos($updOut3, 'from version 2.6.88 to 2.6.90') !== false && $tableCount($cu) === $tablesBefore && $shape($cu) === $shapeBefore && (string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0] === '2.6.90', 'UPGRADE: running the 2.6.89 step a second time (version put back to 2.6.88) changes nothing and ends at 2.6.90');
+// the 2.6.90 step (rc.15, migration 0024: one ADD COLUMN, guarded) is idempotent too
+$cu->query("UPDATE settings SET config_current_database_version = '2.6.89' WHERE company_id = 1");
+$run = proc_open([PHP_BINARY, "$root/scripts/update_cli.php", '--update_db'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, "$root/scripts", array_merge(getenv(), ['RMM_TEST_DATABASE' => $up]));
+$updOut4 = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); proc_close($run);
+$ok(strpos($updOut4, 'from version 2.6.89 to 2.6.90') !== false && $tableCount($cu) === $tablesBefore && $shape($cu) === $shapeBefore && (string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0] === '2.6.90', 'UPGRADE: running the 2.6.90 step a second time (version put back to 2.6.89) changes nothing and ends at 2.6.90');
+$ok((int) $cu->query("SELECT COUNT(*) FROM rivet_core_migrations WHERE migration_id = '0024_rmm_mesh_group_url'")->fetch_row()[0] === 1 && (int) $cu->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'endpoint_agent_mesh_settings' AND column_name = 'group_id_url'")->fetch_row()[0] === 1, 'UPGRADE: migration 0024 is recorded once and endpoint_agent_mesh_settings.group_id_url exists exactly once');
 $ok((int) $cu->query("SELECT COUNT(*) FROM rivet_core_migrations WHERE migration_id = '0023_rmm_mesh_agent'")->fetch_row()[0] === 1 && (int) $cu->query('SELECT COUNT(*) FROM endpoint_agent_mesh_settings')->fetch_row()[0] <= 1, 'UPGRADE: migration 0023 is recorded once, and no Mesh install setting is configured by the update');
 $ok(is_file($sd . '/rmm_state.json') && ($state()['enabled'] ?? null) === false, 'UPGRADE: the updater wrote a state file that says disabled (the gate answers without the database from the first request)');
 $cu->query('UPDATE endpoint_agent_settings SET enabled = 1 WHERE id = 1');

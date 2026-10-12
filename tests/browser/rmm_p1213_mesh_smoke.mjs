@@ -10,6 +10,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { Browser, sleep } from './lib/cdp.mjs';
 import { Harness } from './lib/harness.mjs';
 
@@ -121,6 +123,10 @@ const tls = await new Promise((res, rej) => { let buf = ''; tlsProc.stdout.on('d
 const stopTls = () => { try { tlsProc.kill(); } catch {} };
 process.on('exit', stopTls);
 const GROUP = '4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9';
+// RivetCore 1.0.0-rc.15: MeshCentral's own spelling of the same id (64 characters of base64, '@' for '+', '$' for '/'); the field reads this back, not the hex
+const urlOf = (raw) => raw.toString('base64').replace(/\+/g, '@').replace(/\//g, '$');
+const GROUP_URL = urlOf(Buffer.from(GROUP, 'hex'));
+const fresh = () => { for (;;) { const raw = randomBytes(48), u = urlOf(raw); if (u.includes('@') && u.includes('$')) return { raw, url: u, hex: raw.toString('hex') }; } };   // made at run time, never committed
 const NODE_A = 'node//AbCdEfGhIjKlMnOpQrStUvWxYz0123456789@$AbCdEfGhIjKlMnOpQrStUvWxYz01';
 const NODE_B = 'node//ZyXwVuTsRqPoNmLkJiHgFeDcBa9876543210@$ZyXwVuTsRqPoNmLkJiHgFeDcBa98';
 const NODE_C = 'node//QqWwEeRrTtYyUuIiOoPpAaSsDdFfGgHhJjKk1234@$QqWwEeRrTtYyUuIiOoPpAaSsDdFfGgHhJjKk';
@@ -164,10 +170,15 @@ await T('Mesh card: install fields, labelled controls, the group id masked and r
   await setChecked('#mc_group_show', false);
   assert((await p.eval(`document.getElementById('mc_group').type`)) === 'password', 'the show box did not mask it again');
   assert(/Not ready/.test(await p.eval(`document.querySelector('#mesh').innerText`)), 'the card should say the install option is not ready yet');
+  const help = await p.eval(`document.getElementById('mc_group_h').innerText.replace(/\\s+/g,' ')`);
+  assert(/Paste the download address from MeshCentral \(device group, Add Agent, Windows 64-bit installer\) or just its meshid\. It is 64 characters, not hex\. Treat it like an invitation key/.test(help), 'group id help: ' + help);
+  const pinHelp = await p.eval(`document.getElementById('mc_pin_h').innerText.replace(/\\s+/g,' ')`);
+  assert(/Leave empty when the server certificate is issued by a public CA such as Let's Encrypt/.test(pinHelp) && /Use a pin only for a private CA or a self-signed certificate/.test(pinHelp), 'pin help: ' + pinHelp);
+  assert(!(await p.eval(`document.getElementById('mc_group').hasAttribute('pattern')`)), 'the group id field must not carry a hex-only pattern');
   await click('#mesh details > summary');
   await sleep(300);
   const t = await p.eval(`document.querySelector('#mesh details').innerText.replace(/\\s+/g,' ')`);
-  assert(/not verified against a real server/.test(t) && /Verify these against your own Mesh server/.test(t), 'verify warning missing: ' + t.slice(0, 300));
+  assert(/was checked against a real MeshCentral/.test(t) && /were not: check them against your Mesh version/.test(t) && /Verify these against your own Mesh server/.test(t), 'verify warning missing: ' + t.slice(0, 300));
   assert(/windows\/amd64/.test(t), 'the built-in agent id table should be shown');
   await shotEl('#mesh', 'card-mesh-desktop-light');
 });
@@ -210,6 +221,9 @@ await T('"Read it from the server" proposes the hash, saves NOTHING, and a butto
   await p.waitSel('[data-rmm-mesh-pin-result=ok]');
   const t = await p.eval(`document.querySelector('[data-rmm-mesh-pin-result=ok]').innerText.replace(/\\s+/g,' ')`);
   assert(t.includes(tls.sha384) && t.includes(tls.sha256) && /Nothing has been saved/.test(t) && /mesh\.test\.invalid/.test(t), 'proposal text: ' + t.slice(0, 400));
+  // RivetCore 1.0.0-rc.15: Core's note says why (a self-signed certificate is not publicly trusted); the pin may be used, and it is not the "publicly trusted" panel
+  assert(/not trusted by the system certificate store/.test(t) && /private CA or a self-signed certificate/.test(t), 'probe note missing: ' + t.slice(0, 500));
+  assert(!(await p.exists('[data-rmm-mesh-pin-result=trusted]')) && await p.exists('[data-rmm-mesh-use-pin]'), 'a self-signed server must offer the pin, not the trusted panel');
   assert((await p.eval(`document.getElementById('mc_pin').value`)) === '', 'the proposal must not fill the field by itself');
   await shotEl('#mesh', 'card-mesh-proposal-desktop-light');
   // reload: nothing was saved, the proposal is gone
@@ -226,7 +240,7 @@ await T('"Read it from the server" proposes the hash, saves NOTHING, and a butto
   await p.type('#mc_group', GROUP);
   await nav('button[name=save_mesh_settings]');
   await go(ADMIN + '#mesh');
-  assert((await p.eval(`document.getElementById('mc_pin').value`)) === tls.sha384 && (await p.eval(`document.getElementById('mc_group').value`)) === GROUP, 'pin and group id were not saved by Save');
+  assert((await p.eval(`document.getElementById('mc_pin').value`)) === tls.sha384 && (await p.eval(`document.getElementById('mc_group').value`)) === GROUP_URL, 'pin was not saved by Save, or the group id was not read back in the URL form');
   assert(/Installers can include the MeshCentral agent/.test(await p.eval(`document.querySelector('#mesh').innerText`)), 'the card should say installers can include the agent now');
 });
 await T('overwrite switch saves from the page', async () => {
@@ -240,6 +254,75 @@ await T('overwrite switch saves from the page', async () => {
   await nav('button[name=save_mesh_settings]');
   await go(ADMIN + '#mesh');
   assert(!(await checked('#mc_over')), 'the overwrite switch was not saved off');
+});
+
+// ------------------------------------------------------------------------------------------------ RivetCore 1.0.0-rc.15: the device group id in MeshCentral's URL form
+const saveGroup = async (v) => { await go(ADMIN + '#mesh'); await p.type('#mc_group', v); await nav('button[name=save_mesh_settings]'); await go(ADMIN + '#mesh'); };
+const readGroup = () => p.eval(`document.getElementById('mc_group').value`);
+const meshHost = new URL(tls.url).host;
+await T('group id: the bare meshid, the whole pasted address, hex and mesh// are accepted and read back in the URL form', async () => {
+  const A = fresh(), B = fresh();
+  await saveGroup(A.url);
+  assert((await readGroup()) === A.url, 'bare meshid not read back: ' + (await readGroup()));
+  assert(await p.eval(`document.getElementById('mc_group').type === 'password'`), 'the group id must stay masked');
+  assert((await msgIn('mesh')) === '', 'a clean save has no warning');
+  await saveGroup(`https://${meshHost}/meshagents?id=4&meshid=${B.url}&installflags=0`);
+  assert((await readGroup()) === B.url, 'whole address: only the meshid should be kept, got ' + (await readGroup()));
+  assert((await msgIn('mesh')) === '', 'an address for the saved Mesh host should give no warning, got: ' + (await msgIn('mesh')));
+  await saveGroup(A.hex.toUpperCase());
+  assert((await readGroup()) === A.url, 'hex not read back as the URL form');
+  await saveGroup('mesh//' + B.url);
+  assert((await readGroup()) === B.url, 'mesh// form not accepted');
+  await saveGroup(GROUP);
+  assert((await readGroup()) === GROUP_URL, 'hex group not read back as the URL form');
+});
+await T('group id: an address for a different host is saved with a visible warning', async () => {
+  const C = fresh();
+  await go(ADMIN + '#mesh');
+  await p.type('#mc_group', `https://other.example.test/meshagents?id=4&meshid=${C.url}&installflags=0`);
+  await nav('button[name=save_mesh_settings]');
+  await p.waitSel('#mesh [data-rmm-scale-msg]');
+  const m = await msgIn('mesh');
+  assert(/Saved, with a warning/.test(m) && /other\.example\.test/.test(m) && new RegExp(meshHost.split(':')[0].replace(/\./g, '\\.')).test(m), 'warning text: ' + m);
+  assert((await p.eval(`document.querySelector('#mesh [data-rmm-scale-msg]').getAttribute('role')`)) === 'alert', 'the warning should be role=alert');
+  assert((await readGroup()) === C.url, 'the id should still be saved');
+  await shotEl('#mesh', 'card-mesh-warning-desktop-light');
+  await go(ADMIN + '#mesh');
+  assert((await msgIn('mesh')) === '', 'the warning is shown once');
+});
+await T('group id: hostile or malformed values are refused, nothing changes, the text is put back escaped', async () => {
+  const D = fresh();
+  await saveGroup(D.url);
+  const bad = ['"' + D.url, D.url + ' ' + D.url, D.url + '&installflags=0', D.url + '#x', D.url.slice(0, 63), D.url.slice(0, 63) + '!', 'mesh//' + D.url.slice(1), 'javascript:alert(1)', 'https://u:p@mesh.example.test/meshagents?id=4&meshid=' + D.url, `https://${meshHost}/meshagents?id=999&meshid=${D.url}`, '"><script>window.__x=1</script>'];
+  for (const v of bad) {
+    await go(ADMIN + '#mesh');
+    await p.type('#mc_group', v);
+    await nav('button[name=save_mesh_settings]');
+    await p.waitSel('#mesh [data-rmm-scale-msg]');
+    const m = await msgIn('mesh');
+    assert(/The Mesh device group id must be the meshid from the MeshCentral download address/.test(m), `refusal for ${JSON.stringify(v).slice(0, 60)}: ${m}`);
+    assert((await p.eval('window.__x')) === undefined, 'a hostile value ran script');
+    await go(ADMIN + '#mesh');
+    assert((await readGroup()) === D.url, `${JSON.stringify(v).slice(0, 60)} changed the stored id`);
+  }
+  await shotEl('#mesh', 'card-mesh-group-after-refusals-desktop-light');
+});
+await T('group id: the installer payload carries the URL-form meshid verbatim (decoded from a real download)', async () => {
+  const E = fresh();
+  await saveGroup(`https://${meshHost}/meshagents?id=4&meshid=${E.url}&installflags=0`);
+  assert((await readGroup()) === E.url, 'setup: id not saved');
+  await go('/agent/rmm_fleet.php?add=1');
+  await p.waitSel('#rmmInstallerModal.show');
+  const b64 = await p.eval(`(async()=>{const f=document.querySelector('#rmmInstallerModal form');const q=new URLSearchParams(new FormData(f));q.set('mode','download');q.set('os','windows');q.set('arch','amd64');q.set('client_id','1');q.set('install_mesh_agent','1');
+    const r=await fetch(f.getAttribute('action'),{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'fetch'},body:q.toString()});
+    if(!r.ok)return 'ERR'+r.status;const u=new Uint8Array(await r.arrayBuffer());let s='';for(let i=0;i<u.length;i+=32768)s+=String.fromCharCode.apply(null,u.subarray(i,i+32768));return btoa(s)})()`);
+  assert(!/^ERR/.test(b64), 'installer download failed: ' + b64);
+  const file = join(tmpdir(), 'p1213_inst_' + randomBytes(4).toString('hex') + '.exe');
+  writeFileSync(file, Buffer.from(b64, 'base64'));
+  const d = phpJson(['payload', file]);
+  assert(d.ok && d.install_mesh_agent === true && d.mesh && d.mesh.meshid === E.url, 'payload meshid: ' + JSON.stringify(d.mesh) + ' (expected the URL form)');
+  assert(d.mesh.meshid.length === 64 && !/^[0-9a-f]{64}$/.test(d.mesh.meshid) && d.mesh.meshid.includes('@') && d.mesh.meshid.includes('$'), 'the payload meshid must be the 64-character URL form with @ and $ literal');
+  await saveGroup(GROUP);   // restore the hex group for the rest of the file
 });
 
 // ------------------------------------------------------------------------------------------------ the dialog once Mesh is set up
@@ -257,7 +340,7 @@ await T('Add device dialog, Mesh set up: the box is enabled, off, ticks with the
   await click('#rmm-inst-go');
   await p.waitSel('#rmm-inst-cmd-text');
   const cmd = await p.eval(`document.getElementById('rmm-inst-cmd-text').textContent`);
-  assert(/--install-mesh-agent/.test(cmd) && /--mesh-url/.test(cmd) && cmd.includes(GROUP) && cmd.includes(tls.sha384), 'command: ' + cmd.slice(0, 300));
+  assert(/--install-mesh-agent/.test(cmd) && /--mesh-url/.test(cmd) && cmd.includes(GROUP_URL) && !cmd.includes(GROUP) && cmd.includes(tls.sha384), 'command: ' + cmd.slice(0, 300));
   assert(/also installs the MeshCentral agent/.test(await p.eval(`document.getElementById('rmm-inst-msg').innerText`)), 'the message should say the command also installs the Mesh agent');
   await shot('dialog-mesh-linux-desktop-light');
   // the box is unticked again the next time the dialog opens
@@ -276,7 +359,7 @@ await T('Linux command without the tick has no Mesh flag', async () => {
   await click('#rmm-inst-go');
   await p.waitSel('#rmm-inst-cmd-text');
   const cmd = await p.eval(`document.getElementById('rmm-inst-cmd-text').textContent`);
-  assert(!/mesh/i.test(cmd) && !cmd.includes(GROUP), 'command should not mention Mesh: ' + cmd.slice(0, 200));
+  assert(!/mesh/i.test(cmd) && !cmd.includes(GROUP) && !cmd.includes(GROUP_URL), 'command should not mention Mesh: ' + cmd.slice(0, 200));
 });
 
 // ------------------------------------------------------------------------------------------------ devices that report a Mesh agent

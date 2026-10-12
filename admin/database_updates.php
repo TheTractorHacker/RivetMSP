@@ -7111,3 +7111,18 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.89'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.89') {
+        // DB 2.6.90: RivetCore 1.0.0-rc.15 Migration0024MeshGroupUrl (the Mesh device group id in MeshCentral's own URL form): ONE added column,
+        // endpoint_agent_mesh_settings.group_id_url varchar(64) NOT NULL DEFAULT '' (guarded by information_schema, idempotent; rows from rc.12 to rc.14 keep working and
+        // the URL form is derived from their hex). Core owns the DDL, so this step runs the Core runner (it skips applied ids). Skipped (version NOT advanced, so it
+        // retries) until a package that ships the migration is installed. Run it before, or right after, the new code is live.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Rmm\Migration\Migration0024MeshGroupUrl::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.90'");
+        }
+    }

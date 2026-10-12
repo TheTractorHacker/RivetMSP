@@ -52,7 +52,9 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=rivetit-proof" -add
   -keyout "$WORK/tls/key.pem" -out "$WORK/tls/ca.pem" >/dev/null 2>&1
 # the MOCK Mesh server (tests/real_agent_proof/mock_mesh.py): its own self-signed certificate, whose SHA-384 is the pin the install command carries
 MESHPORT="${MESH_PORT:-8654}"
-MESHGROUP=4a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9
+# RivetCore 1.0.0-rc.15: the device group id in MeshCentral's own URL form (64 characters of base64, '@' for '+', '$' for '/'), a fresh random one per run that has both
+MESHGROUP=""
+until printf '%s' "$MESHGROUP" | grep -q '@' && printf '%s' "$MESHGROUP" | grep -qF '$'; do MESHGROUP="$(head -c 48 /dev/urandom | base64 -w0 | tr '+/' '@$')"; done
 MESHNODE_RAW='AbCdEfGhIjKlMnOpQrStUvWxYz0123456789@$AbCdEfGhIjKlMnOpQrStUvWxYz01'
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=mock-meshcentral" -addext "subjectAltName=IP:$GATEWAY,IP:127.0.0.1" -keyout "$WORK/tls/mesh-key.pem" -out "$WORK/tls/mesh-cert.pem" >/dev/null 2>&1
 cat "$WORK/tls/mesh-key.pem" "$WORK/tls/mesh-cert.pem" >"$WORK/tls/mesh.pem"; chmod 600 "$WORK/tls/mesh.pem"
@@ -201,7 +203,7 @@ sleep 2
 ST="$(api GET "$DEV/logs/stats")"
 chk "storage figures are reported" 'printf "%s" "$ST" | grep -q device_max_rows'
 echo "== optional MeshCentral agent (rc.12): Core's install command, a MOCK Mesh server, a second machine"
-chk "Core's Linux install command carries the Mesh flags, the group id and the pin" 'printf "%s" "$MESHCMD" | grep -q -- "--install-mesh-agent" && printf "%s" "$MESHCMD" | grep -q -- "--mesh-url" && printf "%s" "$MESHCMD" | grep -q "$MESHGROUP" && printf "%s" "$MESHCMD" | grep -q "$MESHPIN"'
+chk "Core's Linux install command carries the Mesh flags, the group id and the pin" 'printf "%s" "$MESHCMD" | grep -q -- "--install-mesh-agent" && printf "%s" "$MESHCMD" | grep -q -- "--mesh-url" && printf "%s" "$MESHCMD" | grep -qF "$MESHGROUP" && printf "%s" "$MESHCMD" | grep -q "$MESHPIN"'
 chk "the mock Mesh server is up and has served nothing yet" '[ ! -s "$WORK/mesh-events.log" ] && kill -0 "$MESHPID"'
 M2="$NAME-mesh"
 docker run -d --name "$M2" --hostname proof-mesh-host --privileged --cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup:rw --tmpfs /tmp --tmpfs /run --tmpfs /run/lock "$IMG" >/dev/null
@@ -215,28 +217,28 @@ printf '%s\n' "$MESHCMD" | docker exec -i "$M2" sh -c 'cat >/w/mesh-install.sh'
 q2() { docker exec "$M2" "$@"; }
 BADPIN="$(printf 0%.0s $(seq 1 96))"
 echo "-- a pin that does not match: the RivetMSP agent installs, the Mesh agent does not, and the failure is reported"
-q2 bash -c "cd /w && ./install-linux.sh --server https://$GATEWAY:$TLSPORT --token-file /w/enroll.token --ca /w/ca.pem --install-mesh-agent --mesh-url $PROOF_MESH_URL --mesh-group-id $MESHGROUP --mesh-cert-pin $BADPIN" >"$WORK/mesh-install-bad.out" 2>&1
+q2 bash -c "cd /w && ./install-linux.sh --server https://$GATEWAY:$TLSPORT --token-file /w/enroll.token --ca /w/ca.pem --install-mesh-agent --mesh-url $PROOF_MESH_URL --mesh-group-id '$MESHGROUP' --mesh-cert-pin $BADPIN" >"$WORK/mesh-install-bad.out" 2>&1
 RCB=$?
 chk "the install exits 0 although the Mesh part failed (a Mesh failure never fails the RivetMSP install)" '[ $RCB = 0 ]'
 chk "no Mesh agent exists on the machine and the mock server was never reached (the TLS handshake was refused)" '! q2 test -e /usr/local/mesh_services/meshagent/meshagent && [ ! -s "$WORK/mesh-events.log" ]'
-chk "the failure is on record on the machine and never holds the group id" 'q2 grep -q "\"installed\": false" /var/lib/rivetit-agent/mesh_agent.json && ! q2 grep -rqa "$MESHGROUP" /var/lib/rivetit-agent'
+chk "the failure is on record on the machine and never holds the group id" 'q2 grep -q "\"installed\": false" /var/lib/rivetit-agent/mesh_agent.json && ! q2 grep -rqaF "$MESHGROUP" /var/lib/rivetit-agent'
 wait_for 60 "[ \"\$(api GET '' | jget total)\" = 2 ]"
 DEV2="$(api GET '' | php -r '$d=json_decode(stream_get_contents(STDIN), true); foreach ($d["data"] as $x) { if ((int) $x["device_id"] !== (int) $argv[1]) { echo $x["device_id"]; } }' "$DEV")"
 chk "the second machine enrolled against RivetMSP and is a device ($DEV2)" '[ -n "$DEV2" ]'
 chk "its first check-in announced the capability mesh:nodeid" 'wait_for 60 "dbq \"SELECT capabilities_json FROM rmm_device_state WHERE device_id = $DEV2\" | grep -q mesh:nodeid"'
-chk "the technician API reports the failed install with its reason, and names no group id" 'wait_for 60 "A GET \"$DEV2\"; [ \"\$(printf %s \"\$R\" | jget mesh_agent.installed)\" = false ]" && printf "%s" "$R" | jget mesh_agent.error | grep -qi pinned && ! printf "%s" "$R" | grep -q "$MESHGROUP"'
+chk "the technician API reports the failed install with its reason, and names no group id" 'wait_for 60 "A GET \"$DEV2\"; [ \"\$(printf %s \"\$R\" | jget mesh_agent.installed)\" = false ]" && printf "%s" "$R" | jget mesh_agent.error | grep -qi pinned && ! printf "%s" "$R" | grep -qF "$MESHGROUP"'
 chk "nothing is mapped for it" '[ "$(dbq "SELECT COUNT(*) FROM endpoint_agent_mesh_nodes WHERE device_id = $DEV2")" = 0 ]'
 chk "audit: Mesh Agent Install Failed" '[ "$(dbq "SELECT COUNT(*) FROM logs WHERE log_action = \"Mesh Agent Install Failed\"")" -ge 1 ]'
 echo "-- the install command Core made (good pin): the Mesh agent is pulled from the mock server, installed, and its node is mapped automatically"
 q2 bash -c "cd /w && bash ./mesh-install.sh" >"$WORK/mesh-install-good.out" 2>&1
 RCG=$?
 chk "the install command exits 0" '[ $RCG = 0 ]'
-chk "downloaded from <mesh>/meshagents?id=6&meshid=<group>&installflags=0 (linux/amd64 = 6)" 'grep -q "MESH-DOWNLOAD id=6 meshid=$MESHGROUP installflags=0" "$WORK/mesh-events.log"'
+chk "downloaded from <mesh>/meshagents?id=6&meshid=<group>&installflags=0 (linux/amd64 = 6)" 'grep -qF "MESH-DOWNLOAD id=6 meshid=$MESHGROUP installflags=0" "$WORK/mesh-events.log"'
 chk "the downloaded installer ran with -install and put the (fake) Mesh agent in place" 'q2 grep -q "installed by: .* -install" /var/tmp/mesh-installed.marker && q2 test -x /usr/local/mesh_services/meshagent/meshagent'
 chk "the install output says so, and the machine keeps one RivetMSP device (no second enrollment)" 'grep -q "MeshCentral agent: installed" "$WORK/mesh-install-good.out" && [ "$(api GET "" | jget total)" = 2 ]'
 chk "the check-in reports it and the server maps the node (installed, node//<id>, mapped)" 'wait_for 90 "A GET \"$DEV2\"; [ \"\$(printf %s \"\$R\" | jget mesh_agent.installed)\" = true ] && [ \"\$(printf %s \"\$R\" | jget mesh_agent.map_state)\" = mapped ]" && [ "$(printf %s "$R" | jget mesh_agent.node_id)" = "node//$MESHNODE_RAW" ]'
 chk "the mapping row says the agent set it, and the earlier error is gone" '[ "$(dbq "SELECT source FROM endpoint_agent_mesh_nodes WHERE device_id = $DEV2")" = agent ] && [ "$(printf %s "$R" | jget mesh_agent.error)" = null ]'
-chk "the device detail never holds the group id" '! printf "%s" "$R" | grep -q "$MESHGROUP"'
+chk "the device detail never holds the group id" '! printf "%s" "$R" | grep -qF "$MESHGROUP"'
 chk "audit: Mesh Agent Installed and Mesh Node Mapped" '[ "$(dbq "SELECT COUNT(*) FROM logs WHERE log_action = \"Mesh Agent Installed\"")" -ge 1 ] && [ "$(dbq "SELECT COUNT(*) FROM logs WHERE log_action = \"Mesh Node Mapped\"")" -ge 1 ]'
 chk "the option was remembered for the enrollment token (installer options row)" '[ "$(dbq "SELECT COUNT(*) FROM endpoint_agent_installer_options WHERE install_mesh_agent = 1")" -ge 1 ]'
 chk "uninstalling the RivetMSP agent leaves the Mesh agent alone" 'q2 bash /w/install-linux.sh --uninstall --purge >"$WORK/mesh-uninstall.out" 2>&1; q2 test -x /usr/local/mesh_services/meshagent/meshagent'

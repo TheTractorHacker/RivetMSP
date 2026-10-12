@@ -907,17 +907,17 @@
         },
         {
             "name": "rivet/rivet-core",
-            "version": "v1.0.0-rc.14",
-            "version_normalized": "1.0.0.0-RC14",
+            "version": "v1.0.0-rc.15",
+            "version_normalized": "1.0.0.0-RC15",
             "source": {
                 "type": "git",
                 "url": "https://github.com/TheTractorHacker/rivet-core",
-                "reference": "fae6d98e63669294ed1bbf6719d082b1bedeb600"
+                "reference": "b930c50063823d1ee324216b7612e518bbb87998"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/TheTractorHacker/rivet-core/zipball/fae6d98e63669294ed1bbf6719d082b1bedeb600",
-                "reference": "fae6d98e63669294ed1bbf6719d082b1bedeb600",
+                "url": "https://api.github.com/repos/TheTractorHacker/rivet-core/zipball/b930c50063823d1ee324216b7612e518bbb87998",
+                "reference": "b930c50063823d1ee324216b7612e518bbb87998",
                 "shasum": ""
             },
             "require": {
@@ -933,7 +933,7 @@
                 "phpstan/phpstan": "^2",
                 "phpunit/phpunit": "^11.5"
             },
-            "time": "2026-10-11T22:24:50+00:00",
+            "time": "2026-10-11T22:47:52+00:00",
             "type": "library",
             "installation-source": "dist",
             "autoload": {

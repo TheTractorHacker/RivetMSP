@@ -1,14 +1,15 @@
 <?php
 
 /*
- * Administration > Endpoint agent > MeshCentral: the install settings of the optional MeshCentral agent (RivetCore 1.0.0-rc.12, migration 0023).
+ * Administration > Endpoint agent > MeshCentral: the install settings of the optional MeshCentral agent (RivetCore 1.0.0-rc.12, migration 0023; the group id in MeshCentral's URL form and the pin guidance came with rc.15, migration 0024).
  * The device group the devices join, the optional pin of the Mesh server's certificate (with a button that READS the certificate and only PROPOSES a pin), the switch that lets an
  * automatically found node id replace one an administrator mapped by hand, and for experts the corrections to the agent-id and install-argument tables.
  *
  * Plain functions. The card's fields are rendered here (no query); the page (admin/settings_endpoint_agent.php) reads the data with rivetRmmMeshInstallView() and the handler
  * (admin/post/settings_endpoint_agent.php) turns the form into the array RmmAdmin::saveMesh() takes with rivetRmmMeshInstallRead(). Core validates, authorizes and audits;
  * nothing is saved by the pin probe. The device group id is a secret (anyone holding it who can reach the Mesh server can download an agent that joins the group), so its field is a
- * masked password input.
+ * masked password input. It accepts what Core accepts (the whole pasted download address, the bare 64-character meshid, mesh//..., hex) and is sent to Core UNCHANGED beyond
+ * trimming whitespace: this edition does not restrict it to hex.
  */
 
 require_once __DIR__ . '/rmm_bootstrap.php';
@@ -45,7 +46,7 @@ function rivetRmmMeshInstallRead(array $post): array
         return [[], [], []];
     }
     $str = static fn (string $k, int $max): string => is_string($post[$k] ?? null) ? mb_substr(trim($post[$k]), 0, $max) : '';
-    $old = ['group_id' => $str('mesh_group_id', 300), 'pin' => $str('mesh_server_cert_pin', 300), 'overwrite' => !empty($post['mesh_auto_map_overwrite']) ? '1' : '',
+    $old = ['group_id' => $str('mesh_group_id', 2001), 'pin' => $str('mesh_server_cert_pin', 300), 'overwrite' => !empty($post['mesh_auto_map_overwrite']) ? '1' : '',
         'agent_ids' => is_string($post['mesh_agent_ids'] ?? null) ? mb_substr((string) $post['mesh_agent_ids'], 0, 4000) : '',
         'install_args' => is_string($post['mesh_install_args'] ?? null) ? mb_substr((string) $post['mesh_install_args'], 0, 4000) : ''];
     $fields = ['mesh_group_id' => $old['group_id'], 'mesh_server_cert_pin' => $old['pin'], 'mesh_auto_map_overwrite' => $old['overwrite'] === '1'];
@@ -78,6 +79,16 @@ function rivetRmmMeshPinProposalHtml(?array $probe): string
             . nullable_htmlentities((string) ($probe['error'] ?? 'The certificate could not be read.')) . '</div></div>';
     }
     $pin = (string) ($probe['pin'] ?? '');
+    $note = (string) ($probe['note'] ?? '');
+    $trusted = !empty($probe['publicly_trusted']);
+    $meta = (!empty($probe['subject']) ? '<p class="mb-1 small">Subject: ' . nullable_htmlentities((string) $probe['subject']) . '</p>' : '')
+        . (!empty($probe['not_after']) ? '<p class="mb-1 small">Valid until: ' . nullable_htmlentities(str_replace('T', ' ', rtrim((string) $probe['not_after'], 'Z'))) . ' UTC</p>' : '');
+    if ($trusted) {
+        // A certificate from a public authority renews every 60 to 90 days (Let's Encrypt): a pin of it would break at each renewal. Show Core's note and offer NO way to save the pin.
+        return '<div class="alert alert-success py-2 mb-3" role="status" tabindex="-1" data-rmm-mesh-pin-result="trusted"><div>'
+            . '<p class="mb-1"><i class="fas fa-check-circle me-1" aria-hidden="true"></i><strong>' . nullable_htmlentities($note !== '' ? $note : 'This certificate is publicly trusted: no pin needed. Leave the pin empty so installs keep working when the certificate is renewed.') . '</strong></p>'
+            . '<p class="mb-1 small">Nothing has been saved. Leave the pin field empty.</p>' . $meta . '</div></div>';
+    }
     $short = '';
     $na = (string) ($probe['not_after'] ?? '');
     if ($na !== '' && ($t = strtotime($na)) !== false && $t - time() < 100 * 86400) {
@@ -88,10 +99,10 @@ function rivetRmmMeshPinProposalHtml(?array $probe): string
     return '<div class="alert alert-info py-2 mb-3" role="status" tabindex="-1" data-rmm-mesh-pin-result="ok"><div><p class="mb-1"><strong>The server presented this certificate.</strong> Nothing has been saved. '
         . 'Trust on first use: compare the hash with the one MeshCentral shows (My Server, certificate hashes) or with <code>openssl x509 -noout -fingerprint -sha384</code> run from a machine you trust. '
         . 'If it matches, use it, then press Save.</p>'
+        . ($note !== '' ? '<p class="mb-1" data-rmm-mesh-pin-note>' . nullable_htmlentities($note) . '</p>' : '')
         . '<p class="mb-1">SHA-384: <code class="user-select-all text-break" data-rmm-mesh-pin-value>' . nullable_htmlentities($pin) . '</code></p>'
         . (!empty($probe['sha256']) ? '<p class="mb-1 small">SHA-256: <code class="user-select-all text-break">' . nullable_htmlentities((string) $probe['sha256']) . '</code></p>' : '')
-        . (!empty($probe['subject']) ? '<p class="mb-1 small">Subject: ' . nullable_htmlentities((string) $probe['subject']) . '</p>' : '')
-        . (!empty($probe['not_after']) ? '<p class="mb-1 small">Valid until: ' . nullable_htmlentities(str_replace('T', ' ', rtrim((string) $probe['not_after'], 'Z'))) . ' UTC</p>' : '')
+        . $meta
         . $short
         . '<button type="button" class="btn btn-sm btn-outline-primary" data-rmm-mesh-use-pin="' . nullable_htmlentities($pin) . '"><i class="fas fa-arrow-down me-1" aria-hidden="true"></i>Put this hash in the pin field</button>'
         . '</div></div>';
@@ -110,7 +121,8 @@ function rivetRmmMeshInstallCard(?array $v, array $old, ?array $probe, string $c
     if ($v === null) {
         return ['fields' => '<div class="col-12"><div class="alert alert-secondary py-2 mb-0" data-rmm-mesh-install="unavailable">The MeshCentral agent install settings are not available yet. Run the database update (Administration, Updates), then reload this page.</div></div>', 'probe_form' => ''];
     }
-    $group = array_key_exists('group_id', $old) ? $old['group_id'] : (string) $v['mesh_group_id'];
+    // Read back the form MeshCentral printed (mesh_group_id_url; derived by Core from the hex for older rows); the canonical hex stays in mesh_group_id.
+    $group = array_key_exists('group_id', $old) ? $old['group_id'] : (string) (($v['mesh_group_id_url'] ?? '') !== '' ? $v['mesh_group_id_url'] : ($v['mesh_group_id'] ?? ''));
     $pin = array_key_exists('pin', $old) ? $old['pin'] : (string) $v['mesh_server_cert_pin'];
     $over = array_key_exists('overwrite', $old) ? $old['overwrite'] === '1' : !empty($v['mesh_auto_map_overwrite']);
     $ids = array_key_exists('agent_ids', $old) ? $old['agent_ids'] : ((array) $v['mesh_agent_ids'] === [] ? '' : (string) json_encode($v['mesh_agent_ids'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
@@ -126,13 +138,13 @@ function rivetRmmMeshInstallCard(?array $v, array $old, ?array $probe, string $c
         . 'A failure never fails the RivetMSP install. Afterwards the device\'s Mesh node is mapped to it automatically, so Remote access works without pasting a node id. <span data-rmm-mesh-ready>' . $state . '</span></p>'
         . '<input type="hidden" name="mesh_install_fields" value="1"></div>'
         . '<div class="col-lg-6"><label class="form-label" for="mc_group">Device group id <span class="badge bg-warning text-dark">secret</span></label>'
-        . '<input type="password" class="form-control font-monospace" id="mc_group" name="mesh_group_id" maxlength="300" autocomplete="off" spellcheck="false" value="' . $e($group) . '" aria-describedby="mc_group_h">'
+        . '<input type="password" class="form-control font-monospace" id="mc_group" name="mesh_group_id" maxlength="2000" autocomplete="off" spellcheck="false" value="' . $e($group) . '" aria-describedby="mc_group_h">'
         . '<div class="form-check mt-1"><input type="checkbox" class="form-check-input" id="mc_group_show" data-rmm-mesh-show="mc_group"><label class="form-check-label small" for="mc_group_show">Show the group id</label></div>'
-        . '<div class="form-text" id="mc_group_h">The long hex after <code>meshid=</code> in the address MeshCentral shows under the group\'s <em>Add Agent</em> (or its <code>mesh//...</code> form; it is converted). Anyone who has it and can reach your Mesh server can download an agent that joins the group: treat it like a password.</div></div>'
+        . '<div class="form-text" id="mc_group_h">Paste the download address from MeshCentral (device group, Add Agent, Windows 64-bit installer) or just its <code>meshid</code>. It is 64 characters, not hex. Treat it like an invitation key: anyone who has it and can reach your Mesh server can download an agent that joins the group.</div></div>'
         . '<div class="col-lg-6"><label class="form-label" for="mc_pin">Mesh server certificate pin</label>'
         . '<div class="input-group"><input type="text" class="form-control font-monospace" id="mc_pin" name="mesh_server_cert_pin" maxlength="300" autocomplete="off" spellcheck="false" value="' . $e($pin) . '" placeholder="empty = system roots" aria-describedby="mc_pin_h">'
         . '<button type="submit" form="mesh-pin-probe" class="btn btn-outline-secondary" formnovalidate' . $probeDisabled . '><i class="fas fa-search me-1" aria-hidden="true"></i>Read it from the server</button></div>'
-        . '<div class="form-text" id="mc_pin_h">SHA-384 (96 hex) or SHA-256 (64 hex) hash of the Mesh server\'s certificate. Leave it empty for a certificate from a public authority. For MeshCentral\'s own self-signed certificate use the button: it connects to the saved address, shows the hash and <strong>never saves it</strong>; compare it, then press Save here.'
+        . '<div class="form-text" id="mc_pin_h">Leave empty when the server certificate is issued by a public CA such as Let\'s Encrypt (the system roots verify it; such a certificate is renewed every 60 to 90 days and a pin of it would break). Use a pin only for a private CA or a self-signed certificate (SHA-384, 96 hex, or SHA-256, 64 hex). The button connects to the saved address, shows the certificate and <strong>never saves a pin</strong>; for a self-signed certificate compare the hash, then press Save here.'
         . ($urlSaved ? '' : ' Save the MeshCentral address first.') . '</div></div>'
         . '<div class="col-12"><div class="form-check form-switch"><input type="checkbox" class="form-check-input" id="mc_over" name="mesh_auto_map_overwrite" value="1"' . ($over ? ' checked' : '') . ' aria-describedby="mc_over_h"><label class="form-check-label" for="mc_over">Let the agent\'s node id replace a node an administrator mapped by hand</label></div>'
         . '<div class="form-text" id="mc_over_h">Off (recommended): a node set by hand is kept and the device shows a hint when the agent reports a different one. A node already mapped to another live device is never taken over, whatever this switch says.</div></div>'
