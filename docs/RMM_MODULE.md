@@ -242,6 +242,14 @@ Idempotent by pack, item and content hash: installing twice changes nothing; an 
 
 Tests: `tests/rmm_ui_p16_mesh_push.php` (the Remote tab controls, the handler, the bulk card and handler, roles, another client's device, CSRF, the approval threshold, module off), the MSI section of `tests/rmm_installer_ui.php` (the Format selector, upload and its refusals, the download: OLE header, decodable trailer, stored template untouched, a real msitools package; the Administration cards; the CLI), `tests/browser/rmm_p16_smoke.mjs`, and the push section of the real agent proof (`tests/real_agent_proof/run.sh`: a real Linux agent enrolled without Mesh is pushed `mesh_install` through the technician API against the mock Mesh server).
 
+## 6h. The Remote button opens the remote screen in a new tab (RivetCore 1.0.0-rc.17, migration 0026, DB 2.6.94)
+
+**The URL.** `<mesh>/<domain>/?login=<token>&gotonode=<node>&viewmode=<11|12|13>&hide=<mesh_hide>`. `hide` is MeshCentral's own bitmask (read from MeshCentral's page source: 1 masthead, 2 top bar, 4 footer, 8 page titles, 16 left bar and device list, 32 back button); the default **31** leaves only the device view, as Tactical RMM's "Take control" does. **Administration > Endpoint agent > MeshCentral > Hide MeshCentral interface elements** sets it (0 to 255; 0 omits the parameter, which is the URL of earlier versions); an optional second value applies to Terminal and Files (empty = same; 0 allowed). Core migration `0026_rmm_mesh_hide` (two columns on `endpoint_agent_mesh_settings`); until it runs the default 31 is used and the fields are not drawn.
+
+**The tab.** `js/rmm_launch.js` opens a blank tab synchronously in the click (a browser blocks a tab opened after an asynchronous request), the launch call runs, and the tab is sent to the URL when it answers; a failed launch closes the blank tab and shows the error; a refused tab shows an **Open remote session** link. Used by the asset panel, the Remote tab (Desktop, Terminal, Files), the legacy device page and the Tactical asset page. Every click opens a new tab.
+
+**Connect.** MeshCentral does not connect by itself from a URL (its page only selects the device and the view): the tab shows the Desktop with MeshCentral's own **Connect** button. **Not verified on a live MeshCentral:** `tests/browser/rmm_rc17_remote_smoke.mjs` runs against a mock Mesh server, and the `hide` bits are from MeshCentral's source, not from a live server of every version.
+
 ## 7. Not verified
 
 A real MeshCentral server (only Core's mock and our local TLS stand-in; this includes the optional Mesh agent install of 6e), the Windows agent and installer on a Windows host (including the MSI installer of 6g and the pushed Mesh install on Windows) and the Windows scripts of the starter pack (6f), and a production-sized fleet (see Core's `docs/rmm/CAPACITY.md`).

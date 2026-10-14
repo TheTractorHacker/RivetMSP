@@ -1782,6 +1782,8 @@ CREATE TABLE `endpoint_agent_mesh_settings` (
   `group_id_url` varchar(64) NOT NULL DEFAULT '',
   `server_cert_pin` varchar(96) NOT NULL DEFAULT '',
   `auto_map_overwrite` tinyint(1) NOT NULL DEFAULT 0,
+  `mesh_hide` tinyint(3) unsigned NOT NULL DEFAULT 31,
+  `mesh_hide_tools` tinyint(3) unsigned DEFAULT NULL,
   `agent_ids_json` text DEFAULT NULL,
   `install_args_json` text DEFAULT NULL,
   `updated_by` int(11) NOT NULL DEFAULT 0,
@@ -5525,6 +5527,7 @@ INSERT INTO `rivet_core_migrations` VALUES ('0022_rmm_remote_and_logs','2026-10-
 INSERT INTO `rivet_core_migrations` VALUES ('0023_rmm_mesh_agent','2026-10-11 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0024_rmm_mesh_group_url','2026-10-11 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0025_rmm_msi_templates','2026-10-12 00:00:00');
+INSERT INTO `rivet_core_migrations` VALUES ('0026_rmm_mesh_hide','2026-10-14 00:00:00');
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

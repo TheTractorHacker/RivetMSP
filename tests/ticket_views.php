@@ -520,7 +520,7 @@ require "$root/includes/database_version.php";
 $upd = $read('admin/database_updates.php');
 $step = substr($upd, strpos($upd, "if (\$rivetit_db_version() == '2.6.92') {"));
 $ok(str_contains($step, 'CREATE TABLE IF NOT EXISTS `ticket_view_defaults`') && !str_contains($step, 'ALTER TABLE') && !str_contains($step, 'DROP ') && str_contains($step, "config_current_database_version` = '2.6.93'"), 'the 2.6.93 step only creates ticket_view_defaults (IF NOT EXISTS)');
-$ok(str_contains($read('db.sql'), 'CREATE TABLE `ticket_view_defaults`') && !str_contains($read('db.sql'), 'uca1400') && LATEST_DATABASE_VERSION === '2.6.93', 'db.sql has the table, no uca1400, and LATEST_DATABASE_VERSION is 2.6.93');
+$ok(str_contains($read('db.sql'), 'CREATE TABLE `ticket_view_defaults`') && !str_contains($read('db.sql'), 'uca1400') && version_compare(LATEST_DATABASE_VERSION, '2.6.93', '>='), 'db.sql has the table, no uca1400, and LATEST_DATABASE_VERSION is at least 2.6.93');
 $lib = $read('agent/includes/ticket_view_filters.php');
 $ok(!preg_match('/<script(?![^>]*src)/', $lib) && !preg_match('/ on(click|change|submit)=/', $lib), 'the filter markup has no inline script or inline event handler (CSP-safe)');
 $grp = (function () { ob_start(); ticketFilterGroup('x', 'n[]', 'Pri<b>', [['value' => 'a"b', 'label' => '<img src=x onerror=1>']], []); return ob_get_clean(); })();

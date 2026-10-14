@@ -30,7 +30,14 @@ function rivetRmmMeshInstallView(RmmModule $rmm, RmmPrincipal $who): ?array
         return null;
     }
 
-    return $r->ok ? $r->data : null;
+    if (!$r->ok) {
+        return null;
+    }
+    // RivetCore 1.0.0-rc.17: the hide values can only be saved once migration 0026 is applied; Core's view reports the defaults either way, so ask the settings.
+    $d = $r->data;
+    $d['hide_available'] = $rmm->meshAgentSettings()->hideAvailable();
+
+    return $d;
 }
 
 /**
@@ -42,8 +49,16 @@ function rivetRmmMeshInstallView(RmmModule $rmm, RmmPrincipal $who): ?array
  */
 function rivetRmmMeshInstallRead(array $post): array
 {
+    // RivetCore 1.0.0-rc.17: how much of MeshCentral's interface the new tab shows; sent exactly as typed, Core refuses anything but a whole number 0 to 255 (the second may be empty = same).
+    // Independent of the install fields: the card prints them whenever the database has migration 0026.
+    $hideFields = [];
+    $hideOld = [];
+    if (($post['mesh_hide_present'] ?? '') === '1') {
+        $hideOld = ['hide' => is_string($post['mesh_hide'] ?? null) ? trim($post['mesh_hide']) : '', 'hide_tools' => is_string($post['mesh_hide_tools'] ?? null) ? trim($post['mesh_hide_tools']) : ''];
+        $hideFields = ['mesh_hide' => $hideOld['hide'], 'mesh_hide_tools' => $hideOld['hide_tools']];
+    }
     if (($post['mesh_install_fields'] ?? '') !== '1') {
-        return [[], [], []];
+        return [$hideFields, [], $hideOld];
     }
     $str = static fn (string $k, int $max): string => is_string($post[$k] ?? null) ? mb_substr(trim($post[$k]), 0, $max) : '';
     $old = ['group_id' => $str('mesh_group_id', 2001), 'pin' => $str('mesh_server_cert_pin', 300), 'overwrite' => !empty($post['mesh_auto_map_overwrite']) ? '1' : '',
@@ -65,7 +80,7 @@ function rivetRmmMeshInstallRead(array $post): array
         $fields[$field] = $d;
     }
 
-    return [$fields, $errors, $old];
+    return [$fields + $hideFields, $errors, $old + $hideOld];
 }
 
 /** The proposal the pin probe produced, as the card shows it (text escaped here). @param array<string,mixed>|null $probe */
@@ -133,7 +148,19 @@ function rivetRmmMeshInstallCard(?array $v, array $old, ?array $probe, string $c
     $probeDisabled = $urlSaved ? '' : ' disabled aria-disabled="true"';
     $e = static fn ($x): string => nullable_htmlentities((string) $x);
 
-    $f = '<div class="col-12 border-top pt-3"><h5 class="h6 mb-1"><i class="fas fa-download me-1" aria-hidden="true"></i>Install the MeshCentral agent with the RivetMSP agent <span class="text-muted fw-normal">(optional)</span></h5>'
+    $hide = '';
+    if (!empty($v['hide_available'])) {
+        $hv = array_key_exists('hide', $old) ? (string) $old['hide'] : (string) ($v['mesh_hide'] ?? 31);
+        $ht = array_key_exists('hide_tools', $old) ? (string) $old['hide_tools'] : (($v['mesh_hide_tools'] ?? null) === null ? '' : (string) $v['mesh_hide_tools']);
+        $hide = '<input type="hidden" name="mesh_hide_present" value="1">'
+            . '<div class="col-lg-6"><label class="form-label" for="mc_hide">Hide MeshCentral interface elements <span class="text-muted">(0 to 255)</span></label>'
+            . '<input type="number" class="form-control" id="mc_hide" name="mesh_hide" min="0" max="255" step="1" value="' . $e($hv) . '" aria-describedby="mc_hide_help">'
+            . '<div class="form-text" id="mc_hide_help">31 = show only the remote screen (no MeshCentral header, tabs, footer or device list), 0 = full MeshCentral. It is MeshCentral\'s <code>hide</code> bitmask: 1 header, 2 top bar, 4 footer, 8 titles, 16 left bar and device list, 32 back button. MeshCentral does not connect by itself: click <em>Connect</em> in the new tab. Not yet checked against a live MeshCentral version: if a bit hides something else on yours, change the number.</div></div>'
+            . '<div class="col-lg-6"><label class="form-label" for="mc_hide_tools">Hide for Terminal and Files <span class="text-muted">(optional)</span></label>'
+            . '<input type="number" class="form-control" id="mc_hide_tools" name="mesh_hide_tools" min="0" max="255" step="1" value="' . $e($ht) . '" placeholder="same as the desktop" aria-describedby="mc_hide_tools_help">'
+            . '<div class="form-text" id="mc_hide_tools_help">Empty = the same value as above. 0 opens the Terminal and Files views inside the full MeshCentral interface.</div></div>';
+    }
+    $f = $hide . '<div class="col-12 border-top pt-3"><h5 class="h6 mb-1"><i class="fas fa-download me-1" aria-hidden="true"></i>Install the MeshCentral agent with the RivetMSP agent <span class="text-muted fw-normal">(optional)</span></h5>'
         . '<p class="small text-muted mb-2">When these are set, the Add device dialog and the deployment forms offer a tick-box <em>Also install the MeshCentral agent</em> (off by default). The installer never contains a Mesh binary: after the RivetMSP agent is in place it downloads the agent for <strong>your</strong> Mesh server and device group over https. '
         . 'A failure never fails the RivetMSP install. Afterwards the device\'s Mesh node is mapped to it automatically, so Remote access works without pasting a node id. <span data-rmm-mesh-ready>' . $state . '</span></p>'
         . '<input type="hidden" name="mesh_install_fields" value="1"></div>'
