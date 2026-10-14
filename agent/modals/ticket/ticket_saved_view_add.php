@@ -4,6 +4,9 @@ require_once '../../../includes/modal_header.php';
 require_once __DIR__ . '/../../includes/ticket_view_filters.php';
 require_once __DIR__ . '/../../../includes/icon_picker.php';
 
+// Saved views are an agent tool: creating one needs write access to the support module (client portal logins never reach agent/).
+enforceUserPermission('module_support', 2);
+
 // The current ticket dashboard filters, passed in via the querystring
 $saved_query = $_SERVER['QUERY_STRING'] ?? '';
 // Strip params that shouldn't be part of a saved view
@@ -41,10 +44,20 @@ ob_start();
         <h6 class="mb-3"><i class="fa fa-fw fa-filter me-2"></i>Filters this view uses</h6>
         <?php ticketViewFilterFields($mysqli, ticketViewParseQuery($saved_query), 'tvfa'); ?>
 
+        <hr>
+        <input type="hidden" name="default_present" value="1">
+        <div class="form-check mb-2">
+            <input type="checkbox" class="form-check-input" name="make_default" value="1" id="savedViewDefault">
+            <label class="form-check-label" for="savedViewDefault">Make this my default view <small class="text-muted">(Tickets opens with it)</small></label>
+        </div>
         <?php if (lookupUserPermission("module_support") === 3) { ?>
-        <div class="form-group form-check">
+        <div class="form-check mb-2">
             <input type="checkbox" class="form-check-input" name="shared" value="1" id="savedViewShared">
             <label class="form-check-label" for="savedViewShared">Share with all agents</label>
+        </div>
+        <div class="form-check mb-2">
+            <input type="checkbox" class="form-check-input" name="make_default_shared" value="1" id="savedViewDefaultShared">
+            <label class="form-check-label" for="savedViewDefaultShared">Make this the default for agents without a personal default <small class="text-muted">(also shares the view)</small></label>
         </div>
         <?php } ?>
 

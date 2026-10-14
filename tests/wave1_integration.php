@@ -21,9 +21,9 @@ $read = fn(string $f): string => (string) file_get_contents("$root/$f");
 $upd = $read('admin/database_updates.php');
 preg_match_all('/if \(\$rivetit_db_version\(\) == \'(2\.6\.\d+)\'\) \{/', $upd, $gates);
 $gates = $gates[1];
-$ok(array_slice($gates, -16) === ['2.6.76', '2.6.77', '2.6.78', '2.6.79', '2.6.80', '2.6.81', '2.6.82', '2.6.83', '2.6.84', '2.6.85', '2.6.86', '2.6.87', '2.6.88', '2.6.89', '2.6.90', '2.6.91'], 'the steps run from 2.6.76 to 2.6.91 in order (to 2.6.92)');
+$ok(array_slice($gates, -17) === ['2.6.76', '2.6.77', '2.6.78', '2.6.79', '2.6.80', '2.6.81', '2.6.82', '2.6.83', '2.6.84', '2.6.85', '2.6.86', '2.6.87', '2.6.88', '2.6.89', '2.6.90', '2.6.91', '2.6.92'], 'the steps run from 2.6.76 to 2.6.92 in order (to 2.6.93)');
 $ok(count($gates) === count(array_unique($gates)), 'no step is gated twice');
-foreach (['2.6.77' => '2.6.78', '2.6.78' => '2.6.79', '2.6.79' => '2.6.80', '2.6.80' => '2.6.81', '2.6.81' => '2.6.82', '2.6.82' => '2.6.83', '2.6.83' => '2.6.84', '2.6.84' => '2.6.85', '2.6.85' => '2.6.86', '2.6.86' => '2.6.87', '2.6.87' => '2.6.88', '2.6.88' => '2.6.89', '2.6.89' => '2.6.90', '2.6.90' => '2.6.91', '2.6.91' => '2.6.92'] as $gate => $next) {
+foreach (['2.6.77' => '2.6.78', '2.6.78' => '2.6.79', '2.6.79' => '2.6.80', '2.6.80' => '2.6.81', '2.6.81' => '2.6.82', '2.6.82' => '2.6.83', '2.6.83' => '2.6.84', '2.6.84' => '2.6.85', '2.6.85' => '2.6.86', '2.6.86' => '2.6.87', '2.6.87' => '2.6.88', '2.6.88' => '2.6.89', '2.6.89' => '2.6.90', '2.6.90' => '2.6.91', '2.6.91' => '2.6.92', '2.6.92' => '2.6.93'] as $gate => $next) {
     $a = strpos($upd, "if (\$rivetit_db_version() == '$gate') {");
     $b = strpos($upd, "if (\$rivetit_db_version() == '$next') {");
     $end = $b === false ? strlen($upd) : $b;
@@ -45,7 +45,9 @@ $ok(str_contains($step89, 'Migration0023MeshAgent::class') && str_contains($step
 $ok(!str_contains($step89, 'ALTER TABLE') && str_contains($read('db.sql'), "('0023_rmm_mesh_agent'"), 'the 2.6.89 step alters no table of ours (Core owns the DDL) and db.sql records 0023');
 $step90 = substr($upd, strpos($upd, "if (\$rivetit_db_version() == '2.6.89') {"), strpos($upd, "if (\$rivetit_db_version() == '2.6.90') {") - strpos($upd, "if (\$rivetit_db_version() == '2.6.89') {"));
 $step91 = substr($upd, strpos($upd, "if (\$rivetit_db_version() == '2.6.90') {"), strpos($upd, "if (\$rivetit_db_version() == '2.6.91') {") - strpos($upd, "if (\$rivetit_db_version() == '2.6.90') {"));
-$step92 = substr($upd, strpos($upd, "if (\$rivetit_db_version() == '2.6.91') {"));
+$step92 = substr($upd, strpos($upd, "if (\$rivetit_db_version() == '2.6.91') {"), strpos($upd, "if (\$rivetit_db_version() == '2.6.92') {") - strpos($upd, "if (\$rivetit_db_version() == '2.6.91') {"));
+$step93 = substr($upd, strpos($upd, "if (\$rivetit_db_version() == '2.6.92') {"));
+$ok(str_contains($step93, 'CREATE TABLE IF NOT EXISTS `ticket_view_defaults`') && !str_contains($step93, 'ALTER TABLE') && !str_contains($step93, 'DROP ') && str_contains($step93, "config_current_database_version` = '2.6.93'") && str_contains($read('db.sql'), 'CREATE TABLE `ticket_view_defaults`') && !str_contains($read('db.sql'), 'uca1400'), 'the 2.6.93 step only creates ticket_view_defaults (IF NOT EXISTS), db.sql has it and no uca1400');
 $ok(str_contains($step90, 'Migration0024MeshGroupUrl::class') && str_contains($step90, 'CoreMigrations::all()') && str_contains($step90, 'MysqliDatabaseAdapter($mysqli)') && strpos($step90, 'class_exists(') < strpos($step90, "= '2.6.90'"), 'the 2.6.90 step runs the Core migration runner (0024, the Mesh group id URL form) and only advances the version when the package that ships it is installed');
 $ok(!str_contains($step90, 'ALTER TABLE') && str_contains($read('db.sql'), "('0024_rmm_mesh_group_url'") && preg_match('/CREATE TABLE `endpoint_agent_mesh_settings` \((.*?)\n\) ENGINE/s', $read('db.sql'), $m90) === 1 && str_contains($m90[1], "`group_id_url` varchar(64)"), 'the 2.6.90 step alters no table of ours (Core owns the DDL), db.sql records 0024 and has endpoint_agent_mesh_settings.group_id_url');
 $ok(str_contains($step91, 'Migration0025MsiTemplates::class') && str_contains($step91, 'CoreMigrations::all()') && str_contains($step91, 'MysqliDatabaseAdapter($mysqli)') && strpos($step91, 'class_exists(') < strpos($step91, "= '2.6.91'"), 'the 2.6.91 step runs the Core migration runner (0025, the MSI template store) and only advances the version when the package that ships it is installed');

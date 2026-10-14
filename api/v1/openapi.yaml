@@ -220,9 +220,13 @@ paths:
         - {$ref: '#/components/parameters/SearchParam'}
         - {$ref: '#/components/parameters/PageParam'}
         - {$ref: '#/components/parameters/LimitParam'}
-        - {name: priority, in: query, schema: {type: string, enum: [low, medium, high, critical]}}
-        - {name: onsite, in: query, schema: {type: integer, enum: [0, 1]}}
-        - {name: category_id, in: query, schema: {type: integer}}
+        - {name: priority, in: query, description: 'One or several (comma list, e.g. high,medium). OR inside a filter, AND between filters.', schema: {type: string, example: 'high,medium'}}
+        - {name: onsite, in: query, description: 'Comma list of 0 and/or 1 (both = no filter).', schema: {type: string, example: '1'}}
+        - {name: category_id, in: query, description: 'One or several category ids (comma list).', schema: {type: string, example: '3,4'}}
+        - {name: board_id, in: query, description: 'One or several board (top-level category) ids; includes their sub-categories.', schema: {type: string}}
+        - {name: assigned, in: query, description: 'Comma list of me, unassigned and agent ids (mine=1 is the same as me).', schema: {type: string, example: 'me,7,unassigned'}}
+        - {name: status_id, in: query, description: 'Specific status ids (comma list); overrides status.', schema: {type: string}}
+        - {name: tag_id, in: query, description: 'Tickets carrying any of these tag ids (comma list).', schema: {type: string}}
         - {name: client_id, in: query, schema: {type: integer}}
         - {name: contact_id, in: query, schema: {type: integer}}
         - {name: overdue, in: query, schema: {type: integer}}
@@ -2116,7 +2120,8 @@ components:
         id: {type: integer}
         name: {type: string}
         icon: {type: string}
-        params: {type: object, additionalProperties: {type: string}}
+        params: {type: object, additionalProperties: {type: string}, description: 'Ready-to-use GET /tickets params; a filter with several values is a comma list.'}
+        is_default: {type: boolean, description: 'True for the view the agent opens by default (their personal default, else the shared default).'}
     ClientListItem:
       type: object
       properties:

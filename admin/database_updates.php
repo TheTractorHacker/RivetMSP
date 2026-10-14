@@ -7162,3 +7162,21 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.92'");
     }
+
+    if ($rivetit_db_version() == '2.6.92') {
+        // DB 2.6.93: the default Service Desk ticket view. ONE new table, CREATE TABLE IF NOT EXISTS (re-running is harmless, nothing existing is altered):
+        // one personal default per agent (user_id = the agent) and one shared default (user_id = 0), each pointing at a saved ticket view. With no rows,
+        // opening Tickets behaves as before.
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `ticket_view_defaults` (
+          `id` int(11) NOT NULL AUTO_INCREMENT,
+          `user_id` int(11) NOT NULL DEFAULT 0,
+          `view_id` int(11) NOT NULL,
+          `scope` enum('personal','shared') NOT NULL DEFAULT 'personal',
+          `set_at` datetime NOT NULL DEFAULT current_timestamp(),
+          PRIMARY KEY (`id`),
+          UNIQUE KEY `uq_ticket_view_default` (`user_id`,`scope`),
+          KEY `view_id` (`view_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.93'");
+    }

@@ -80,29 +80,55 @@ if ($method === 'GET' && $id === null && $resource === 'tickets') {
     $limit   = min(50, max(1, intval($_GET['limit'] ?? 20)));
     $offset  = ($page - 1) * $limit;
     $search   = mysqli_real_escape_string($mysqli, $_GET['search'] ?? '');
-    $status   = $_GET['status'] ?? 'open'; // open|closed|all
-    $mine     = isset($_GET['mine']) ? intval($_GET['mine']) : 0;
-    $priority = mysqli_real_escape_string($mysqli, strtolower($_GET['priority'] ?? ''));
-    $onsite   = isset($_GET['onsite']) && $_GET['onsite'] !== '' ? intval($_GET['onsite']) : -1;
+    $status   = $_GET['status'] ?? 'open'; // open|closed|all (status_id picks specific statuses)
     $contact_id = isset($_GET['contact_id']) ? intval($_GET['contact_id']) : 0;
     $client_id  = isset($_GET['client_id']) ? intval($_GET['client_id']) : 0;
+
+    // Multi-value filters: priority, onsite, assigned, status_id, board_id, category_id, tag_id take a comma list (`priority=high,medium`)
+    // or repeated params (`priority[]=high&priority[]=medium`). OR inside a filter, AND between filters. Everything reaches SQL as
+    // an integer or a fixed enum member (the same validator the Service Desk page uses).
+    require_once __DIR__ . '/../../agent/includes/ticket_view_filters.php';
+    $api_list = static function (string $key): array {
+        $v = $_GET[$key] ?? null;
+        if (is_array($v)) {
+            return $v;
+        }
+
+        return (is_string($v) && $v !== '') ? explode(',', $v) : [];
+    };
+    $status_ids = $api_list('status_id');
+    $assigned_in = $api_list('assigned');
+    if (!empty($_GET['mine'])) {
+        $assigned_in[] = 'me';
+    }
+    $tf = ticketFiltersNormalize([
+        'status'    => $status_ids ?: (['closed' => 'Closed', 'all' => 'All'][strtolower((string) (is_array($status) ? 'open' : $status))] ?? 'Open'),
+        'assigned'  => $assigned_in,
+        'priority'  => array_map(static fn ($x) => ucfirst(strtolower(trim((string) $x))), array_filter($api_list('priority'), 'is_scalar')),
+        'onsite'    => $api_list('onsite'),
+        'board'     => $api_list('board_id'),
+        'category'  => $api_list('category_id'),
+        'tags'      => $api_list('tag_id'),
+        'overdue'   => $_GET['overdue'] ?? null,
+        'due_today' => $_GET['due_today'] ?? null,
+    ], $uid);
+    $tsql = ticketFiltersSql($tf, $uid);
 
     // Same client-scope restriction as the per-ticket path above: agents with
     // user_client_permissions rows may only list tickets for permitted clients.
     $where = [
         't.ticket_archived_at IS NULL',
         api_client_scope_sql('t.ticket_client_id'),
+        $tsql['status'],
     ];
-    if ($status === 'open')   $where[] = 't.ticket_resolved_at IS NULL';
-    if ($status === 'closed') $where[] = 't.ticket_resolved_at IS NOT NULL';
-    if ($mine)                $where[] = "t.ticket_assigned_to = $uid";
+    foreach (['assigned', 'priority', 'onsite', 'board', 'category', 'due', 'tags'] as $k) {
+        if ($tsql[$k] !== '') {
+            $where[] = preg_replace('/^AND /', '', $tsql[$k]);
+        }
+    }
     if ($search)              $where[] = "(t.ticket_subject LIKE '%$search%' OR t.ticket_number LIKE '%$search%')";
-    if ($priority)            $where[] = "LOWER(t.ticket_priority) = '$priority'";
-    if ($onsite !== -1)       $where[] = "t.ticket_onsite = $onsite";
     if ($contact_id)          $where[] = "t.ticket_contact_id = $contact_id";
     if ($client_id)           $where[] = "t.ticket_client_id = $client_id";
-    if (isset($_GET['overdue']))   $where[] = "t.ticket_due_at IS NOT NULL AND t.ticket_due_at < NOW() AND t.ticket_resolved_at IS NULL";
-    if (isset($_GET['due_today'])) $where[] = "t.ticket_due_at IS NOT NULL AND DATE(t.ticket_due_at) = CURDATE() AND t.ticket_resolved_at IS NULL";
 
     $where_sql = implode(' AND ', $where);
 

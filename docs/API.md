@@ -220,7 +220,7 @@ Core service-desk workflow: list/create/view tickets, reply (with optional file 
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/tickets` | List tickets — paged, filterable by `status`, `mine`, `priority`, `onsite`, `category_id`, `client_id`, `contact_id`, `overdue`, `due_today`, `search`. |
+| GET | `/tickets` | List tickets — paged, filterable by `status`, `status_id`, `mine`, `assigned`, `priority`, `onsite`, `category_id`, `board_id`, `tag_id`, `client_id`, `contact_id`, `overdue`, `due_today`, `search`. `priority`, `onsite`, `assigned`, `status_id`, `category_id`, `board_id` and `tag_id` take several values (comma list or repeated `name[]`): OR inside a filter, AND between filters; `overdue` and `due_today` together match either. |
 | POST | `/tickets` | Create a ticket (JSON or multipart with files). Requires `subject`. |
 | GET | `/tickets/{id}` | Ticket detail with replies and attachments. |
 | POST | `/tickets/{id}/reply` | Add a reply or internal note (JSON or multipart with files). Requires `reply`; `type` distinguishes reply/note/client-portal. |
@@ -241,7 +241,7 @@ Small reference lists used to populate ticket forms/filters in a client app.
 |---|---|---|
 | GET | `/statuses` | List active ticket statuses. **Bare array.** |
 | GET | `/ticket-categories` | List ticket categories. **Bare array.** |
-| GET | `/ticket-views` | List saved ticket views, translated into ready-to-use list query params. **Bare array.** |
+| GET | `/ticket-views` | List saved ticket views, translated into ready-to-use list query params (several values are comma lists); `is_default` marks the agent's default view. **Bare array.** |
 
 ### Clients
 

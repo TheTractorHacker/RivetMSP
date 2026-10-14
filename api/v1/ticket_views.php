@@ -1,9 +1,19 @@
 <?php
 // GET /api/v1/ticket-views   list saved ticket views, translated to /api/v1/tickets-compatible params
 defined('FROM_API') || die();
+require_once __DIR__ . '/includes/api_permissions.php';
+require_once __DIR__ . '/../../agent/includes/ticket_view_filters.php';
 if ($method !== 'GET') api_error(405, 'Method not allowed');
 
-$uid = $api_user_id;
+$uid = intval($api_user_id);
+
+// Saved views are an agent's own tool: they need read access to the support module, and a key locked to one client never sees them.
+api_require_module_permission($mysqli, $uid, 'module_support', 1);
+if (!empty($api_key_client_id)) api_error(403, 'Access denied');
+
+// The agent's default view (personal, else the shared one), if it is still usable.
+$default = ticketViewDefaultResolve($mysqli, $uid);
+$default_id = $default ? intval($default['view']['ticket_saved_view_id']) : 0;
 
 $views = [];
 $sql = mysqli_query($mysqli,
@@ -14,36 +24,49 @@ $sql = mysqli_query($mysqli,
      ORDER BY ticket_saved_view_user_id ASC, ticket_saved_view_order ASC"
 );
 while ($row = mysqli_fetch_assoc($sql)) {
-    parse_str($row['ticket_saved_view_query'], $q);
+    $q = ticketViewParseQuery($row['ticket_saved_view_query']);
+    $f = ticketFiltersNormalize($q);
 
-    // All values are strings so the Android client can deserialize this as Map<String, String>
+    // All values are strings so the Android client can deserialize this as Map<String, String>. A filter with several values is a
+    // comma list (priority=high,medium), which GET /tickets accepts.
     $params = [];
-    if (isset($q['status'])) {
-        $params['status'] = $q['status'] === 'Closed' ? 'closed' : 'open';
+    $params['status'] = ['closed' => 'closed', 'all' => 'all'][$f['status']['mode']] ?? 'open';
+    if ($f['status']['mode'] === 'specific') {
+        $params['status'] = 'all';
+        $params['status_id'] = implode(',', $f['status']['ids']);
     }
-    if (isset($q['assigned']) && $q['assigned'] === 'me') {
+    if ($f['assigned'] === ['me']) {
         $params['mine'] = '1';
+    } elseif ($f['assigned']) {
+        $params['assigned'] = implode(',', $f['assigned']);
     }
-    if (isset($q['onsite']) && $q['onsite'] !== '') {
-        $params['onsite'] = (string) intval($q['onsite']);
+    if ($f['onsite']) {
+        $params['onsite'] = implode(',', $f['onsite']);
     }
-    if (isset($q['priority']) && $q['priority'] !== '') {
-        $params['priority'] = strtolower($q['priority']);
+    if ($f['priority']) {
+        $params['priority'] = strtolower(implode(',', $f['priority']));
     }
-    if (isset($q['category']) && $q['category'] !== '') {
-        $params['category_id'] = (string) intval($q['category']);
+    if ($f['category']) {
+        $params['category_id'] = implode(',', $f['category']);
     }
-    if (isset($q['search']) && $q['search'] !== '') {
+    if ($f['board']) {
+        $params['board_id'] = implode(',', $f['board']);
+    }
+    if ($f['tags']) {
+        $params['tag_id'] = implode(',', $f['tags']);
+    }
+    if (isset($q['search']) && is_scalar($q['search']) && $q['search'] !== '') {
         $params['search'] = (string) $q['search'];
     }
-    if (isset($q['overdue'])) $params['overdue'] = '1';
-    if (isset($q['due_today'])) $params['due_today'] = '1';
+    if ($f['overdue']) $params['overdue'] = '1';
+    if ($f['due_today']) $params['due_today'] = '1';
 
     $views[] = [
         'id'     => intval($row['ticket_saved_view_id']),
         'name'   => $row['ticket_saved_view_name'],
         'icon'   => $row['ticket_saved_view_icon'],
         'params' => $params,
+        'is_default' => intval($row['ticket_saved_view_id']) === $default_id,
     ];
 }
 
