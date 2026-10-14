@@ -286,7 +286,7 @@ $autoLimits = (array) $cfg['limits'];
                     <div class="border rounded p-3 h-100">
                         <div class="form-check form-switch mb-2">
                             <input type="checkbox" class="form-check-input" id="ea_sw_scripts" name="feature_scripts" value="1" <?= !empty($cfg['features']['scripts']) ? 'checked' : '' ?> aria-describedby="ea_sw_scripts_h">
-                            <label class="form-check-label fw-semibold" for="ea_sw_scripts">Script library, schedules and approvals (<code>scripts</code>)</label>
+                            <label class="form-check-label fw-semibold" for="ea_sw_scripts">Scripts: library, schedules and approvals (<code>scripts</code>)</label>
                         </div>
                         <p class="small text-muted mb-0" id="ea_sw_scripts_h">Signed, versioned scripts with parameters, runs on a device, tag, group or client, schedules, a second person's approval and custom fields. <strong>Cost:</strong> the scheduler runs from the minute cron: about 4 database statements per device per scheduled run (a daily schedule on 5,000 devices adds about 5,000 job rows a day), and nothing runs between schedules. Scripts run as SYSTEM or root on the device.</p>
                     </div>

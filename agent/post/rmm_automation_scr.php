@@ -58,7 +58,7 @@ switch (rivetRmmAutoStr('action', 40)) {
         }
         if (!$r['ok']) {
             $_SESSION['rmm_scr_draft'] = ['script_id' => $sid, 'draft' => array_diff_key($body, ['params' => 1]) + ['current' => ['body' => $body['body'], 'params' => $body['params']]]];
-            rivetRmmAutoDone($r, '', $sid === 0 ? '/agent/rmm_script_library.php?new=1' : '/agent/rmm_script_library.php?script_id=' . $sid);
+            rivetRmmAutoDone($r, '', $sid === 0 ? '/agent/rmm_scripts.php?tab=library&new=1' : '/agent/rmm_scripts.php?tab=library&script_id=' . $sid);
         }
         $new = (array) ($r['data']['script'] ?? []);
         $nid = (int) ($new['script_id'] ?? $sid);
@@ -70,7 +70,7 @@ switch (rivetRmmAutoStr('action', 40)) {
         } else {
             $msg = 'Settings saved. The script text and parameters are unchanged, so no new version was made.';
         }
-        rivetRmmAutoDone($r, $msg, '/agent/rmm_script_library.php?script_id=' . $nid);
+        rivetRmmAutoDone($r, $msg, '/agent/rmm_scripts.php?tab=library&script_id=' . $nid);
 
     case 'retire_script':
     case 'restore_script':
@@ -110,10 +110,11 @@ switch (rivetRmmAutoStr('action', 40)) {
         }
         if ($r['status'] === 202) {
             $n = (int) ($r['data']['device_count'] ?? 1);
-            rivetRmmAutoDone($r, 'This run needs a second person to approve it before anything runs (' . $n . ' device' . ($n === 1 ? '' : 's') . '). It is waiting under Approvals.', $approvalsUrl((int) ($r['data']['approval_id'] ?? 0)));
+            rivetRmmAutoDone($r, 'This run needs a second person to approve it before anything runs (' . $n . ' device' . ($n === 1 ? '' : 's') . '). It is waiting under Approvals.', $approvalsUrl((int) ($r['data']['approval_id'] ?? 0)),
+                ['approval' => true, 'link' => $approvalsUrl((int) ($r['data']['approval_id'] ?? 0)), 'link_text' => 'Open Approvals']);
         }
         if ($device > 0) {
-            rivetRmmAutoDone($r, 'Job queued. The device runs it the next time it checks in.', $ret);
+            rivetRmmAutoDone($r, 'Job queued. The device runs it the next time it checks in.', $ret, ['job_id' => (string) ($r['data']['job_id'] ?? ''), 'link' => $ret, 'link_text' => 'View it in Jobs']);
         }
         $d = (array) $r['data'];
         $msg = (int) ($d['created'] ?? 0) . ' job' . ((int) ($d['created'] ?? 0) === 1 ? '' : 's') . ' queued for ' . (int) ($d['device_count'] ?? 0) . ' device' . ((int) ($d['device_count'] ?? 0) === 1 ? '' : 's') . '.';
@@ -122,6 +123,19 @@ switch (rivetRmmAutoStr('action', 40)) {
             $msg .= ' ' . $skipped . ' skipped' . (!empty($d['errors'][0]) ? ': ' . implode('; ', array_map('strval', array_slice((array) $d['errors'], 0, 3))) : '.');
         }
         rivetRmmAutoDone($r, $msg, $ret);
+
+    case 'device_script_form':
+        // The Run script dialog of the asset page asks for the form of the script the person picked (JSON). Read only: the device must be visible to the person and the script must
+        // run on its platform; Core's technician API decides who may read scripts.
+        $dev = $ctx['perm']['run_saved'] ? rivetRmmModule($mysqli)->technician()->visibleDevice($ctx['uid'], $id('device_id')) : null;
+        if ($dev === null) {
+            rivetRmmAutoDone(['ok' => false, 'status' => 404, 'error' => 'Device not found.'], '', $ret);
+        }
+        $frag = rivetRmmScrDialogFragment(['uid' => $ctx['uid'], 'name' => $ctx['name'], 'mysqli' => $mysqli, 'perm' => $ctx['perm'], 'csrf' => ''], $id('library_script_id'), rivetRmmUiPlatform($dev));
+        if ($frag === null) {
+            rivetRmmAutoDone(['ok' => false, 'status' => 404, 'error' => 'That script is not available for this device.'], '', $ret);
+        }
+        rivetRmmAutoDone(['ok' => true], 'ok', $ret, ['fragment' => $frag]);
 
     case 'save_schedule':
         $sid = $id('schedule_id');

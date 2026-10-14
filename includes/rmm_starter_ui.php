@@ -298,7 +298,7 @@ function rivetRmmStarterScriptRow(array $s): string
     return '<tr data-rmm-starter-row="' . rmmH($id) . '"><td class="ps-3"><input class="form-check-input" type="checkbox" name="ids[]" value="' . rmmH($id) . '" id="st-chk-' . rmmH($id) . '" aria-label="Select ' . rmmH($s['name']) . '" data-rmm-starter-pick></td>'
         . '<td><label for="st-chk-' . rmmH($id) . '" class="mb-0 fw-semibold">' . rmmH($s['name']) . '</label><div class="small text-muted">' . rmmH($s['description']) . '</div>' . $more . '</td>'
         . '<td>' . rmmH(rivetRmmStarterPlatformWords((string) $s['platform'])) . '</td><td>' . rivetRmmStarterRiskChip((string) $s['risk']) . ($s['requires_approval'] ? '<div class="mt-1">' . rivetRmmUiPill('warn', 'Needs approval') . '</div>' : '') . '</td>'
-        . '<td>' . rivetRmmStarterStatePill((string) $s['state']) . ($s['script_id'] ? '<div class="small mt-1"><a href="/agent/rmm_script_library.php?script_id=' . (int) $s['script_id'] . '">Open in the library</a></div>' : '') . '</td></tr>';
+        . '<td>' . rivetRmmStarterStatePill((string) $s['state']) . ($s['script_id'] ? '<div class="small mt-1"><a href="/agent/rmm_scripts.php?tab=library&amp;script_id=' . (int) $s['script_id'] . '">Open in the library</a></div>' : '') . '</td></tr>';
 }
 
 /** One input of a policy parameter form. @param array<string,mixed> $p */
@@ -351,7 +351,7 @@ function rivetRmmStarterPageHtml(array $vm, array $ctx): string
     $csrf = $ctx['csrf'];
     $self = RIVET_RMM_STARTER_PAGE;
     $f = $vm['filters'];
-    $o = rivetRmmAutoHeader('Starter pack', 'box-open', '<a class="btn btn-sm btn-outline-secondary" href="/agent/rmm_script_library.php"><i class="fas fa-file-code me-1" aria-hidden="true"></i>Script library</a>'
+    $o = rivetRmmAutoHeader('Starter pack', 'box-open', '<a class="btn btn-sm btn-outline-secondary" href="/agent/rmm_scripts.php?tab=library"><i class="fas fa-file-code me-1" aria-hidden="true"></i>Scripts</a>'
         . ' <a class="btn btn-sm btn-outline-secondary" href="/agent/rmm_policies.php"><i class="fas fa-sliders-h me-1" aria-hidden="true"></i>Policies</a>',
         'Ready-made scripts, check sets and policy drafts, so a new install is useful on day one. Nothing is installed or run by itself, and no policy reaches a device until you have read it, switched it on and assigned it.');
     if (!$vm['ok']) {

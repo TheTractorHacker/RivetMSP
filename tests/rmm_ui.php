@@ -88,9 +88,10 @@ $ok(substr_count($nvStrip, 'disabled') >= 3 && str_contains($nvStrip, 'Available
 $lin = $panel('LNX1', 'admin');
 $ok($lin['platform'] === 'linux' && $lin['saved_scripts'] === [], 'LNX1: a Linux device, no saved-script list');
 $linStrip = rivetRmmUiStrip($lin);
-$ok(str_contains($linStrip, 'fa-linux') && !str_contains($linStrip, 'fa-windows') && str_contains($linStrip, 'id="rmm-act-script" data-bs-toggle="modal" data-bs-target="#rmmRunModal" disabled') && str_contains($linStrip, 'Linux devices can collect inventory and reboot')
-    && preg_match('/id="rmm-act-reboot"[^>]*>/', $linStrip, $m) === 1 && !str_contains($m[0], 'disabled'), 'LNX1: Linux icon (no Windows), Run script disabled with the reason, Reboot enabled');
-$ok(!str_contains(rivetRmmUiDialogs($lin), 'rmmRunModal') && str_contains(rivetRmmUiDialogs($lin), 'rmmRebootModal'), 'LNX1: no script dialog is rendered, the reboot dialog is');
+// (26.10.22: a Linux device gets Run script too, for the library scripts of platform linux and the shell text job; with the scripts switch off and no legacy source there is nothing to run)
+$ok(str_contains($linStrip, 'fa-linux') && !str_contains($linStrip, 'fa-windows') && preg_match('/id="rmm-act-script"[^>]*>/', $linStrip, $m) === 1 && !str_contains($m[0], 'disabled')
+    && preg_match('/id="rmm-act-reboot"[^>]*>/', $linStrip, $m) === 1 && !str_contains($m[0], 'disabled'), 'LNX1: Linux icon (no Windows), Run script enabled (shell text for the admin), Reboot enabled');
+$ok(str_contains(rivetRmmUiDialogs($lin), 'rmmRunModal') && str_contains(rivetRmmUiDialogs($lin), 'rmmRebootModal') && !str_contains(rivetRmmUiDialogs($lin), 'PowerShell (type or paste)') && str_contains(rivetRmmUiDialogs($lin), 'Shell (type or paste)'), 'LNX1: the script dialog offers shell text, not PowerShell; the reboot dialog is there too');
 $pend = rivetRmmUiPanel($db, $A['WIN1'], 1);   // pending approval has no asset; simulate the asset link of a device that dropped back to approval
 $q("UPDATE endpoint_agent_devices SET link_state='pending_approval', match_reason='ambiguous' WHERE device_id=" . $D['OFFL']);
 $pend = $panel('OFFL');
@@ -157,7 +158,7 @@ $ok(!str_contains($jobsHtml, 'boom <script>') && !str_contains($jobsHtml, 'boom'
 // ============================================================ query budget
 $a = $questions(); $v = rivetRmmUiPanel($db, $A['WIN1'], 1, $D['WIN1']); $b = $questions();
 $added = $b - $a - $overhead;
-$ok($added <= 42, "view-model for an admin costs $added statements (informational ceiling 42: 40 of RivetCore rc.9 plus the one read of the library jobs of rc.10)");
+$ok($added <= 46, "view-model for an admin costs $added statements (informational ceiling 46: 40 of RivetCore rc.9, the one read of the library jobs of rc.10, and the Run script dialog's library list and synced-script link of 26.10.22)");
 $a = $questions(); $v = rivetRmmUiPanel($db, $A['WIN1'], 12, $D['WIN1']); $b = $questions();
 echo "INFO  panel statements: admin=$added, viewer=" . ($b - $a - $overhead) . "\n";
 

@@ -413,6 +413,9 @@ function rivetRmmUiPanel(\mysqli $mysqli, int $assetId, int $userId, ?int $devic
         }
     }
 
+    // ---- what the "Run script" dialog can offer (RivetMSP 26.10.22): the Core script library, the legacy saved scripts above, free-form text and scripts synced from a vendor RMM
+    $run = rivetRmmUiRunChoices($mysqli, $assetId, $userId, $platform, $perm, $dev, $state);
+
     // ---- gauges (a reading the agent could not take stays null)
     $gauges = [];
     $cpu = rivetRmmUiNum($met['cpu_pct'] ?? null);
@@ -589,12 +592,68 @@ function rivetRmmUiPanel(\mysqli $mysqli, int $assetId, int $userId, ?int $devic
         'mesh_install' => rivetRmmUiMeshInstall(is_array($view['mesh_install'] ?? null) ? $view['mesh_install'] : null),
         'remote_sessions' => $sessions,
         'saved_scripts' => $saved,
+        'run' => $run,
         'banners' => $banners,
         'match_reason_text' => (string) ($view['match_reason_text'] ?? ''),
         'update_state' => $view['update_state'] ?? null,
         'offered_release' => $view['offered_release'] ?? null,
         'coexistence_policy' => (string) ($cfg['coexistence_policy'] ?? ''),
     ];
+}
+
+/** The viewer's level (0 to 3) on the edition's legacy `module_rmm_scripts` grant (the Scripts synced from a vendor RMM). An administrator role is 3. */
+function rivetRmmUiLegacyScriptsLevel(\mysqli $mysqli, int $userId): int
+{
+    $r = mysqli_query($mysqli, 'SELECT r.role_is_admin AS adm, (SELECT MAX(p.user_role_permission_level) FROM user_role_permissions p JOIN modules m ON m.module_id = p.module_id '
+        . "WHERE m.module_name = 'module_rmm_scripts' AND p.user_role_id = r.role_id) AS lvl FROM users u JOIN user_roles r ON r.role_id = u.user_role_id WHERE u.user_id = " . $userId . ' LIMIT 1');
+    $row = $r ? mysqli_fetch_assoc($r) : null;
+
+    return $row === null || $row === false ? 0 : ((int) $row['adm'] === 1 ? 3 : (int) ($row['lvl'] ?? 0));
+}
+
+/**
+ * What the "Run script" dialog of the asset page can offer for this device and viewer, so the button, its reason and the dialog agree:
+ *   library    the RivetCore script library (null while the module or the `scripts` switch is off, the viewer may not run saved scripts or the device cannot take jobs)
+ *   free_form  the free-form text job Core supports for this platform and the viewer's grant: 'powershell' (Windows), 'shell' (Linux, bash) or null
+ *   synced     scripts synced from a vendor RMM that can run through that RMM for this asset (the asset has a link to it), or null
+ *
+ * @param array<string,bool> $perm
+ * @param array<string,mixed> $dev
+ * @return array{library:?array<string,mixed>,free_form:?string,synced:?array<string,mixed>}
+ */
+function rivetRmmUiRunChoices(\mysqli $mysqli, int $assetId, int $userId, string $platform, array $perm, array $dev, string $state): array
+{
+    $out = ['library' => null, 'free_form' => null, 'synced' => null];
+    $usable = ($dev['revoked_at'] ?? null) === null && ($dev['retired_at'] ?? null) === null && ($dev['link_state'] ?? '') === 'linked';
+    $type = ['windows' => 'powershell', 'linux' => 'shell'][$platform] ?? null;
+    if ($type !== null && $perm['run_script']) {
+        $def = \RivetCore\Rmm\Job\JobTypeRegistry::withDefaults()->get($type);
+        if ($def !== null && in_array($platform, $def->platforms, true)) {
+            $out['free_form'] = $type;
+        }
+    }
+    if ($perm['run_saved'] && $usable && $state !== 'never' && function_exists('rivetRmmScrDeviceChoices')) {
+        $out['library'] = rivetRmmScrDeviceChoices($mysqli, $userId, (string) ($GLOBALS['session_name'] ?? ''), $perm, $platform);
+    }
+    if ($usable && $state !== 'never') {
+        $l = mysqli_query($mysqli, 'SELECT arl.id, arl.integration_id, i.name, i.type FROM asset_rmm_links arl LEFT JOIN rmm_integrations i ON i.id = arl.integration_id WHERE arl.asset_id = ' . $assetId
+            . " AND arl.tactical_agent_id <> '' AND arl.tactical_agent_id NOT LIKE 'rivetit:%' ORDER BY arl.id DESC LIMIT 1");
+        $link = $l ? mysqli_fetch_assoc($l) : null;
+        if ($link && rivetRmmUiLegacyScriptsLevel($mysqli, $userId) >= 2) {   // (the grant is read only for an asset that has such a link)
+            $integration = (int) $link['integration_id'];
+            $items = [];
+            $q = mysqli_query($mysqli, 'SELECT id, name, category FROM rmm_scripts WHERE enabled = 1 AND tactical_script_id > 0 AND rmm_integration_id IN (0, ' . $integration . ') ORDER BY category, name LIMIT 300');
+            while ($q && ($r = mysqli_fetch_assoc($q))) {
+                $items[] = ['id' => (int) $r['id'], 'name' => (string) $r['name'], 'category' => (string) $r['category']];
+            }
+            if ($items !== []) {
+                $names = ['tactical_rmm' => 'Tactical RMM', 'level' => 'Level.io', 'action1' => 'Action1', 'sophos_central' => 'Sophos Central'];
+                $out['synced'] = ['link_id' => (int) $link['id'], 'provider' => (string) ($link['name'] ?? '') !== '' ? (string) $link['name'] : ($names[(string) ($link['type'] ?? '')] ?? 'RMM'), 'items' => $items];
+            }
+        }
+    }
+
+    return $out;
 }
 
 /** The agent device linked to an asset through asset_rmm_links (the link row carries "rivetit:<device id>"), or null. */

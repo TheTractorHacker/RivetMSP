@@ -75,9 +75,9 @@ $ok(in_array('/agent/rmm_starter_pack.php', $stNav(), true) && in_array('/agent/
 $ok(!in_array('/agent/rmm_starter_pack.php', $stNav($USER['tech']), true) && !in_array('/agent/rmm_starter_pack.php', $stNav($USER['viewer']), true) && !in_array('/agent/rmm_starter_pack.php', $stNav($USER['stock']), true) && !in_array('/agent/rmm_starter_pack.php', $stNav($USER['clientb']), true), 'menu: not offered to a technician, a viewer, a stock technician or a client-limited user (administrators only)');
 [$c, $b2] = $stPg('admin');
 $ok(str_contains($b2, 'href="/agent/rmm_starter_pack.php"'), 'the Endpoints menu of a real page links it for an administrator');
-[$c, $b3] = web($wb, 'GET', '/agent/rmm_script_library.php', $SS['tech']);
+[$c, $b3] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library', $SS['tech']);
 $ok($c === 200 && !str_contains($b3, 'href="/agent/rmm_starter_pack.php"'), 'and not for a technician (' . $c . ')');
-[$c, $b4] = web($wb, 'GET', '/agent/rmm_script_library.php', $SS['admin']);
+[$c, $b4] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library', $SS['admin']);
 $ok($c === 200 && str_contains($b4, 'href="/agent/rmm_starter_pack.php"'), 'the script library (administrator) offers a Starter pack button as well');
 
 // ---- access: only an administrator; nothing is asked of the database with the module or the switch off
@@ -184,7 +184,7 @@ $ok(str_contains($b, 'data-rmm-starter-kpi="scripts">3 <span') , 'the figures fo
 
 // ---- the page after the install: states, links
 [, $b] = $stPg();
-$ok(str_contains($b, '>Installed<') && str_contains($b, 'href="/agent/rmm_script_library.php?script_id=' . $sid . '"') && str_contains($b, 'Open in the library'), 'installed items say "Installed" and link to the library');
+$ok(str_contains($b, '>Installed<') && str_contains($b, 'href="/agent/rmm_scripts.php?tab=library&amp;script_id=' . $sid . '"') && str_contains($b, 'Open in the library'), 'installed items say "Installed" and link to the library');
 [, $b] = $stPg('admin', '?state=current');
 $ok(substr_count($b, 'data-rmm-starter-row="') === 4, 'state filter: the four installed items');
 
@@ -205,16 +205,16 @@ $ok(preg_match('/rmm_starter\.php/', $b) === 1 && true, 'parameter flow reachabl
 
 // ============================================================ the script library: Starter badge, risk chip, no badge on your own scripts
 $mine = $rmm->scripts()->create(['name' => 'My own script', 'description' => 'not from the pack', 'language' => 'powershell', 'body' => 'Get-Date', 'tags' => ['mine'], 'params' => []], 1);
-[$c, $b] = web($wb, 'GET', '/agent/rmm_script_library.php', $SS['admin']);
+[$c, $b] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library', $SS['admin']);
 $ok($c === 200 && substr_count($b, 'data-rmm-starter-script="1"') === 3 && substr_count($b, 'rmm-starter-badge') >= 3, 'script library: the three starter scripts are marked Starter (and nothing else is)');
 $ok(str_contains($b, 'Read only') && str_contains($b, 'Changes the system') && str_contains($b, 'Disruptive'), 'script library: each carries its risk chip');
 preg_match('/<tr data-rmm-starter-script="1">.*?<\/tr>/s', $b, $firstRow);
 $ok(isset($firstRow[0]) && !str_contains($firstRow[0], '>starter<') && !str_contains($firstRow[0], 'risk:'), 'the tags column does not repeat the starter and risk tags');
 $ok(preg_match('/My own script<\/a>(?:(?!<\/tr>).)*<\/tr>/s', $b, $mr) === 1 && !str_contains($mr[0], 'rmm-starter-badge'), 'your own script has no Starter badge');
 $ok(!str_contains($b, 'rmm-starter-waiting'), 'no "update waiting" marker while nothing is parked');
-[$c, $b] = web($wb, 'GET', '/agent/rmm_script_library.php?script_id=' . $sid, $SS['admin']);
+[$c, $b] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library&script_id=' . $sid, $SS['admin']);
 $ok($c === 200 && str_contains($b, 'rmm-starter-badge') && str_contains($b, 'Read only') && !str_contains($b, 'data-rmm-starter-update'), 'a starter script page shows the badge and the chip');
-[$c, $b] = web($wb, 'GET', '/agent/rmm_script_library.php', $SS['tech']);
+[$c, $b] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library', $SS['tech']);
 $ok($c === 200 && substr_count($b, 'data-rmm-starter-script="1"') === 3 && !str_contains($b, 'href="/agent/rmm_starter_pack.php"'), 'a technician sees the marks too, but not the button to the page');
 // policies: the draft badge, the marker is not shown
 [$c, $b] = web($wb, 'GET', '/agent/rmm_policies.php', $SS['admin']);
@@ -240,15 +240,15 @@ foreach ($stCatalog()['packs'][0]['scripts'] as $s) { if ($s['id'] === 'lin-disk
 $cur = (int) $one("SELECT current_version FROM rmm_scripts_v2 WHERE script_id = $sid");
 $staged = $rmm->scripts()->stage($sid, ['body' => "echo pack text v2\n", 'params' => [], 'note' => 'starter-updated|rivet-core-starter|lin-disk-usage|1.0.0|' . $hash], 1);
 $ok($staged > $cur && $stState('lin-disk-usage') === 'update_staged' && (int) $one("SELECT current_version FROM rmm_scripts_v2 WHERE script_id = $sid") === $cur, 'a parked update: version ' . $staged . ' exists, is not current, and the catalog says "update_staged"');
-[$c, $b] = web($wb, 'GET', '/agent/rmm_script_library.php', $SS['admin']);
+[$c, $b] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library', $SS['admin']);
 $ok(substr_count($b, 'rmm-starter-waiting') === 1 && str_contains($b, 'Update waiting'), 'script library: the "Update waiting" marker on that one script');
-[$c, $b] = web($wb, 'GET', '/agent/rmm_script_library.php?script_id=' . $sid, $SS['admin']);
+[$c, $b] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library&script_id=' . $sid, $SS['admin']);
 $ok(str_contains($b, 'data-rmm-starter-update="' . $staged . '"') && str_contains($b, 'The Starter pack has a newer version of this script') && str_contains($b, 'from=' . $cur . '&amp;to=' . $staged), 'the script page explains it and links the comparison of the current version with the parked one');
-[$c, $b] = web($wb, 'GET', '/agent/rmm_script_library.php?script_id=' . $sid, $SS['admin']);
+[$c, $b] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library&script_id=' . $sid, $SS['admin']);
 $ok(str_contains($b, 'Installed from the starter pack (rivet-core-starter 1.0.0)') && str_contains($b, 'Starter pack update, waiting for review') && str_contains($b, 'Compare with the current version') && !str_contains($b, 'starter-updated|'), 'the versions table words the pack\'s notes plainly and links the comparison, without the raw marker');
-[$c, $b] = web($wb, 'GET', '/agent/rmm_script_library.php?script_id=' . $sid . '&from=' . $cur . '&to=' . $staged, $SS['admin']);
+[$c, $b] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library&script_id=' . $sid . '&from=' . $cur . '&to=' . $staged, $SS['admin']);
 $ok($c === 200 && str_contains($b, 'id="scr-diff"') && str_contains($b, 'pack text v2'), 'and that link shows the differences');
-[$c, $b] = web($wb, 'GET', '/agent/rmm_script_library.php?script_id=' . $sid, $SS['tech']);
+[$c, $b] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library&script_id=' . $sid, $SS['tech']);
 $ok($c === 200 && str_contains($b, 'data-rmm-starter-update="' . $staged . '"'), 'a technician sees the marker on the script page too');
 [, $b] = $stPg('admin', '?q=disk+usage');
 $ok(str_contains($b, 'Update waiting for review'), 'the Starter pack page says "Update waiting for review"');
@@ -298,7 +298,7 @@ $ok($stCatalog()['ready'] === true, 'the signing key is back');
 
 // ============================================================ escaping of server text
 $odd = $rmm->scripts()->create(['name' => 'Hostile <b>name</b>', 'description' => '"><img src=x onerror=alert(1)>', 'language' => 'bash', 'body' => 'true', 'tags' => ['starter', 'risk:read_only'], 'params' => []], 1);
-[$c, $b] = web($wb, 'GET', '/agent/rmm_script_library.php', $SS['admin']);
+[$c, $b] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library', $SS['admin']);
 $ok($c === 200 && !str_contains($b, '<img src=x onerror') && !str_contains($b, 'Hostile <b>name</b>') && str_contains($b, 'Hostile &lt;b&gt;name&lt;/b&gt;'), 'library: a hostile script name and description are escaped, even with the starter tags');
 // a script that only claims to be a starter script (the tags are free text) is a badge and nothing more: it is not in the pack, so the pack\'s own state ignores it
 $ok($stState('lin-cron-jobs') === 'not_installed', 'a look-alike tag does not make a script part of the pack');

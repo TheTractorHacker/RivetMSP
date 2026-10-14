@@ -3,7 +3,7 @@ require_once "includes/inc_all.php";
 enforceUserPermission('module_rmm_scripts');
 
 $run_id = intval($_GET['run_id'] ?? 0);
-if (!$run_id) { flash_alert('No run specified', 'danger'); redirect('/agent/rmm_scripts.php'); }
+if (!$run_id) { flash_alert('No run specified', 'danger'); redirect('/agent/rmm_scripts.php?tab=synced'); }
 
 $run = mysqli_fetch_assoc(mysqli_query($mysqli,
     "SELECT sr.*, s.name as script_name, s.script_type, s.description as script_desc,
@@ -17,7 +17,7 @@ $run = mysqli_fetch_assoc(mysqli_query($mysqli,
      LEFT JOIN users u ON u.user_id = sr.user_id
      WHERE sr.id=$run_id"
 ));
-if (!$run) { flash_alert('Script run not found', 'danger'); redirect('/agent/rmm_scripts.php'); }
+if (!$run) { flash_alert('Script run not found', 'danger'); redirect('/agent/rmm_scripts.php?tab=synced'); }
 
 if ($run['asset_client_id']) { enforceClientAccess(intval($run['asset_client_id'])); }
 
@@ -31,8 +31,8 @@ $badge = ['completed'=>'success','failed'=>'danger','running'=>'warning','pendin
     <a href="/agent/asset_details.php?asset_id=<?= intval($run['asset_id']) ?>" class="btn btn-secondary btn-sm me-2">
         <i class="fas fa-desktop me-1"></i><?= nullable_htmlentities($run['asset_name']) ?>
     </a>
-    <a href="/agent/rmm_scripts.php" class="btn btn-secondary btn-sm">
-        <i class="fas fa-arrow-left me-1"></i>Script Library
+    <a href="/agent/rmm_scripts.php?tab=synced" class="btn btn-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i>Scripts
     </a>
 </div>
 

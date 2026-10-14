@@ -91,11 +91,14 @@ await T('login: real form signs in', async () => {
 }, { allowHttp: [/\/agent\/clients\.php/] });
 
 // ------------------------------------------------------------------------------------------------ the library
-await T('library: empty state with a New script button; the menu has the three pages', async () => {
-  await go('/agent/rmm_script_library.php');
+await T('library: empty state with a New script button; the menu has ONE Scripts entry (the library is its Library tab), Schedules and Approvals', async () => {
+  await go('/agent/rmm_script_library.php');   // the older address: redirects to the Library tab of the Scripts page
   await p.waitSel('.it-empty-state');
   assert(/No scripts yet/.test(await bodyText()), 'empty state text');
-  for (const href of ['/agent/rmm_script_library.php', '/agent/rmm_schedules.php', '/agent/rmm_approvals.php']) assert(await p.exists(`a[href="${href}"]`), 'menu entry ' + href);
+  assert(/rmm_scripts\.php\?tab=library/.test(await p.url()), 'the older address did not land on the Library tab: ' + (await p.url()));
+  for (const href of ['/agent/rmm_scripts.php', '/agent/rmm_schedules.php', '/agent/rmm_approvals.php']) assert(await p.exists(`a[href="${href}"]`), 'menu entry ' + href);
+  assert(!(await p.exists('a[href="/agent/rmm_script_library.php"]')), 'a separate Script library menu entry is still drawn');
+  assert((await p.eval(`document.querySelectorAll('a.dropdown-item[href="/agent/rmm_scripts.php"]').length`)) === 1, 'the Scripts entry is not unique');
   await shot('library-empty-desktop-light');
 });
 await T('publish: the editor (counter, parameter rows, secret hides the default) and the first version', async () => {

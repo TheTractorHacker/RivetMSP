@@ -265,7 +265,7 @@ function rivetRmmAutoNav(?int $userId = null): array
 {
     $all = [
         ['policies', '/agent/rmm_policies.php', 'Policies', 'fa-sliders-h', ['rmm_policies.php'], 'automation'],
-        ['scripts', '/agent/rmm_script_library.php', 'Script library', 'fa-file-code', ['rmm_script_library.php'], 'automation'],
+        // (the script library is a tab of the single Scripts page, drawn by agent/includes/side_nav.php: Scripts > Library, Scripts > Synced from <provider>)
         // RMM starter pack (RivetCore 1.0.0-rc.13): ready-made scripts, check sets and policy drafts. Administrators only (rmm.admin), shown with the script library's sub-switch.
         ['scripts', '/agent/rmm_starter_pack.php', 'Starter pack', 'fa-box-open', ['rmm_starter_pack.php'], 'automation'],
         ['scripts', '/agent/rmm_schedules.php', 'Schedules', 'fa-clock', ['rmm_schedules.php'], 'automation'],

@@ -196,11 +196,12 @@ function rivetRmmUiStrip(array $vm): string
             . '><i class="' . $iconCls . ' me-1" aria-hidden="true"></i>' . rmmH($label) . '</button>';
     };
     $dev = $vm['usable'];
-    $canScript = ($perm['run_saved'] && $vm['saved_scripts'] !== []) || $perm['run_script'];
-    $scriptReason = !$dev ? 'The device is not approved or no longer active.' : ($vm['platform'] !== 'windows' ? 'Script jobs run on Windows devices in this release. Linux devices can collect inventory and reboot.'
-        : (!($perm['run_saved'] || $perm['run_script']) ? 'Your role cannot run jobs.' : ($never ? 'Available after the first check-in.' : 'No saved script is available and your role cannot run free-form scripts.')));
+    // Run script: offered when the dialog has something to run, or (library switch on) when it can at least explain where scripts come from. Windows and Linux devices only.
+    $canScript = in_array($vm['platform'], ['windows', 'linux'], true) && (rivetRmmUiRunOptions($vm) !== [] || ($vm['run']['library'] ?? null) !== null);
+    $scriptReason = !$dev ? 'The device is not approved or no longer active.' : (!in_array($vm['platform'], ['windows', 'linux'], true) ? 'Script jobs run on Windows and Linux devices.'
+        : (!($perm['run_saved'] || $perm['run_script']) ? 'Your role cannot run jobs.' : ($never ? 'Available after the first check-in.' : 'No script is available for this device, and your role cannot run free-form scripts.')));
     $actions = '';
-    $actions .= $btn('rmm-act-script', 'btn-primary', 'fas fa-play', 'Run script', $dev && !$never && $vm['platform'] === 'windows' && $canScript, $scriptReason, ' data-bs-toggle="modal" data-bs-target="#rmmRunModal"');
+    $actions .= $btn('rmm-act-script', 'btn-primary', 'fas fa-play', 'Run script', $dev && !$never && $canScript, $scriptReason, ' data-bs-toggle="modal" data-bs-target="#rmmRunModal"');
     $actions .= $btn('rmm-act-reboot', 'btn-outline-warning', 'fas fa-power-off', 'Reboot', $dev && !$never && $perm['reboot'], !$dev ? 'The device is not approved or no longer active.'
         : ($never ? 'Available after the first check-in.' : 'Your role cannot reboot devices.'), ' data-bs-toggle="modal" data-bs-target="#rmmRebootModal"');
     if ($vm['mesh']['configured']) {
@@ -718,9 +719,37 @@ function rivetRmmUiJobs(array $vm, array $userNames): string
     return rivetRmmUiCard('Jobs and scripts', 'tasks', $table, '', $head, true, 'rmm-jobs-card');
 }
 
+/**
+ * The "What to run" choices of the Run script dialog for this device and viewer, in display order: value => label. Empty when nothing can be run from here. Library first, then
+ * the legacy saved scripts, scripts synced from a vendor RMM, and free-form text (PowerShell on Windows, shell on Linux) where Core supports it for the viewer.
+ *
+ * @param array<string,mixed> $vm rivetRmmUiPanel()
+ * @return array<string,string>
+ */
+function rivetRmmUiRunOptions(array $vm): array
+{
+    $perm = $vm['perm'];
+    $run = $vm['run'] ?? ['library' => null, 'free_form' => null, 'synced' => null];
+    $o = [];
+    if (($run['library']['count'] ?? 0) > 0) {
+        $o['library'] = 'Script library (' . (int) $run['library']['count'] . ')';
+    }
+    if ($perm['run_saved'] && $vm['platform'] === 'windows' && $vm['saved_scripts'] !== []) {
+        $o['saved'] = 'A saved script';
+    }
+    if (!empty($run['synced']['items'])) {
+        $o['synced'] = 'Synced from ' . $run['synced']['provider'] . ' (' . count($run['synced']['items']) . ')';
+    }
+    if (!empty($run['free_form'])) {
+        $o[$run['free_form']] = $run['free_form'] === 'shell' ? 'Shell (type or paste)' : 'PowerShell (type or paste)';
+    }
+
+    return $o;
+}
+
 // ------------------------------------------------------------------ dialogs (in-page; no window.confirm)
 
-function rivetRmmUiDialogs(array $vm): string
+function rivetRmmUiDialogs(array $vm, string $csrf = ''): string
 {
     $perm = $vm['perm'];
     $o = '';
@@ -730,30 +759,52 @@ function rivetRmmUiDialogs(array $vm): string
         . '<div class="modal-body"><p>The device restarts the next time it picks the job up' . ($vm['offline'] ? ' (it is offline now, so this waits until it returns, until the job expires)' : '') . '. Anyone signed in loses unsaved work. The job is sent at most once.</p>'
         . '<div class="form-check"><input class="form-check-input" type="checkbox" id="rmm-reboot-confirm"><label class="form-check-label" for="rmm-reboot-confirm">I confirm this device may restart.</label></div></div>'
         . '<div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-warning" id="rmm-reboot-go" disabled>Reboot device</button></div></div></div></div>';
-    // Run script
-    if ($vm['platform'] === 'windows' && ($perm['run_saved'] || $perm['run_script'])) {
-        $opts = '';
-        if ($perm['run_saved'] && $vm['saved_scripts'] !== []) {
-            $opts .= '<option value="saved">A saved script</option>';
-        }
-        if ($perm['run_script']) {
-            $opts .= '<option value="powershell">PowerShell text</option>';
+    // Run script (RivetMSP 26.10.22): one dialog, one "What to run" list. The sources are the Core script library (Windows and Linux), the legacy saved scripts, scripts synced
+    // from a vendor RMM and free-form text (PowerShell on Windows, shell on Linux, only where Core supports it for the viewer). The library has its own form: it posts to the same
+    // handler as the library card of the Jobs tab. Everything here is cosmetic gating; Core and the handlers decide again.
+    $opts = rivetRmmUiRunOptions($vm);
+    if ($opts !== [] || ($vm['run']['library'] ?? null) !== null) {
+        $run = $vm['run'];
+        $lib = $run['library'];
+        $platformWord = ['windows' => 'Windows', 'linux' => 'Linux'][$vm['platform']] ?? 'this kind of';
+        $select = '';
+        foreach ($opts as $value => $label) {
+            $select .= '<option value="' . rmmH($value) . '">' . rmmH($label) . '</option>';
         }
         $saved = '';
         foreach ($vm['saved_scripts'] as $s) {
             $saved .= '<option value="' . (int) $s['id'] . '">' . rmmH($s['name']) . '</option>';
         }
-        $o .= '<div class="modal fade" id="rmmRunModal" tabindex="-1" aria-labelledby="rmmRunTitle" aria-hidden="true"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content"><form id="rmm-run-form">'
+        $synced = '';
+        foreach ((array) ($run['synced']['items'] ?? []) as $s) {
+            $synced .= '<option value="' . (int) $s['id'] . '">' . rmmH(($s['category'] !== '' ? '[' . $s['category'] . '] ' : '') . $s['name']) . '</option>';
+        }
+        $textType = (string) $run['free_form'];
+        $textLabel = $textType === 'shell' ? 'Shell commands' : 'PowerShell';
+        $noLib = $lib !== null && $lib['count'] === 0 && $opts !== [];
+        $csrf = $csrf !== '' ? $csrf : (string) ($_SESSION['csrf_token'] ?? '');
+        $o .= '<div class="modal fade" id="rmmRunModal" tabindex="-1" aria-labelledby="rmmRunTitle" aria-hidden="true"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">'
             . '<div class="modal-header"><h5 class="modal-title" id="rmmRunTitle"><i class="fas fa-play me-2" aria-hidden="true"></i>Run a script on ' . rmmH($vm['hostname']) . '</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>'
-            . '<div class="modal-body">' . ($opts === '' ? '<p class="text-muted mb-0">No saved script is available and your role cannot run free-form text.</p>' : '<div class="row g-2">'
-            . '<div class="col-md-6"><label class="form-label" for="rmm-run-type">What to run</label><select class="form-select" id="rmm-run-type" name="type">' . $opts . '</select></div>'
-            . '<div class="col-md-6"><label class="form-label" for="rmm-run-timeout">Timeout, seconds</label><input class="form-control" type="number" min="5" max="3600" value="300" id="rmm-run-timeout" name="timeout_s"></div>'
+            . ($opts === [] ? '' : '<div class="modal-body pb-0"><div class="row g-2"><div class="col-md-8"><label class="form-label" for="rmm-run-type"' . (count($opts) === 1 ? ' id="rmm-run-type-label"' : '') . '>What to run</label>'
+                . (count($opts) === 1
+                    // one choice is shown as text, not as a one-option dropdown (the hidden field carries it for the page script)
+                    ? '<div class="form-control-plaintext fw-semibold" id="rmm-run-type-text" aria-labelledby="rmm-run-type-label">' . rmmH((string) reset($opts)) . '</div><input type="hidden" id="rmm-run-type" value="' . rmmH((string) key($opts)) . '">'
+                    : '<select class="form-select" id="rmm-run-type" aria-controls="' . (($lib['count'] ?? 0) > 0 ? 'rmm-lib-form ' : '') . 'rmm-run-form">' . $select . '</select>')
+                . ($noLib ? '<div class="form-text">The script library has no script for ' . rmmH($platformWord) . ' devices yet. ' . (!empty($perm['admin']) ? '<a href="/agent/rmm_starter_pack.php">Open the Starter pack</a>' : '<a href="/agent/rmm_scripts.php?tab=library">Open Scripts</a>') . '</div>' : '')
+                . '</div></div></div>')
+            . rivetRmmScrDialogPane($vm, $csrf, $opts === [])
+            . ($opts === [] ? '' : '<form id="rmm-run-form" data-run-pane="other" data-text-type="' . rmmH($textType !== '' ? $textType : 'powershell') . '" data-synced-link="' . (int) ($run['synced']['link_id'] ?? 0) . '">'
+            . '<div class="modal-body"><div class="row g-2">'
+            . '<div class="col-md-6 d-none" id="rmm-run-timeout-wrap"><label class="form-label" for="rmm-run-timeout">Timeout, seconds</label><input class="form-control" type="number" min="5" max="3600" value="300" id="rmm-run-timeout" name="timeout_s"></div>'
             . '<div class="col-12" id="rmm-run-saved-wrap"><label class="form-label" for="rmm-run-saved">Saved script</label><select class="form-select" id="rmm-run-saved" name="script_id">' . $saved . '</select></div>'
-            . '<div class="col-12 d-none" id="rmm-run-text-wrap"><label class="form-label" for="rmm-run-text">PowerShell</label><textarea class="form-control font-monospace" rows="6" id="rmm-run-text" name="script" maxlength="100000"></textarea></div>'
-            . '<div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" id="rmm-run-destructive"><label class="form-check-label" for="rmm-run-destructive">This script changes or removes things (destructive)</label></div></div>'
-            . '<div class="col-12 d-none" id="rmm-run-confirm-wrap"><div class="form-check"><input class="form-check-input" type="checkbox" id="rmm-run-confirm"><label class="form-check-label" for="rmm-run-confirm">I confirm it may run now as SYSTEM.</label></div></div></div>')
-            . '</div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>' . ($opts === '' ? '' : '<button type="submit" class="btn btn-primary" id="rmm-run-go">Queue job</button>')
-            . '</div></form></div></div></div>';
+            . '<div class="col-12 d-none" id="rmm-run-synced-wrap"><label class="form-label" for="rmm-run-synced">Script synced from ' . rmmH((string) ($run['synced']['provider'] ?? '')) . '</label><select class="form-select" id="rmm-run-synced" name="synced_script_id">' . $synced . '</select>'
+            . '<div class="form-text">It runs through ' . rmmH((string) ($run['synced']['provider'] ?? 'the RMM')) . ', not through the RivetCore agent, and its result is on the script run page.</div></div>'
+            . '<div class="col-12 d-none" id="rmm-run-text-wrap"><label class="form-label" for="rmm-run-text">' . rmmH($textLabel) . '</label><textarea class="form-control font-monospace" rows="6" id="rmm-run-text" name="script" maxlength="100000"></textarea></div>'
+            . '<div class="col-12" id="rmm-run-destructive-wrap"><div class="form-check"><input class="form-check-input" type="checkbox" id="rmm-run-destructive"><label class="form-check-label" for="rmm-run-destructive">This script changes or removes things (destructive)</label></div></div>'
+            . '<div class="col-12 d-none" id="rmm-run-confirm-wrap"><div class="form-check"><input class="form-check-input" type="checkbox" id="rmm-run-confirm"><label class="form-check-label" for="rmm-run-confirm">I confirm it may run now' . ($vm['platform'] === 'windows' ? ' as SYSTEM' : ' as root') . '.</label></div></div></div></div>'
+            . '<div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary" id="rmm-run-go">Queue job</button></div></form>')
+            . ($opts === [] ? '<div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div>' : '')
+            . '</div></div></div>';
     }
 
     return $o;
@@ -802,7 +853,7 @@ function rivetRmmUiTabs(array $vm, string $performanceHtml, string $performanceN
         . ($alrHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-alerting" role="tabpanel" aria-labelledby="rmm-tab-alerting" tabindex="0">' . $alrHtml . '</div>' : '')
         . ($remHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-remote" role="tabpanel" aria-labelledby="rmm-tab-remote" tabindex="0">' . $remHtml . '</div>' : '')
         . ($logHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-logs" role="tabpanel" aria-labelledby="rmm-tab-logs" tabindex="0">' . $logHtml . '</div>' : '') . '</div></div>'
-        . rivetRmmUiDialogs($vm)
+        . rivetRmmUiDialogs($vm, $csrf)
         . ($polHtml . $scrHtml . $alrHtml !== '' ? rivetRmmAutoConfirmModal() . rivetRmmAutoScriptsOn() : '');
 }
 

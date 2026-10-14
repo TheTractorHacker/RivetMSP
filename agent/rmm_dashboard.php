@@ -338,7 +338,7 @@ $has_alert_analytics = array_sum($alert_trend_data) > 0 || !empty($sev_counts);
         </div></a>
     </div>
     <div class="col-6 col-md-2">
-        <a href="/agent/rmm_scripts.php" class="text-decoration-none">
+        <a href="/agent/rmm_scripts.php?tab=synced" class="text-decoration-none">
         <div class="info-box bg-dark mb-0">
             <span class="info-box-icon"><i class="fas fa-code"></i></span>
             <div class="info-box-content">
@@ -744,7 +744,7 @@ $has_alert_analytics = array_sum($alert_trend_data) > 0 || !empty($sev_counts);
         <div class="card card-dark mb-3">
             <div class="card-header py-2 d-flex align-items-center">
                 <h6 class="mb-0 mr-auto"><i class="fas fa-code me-2"></i>Recent Script Runs</h6>
-                <a href="/agent/rmm_scripts.php" class="btn btn-xs btn-secondary">Library</a>
+                <a href="/agent/rmm_scripts.php?tab=synced" class="btn btn-xs btn-secondary">Scripts</a>
             </div>
             <div class="card-body p-0">
             <?php if (mysqli_num_rows($sql_recent_runs) === 0): ?>

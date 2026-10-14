@@ -20,7 +20,7 @@ $section_pages = [
     'finance'       => ['payments.php', 'vendors.php', 'expenses.php', 'recurring_expenses.php', 'accounts.php', 'transfers.php', 'trips.php'],
     'endpoint'      => ['rmm_dashboard.php', 'rmm_fleet.php', 'rmm_assets.php', 'rmm_asset.php', 'rmm_alerts.php', 'rmm_scripts.php', 'rmm_checks.php', 'network.php', 'firewalls.php',
         // RMM Phase 2 and 3 pages (shown only while the module and the sub-switch are on)
-        'rmm_policies.php', 'rmm_script_library.php', 'rmm_starter_pack.php', 'rmm_schedules.php', 'rmm_approvals.php', 'rmm_fields.php', 'rmm_agent_alerts.php', 'rmm_maintenance.php', 'rmm_escalations.php',
+        'rmm_policies.php', 'rmm_script_library.php', 'rmm_script_run.php', 'rmm_starter_pack.php', 'rmm_schedules.php', 'rmm_approvals.php', 'rmm_fields.php', 'rmm_agent_alerts.php', 'rmm_maintenance.php', 'rmm_escalations.php',
         // RMM Phase 8 (sub-switch `logs`)
         'rmm_logs.php', 'rmm_log_rules.php'],
     'backups'       => ['backups.php'],
@@ -366,10 +366,14 @@ foreach ($section_pages as $key => $pages) {
                             <span class="dropdown-item-icon"><i class="fas fa-bell"></i></span>
                             <span class="text-truncate">RMM Alerts</span>
                         </a>
-                        <a href="/agent/rmm_scripts.php" class="dropdown-item<?php if ($current_page == 'rmm_scripts.php') { echo ' active'; } ?>">
+                        <?php } ?>
+                        <?php if ($config_module_enable_rmm || ($rmm_nav_agent && rivetRmmFeatureOn('scripts'))) { // ONE Scripts entry: the RivetCore library and what is synced from a vendor RMM are tabs of its page ?>
+                        <a href="/agent/rmm_scripts.php" class="dropdown-item<?php if (in_array($current_page, ['rmm_scripts.php', 'rmm_script_library.php', 'rmm_script_run.php'], true)) { echo ' active'; } ?>">
                             <span class="dropdown-item-icon"><i class="fas fa-code"></i></span>
                             <span class="text-truncate">Scripts</span>
                         </a>
+                        <?php } ?>
+                        <?php if ($config_module_enable_rmm) { ?>
                         <a href="/agent/rmm_checks.php" class="dropdown-item<?php if ($current_page == 'rmm_checks.php') { echo ' active'; } ?>">
                             <span class="dropdown-item-icon"><i class="fas fa-heartbeat"></i></span>
                             <span class="text-truncate">Check Policies</span>

@@ -938,7 +938,7 @@ if (isset($_GET['asset_id'])) {
                                         </div>
                                         <div class="card-body">
                                             <?php if (mysqli_num_rows($sql_rdt_scripts) === 0): ?>
-                                            <p class="text-muted small mb-0">No scripts configured. <a href="/agent/rmm_scripts.php">Add scripts</a> first.</p>
+                                            <p class="text-muted small mb-0">No scripts configured. <a href="/agent/rmm_scripts.php?tab=synced">Add scripts</a> first.</p>
                                             <?php else: ?>
                                             <div class="form-group mb-2">
                                                 <select id="rdt-script-select" class="form-control form-control-sm">

@@ -209,7 +209,7 @@ await T('states: offline (banner, dimmed gauges), never checked in, Linux, bare 
   await shot('asset-never-desktop-light');
   await go(asset('LNX1'));
   await p.waitSel('#rmm-strip');
-  assert(await p.eval(`document.getElementById('rmm-act-script').disabled`), 'Run script enabled on Linux');
+  assert(!(await p.eval(`document.getElementById('rmm-act-script').disabled`)), 'Run script is disabled on Linux (26.10.22: Linux gets it: library scripts and shell text)');
   assert(!(await p.eval(`document.getElementById('rmm-act-reboot').disabled`)), 'Reboot disabled on Linux');
   assert(!!(await p.exists('#rmm-strip .fa-linux')) && !(await p.exists('#rmm-strip .fa-windows')), 'Linux device shows a Windows icon');
   await shot('asset-linux-desktop-light');

@@ -157,7 +157,7 @@ headers of the test files). The golden runner records this install into a tempor
 ## 6b. Policies, scripts and alerting (RivetCore 1.0.0-rc.10, DB 2.6.84)
 
 Three sub-switches, all off by default (Administration > Endpoint agent > "Policies, scripts and alerting"): `policies`, `scripts` (script library, schedules, approvals, custom fields)
-and `alerting` (thresholds, flap detection, maintenance windows, escalation). The pages (`agent/rmm_policies.php`, `rmm_script_library.php`, `rmm_schedules.php`, `rmm_approvals.php`,
+and `alerting` (thresholds, flap detection, maintenance windows, escalation). The pages (`agent/rmm_policies.php`, `rmm_scripts.php` (Library tab; the older `rmm_script_library.php` address redirects), `rmm_schedules.php`, `rmm_approvals.php`,
 `rmm_fields.php`, `rmm_agent_alerts.php`, `rmm_maintenance.php`, `rmm_escalations.php`) and the asset page tabs are rendered by `includes/rmm_automation.php` (shared layer),
 `rmm_pol_ui.php`, `rmm_scr_ui.php` and `rmm_alr_ui.php`; their forms post to `agent/post/rmm_automation_{pol,scr,alr}.php`. Every read and write is an in-process call into RivetCore's
 technician API as the signed-in user, so Core's 403/404 rules, client scoping and audit apply and a forged POST gets the REST API's answer. A page checks the module, then its sub-switch (both

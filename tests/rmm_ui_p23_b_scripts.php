@@ -15,6 +15,8 @@ $Wd = $D['WIN1'];
 $SECRET = 'S3cr3t-VALUE-9f2c1';
 $HANDLER = '/agent/post/rmm_automation_scr.php';
 $gp = function (string $who, string $path) use ($wb, $SS) {
+    // (26.10.22: the library is the Library tab of the Scripts page; the older address is kept and tested separately, so the fragment asks the page itself)
+    if (str_starts_with($path, '/agent/rmm_script_library.php')) { $rest = substr($path, strlen('/agent/rmm_script_library.php')); $path = '/agent/rmm_scripts.php?tab=library' . ($rest !== '' && $rest[0] === '?' ? '&' . substr($rest, 1) : $rest); }
     $r = web($wb, 'GET', $path, $SS[$who]);
     if (getenv('P23_DUMP')) { static $n = 0; file_put_contents(getenv('P23_DUMP') . '/' . sprintf('%03d', ++$n) . '_' . $who . '_' . preg_replace('/[^a-z0-9]+/i', '_', $path) . '.html', $r[1]); }
     return $r;
