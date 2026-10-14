@@ -5528,6 +5528,7 @@ INSERT INTO `rivet_core_migrations` VALUES ('0023_rmm_mesh_agent','2026-10-11 00
 INSERT INTO `rivet_core_migrations` VALUES ('0024_rmm_mesh_group_url','2026-10-11 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0025_rmm_msi_templates','2026-10-12 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0026_rmm_mesh_hide','2026-10-14 00:00:00');
+INSERT INTO `rivet_core_migrations` VALUES ('0027_rmm_mesh_node_ids','2026-10-14 00:00:00');
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
