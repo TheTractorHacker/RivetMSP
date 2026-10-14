@@ -78,19 +78,19 @@ $ok(!str_contains($step94, 'ALTER TABLE') && !str_contains($step94, 'mysqli_quer
 $ok(str_contains($step95, 'Migration0027MeshNodeIds::class') && str_contains($step95, 'CoreMigrations::all()') && str_contains($step95, 'RivetMSP\\Core\\Adapter\\Database\\MysqliDatabaseAdapter($mysqli)') && strpos($step95, 'class_exists(') < strpos($step95, "= '2.6.95'"), 'the 2.6.95 step runs the Core migration runner (0027, the canonical MeshCentral node ids) and only advances the version when the package that ships it is installed');
 $ok(!str_contains($step95, 'ALTER TABLE') && !str_contains($step95, 'mysqli_query($mysqli, "CREATE') && str_contains($read('db.sql'), "('0027_rmm_mesh_node_ids'"), 'the 2.6.95 step alters no table of ours (data only, Core owns it); db.sql records 0027');
 
-// ------------------------------------------------------------------ the RivetCore pin (rc.18)
+// ------------------------------------------------------------------ the RivetCore pin (rc.19)
 $composer = json_decode($read('composer.json'), true);
 $lock = json_decode($read('composer.lock'), true);
-$ok(($composer['require']['rivet/rivet-core'] ?? '') === '^1.0.0-rc.18', 'composer.json requires rivet/rivet-core ^1.0.0-rc.18');
+$ok(($composer['require']['rivet/rivet-core'] ?? '') === '^1.0.0-rc.19', 'composer.json requires rivet/rivet-core ^1.0.0-rc.19');
 $pkg = null; foreach ($lock['packages'] as $p) { if ($p['name'] === 'rivet/rivet-core') { $pkg = $p; } }
-$ok($pkg && $pkg['version'] === 'v1.0.0-rc.18' && $pkg['source']['reference'] === $pkg['dist']['reference'] && str_contains($pkg['dist']['url'], $pkg['source']['reference']), 'composer.lock pins v1.0.0-rc.18 with one reference for source and dist');
+$ok($pkg && $pkg['version'] === 'v1.0.0-rc.19' && $pkg['source']['reference'] === $pkg['dist']['reference'] && str_contains($pkg['dist']['url'], $pkg['source']['reference']), 'composer.lock pins v1.0.0-rc.19 with one reference for source and dist');
 $ref = $pkg['source']['reference'] ?? '';
 $inst = json_decode($read('vendor/composer/installed.json'), true);
 $ip = null; foreach (($inst['packages'] ?? $inst) as $p) { if (($p['name'] ?? '') === 'rivet/rivet-core') { $ip = $p; } }
-$ok($ip && $ip['version'] === 'v1.0.0-rc.18' && $ip['source']['reference'] === $ref, 'vendor/composer/installed.json agrees with the lock');
+$ok($ip && $ip['version'] === 'v1.0.0-rc.19' && $ip['source']['reference'] === $ref, 'vendor/composer/installed.json agrees with the lock');
 $phpInst = require "$root/vendor/composer/installed.php";
-$ok(($phpInst['versions']['rivet/rivet-core']['reference'] ?? '') === $ref && ($phpInst['versions']['rivet/rivet-core']['pretty_version'] ?? '') === 'v1.0.0-rc.18', 'vendor/composer/installed.php agrees with the lock');
-$ok(is_file("$root/vendor/rivet/rivet-core/src/Mcp/Migration/Migration0017McpIdentityBinaryCollation.php") && str_contains($read('vendor/rivet/rivet-core/CHANGELOG.md'), '## 1.0.0-rc.18') && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0022RemoteAndLogs.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0021ScaleStorage.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0023MeshAgent.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Starter/StarterInstaller.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0024MeshGroupUrl.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0025MsiTemplates.php"), 'the vendored package is rc.16 (ships migrations 0021 to 0025)');
+$ok(($phpInst['versions']['rivet/rivet-core']['reference'] ?? '') === $ref && ($phpInst['versions']['rivet/rivet-core']['pretty_version'] ?? '') === 'v1.0.0-rc.19', 'vendor/composer/installed.php agrees with the lock');
+$ok(is_file("$root/vendor/rivet/rivet-core/src/Mcp/Migration/Migration0017McpIdentityBinaryCollation.php") && str_contains($read('vendor/rivet/rivet-core/CHANGELOG.md'), '## 1.0.0-rc.19') && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0022RemoteAndLogs.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0021ScaleStorage.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0023MeshAgent.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Starter/StarterInstaller.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0024MeshGroupUrl.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0025MsiTemplates.php"), 'the vendored package is rc.19 (ships migrations 0021 to 0025)');
 $ok(preg_match('/^[0-9a-f]{40}$/', $ref) === 1, 'the lock reference is a full commit id');
 
 // ------------------------------------------------------------------ mail OAuth secrets: wrapped, read through decryptSetting, written wrapped by the queue

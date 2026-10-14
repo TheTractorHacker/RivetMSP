@@ -4,6 +4,16 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.25] RivetMSP — RivetCore 1.0.0-rc.19: thresholds of policy checks, starter pack 1.0.1
+
+**Deploy notes:** back up the database, pull this tag. RivetCore is now **1.0.0-rc.19** (the tracked `vendor/rivet/rivet-core` is the tag's `git archive`, so no `composer install` is needed). **No database change** (DB stays 2.6.95), no cron change. Then, for the Windows fixes: publish agent **0.7.1** (or newer) to your rings, rebuild the MSI template with it, and install the starter pack's update (Starter pack page, "updated" items).
+
+- **Bug fixed: the Alerting tab of the asset page could not show or override the thresholds of a check delivered by a policy.** The threshold endpoints answered 404 for every check defined only by a policy (the whole starter pack is delivered that way), so the tab said "This check declares no thresholds" and the override form was missing. They now answer for those checks; the editor renders and the override saves like any other.
+- **Security (agent):** agent 0.7.1 closes a file-transfer hole on Windows where a junction inside an allowed folder reached files outside it (file transfer is off by default and needs an administrator-listed folder). Anyone running agent 0.6.0 or older with file transfer on should update the agent.
+- **Agent fixes from the first run on a real Windows 11 machine:** PowerShell jobs get a proper environment (`ping`, `whoami`, `w32tm` and others are found; nine starter scripts no longer report success with empty sections), PowerShell error output is plain text instead of CLIXML, `proc_kill` waits for the process to end, service checks read services with a restrictive descriptor, and the antivirus check accepts a third-party product Windows Security Center lists as on.
+- **Starter pack 1.0.1:** `battery-report`, `defender-status`, `defender-update-signatures` and `disk-health` print `unknown` or a note instead of Windows' sentinel values. Policies you edited and scripts you edited are never overwritten.
+- **Tests:** `tests/rmm_ui_p23_c_alerting.php` gains a regression block (a check defined only by a policy: GET thresholds answers, the asset page Alerting tab renders the editor, the override saves and is removed); `tests/rmm_ui_p1213_starter.php` reads the pack version from the pack instead of assuming 1.0.0; `tests/wave1_integration.php` checks the rc.19 pin.
+
 ## [26.10.24] RivetMSP — the Remote button finds the device (MeshCentral node ids)
 
 **Deploy notes:** back up the database, pull this tag, run the database update (Administration > Updates or `php scripts/update_cli.php --update_db`). RivetCore is now **1.0.0-rc.18** (the tracked `vendor/rivet/rivet-core` is the tag's `git archive`, so no `composer install` is needed). **DB 2.6.95**: Core migration `0027_rmm_mesh_node_ids` rewrites the stored MeshCentral node ids to one form (data only, no schema change, idempotent). No cron change.

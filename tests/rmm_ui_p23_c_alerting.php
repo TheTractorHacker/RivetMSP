@@ -411,6 +411,53 @@ $ok($c === 200 && str_contains($body2, '&quot;params&quot;: {}') && !str_contain
 $ok(substr_count($body, 'This check declares no thresholds') >= 3, 'default checks: the thresholds part renders one entry per check (the defaults declare no thresholds, so each says so)');
 $ok(!preg_match('/stdClass|Cannot use object|PHP Fatal|Uncaught|AlertingActions/', $logNew), 'default checks: nothing logged by the server while loading the Alerting tab' . ($logNew !== '' ? ': ' . substr(preg_replace('/\s+/', ' ', $logNew), 0, 600) : ''));
 
+// ============================================================ regression (Core rc.19): a check delivered by a POLICY has threshold endpoints and an override editor
+// Core rc.18 and older answered 404 for GET/PUT endpoint_devices/{id}/checks/{key}/thresholds when the check came from a policy (the whole starter pack is policy
+// delivered), so the asset page's Alerting tab showed "This check declares no thresholds" for it and the override could not be saved. The global checks list is
+// empty of this key on purpose: the only place that defines rc19_cpu is the policy.
+$rc19Feat = $rmm->settings()->features();
+$rc19FeatOn = $rc19Feat; $rc19FeatOn['policies'] = true; $rc19FeatOn['alerting'] = true;
+$rmm->admin()->saveSettings($admin, ['features_json' => $rc19FeatOn]);
+$fresh();
+rivetRmmForgetAccess();
+$q("INSERT INTO assets SET asset_type='Laptop', asset_name='ALRP', asset_make='Dell', asset_serial='SER-ALRP', asset_client_id=1, asset_status='Active'");
+$alrpAsset = (int) $db->insert_id;
+[$c, , $j] = ea_enroll($S['enroll']['A'], ea_dev(['serial' => 'SER-ALRP', 'hostname' => 'ALRP']));
+$alrpDev = (int) ($j['device_id'] ?? 0);
+$alrpTok = (string) ($j['device_token'] ?? '');
+$ok($c === 201 && $alrpDev > 0, 'policy check: ALRP enrolled through the real endpoint');
+$polForm = ['action' => 'save_policy', 'policy_id' => 0, 'name' => 'RC19 policy thresholds', 'description' => '', 'enabled' => '1', 'ci_mode' => '', 'co_mode' => '', 'ring' => '',
+    'chk' => [0 => ['key' => 'rc19_cpu', 'mode' => 'override', 'type' => 'cpu', 'interval_s' => '60', 'p' => ['cpu' => ['window_s' => '5']],
+        'th' => ['warn_op' => 'gt', 'warn_val' => '80', 'crit_op' => 'gt', 'crit_val' => '95', 'hysteresis' => '5', 'for_samples' => '2', 'for_minutes' => '', 'ignore' => '']]]];
+[$c, , $h] = web($wb, 'POST', '/agent/post/rmm_automation_pol.php', $SS['admin'], $polForm + ['csrf_token' => 'csrftok1']);
+$rc19Pol = (int) $one("SELECT policy_id FROM rmm_policies WHERE name='RC19 policy thresholds'");
+$ok($c === 302 && $rc19Pol > 0, 'policy check: the policy is created through the real handler (' . $c . ')');
+[$c] = web($wb, 'POST', '/agent/post/rmm_automation_pol.php', $SS['admin'], ['action' => 'assign_policy', 'policy_id' => $rc19Pol, 'as_type' => 'device', 'as_id_device' => $alrpDev, 'priority' => '100', 'csrf_token' => 'csrftok1']);
+$ok((int) $one("SELECT COUNT(*) FROM rmm_policy_assignments WHERE policy_id=$rc19Pol AND scope_type='device' AND scope_id=$alrpDev") === 1, 'policy check: assigned to the device only');
+$ci = ea_checkin($alrpTok, ['capabilities' => ['check:cpu', 'policies'], 'checks' => [['key' => 'rc19_cpu', 'status' => 'ok', 'detail' => 'cpu 40%', 'value' => 40.0]]]);
+$delivered = array_column($ci[2]['config']['checks'] ?? [], null, 'key');
+$ok($ci[0] === 200 && ($delivered['rc19_cpu']['params']['thresholds']['warn']['value'] ?? null) === 80, 'policy check: the check-in delivers rc19_cpu with its thresholds from the policy only (' . $ci[0] . ')');
+$ci = ea_checkin($alrpTok, ['capabilities' => ['check:cpu', 'policies'], 'checks' => [['key' => 'rc19_cpu', 'status' => 'ok', 'detail' => 'cpu 41%', 'value' => 41.0]]]);
+$fresh();
+$ok(!in_array('rc19_cpu', array_column($rmm->settings()->checks(), 'key'), true), 'policy check: the key is NOT in the global checks list (only the policy defines it)');
+$t = rivetRmmAutoApi($db, 1, 'admin', 'GET', [$alrpDev, 'checks', 'rc19_cpu', 'thresholds']);
+$ok($t['ok'] === true && ($t['data']['defined']['warn']['value'] ?? null) === 80 && ($t['data']['defined']['crit']['value'] ?? null) === 95, 'policy check: GET checks/rc19_cpu/thresholds answers with the policy\'s limits (not 404)' . ($t['ok'] ? '' : ' ' . json_encode($t)));
+[$c, $body] = web($wb, 'GET', '/agent/asset_details.php?asset_id=' . $alrpAsset, $SS['admin']);
+$ok($c === 200 && preg_match('/value="save_thresholds">.{0,200}name="check_key" value="rc19_cpu"/s', $body) === 1, 'policy check: the asset page Alerting tab renders the threshold editor for the policy check');
+$ok(str_contains($body, 'Warning when above 80') && str_contains($body, 'Defined:'), 'policy check: the tab shows the policy\'s limits as the defined ones');
+[$c, , $hd] = $alrPost('admin', ['action' => 'save_thresholds', 'device_id' => $alrpDev, 'check_key' => 'rc19_cpu', 'warn_op' => 'gt', 'warn_value' => '70', 'crit_op' => 'gt', 'crit_value' => '90', 'hysteresis' => '5', 'for_samples' => '2', 'for_minutes' => '0']);
+$ov = json_decode((string) $one("SELECT override_json FROM rmm_check_eval WHERE device_id=$alrpDev AND check_key='rc19_cpu'"), true);
+$ok($c === 302 && ($ov['warn']['value'] ?? null) === 70 && ($ov['crit']['value'] ?? null) === 90, 'policy check: the override saves (' . $c . ')');
+[$c, $body] = web($wb, 'GET', '/agent/asset_details.php?asset_id=' . $alrpAsset, $SS['admin']);
+$ok(str_contains($body, 'Changed for this device') && str_contains($body, 'Warning when above 70') && str_contains($body, 'value="clear_thresholds"'), 'policy check: the tab shows the override as in effect and offers to remove it');
+[$c] = $alrPost('admin', ['action' => 'clear_thresholds', 'device_id' => $alrpDev, 'check_key' => 'rc19_cpu']);
+$ok($one("SELECT override_json FROM rmm_check_eval WHERE device_id=$alrpDev AND check_key='rc19_cpu'") === null, 'policy check: the override is removed again');
+// leave the shared settings as they were
+$q("DELETE FROM rmm_policy_assignments WHERE policy_id=$rc19Pol"); $q("DELETE FROM rmm_policy_versions WHERE policy_id=$rc19Pol"); $q("DELETE FROM rmm_policies WHERE policy_id=$rc19Pol");
+$rmm->admin()->saveSettings($admin, ['features_json' => $rc19Feat]);
+$fresh();
+rivetRmmForgetAccess();
+
 // ---- restore what this fragment changed in the shared settings
 $rmm->settings()->update(['checks_json' => json_encode($alrOrigChecks), 'failure_debounce' => (int) $alrOrigSettings['failure_debounce'], 'recovery_debounce' => (int) $alrOrigSettings['recovery_debounce']]);
 $fresh();

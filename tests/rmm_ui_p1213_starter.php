@@ -18,6 +18,8 @@ $stPg = fn (string $who = 'admin', string $qs = '') => web($wb, 'GET', '/agent/r
 $stPost = fn (array $f, string $who = 'admin', array $hdr = []) => web($wb, 'POST', '/agent/post/rmm_starter.php', $SS[$who], $f + ['csrf_token' => 'csrftok1'], $hdr);
 $stLoc = fn (string $heads) => preg_match('/^Location:\s*(.+?)\r?$/mi', $heads, $m) === 1 ? trim($m[1]) : '';
 $stCatalog = fn () => $rmm->starterInstaller()->catalog();
+$stPackVer = (string) (json_decode((string) file_get_contents("$root/vendor/rivet/rivet-core/src/Rmm/Starter/data/pack.json"), true)['version'] ?? '');   // 1.0.1 since RivetCore 1.0.0-rc.19
+$stPackVerRe = preg_quote($stPackVer, '/');
 $stState = function (string $id) use ($stCatalog): ?string {
     foreach ($stCatalog()['packs'][0] as $k => $v) {
         if (in_array($k, ['scripts', 'policies'], true)) {
@@ -52,7 +54,7 @@ $ok($cat['totals']['installed'] === 0 && $stScriptRows() === 0 && $stPolicyRows(
 [$c, $body] = $stPg();
 $ok($c === 200 && !str_contains($body, 'Fatal error') && !str_contains($body, 'Warning:') && !str_contains($body, 'Deprecated:'), 'the Starter pack page loads for an administrator with no PHP notice (' . $c . ')');
 $ok(substr_count($body, 'data-rmm-starter-row="') === 76 && str_contains($body, 'data-rmm-starter-table="scripts"') && str_contains($body, 'data-rmm-starter-table="policies"'), 'it lists 73 scripts and 3 policy drafts');
-$ok(str_contains($body, 'data-rmm-starter-kpi="scripts">0 <span') && str_contains($body, 'of 73') && str_contains($body, '41 / 32') && str_contains($body, '1.0.0'), 'the figures: 0 of 73 installed, 41 / 32 by platform, the pack version');
+$ok(str_contains($body, 'data-rmm-starter-kpi="scripts">0 <span') && str_contains($body, 'of 73') && str_contains($body, '41 / 32') && str_contains($body, $stPackVer), 'the figures: 0 of 73 installed, 41 / 32 by platform, the pack version');
 $ok(str_contains($body, 'Read only') && str_contains($body, 'Changes the system') && str_contains($body, 'Disruptive') && str_contains($body, 'Needs approval'), 'risk chips (icon and words) and the approval mark are drawn');
 $ok(!str_contains($body, 'data-rmm-starter-blocker'), 'no blocker while the signing key exists');
 $ok(str_contains($body, '/js/rmm_starter.js') && str_contains($body, 'itflow_rmm_starter.css'), 'the page links its script and style');
@@ -166,7 +168,7 @@ $sid = (int) $one("SELECT script_id FROM rmm_script_versions WHERE note LIKE 'st
 $tags = (string) $one("SELECT tags_json FROM rmm_scripts_v2 WHERE script_id = $sid");
 $ok($sid > 0 && str_contains($tags, '"starter"') && str_contains($tags, 'risk:read_only'), 'a starter script carries the tags starter and risk:<class>');
 $pol = $rows("SELECT policy_id, enabled, description FROM rmm_policies WHERE description LIKE '% [starter|%'")[0] ?? [];
-$ok(($pol['enabled'] ?? 1) == 0 && (int) $one('SELECT COUNT(*) FROM rmm_policy_assignments WHERE policy_id = ' . (int) ($pol['policy_id'] ?? 0)) === 0 && preg_match('/ \[starter\|rivet-core-starter\|policy-linux-server\|1\.0\.0\|[0-9a-f]{64}\]$/', (string) ($pol['description'] ?? '')) === 1, 'the policy draft is switched off, assigned to nothing, and ends with the pack marker');
+$ok(($pol['enabled'] ?? 1) == 0 && (int) $one('SELECT COUNT(*) FROM rmm_policy_assignments WHERE policy_id = ' . (int) ($pol['policy_id'] ?? 0)) === 0 && preg_match('/ \[starter\|rivet-core-starter\|policy-linux-server\|' . $stPackVerRe . '\|[0-9a-f]{64}\]$/', (string) ($pol['description'] ?? '')) === 1, 'the policy draft is switched off, assigned to nothing, and ends with the pack marker');
 $dry = $rows("SELECT body FROM rmm_script_versions v JOIN rmm_scripts_v2 s ON s.script_id = v.script_id AND s.current_version = v.version WHERE v.note LIKE 'starter|rivet-core-starter|win-flush-dns|%'");
 $ok(count($dry) === 1 && str_contains((string) $dry[0]['body'], 'dry_run'), 'a script that changes the system has the dry_run switch in its text');
 $ok($stAudit('Starter Pack Installed') === 1 && $stAudit('Starter Pack Item Added') === 4, 'audit: one "Starter Pack Installed" and one line per item added (' . $stAudit('Starter Pack Item Added') . ')');
@@ -245,7 +247,7 @@ $ok(substr_count($b, 'rmm-starter-waiting') === 1 && str_contains($b, 'Update wa
 [$c, $b] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library&script_id=' . $sid, $SS['admin']);
 $ok(str_contains($b, 'data-rmm-starter-update="' . $staged . '"') && str_contains($b, 'The Starter pack has a newer version of this script') && str_contains($b, 'from=' . $cur . '&amp;to=' . $staged), 'the script page explains it and links the comparison of the current version with the parked one');
 [$c, $b] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library&script_id=' . $sid, $SS['admin']);
-$ok(str_contains($b, 'Installed from the starter pack (rivet-core-starter 1.0.0)') && str_contains($b, 'Starter pack update, waiting for review') && str_contains($b, 'Compare with the current version') && !str_contains($b, 'starter-updated|'), 'the versions table words the pack\'s notes plainly and links the comparison, without the raw marker');
+$ok(str_contains($b, 'Installed from the starter pack (rivet-core-starter ' . $stPackVer . ')') && str_contains($b, 'Starter pack update, waiting for review') && str_contains($b, 'Compare with the current version') && !str_contains($b, 'starter-updated|'), 'the versions table words the pack\'s notes plainly and links the comparison, without the raw marker');
 [$c, $b] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library&script_id=' . $sid . '&from=' . $cur . '&to=' . $staged, $SS['admin']);
 $ok($c === 200 && str_contains($b, 'id="scr-diff"') && str_contains($b, 'pack text v2'), 'and that link shows the differences');
 [$c, $b] = web($wb, 'GET', '/agent/rmm_scripts.php?tab=library&script_id=' . $sid, $SS['tech']);
@@ -277,7 +279,7 @@ $ok(str_contains($b, 'Uninstall result') && str_contains($b, 'was left alone') &
 // editing a draft through the real handler keeps its marker (the editor does not show it; the handler puts the stored one back)
 $edit = web($wb, 'POST', '/agent/post/rmm_automation_pol.php', $SS['admin'], ['csrf_token' => 'csrftok1', 'action' => 'save_policy', 'policy_id' => (int) $pol['policy_id'], 'name' => 'Starter: Linux Server baseline', 'description' => 'Reviewed by the team.', 'return' => '/agent/rmm_policies.php']);
 $descNow = (string) $one('SELECT description FROM rmm_policies WHERE policy_id = ' . (int) $pol['policy_id']);
-$ok(str_starts_with($descNow, 'Reviewed by the team.') && preg_match('/ \[starter\|rivet-core-starter\|policy-linux-server\|1\.0\.0\|[0-9a-f]{64}\]$/', $descNow) === 1 && strlen($descNow) <= 300, 'saving a draft keeps its marker (' . $edit[0] . ')');
+$ok(str_starts_with($descNow, 'Reviewed by the team.') && preg_match('/ \[starter\|rivet-core-starter\|policy-linux-server\|' . $stPackVerRe . '\|[0-9a-f]{64}\]$/', $descNow) === 1 && strlen($descNow) <= 300, 'saving a draft keeps its marker (' . $edit[0] . ')');
 $q("UPDATE rmm_policies SET description = '" . $esc($descNow) . "' WHERE policy_id = " . (int) $pol['policy_id']);
 
 // ============================================================ the blocker: no signing key
