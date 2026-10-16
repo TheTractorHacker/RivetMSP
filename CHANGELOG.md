@@ -4,6 +4,10 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+### Incoming (IMAP) and outgoing (SMTP) mail providers no longer change each other
+
+- The Settings > Mail "Connect Microsoft 365" flow belongs to the incoming (IMAP) card, but its callback set **both** `config_imap_provider` and `config_smtp_provider` to Microsoft 365. On a tenant with SMTP AUTH disabled that silently stopped all outgoing mail. The callback now sets the IMAP provider only. `tests/mail_provider_independence.php` fails if any settings update ever sets both providers together.
+
 ## [26.10.25] RivetMSP — RivetCore 1.0.0-rc.19: thresholds of policy checks, starter pack 1.0.1
 
 **Deploy notes:** back up the database, pull this tag. RivetCore is now **1.0.0-rc.19** (the tracked `vendor/rivet/rivet-core` is the tag's `git archive`, so no `composer install` is needed). **No database change** (DB stays 2.6.95), no cron change. Then, for the Windows fixes: publish agent **0.7.1** (or newer) to your rings, rebuild the MSI template with it, and install the starter pack's update (Starter pack page, "updated" items).
