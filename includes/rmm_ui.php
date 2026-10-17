@@ -543,7 +543,9 @@ function rivetRmmUiPanel(\mysqli $mysqli, int $assetId, int $userId, ?int $devic
         'client_id' => $client,
         'user_id' => $userId,
         // RMM Phase 2 and 3 sub-switches (RivetCore 1.0.0-rc.10), from the module's state file: the asset page shows the Policy and Alerting tabs only for these
-        'features' => ['policies' => !empty($featureSwitches['policies']), 'scripts' => !empty($featureSwitches['scripts']), 'alerting' => !empty($featureSwitches['alerting'])],
+        'features' => ['policies' => !empty($featureSwitches['policies']), 'scripts' => !empty($featureSwitches['scripts']), 'alerting' => !empty($featureSwitches['alerting']),
+            // RMM Phase 4 (RivetCore 1.0.0-rc.20): the asset page shows the Patches tab only for this
+            'patching' => !empty($featureSwitches['patching'])],
         'hostname' => (string) $dev['hostname'],
         'platform' => $platform,
         'os_label' => (string) ($dev['os_version'] ?? ''),

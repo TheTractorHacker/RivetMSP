@@ -180,6 +180,21 @@ Everything here is **off by default** and dormant until an administrator turns i
 
 **`agent/post/rmm_remote.php` is NOT the Remote tab's handler.** It is the vendor-RMM "Remote Connect" handler (and carries the endpoint-agent Mesh branch); the Remote tab posts to `agent/post/rmm_remote_tools.php`. `tests/rmm_ui_p68_remote.php` pins both files. The Endpoints menu entries Logs and Log rules are drawn only for a user who has the ability (`rivetRmmAutoNav($userId)`). Every action is authorised on the server on every call (role, the device's client, the ability, the switch) by Core's `RemoteActions` / `LogActions`; another client's device is the same 404 as a missing one; every request, refusal and completion is audited, and `rmm.file.transferred` and `rmm.log.rule_matched` are on the event bus (RivetMSP's picker reads Core's `EventCatalog`, so both appear without an extension list).
 
+## 6f. Patch management (RivetCore 1.0.0-rc.20, RMM Phase 4, migration 0028, DB 2.6.96)
+
+Sub-switch `patching` (off by default; Administration > Settings > Endpoint agent > **Patch management**). The model, the safety defaults and what is not done are in RivetCore's `docs/rmm/PATCHING.md`; this edition adds the screens.
+
+| Piece | Where | Needs |
+| --- | --- | --- |
+| Patches tab of the asset page | `includes/rmm_patch_ui.php` (`rivetRmmPatchPanelSection()`, hooked in `rivetRmmUiTabs()`), `agent/post/rmm_patch.php` | module + `patching` + `rmm.patch.view` for the device's client; scan, approve, decline, dry run need `rmm.patch.manage`; a real install `rmm.patch.install` (and `rmm.job.reboot` to ask for a restart) |
+| Patch compliance | `agent/rmm_patch_compliance.php` | module + `patching` + `rmm.patch.view` |
+| Patch approvals (missing updates, fleet-wide) | `agent/rmm_patch_approvals.php` | view to read, manage to decide |
+| Patch policies, rings, approval rules | `agent/rmm_patch_policies.php` | view to read, manage to change; rings and policies also need access to every client (Core) |
+| Second person's decision | the existing Approvals page (kind `patch`), `agent/post/rmm_automation_scr.php` | `rmm.job.approve` and `rmm.patch.manage`; works with the script library off, then only for patch requests |
+| Administration card | `admin/settings_endpoint_agent.php`, `admin/post/settings_endpoint_agent.php` (`save_patching_settings`) | administrator |
+
+**Roles** (`src/Core/Adapter/Endpoint/EndpointAccessPolicy.php`): `rmm.patch.view` = RMM module level 1; `rmm.patch.manage` = RMM scripts level 2; `rmm.patch.install` = RMM scripts level 3. Administrators hold all three. **Live installs** (`patch_live_install`, default off) is a separate switch with its own confirmation: until it is on, the scheduler queues dry runs only. **Agent:** 0.8.0 or later announces `patch:scan` and `patch:install`; publish it to the rings and rebuild the MSI template. Tests: `tests/rmm_ui_p20_patching.php`.
+
 ## 6d. Scale settings, storage and the Performance and capacity panel (RivetCore 1.0.0-rc.11, S3 to S8)
 
 Administration > Settings > Endpoint agent > the cards **Scale settings**, **Metric storage and partitioning** and **External metric store**, and the read-only **Performance and capacity** panel on the Agent Fleet page (autoscaling hint, read cache, warm start, per-client token buckets, shedding, the three storage tiers and the rollup status).

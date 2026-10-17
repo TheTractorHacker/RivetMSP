@@ -9,7 +9,7 @@ use RivetCore\Database\DatabaseInterface;
 use RivetCore\Rmm\Authz\RmmAbility;
 
 /**
- * Maps the twelve rmm.* abilities onto RivetMSP's role model: the permission level of a role for a module (user_role_permissions joined to
+ * Maps the fifteen rmm.* abilities onto RivetMSP's role model: the permission level of a role for a module (user_role_permissions joined to
  * modules, the lookup lookupUserPermission() does for the signed-in user, here keyed by user id) and the administrator flag
  * (user_roles.role_is_admin). Same matrix as RivetIT minus module-only logins, which RivetMSP does not have:
  *
@@ -29,6 +29,10 @@ use RivetCore\Rmm\Authz\RmmAbility;
  *                                            the service and process managers, downloading a file from a device and the Mesh terminal and files views. A stronger
  *                                            grant than rmm.remote.launch, so it is not handed to everyone who may open a desktop session. Sending a file TO a device
  *                                            and the remote-tools settings stay rmm.admin (administrators only).
+ *   rmm.patch.view (RMM Phase 4)             view + module_rmm >= 1 (the same as rmm.device.view): patch state, history, compliance, policies, rings and rules
+ *   rmm.patch.manage (RMM Phase 4)           view + module_rmm_scripts >= 2 (the same as rmm.job.run_saved): scan, approve, decline, dry run, rules, rings, patch policies
+ *   rmm.patch.install (RMM Phase 4)          view + module_rmm_scripts >= 3 (the same as rmm.job.run_script, STRONGER than reboot): a real installation of approved updates
+ *                                            on devices. A second person's approval of a patch request (kind `patch`) additionally needs rmm.job.approve, which is unchanged.
  *
  * An administrator holds every module at full access (as lookupUserPermission() does). Only active agents (staff, users.user_type 1) hold
  * anything: a client-portal contact, a disabled or an archived account is denied every ability, whatever role row it carries. The client
@@ -83,6 +87,9 @@ final class EndpointAccessPolicy implements AccessPolicyInterface
             RmmAbility::JOB_RUN_SAVED, RmmAbility::JOB_REBOOT => $this->level($roleId, 'module_rmm_scripts') >= 2,
             RmmAbility::REMOTE_LAUNCH => $this->level($roleId, 'module_rmm_remote_connect') >= 1,
             RmmAbility::ALERT_MANAGE => $this->level($roleId, 'module_rmm') >= 2,
+            RmmAbility::PATCH_VIEW => true,
+            RmmAbility::PATCH_MANAGE => $this->level($roleId, 'module_rmm_scripts') >= 2,
+            RmmAbility::PATCH_INSTALL => $this->level($roleId, 'module_rmm_scripts') >= 3,
             RmmAbility::REMOTE_MANAGE => $this->level($roleId, 'module_rmm_scripts') >= 3 && $this->level($roleId, 'module_rmm_remote_connect') >= 1 && $this->level3MayManageRemote(),
             RmmAbility::JOB_APPROVE => $this->level($roleId, 'module_rmm_scripts') >= 3 && $this->level3MayApprove(),
             default => false,

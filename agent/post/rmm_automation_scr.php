@@ -20,7 +20,10 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/vendor/autoload.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/rmm_bootstrap.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/rmm_scr_ui.php';
 
-$ctx = rivetRmmAutoPostBegin($mysqli, 'scripts', (int) $session_user_id, (string) $session_name);
+// RMM Phase 4: a request to approve patches (kind `patch`) can be decided while patch management is on even when the script library is switched off. In that case ONLY
+// patch requests may be decided here; a script run or schedule still needs the `scripts` switch (checked again below, on the approval itself).
+$patchOnly = in_array($_POST['action'] ?? '', ['decide_approval', 'cancel_approval'], true) && !rivetRmmFeatureOn('scripts', $mysqli) && rivetRmmFeatureOn('patching', $mysqli);
+$ctx = rivetRmmAutoPostBegin($mysqli, $patchOnly ? 'patching' : 'scripts', (int) $session_user_id, (string) $session_name);
 $api = static fn (string $method, array $seg, array $query = [], ?array $body = null): array => rivetRmmAutoApi($mysqli, $ctx['uid'], $ctx['name'], $method, $seg, $query, $body);
 $ret = $ctx['return'];
 $id = static fn (string $k): int => rivetRmmAutoInt($k) ?? 0;
@@ -212,6 +215,9 @@ switch (rivetRmmAutoStr('action', 40)) {
         rivetRmmAutoDone($r, 'Schedule deleted.', '/agent/rmm_schedules.php');
 
     case 'decide_approval':
+        if ($patchOnly && ($api('GET', ['approvals', $id('approval_id')])['data']['approval']['kind'] ?? '') !== 'patch') {
+            rivetRmmAutoDone(['ok' => false, 'status' => 403, 'error' => 'The script library is switched off, so only requests to approve patches can be decided.'], '', $ret);
+        }
         $approve = ($_POST['decision'] ?? '') === 'approve';
         if (!$approve && ($_POST['decision'] ?? '') !== 'reject') {
             rivetRmmAutoDone(['ok' => false, 'status' => 422, 'error' => 'Choose Approve or Reject.'], '', $ret);
@@ -234,6 +240,9 @@ switch (rivetRmmAutoStr('action', 40)) {
         rivetRmmAutoDone($r, $msg, $ret);
 
     case 'cancel_approval':
+        if ($patchOnly && ($api('GET', ['approvals', $id('approval_id')])['data']['approval']['kind'] ?? '') !== 'patch') {
+            rivetRmmAutoDone(['ok' => false, 'status' => 403, 'error' => 'The script library is switched off, so only requests to approve patches can be cancelled.'], '', $ret);
+        }
         $r = $api('POST', ['approvals', $id('approval_id'), 'cancel'], [], []);
         rivetRmmAutoDone($r, 'Request cancelled. Nothing is run.', $ret);
 }

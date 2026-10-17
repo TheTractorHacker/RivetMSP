@@ -621,8 +621,8 @@ $ok(str_contains($body, 'Trend (') && str_contains($body, 'id="rmm-net"'), 'asse
 
 // ---- events: catalog entries (RivetMSP's picker reads RivetCore's EventCatalog) and the adapter
 $all = RivetCore\Rmm\RmmEvent::all();
-$ok(count($all) === 24 && in_array('rmm.file.transferred', $all, true) && in_array('rmm.log.rule_matched', $all, true) && in_array('rmm.mesh.agent_installed', $all, true) && in_array('rmm.mesh.node_conflict', $all, true) && in_array('rmm.starter.installed', $all, true),
-    'RivetCore defines twenty-four rmm.* events (nine of Phase 1, ten of Phase 2 and 3, rmm.file.transferred and rmm.log.rule_matched of Phase 6 and 8, rmm.mesh.agent_installed and rmm.mesh.node_conflict of the Mesh agent, rmm.starter.installed of the starter pack)');
+$ok(count($all) === 29 && in_array('rmm.patch.scan_completed', $all, true) && in_array('rmm.patch.install_failed', $all, true) && in_array('rmm.file.transferred', $all, true) && in_array('rmm.log.rule_matched', $all, true) && in_array('rmm.mesh.agent_installed', $all, true) && in_array('rmm.mesh.node_conflict', $all, true) && in_array('rmm.starter.installed', $all, true),
+    'RivetCore defines twenty-nine rmm.* events (nine of Phase 1, ten of Phase 2 and 3, rmm.file.transferred and rmm.log.rule_matched of Phase 6 and 8, rmm.mesh.agent_installed and rmm.mesh.node_conflict of the Mesh agent, rmm.starter.installed of the starter pack, five rmm.patch.* of Phase 4)');
 require_once "$root/includes/event_picker.php";
 $cat = json_decode(eventPickerCatalogJson(), true);
 $pickerIds = array_column($cat['events'], 'i');
@@ -726,4 +726,12 @@ $rmm->admin()->enable($admin);
 foreach (glob(__DIR__ . '/rmm_ui_p16_*.php') ?: [] as $__p16) {
     echo "---- " . basename($__p16) . "\n";
     require $__p16;
+}
+
+// ============================================================ patch management (rc.20): the sections live in tests/rmm_ui_p20_*.php
+// Same contract as the fragments above (shared variables, module on, run in file-name order). The `patching` switch is OFF at the start of each fragment and put back OFF.
+$rmm->admin()->enable($admin);
+foreach (glob(__DIR__ . '/rmm_ui_p20_*.php') ?: [] as $__p20) {
+    echo "---- " . basename($__p20) . "\n";
+    require $__p20;
 }

@@ -224,6 +224,56 @@ if (isset($_POST['save_automation_settings'])) {
     ea_flash_result(ActionResult::ok('Saved.'), implode(' ', $messages));
 }
 
+// RMM Phase 4 (RivetCore 1.0.0-rc.20): patch management. The `patching` sub-switch (off by default) and its limits. RmmAdmin validates and audits both; only values that
+// changed are written. Turning LIVE installs on (patch_live_install = 1, the scheduler may then queue real installs) is a separate, deliberate step: it needs its own
+// confirmation box, because until then the scheduler only ever queues dry runs.
+if (isset($_POST['save_patching_settings'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $cur = $rmm->readModel()->settingsSummary();
+    $in = [];
+    $features = $cur['features'];
+    $want = !empty($_POST['feature_patching']);
+    if ($want !== !empty($features['patching'])) {
+        $features['patching'] = $want;
+        $in['features_json'] = $features;
+    }
+    $stored = is_string($cur['limits_json'] ?? null) && $cur['limits_json'] !== '' ? json_decode($cur['limits_json'], true) : [];
+    $stored = is_array($stored) ? $stored : [];
+    $changedLimit = false;
+    $hours = isset($_POST['patch_scan_hours']) && is_numeric($_POST['patch_scan_hours']) ? max(1, min(168, (int) $_POST['patch_scan_hours'])) * 3600 : null;
+    $wanted = ['patch_scan_interval_s' => $hours, 'patch_overdue_days' => isset($_POST['patch_overdue_days']) && is_numeric($_POST['patch_overdue_days']) ? max(1, min(365, (int) $_POST['patch_overdue_days'])) : null,
+        'patch_max_installs' => isset($_POST['patch_max_installs']) && is_numeric($_POST['patch_max_installs']) ? max(1, min(10000, (int) $_POST['patch_max_installs'])) : null,
+        'patch_max_installs_per_client' => isset($_POST['patch_max_installs_per_client']) && is_numeric($_POST['patch_max_installs_per_client']) ? max(1, min(1000, (int) $_POST['patch_max_installs_per_client'])) : null,
+        'patch_history_days' => isset($_POST['patch_history_days']) && is_numeric($_POST['patch_history_days']) ? max(30, min(3650, (int) $_POST['patch_history_days'])) : null];
+    foreach ($wanted as $k => $v) {
+        if ($v !== null && $v !== (int) ($cur['limits'][$k] ?? -1)) {
+            $stored[$k] = $v;
+            $changedLimit = true;
+        }
+    }
+    $live = !empty($_POST['patch_live_install']) ? 1 : 0;
+    if ($live !== (int) ($cur['limits']['patch_live_install'] ?? 0)) {
+        if ($live === 1 && empty($_POST['patch_live_confirm'])) {
+            flash_alert('To allow live installs, tick the confirmation box as well.', 'error');
+            redirect();
+        }
+        $stored['patch_live_install'] = $live;
+        $changedLimit = true;
+    }
+    if ($changedLimit) {
+        $in['limits_json'] = $stored;
+    }
+    if ($in === []) {
+        flash_alert('No change to save.', 'info');
+        redirect();
+    }
+    $r = $ea_admin->saveSettings($ea_who, $in);
+    if ($r->ok) {
+        logAction('RMM', 'Settings Changed', "$session_name changed the patch management settings (" . implode(', ', array_keys($in)) . '; live installs ' . (($stored['patch_live_install'] ?? 0) ? 'on' : 'off') . ')');
+    }
+    ea_flash_result($r, 'Patch management settings saved.');
+}
+
 // ---------------------------------------------------------------- agent binaries and per-client installers
 
 /**

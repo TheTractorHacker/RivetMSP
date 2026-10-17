@@ -277,9 +277,16 @@ function rivetRmmAutoNav(?int $userId = null): array
         // RMM Phase 8 (RivetCore 1.0.0-rc.11), sub-switch `logs` (off by default): the search needs the ability that reads job output, the rules the alert-management ability.
         ['logs', '/agent/rmm_logs.php', 'Logs', 'fa-scroll', ['rmm_logs.php'], 'logs'],
         ['logs', '/agent/rmm_log_rules.php', 'Log rules', 'fa-bullhorn', ['rmm_log_rules.php'], 'logs'],
+        // RMM Phase 4 (RivetCore 1.0.0-rc.20), sub-switch `patching` (off by default): fleet compliance, the approvals queue of missing updates and the patch policies. Shown only to a
+        // user holding rmm.patch.view (the policies page needs nothing beyond view to read; its forms need rmm.patch.manage and Core decides again).
+        ['patching', '/agent/rmm_patch_compliance.php', 'Patch compliance', 'fa-shield-alt', ['rmm_patch_compliance.php'], 'patching'],
+        ['patching', '/agent/rmm_patch_approvals.php', 'Patch approvals', 'fa-clipboard-check', ['rmm_patch_approvals.php'], 'patching'],
+        ['patching', '/agent/rmm_patch_policies.php', 'Patch policies', 'fa-calendar-check', ['rmm_patch_policies.php'], 'patching'],
     ];
     $abilities = ['/agent/rmm_logs.php' => \RivetCore\Rmm\Authz\RmmAbility::JOB_RUN_SAVED, '/agent/rmm_log_rules.php' => \RivetCore\Rmm\Authz\RmmAbility::ALERT_MANAGE,
-        '/agent/rmm_starter_pack.php' => \RivetCore\Rmm\Authz\RmmAbility::ADMIN];
+        '/agent/rmm_starter_pack.php' => \RivetCore\Rmm\Authz\RmmAbility::ADMIN,
+        '/agent/rmm_patch_compliance.php' => \RivetCore\Rmm\Authz\RmmAbility::PATCH_VIEW, '/agent/rmm_patch_approvals.php' => \RivetCore\Rmm\Authz\RmmAbility::PATCH_VIEW,
+        '/agent/rmm_patch_policies.php' => \RivetCore\Rmm\Authz\RmmAbility::PATCH_VIEW];
     $out = [];
     foreach ($all as [$feature, $href, $label, $icon, $pages, $group]) {
         if (rivetRmmFeatureOn($feature)) {
