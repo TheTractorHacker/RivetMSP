@@ -76,7 +76,7 @@ async function shot(name) {
 }
 /** A screenshot of one element (a card), however far down the page it is. */
 async function shotEl(sel, name) {
-  const r = await p.eval(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e)return null;const b=e.getBoundingClientRect();return {x:b.x+scrollX,y:b.y+scrollY,w:b.width,h:b.height}})()`);
+  const r = await p.evalWith((q) => { const e = document.querySelector(q); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x + scrollX, y: b.y + scrollY, w: b.width, h: b.height }; }, sel);
   assert(r, 'no element ' + sel);
   const { data } = await p.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: Math.max(0, r.x), y: Math.max(0, r.y), width: Math.ceil(r.w), height: Math.min(Math.ceil(r.h), 6000), scale: 1 } });
   writeFileSync(join(shotDir, name + '.png'), Buffer.from(data, 'base64'));
@@ -104,7 +104,7 @@ const unlabeled = () => p.eval(`[...document.querySelectorAll('#mesh input, #mes
   if(e.type==='hidden'||e.disabled)return false;const r=e.getBoundingClientRect();if(!(r.width>0&&r.height>0))return false;
   const lab=(e.labels&&e.labels.length)||e.getAttribute('aria-label')||e.getAttribute('aria-labelledby')||e.getAttribute('title');return !lab}).map(e=>e.name||e.id||e.tagName)`);
 const msgIn = (card) => p.eval(`(()=>{const e=document.querySelector('#${card} [data-rmm-scale-msg]');return e?e.innerText.trim():''})()`);
-const checked = (sel) => p.eval(`!!document.querySelector(${JSON.stringify(sel)}).checked`);
+const checked = (sel) => p.evalWith((q) => !!document.querySelector(q).checked, sel);
 // a person clicks the label of a switch or box (the input itself is a few pixels)
 const setChecked = async (sel, want) => {
   for (let i = 0; i < 3 && (await checked(sel)) !== want; i++) { await click(`label[for="${sel.slice(1)}"]`); await sleep(350); }
@@ -258,7 +258,7 @@ await T('Add device: with a template published msi is enabled for x64 only, the 
   await p.waitSel('#rmmInstallerModal.show');
   await trapDialogs();
   assert(!(await p.eval(`document.querySelector('#rmm-inst-format option[value=msi]').disabled`)), 'msi should be enabled for x64');
-  await p.eval(`(()=>{const s=document.getElementById('rmm-inst-client');s.value=${JSON.stringify(String(1))};s.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+  await p.eval(`(()=>{const s=document.getElementById('rmm-inst-client');s.value='1';s.dispatchEvent(new Event('change',{bubbles:true}))})()`);
   await p.eval(`(()=>{const s=document.getElementById('rmm-inst-format');s.value='msi';s.dispatchEvent(new Event('change',{bubbles:true}))})()`);
   await sleep(300);
   assert(/Download MSI/.test(await p.eval(`document.getElementById('rmm-inst-go-label').innerText`)), 'the button should say Download MSI');

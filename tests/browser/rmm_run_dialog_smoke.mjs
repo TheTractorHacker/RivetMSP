@@ -71,8 +71,8 @@ const trapDialogs = () => p.eval(`window.__dialogs = 0; window.confirm = window.
 
 
 
-const pick = (sel, val) => p.eval(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});e.value=${JSON.stringify(String(val))};e.dispatchEvent(new Event('change',{bubbles:true}));return e.value})()`);
-const optionValue = (sel, text) => p.eval(`(()=>{const o=[...document.querySelector(${JSON.stringify(sel)}).options].find(x=>x.text.includes(${JSON.stringify(text)}));return o?o.value:null})()`);
+const pick = (sel, val) => p.evalWith((q, v) => { const e = document.querySelector(q); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); return e.value; }, sel, String(val));
+const optionValue = (sel, text) => p.evalWith((q, t) => { const o = [...document.querySelector(q).options].find((x) => x.text.includes(t)); return o ? o.value : null; }, sel, text);
 const waitText = (re, label) => p.waitFor(`/${re}/.test(document.body.innerText)`, { timeout: 12000, label: label || String(re) });
 const extra = (...args) => JSON.parse(execFileSync('php', ['-d', 'display_errors=0', 'tests/browser/rmm_run_dialog_extra.php', process.env.SEED_JSON, ...args], { cwd: process.cwd(), env: process.env, encoding: 'utf8', timeout: 90000 }).trim().split('\n').filter((l) => l.startsWith('{')).pop());
 const FX = {};
@@ -85,11 +85,11 @@ const openDialog = async (assetName) => {
   await sleep(500);   // the fade
 };
 const closeDialog = async () => { await p.press('Escape'); await p.waitFor(`!document.querySelector('#rmmRunModal.show') && !document.body.classList.contains('modal-open')`, { timeout: 10000, label: 'dialog closed' }); await sleep(250); };
-const optionTexts = (sel) => p.eval(`[...document.querySelectorAll(${JSON.stringify(sel)})].map(o=>o.textContent.trim())`);
+const optionTexts = (sel) => p.evalWith((q) => [...document.querySelectorAll(q)].map((o) => o.textContent.trim()), sel);
 const choose = async (name) => {
   await p.eval(`document.getElementById('rmm-lib-search').value=''; document.getElementById('rmm-lib-search').dispatchEvent(new Event('input',{bubbles:true}))`);
   await pick('#rmm-lib-script', await optionValue('#rmm-lib-script', name));
-  await p.waitFor(`document.getElementById('rmm-lib-name').textContent === ${JSON.stringify(name)} && !document.getElementById('rmm-lib-go').disabled`, { label: 'form for ' + name });
+  await p.waitFor((n) => document.getElementById('rmm-lib-name').textContent === n && !document.getElementById('rmm-lib-go').disabled, { args: [name], label: 'form for ' + name });
 };
 const toast = () => p.eval(`document.getElementById('rmm-msg').innerText`);
 

@@ -107,16 +107,16 @@ const drpOpen = async () => { await p.click(DR.btn); await p.waitSel(DR.panelOpe
 await T('tickets: date picker opens, "Last 7 days" auto-submits', async () => {
   await go('/agent/tickets.php');
   await drpOpen();
-  assert((await p.eval(`document.querySelector(${JSON.stringify(DR.btn)}).getAttribute('aria-expanded')`)) === 'true', 'aria-expanded not true');
+  assert((await p.evalWith((q) => document.querySelector(q).getAttribute('aria-expanded'), DR.btn)) === 'true', 'aria-expanded not true');
   await p.clickNav(`${DR.opt}[data-preset="last7"]`);
   const u = await p.url();
   assert(/last7/.test(u), 'URL does not carry the preset: ' + u);
-  const label = await p.eval(`document.querySelector(${JSON.stringify(DR.label)}).textContent`);
+  const label = await p.evalWith((q) => document.querySelector(q).textContent, DR.label);
   assert(/Last 7 days/i.test(label), 'button label is "' + label + '"');
 });
 await T('tickets: reopen shows the selection; custom range by two calendar clicks', async () => {
   await drpOpen();
-  const sel = await p.eval(`(()=>{const o=document.querySelector(${JSON.stringify(DR.opt + '[data-preset="last7"]')});return o.getAttribute('aria-selected')==='true'||o.classList.contains('selected')})()`);
+  const sel = await p.evalWith((q) => { const o = document.querySelector(q); return o.getAttribute('aria-selected') === 'true' || o.classList.contains('selected'); }, DR.opt + '[data-preset="last7"]');
   assert(sel, 'last7 not marked selected on reopen');
   await p.click(`${DR.opt}[data-preset="custom"]`);
   const dayCells = `${DR.custom} .litepicker .day-item, ${DR.custom} .day-item`;
@@ -127,12 +127,12 @@ await T('tickets: reopen shows the selection; custom range by two calendar click
   const a = days[2], b = days[8];
   await p.click(`${DR.custom} .day-item[data-time="${a}"]`);
   await p.click(`${DR.custom} .day-item[data-time="${b}"]`);
-  const from = await p.eval(`document.querySelector(${JSON.stringify(DR.from)}).value`), to = await p.eval(`document.querySelector(${JSON.stringify(DR.to)}).value`);
+  const from = await p.evalWith((q) => document.querySelector(q).value, DR.from), to = await p.evalWith((q) => document.querySelector(q).value, DR.to);
   assert(from && to && from < to, `inputs not filled by the calendar clicks (from="${from}" to="${to}")`);
   await p.clickNav(DR.apply);
   const u = new URL(await p.url());
   assert(u.searchParams.get(DR.fromParam) === from && u.searchParams.get(DR.toParam) === to, 'URL range does not match the picked days: ' + u.search);
-  assert(/Custom range|[A-Z][a-z]{2} \d/.test(await p.eval(`document.querySelector(${JSON.stringify(DR.label)}).textContent`)), 'label does not show the custom range');
+  assert(/Custom range|[A-Z][a-z]{2} \d/.test(await p.evalWith((q) => document.querySelector(q).textContent, DR.label)), 'label does not show the custom range');
 });
 
 // ------------------------------------------------------------------------------------------------ saved view + icon picker
@@ -181,7 +181,7 @@ await T('tickets: create through the UI form and open it', async () => {
 });
 await T('tickets: the new ticket appears in the list and opens', async () => {
   await go('/agent/tickets.php');
-  const href = await p.eval(`(()=>{const a=[...document.querySelectorAll('a[href*="ticket.php"]')].find(a=>a.textContent.includes(${JSON.stringify(subject)}));return a?a.getAttribute('href'):null})()`);
+  const href = await p.evalWith((t) => { const a = [...document.querySelectorAll('a[href*="ticket.php"]')].find((x) => x.textContent.includes(t)); return a ? a.getAttribute('href') : null; }, subject);
   assert(href, 'subject not linked from the list');
   await p.clickNav(`a[href="${href}"]`);
   assert((await bodyText()).includes(subject), 'ticket detail does not show the subject');
@@ -208,7 +208,7 @@ await T('admin: global search finds a settings page (live dropdown + results pag
 
 // ------------------------------------------------------------------------------------------------ webhooks
 const whName = `Smoke hook ${RUN}`;
-const waitUrlState = (cls) => p.waitFor(`(()=>{const s=document.querySelector('[data-wz-urlstate], #whf_url_status');return s&&s.classList.contains(${JSON.stringify(cls)})})()`, { timeout: 25000, label: 'url state ' + cls });
+const waitUrlState = (cls) => p.waitFor((c) => { const s = document.querySelector('[data-wz-urlstate], #whf_url_status'); return s && s.classList.contains(c); }, { timeout: 25000, args: [cls], label: 'url state ' + cls });
 if (ED.webhookUi === 'wizard') {
   await T('webhooks: guided add (n8n, live check, advanced, events search + group, review, create)', async () => {
     await go(ED.webhookNew);
@@ -424,8 +424,8 @@ await T('keyboard: Esc closes a modal and the date picker', async () => {
   await sleep(800); // backdrop fade-out
   await drpOpen();
   await p.press('Escape');
-  await p.waitFor(`document.querySelector(${JSON.stringify(DR.panel)}).hidden`, { timeout: 4000, label: 'picker closes on Esc' });
-  assert((await p.eval(`document.querySelector(${JSON.stringify(DR.btn)}).getAttribute('aria-expanded')`)) === 'false', 'aria-expanded still true');
+  await p.waitFor((q) => document.querySelector(q).hidden, { timeout: 4000, args: [DR.panel], label: 'picker closes on Esc' });
+  assert((await p.evalWith((q) => document.querySelector(q).getAttribute('aria-expanded'), DR.btn)) === 'false', 'aria-expanded still true');
 });
 await T('keyboard: Esc closes the icon picker popover', async () => {
   await go('/agent/tickets.php');

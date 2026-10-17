@@ -50,7 +50,7 @@ const T = (name, fn, o = {}) => (only && !only.test(name) ? Promise.resolve() : 
 const p = page;
 const go = async (path) => { if (path.includes('#')) await p.goto('about:blank'); await p.goto(BASE + path); };
 const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
-const text = (sel) => p.eval(`(document.querySelector(${JSON.stringify(sel)})||{}).innerText||''`);
+const text = (sel) => p.evalWith((q) => (document.querySelector(q) || {}).innerText || '', sel);
 
 // the page targets of the browser, from its HTTP endpoint: a tab opened by window.open appears here
 const targets = async () => (await (await fetch(`http://127.0.0.1:${browser.port}/json/list`)).json()).filter((t) => t.type === 'page');
