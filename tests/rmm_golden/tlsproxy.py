@@ -2,7 +2,7 @@
 """TLS terminator for the real-agent test: listens on https://127.0.0.1:<port> (self-signed cert for 127.0.0.1) and forwards raw bytes to a plain-http php -S."""
 import socket, ssl, sys, threading
 listen, target, cert, key = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3], sys.argv[4]
-ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); ctx.load_cert_chain(cert, key)
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); ctx.minimum_version = ssl.TLSVersion.TLSv1_2; ctx.load_cert_chain(cert, key)
 srv = socket.socket(); srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); srv.bind(('127.0.0.1', listen)); srv.listen(64)
 def pipe(a, b):
     try:

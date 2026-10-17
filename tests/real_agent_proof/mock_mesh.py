@@ -60,6 +60,7 @@ class H(http.server.BaseHTTPRequestHandler):
 
 srv = http.server.ThreadingHTTPServer(('0.0.0.0', port), H)
 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+ctx.minimum_version = ssl.TLSVersion.TLSv1_2   # no TLS 1.0/1.1
 ctx.load_cert_chain(pem)
 srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
 srv.timeout = 1

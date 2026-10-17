@@ -201,7 +201,7 @@ check('save: errors name the field (cfg_message)', 'cfg_message' in j.get('error
 s, j = tools('describe', form('E2E UI x', 'ticket.created', 'notify_user', [('ticket_priority', 'High')], cfg_message='{ticket_number} {client_name}'))
 check('describe: live sentence + sample-data preview', j.get('ok') and j['summary'].startswith('When "Ticket created" happens and ticket priority is "High", notify technicians') and j['preview'] == {'Message': 'TCK-1042 Acme Corp'}, j)
 s, j = tools('describe', form('E2E UI x', 'ticket.created', 'send_webhook', cfg_url='http://a.test/p?token=zzz', cfg_secret='shh'))
-check('describe never echoes a URL path/query or secret', 'zzz' not in json.dumps(j) and 'shh' not in json.dumps(j) and 'http://a.test' in j['summary'], j)
+check('describe never echoes a URL path/query or secret', 'zzz' not in json.dumps(j) and 'shh' not in json.dumps(j) and 'a.test' in [urllib.parse.urlparse(u).hostname for u in re.findall(r'https?://[^\s"\'<>,;]+', j['summary'])], j)
 
 # ---- hostile input is escaped everywhere it is displayed
 evil = "E2E UI <script>alert(1)</script> \"'&"
