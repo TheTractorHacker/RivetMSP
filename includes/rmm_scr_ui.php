@@ -1421,11 +1421,39 @@ function rivetRmmScrScheduleDetailPage(array $vm, array $ctx): string
 
 const RIVET_RMM_SCR_APPROVAL_STATES = ['pending_approval', 'approved', 'rejected', 'cancelled', 'expired', 'all'];
 
+/**
+ * The approval kinds that may still be decided while the script library is switched off: `patch` while patch management is on (RMM Phase 4) and `software` while software
+ * deployment is on (RMM Phase 5). Returns null when the script library is ON (then every kind may be decided) and an empty list when it is off and neither is on (then nothing
+ * may). The state file answers: no database query. Each kind's sub-switch is also its feature name in RIVET_RMM_AUTO_FEATURES.
+ *
+ * @return list<string>|null
+ */
+function rivetRmmScrAltKinds(\mysqli $mysqli): ?array
+{
+    if (rivetRmmFeatureOn('scripts', $mysqli)) {
+        return null;
+    }
+    $out = [];
+    foreach (['patch' => 'patching', 'software' => 'software_deploy'] as $kind => $feature) {
+        if (rivetRmmFeatureOn($feature, $mysqli)) {
+            $out[] = $kind;
+        }
+    }
+
+    return $out;
+}
+
+/** The sub-switch an approval kind belongs to (for the page gate while the script library is off). */
+function rivetRmmScrKindFeature(string $kind): string
+{
+    return ['patch' => 'patching', 'software' => 'software_deploy'][$kind] ?? 'scripts';
+}
+
 /** @return array<string,mixed> */
 function rivetRmmScrApprovalsView(array $ctx, array $get): array
 {
     $state = is_string($get['state'] ?? null) && in_array($get['state'], RIVET_RMM_SCR_APPROVAL_STATES, true) ? $get['state'] : 'pending_approval';
-    $kind = is_string($get['kind'] ?? null) && in_array($get['kind'], ['run', 'schedule', 'patch'], true) ? $get['kind'] : '';
+    $kind = is_string($get['kind'] ?? null) && in_array($get['kind'], ['run', 'schedule', 'patch', 'software'], true) ? $get['kind'] : '';
     $vm = ['state' => $state, 'kind' => $kind, 'page' => max(1, (int) ($get['page'] ?? 1)), 'items' => [], 'total' => 0, 'error' => '', 'names' => [], 'pending' => 0, 'detail' => []];
     $q = ['limit' => (string) RIVET_RMM_SCR_PAGE, 'offset' => (string) (($vm['page'] - 1) * RIVET_RMM_SCR_PAGE)];
     if ($state !== 'all') {
@@ -1468,6 +1496,24 @@ function rivetRmmScrApprovalsView(array $ctx, array $get): array
                 }
                 $vm['detail'][(int) $a['approval_id']] = ['patch' => true, 'req' => $req, 'script_name' => '', 'version' => 0, 'sha' => '', 'params' => [], 'secrets' => [], 'target' => '', 'body' => null, 'body_cut' => false, 'body_note' => '', 'destructive' => false,
                     'update_count' => count($ids), 'pair_count' => count($pairs), 'updates' => array_slice($ids, 0, 30, true)];
+                continue;
+            }
+            if ((string) $a['kind'] === 'software') {
+                // RMM Phase 5 (RivetCore 1.0.0-rc.21): a real install or removal on one device, or an assignment that would change machines by itself. The frozen request names ids only;
+                // the words come from the catalog and the assignment list, read as this user (a restricted user sees only their own clients' assignments, and a missing row reads "unknown").
+                $op = (string) ($req['op'] ?? '');
+                $row = null;
+                if ($op === 'assign') {
+                    $swAssign ??= (array) (rivetRmmScrApi($ctx, 'GET', ['software_assignments'])['data']['assignments'] ?? []);
+                    foreach ($swAssign as $x) {
+                        if ((int) ($x['assignment_id'] ?? 0) === (int) ($req['assignment_id'] ?? -1)) {
+                            $row = $x;
+                        }
+                    }
+                }
+                $vm['detail'][(int) $a['approval_id']] = ['software' => true, 'op' => $op, 'req' => $req, 'action' => (string) ($req['action'] ?? $row['action'] ?? ''), 'assignment' => $row,
+                    'scope' => $row === null ? '' : rivetRmmAutoScopeLabel((string) $row['scope_type'], (int) $row['scope_id'], $scope), 'script_name' => '', 'version' => 0, 'sha' => '', 'params' => [], 'secrets' => [], 'target' => '', 'body' => null,
+                    'body_cut' => false, 'body_note' => '', 'destructive' => false];
                 continue;
             }
             $sid = (int) ($a['script_id'] ?? $req['script_id'] ?? 0);
@@ -1518,7 +1564,7 @@ function rivetRmmScrApprovalsPage(array $vm, array $ctx): string
         $o .= '<option value="' . $k . '"' . ($vm['state'] === $k ? ' selected' : '') . '>' . $w . '</option>';
     }
     $o .= '</select></div><div class="col-md-3"><label class="form-label" for="apr_kind">Kind</label><select class="form-select" id="apr_kind" name="kind"><option value="">Run or schedule</option><option value="run"' . ($vm['kind'] === 'run' ? ' selected' : '')
-        . '>A run</option><option value="schedule"' . ($vm['kind'] === 'schedule' ? ' selected' : '') . '>A schedule</option><option value="patch"' . ($vm['kind'] === 'patch' ? ' selected' : '') . '>Approving patches</option></select></div><div class="col-md-2"><button class="btn btn-outline-primary" type="submit">Filter</button></div></div></div></form>';
+        . '>A run</option><option value="schedule"' . ($vm['kind'] === 'schedule' ? ' selected' : '') . '>A schedule</option><option value="patch"' . ($vm['kind'] === 'patch' ? ' selected' : '') . '>Approving patches</option><option value="software"' . ($vm['kind'] === 'software' ? ' selected' : '') . '>Software</option></select></div><div class="col-md-2"><button class="btn btn-outline-primary" type="submit">Filter</button></div></div></div></form>';
     if ($vm['error'] !== '') {
         return $o . '<div class="alert alert-danger" role="alert">' . rmmH($vm['error']) . '</div>';
     }
@@ -1532,7 +1578,7 @@ function rivetRmmScrApprovalsPage(array $vm, array $ctx): string
         $by = $vm['names'][(int) $a['requested_by']] ?? ('user #' . (int) $a['requested_by']);
         $mine = (int) $a['requested_by'] === $ctx['uid'];
         $decided = $a['decided_by'] ? ($vm['names'][(int) $a['decided_by']] ?? 'user #' . (int) $a['decided_by']) : '';
-        $rows .= '<tr id="approval-' . $id . '"><td class="ps-3">' . rmmH($a['summary']) . '</td><td>' . (['schedule' => 'Schedule', 'patch' => 'Patches'][(string) $a['kind']] ?? 'Run') . '</td><td>' . rmmH($by) . '<div class="small text-muted">' . rivetRmmUiTime((string) $a['requested_at']) . '</div></td>'
+        $rows .= '<tr id="approval-' . $id . '"><td class="ps-3">' . rmmH($a['summary']) . '</td><td>' . (['schedule' => 'Schedule', 'patch' => 'Patches', 'software' => 'Software'][(string) $a['kind']] ?? 'Run') . '</td><td>' . rmmH($by) . '<div class="small text-muted">' . rivetRmmUiTime((string) $a['requested_at']) . '</div></td>'
             . '<td>' . (int) $a['device_count'] . '</td><td>' . ($pending ? rivetRmmScrTimeBoth((string) $a['expires_at']) : '<span class="text-muted">' . rivetRmmAutoUtc((string) $a['expires_at']) . '</span>') . '</td><td>' . rivetRmmAutoStatePill((string) $a['state']) . '</td>'
             . '<td>' . ($decided !== '' ? rmmH($decided) . '<div class="small text-muted">' . rivetRmmAutoUtc($a['decided_at']) . '</div>' : '<span class="text-muted">-</span>') . (!empty($a['decision_note']) ? '<div class="small">' . rmmH((string) $a['decision_note']) . '</div>' : '') . '</td></tr>';
         if ($pending) {
@@ -1552,6 +1598,18 @@ function rivetRmmScrApprovalsPage(array $vm, array $ctx): string
 /** What the request will do: script, version, hash, parameters (secrets masked), target, device count, and the script text when the viewer may read it. */
 function rivetRmmScrApprovalDetail(array $a, array $d): string
 {
+    if (!empty($d['software'])) {
+        $asg = $d['assignment'];
+        $what = $d['op'] === 'assign'
+            ? ($asg === null ? '<span class="text-muted">An assignment that you cannot see (it is for a client outside your access, or it was removed).</span>'
+                : rmmH(ucfirst((string) $asg['action'])) . ' <strong>' . rmmH((string) $asg['package']) . '</strong> on ' . rmmH($d['scope']) . ($asg['version_id'] === null ? ' (the newest fitting version)' : ' (one chosen version)'))
+            : rmmH(ucfirst($d['action'] !== '' ? $d['action'] : 'install')) . ' now on one device (device #' . (int) ($d['req']['device_id'] ?? 0) . '): ' . rmmH((string) $a['summary']);
+
+        return rivetRmmUiDl([['Asks to', $what],
+            ['What approving does', $d['op'] === 'assign'
+                ? 'The assignment goes live. Devices in its scope are then looked at by the scheduler, after their ring\'s delay, and changed only while live installs are switched on.'
+                : 'A real ' . ($d['action'] === 'uninstall' ? 'removal' : 'install') . ' is queued on that device right away, attributed to the person who asked. Rejecting it queues nothing.']]);
+    }
     if (!empty($d['patch'])) {
         $li = '';
         foreach ($d['updates'] as $uid => $n) {
@@ -1590,8 +1648,9 @@ function rivetRmmScrApprovalActions(array $a, bool $mine, array $perm, string $c
         if ($mine) {
             $o .= '<span class="text-muted small align-self-center"><i class="fas fa-ban me-1" aria-hidden="true"></i>You cannot approve your own request</span><button type="button" class="btn btn-sm btn-success" disabled>Approve</button>';
         } else {
-            $sentence = ($a['kind'] ?? '') === 'patch' ? 'Approve this request? ' . $a['summary'] . '. The updates are marked approved; nothing is installed by approving. Requested by ' . $by . '.' : 'Approve this request? ' . $a['summary'] . '. It reaches ' . (int) $a['device_count'] . ' device' . ((int) $a['device_count'] === 1 ? '' : 's') . ($d !== null && $d['script_name'] !== '' ? ', running "' . $d['script_name'] . '" version ' . $d['version'] : '')
-                . '. A run is queued right away, as ' . $by . '.';
+            $sentence = ($a['kind'] ?? '') === 'software' ? 'Approve this request? ' . $a['summary'] . '. ' . (($d['op'] ?? '') === 'assign' ? 'The assignment goes live and devices in its scope are changed later by the scheduler (only while live installs are on).' : 'A real install or removal is queued on the device right away, as ' . $by . '.')
+                : (($a['kind'] ?? '') === 'patch' ? 'Approve this request? ' . $a['summary'] . '. The updates are marked approved; nothing is installed by approving. Requested by ' . $by . '.' : 'Approve this request? ' . $a['summary'] . '. It reaches ' . (int) $a['device_count'] . ' device' . ((int) $a['device_count'] === 1 ? '' : 's') . ($d !== null && $d['script_name'] !== '' ? ', running "' . $d['script_name'] . '" version ' . $d['version'] : '')
+                . '. A run is queued right away, as ' . $by . '.');
             $o = '<form method="post" action="/agent/post/' . RIVET_RMM_SCR_HANDLER . '.php" class="mt-3" data-rmm-once="1">' . rivetRmmAutoHidden($csrf, $self . '?state=pending_approval') . '<input type="hidden" name="action" value="decide_approval"><input type="hidden" name="approval_id" value="' . $id . '">'
                 . '<div class="row g-2 align-items-end"><div class="col-md-6"><label class="form-label" for="apr_note_' . $id . '">Note (optional, kept with the decision)</label><input class="form-control" type="text" id="apr_note_' . $id . '" name="note" maxlength="300"></div>'
                 . '<div class="col-md-6"><button type="submit" name="decision" value="approve" class="btn btn-success" data-rmm-confirm="' . rmmH($sentence) . '" data-rmm-confirm-label="Approve"><i class="fas fa-check me-1" aria-hidden="true"></i>Approve</button> '

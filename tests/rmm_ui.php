@@ -369,6 +369,7 @@ use RivetCore\Rmm\Software\SoftwareHash;
 $fresh = function () use ($rmm): void { $rmm->settings()->refresh(); $rmm->state()->forget(); };   // another process (the web server) wrote settings: drop this object's cached row
 
 $REF1 = ['Referer: ' . $wb . '/admin/settings_endpoint_agent.php'];
+if (getenv('RMM_UI_ONLY') === 'p21') { goto software_p21; }   // developer shortcut: set up the web server and the sessions, then run only the software deployment fragment (the rest of this file needs the full run)
 $W = $D['WIN1'];
 $aW = $A['WIN1'];
 $swLine = fn(string $name, string $ver, string $src = 'registry', string $pub = 'Acme') => ['name' => $name, 'version' => $ver, 'publisher' => $pub, 'source' => $src, 'installed' => '2026-09-01'];
@@ -621,8 +622,8 @@ $ok(str_contains($body, 'Trend (') && str_contains($body, 'id="rmm-net"'), 'asse
 
 // ---- events: catalog entries (RivetMSP's picker reads RivetCore's EventCatalog) and the adapter
 $all = RivetCore\Rmm\RmmEvent::all();
-$ok(count($all) === 29 && in_array('rmm.patch.scan_completed', $all, true) && in_array('rmm.patch.install_failed', $all, true) && in_array('rmm.file.transferred', $all, true) && in_array('rmm.log.rule_matched', $all, true) && in_array('rmm.mesh.agent_installed', $all, true) && in_array('rmm.mesh.node_conflict', $all, true) && in_array('rmm.starter.installed', $all, true),
-    'RivetCore defines twenty-nine rmm.* events (nine of Phase 1, ten of Phase 2 and 3, rmm.file.transferred and rmm.log.rule_matched of Phase 6 and 8, rmm.mesh.agent_installed and rmm.mesh.node_conflict of the Mesh agent, rmm.starter.installed of the starter pack, five rmm.patch.* of Phase 4)');
+$ok(count($all) === 32 && in_array('rmm.deploy.started', $all, true) && in_array('rmm.deploy.finished', $all, true) && in_array('rmm.deploy.failed', $all, true) && in_array('rmm.patch.scan_completed', $all, true) && in_array('rmm.patch.install_failed', $all, true) && in_array('rmm.file.transferred', $all, true) && in_array('rmm.log.rule_matched', $all, true) && in_array('rmm.mesh.agent_installed', $all, true) && in_array('rmm.mesh.node_conflict', $all, true) && in_array('rmm.starter.installed', $all, true),
+    'RivetCore defines thirty-two rmm.* events (nine of Phase 1, ten of Phase 2 and 3, rmm.file.transferred and rmm.log.rule_matched of Phase 6 and 8, rmm.mesh.agent_installed and rmm.mesh.node_conflict of the Mesh agent, rmm.starter.installed of the starter pack, five rmm.patch.* of Phase 4, three rmm.deploy.* of Phase 5)');
 require_once "$root/includes/event_picker.php";
 $cat = json_decode(eventPickerCatalogJson(), true);
 $pickerIds = array_column($cat['events'], 'i');
@@ -734,4 +735,13 @@ $rmm->admin()->enable($admin);
 foreach (glob(__DIR__ . '/rmm_ui_p20_*.php') ?: [] as $__p20) {
     echo "---- " . basename($__p20) . "\n";
     require $__p20;
+}
+
+software_p21:
+// ============================================================ software deployment (rc.21): the sections live in tests/rmm_ui_p21_*.php
+// Same contract as the fragments above (shared variables, module on, run in file-name order). The `software_deploy` switch is OFF at the start of each fragment and put back OFF.
+$rmm->admin()->enable($admin);
+foreach (glob(__DIR__ . '/rmm_ui_p21_*.php') ?: [] as $__p21) {
+    echo "---- " . basename($__p21) . "\n";
+    require $__p21;
 }

@@ -28,6 +28,7 @@ const RIVET_RMM_AUTO_FEATURES = [
     'scripts' => 'The script library, schedules and approvals',
     'alerting' => 'Alerting',
     'patching' => 'Patch management',
+    'software_deploy' => 'Software deployment',
 ];
 
 // ------------------------------------------------------------------ the internal call into the technician API
@@ -125,7 +126,7 @@ function rivetRmmAutoPage(\mysqli $mysqli, string $feature, int $userId, string 
         return null;
     }
     if (!rivetRmmFeatureOn($feature, $mysqli)) {
-        rivetRmmAutoDenied((RIVET_RMM_AUTO_FEATURES[$feature] ?? 'This part of the endpoint agent') . ' is switched off. An administrator can turn it on under Administration > Endpoint agent > Policies, scripts, alerting and patching.',
+        rivetRmmAutoDenied((RIVET_RMM_AUTO_FEATURES[$feature] ?? 'This part of the endpoint agent') . ' is switched off. An administrator can turn it on under Administration > Endpoint agent > Policies, scripts, alerting, patching and software deployment.',
             'Switched off');
 
         return null;

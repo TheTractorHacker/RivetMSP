@@ -195,6 +195,21 @@ Sub-switch `patching` (off by default; Administration > Settings > Endpoint agen
 
 **Roles** (`src/Core/Adapter/Endpoint/EndpointAccessPolicy.php`): `rmm.patch.view` = RMM module level 1; `rmm.patch.manage` = RMM scripts level 2; `rmm.patch.install` = RMM scripts level 3. Administrators hold all three. **Live installs** (`patch_live_install`, default off) is a separate switch with its own confirmation: until it is on, the scheduler queues dry runs only. **Agent:** 0.8.0 or later announces `patch:scan` and `patch:install`; publish it to the rings and rebuild the MSI template. Tests: `tests/rmm_ui_p20_patching.php`.
 
+## 6g. Software deployment and reporting (RivetCore 1.0.0-rc.21, RMM Phase 5, migration 0029, DB 2.6.97)
+
+Sub-switch `software_deploy` (off by default; Administration > Settings > Endpoint agent > **Software deployment**). The model, the safety defaults, the package source pinning and what is not done are in RivetCore's `docs/rmm/SOFTWARE_DEPLOY.md`; this edition adds the screens.
+
+| Piece | Where | Needs |
+| --- | --- | --- |
+| Deployment tab of the asset page | `includes/rmm_software_ui.php` (`rivetRmmSoftwarePanelSection()`, hooked in `rivetRmmUiTabs()`; hash `#rmm-deploy`), `agent/post/rmm_software.php` | module + `software_deploy` + `rmm.software.view` for the device's client; Check now and Dry run need `rmm.software.manage`; a real install or removal `rmm.software.deploy` |
+| Software catalog (packages, versions, hosts) | `agent/rmm_software_catalog.php` | view to read; manage to change packages and versions (every client: Core's rule); the host list and lowering the two-person flag need `rmm.admin` |
+| Software assignments (with the ring delays) | `agent/rmm_software_assignments.php` | view to read, deploy to assign and remove; a restricted technician assigns only to their own clients and devices |
+| Software report and CSV | `agent/rmm_software_report.php`, `agent/rmm_software_report_csv.php` | view; Core scopes every row and audits the export |
+| Second person's decision | the existing Approvals page (kind `software`), `agent/post/rmm_automation_scr.php` | `rmm.job.approve` and `rmm.software.deploy`; works with the script library off, then only for patch and software requests |
+| Administration card | `admin/settings_endpoint_agent.php`, `admin/post/settings_endpoint_agent.php` (`save_software_settings`) | administrator |
+
+**Roles** (`src/Core/Adapter/Endpoint/EndpointAccessPolicy.php`): `rmm.software.view` = RMM module level 1; `rmm.software.manage` = RMM scripts level 2; `rmm.software.deploy` = RMM scripts level 3. Administrators hold all three. **Live installs** (`software_live_install`, default off) is a separate switch with its own acknowledgement: until it is on, the scheduler queues dry runs only. **Agent:** a build of RivetCore 1.0.0-rc.21 announces `software:detect` and `software:install`; publish it to the rings. **The Windows install paths (MSI, EXE, the pinned download) have never been run on a real machine:** add the installer host, run a dry run first, start with one machine in the pilot ring and a small package. The asset page's older **Software** tab (installed software from the inventory) is unchanged; the new tab is called **Deployment**. Tests: `tests/rmm_ui_p21_software.php`, `tests/browser/rmm_p21_software_smoke.mjs`.
+
 ## 6d. Scale settings, storage and the Performance and capacity panel (RivetCore 1.0.0-rc.11, S3 to S8)
 
 Administration > Settings > Endpoint agent > the cards **Scale settings**, **Metric storage and partitioning** and **External metric store**, and the read-only **Performance and capacity** panel on the Agent Fleet page (autoscaling hint, read cache, warm start, per-client token buckets, shedding, the three storage tiers and the rollup status).

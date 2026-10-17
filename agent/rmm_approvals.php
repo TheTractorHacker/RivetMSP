@@ -15,12 +15,15 @@ require_once dirname(__DIR__) . '/includes/rmm_scr_ui.php';
 
 mysqli_report(MYSQLI_REPORT_OFF);
 
-// The queue belongs to the `scripts` switch; with the script library off but patch management on (RMM Phase 4) the page still opens, showing only requests to approve patches.
-$patchOnly = !rivetRmmFeatureOn('scripts', $mysqli) && rivetRmmFeatureOn('patching', $mysqli);
-if ($patchOnly) {
-    $_GET['kind'] = 'patch';
+// The queue belongs to the `scripts` switch; with the script library off but patch management (RMM Phase 4) or software deployment (RMM Phase 5) on, the page still opens, showing
+// only the requests of those kinds (the one asked for when it is allowed, else the first allowed).
+$altKinds = rivetRmmScrAltKinds($mysqli);   // null: the script library is on and every kind is shown
+$altFeature = 'scripts';
+if ($altKinds !== null && $altKinds !== []) {
+    $_GET['kind'] = is_string($_GET['kind'] ?? null) && in_array($_GET['kind'], $altKinds, true) ? $_GET['kind'] : $altKinds[0];
+    $altFeature = rivetRmmScrKindFeature($_GET['kind']);
 }
-$ctx = rivetRmmAutoPage($mysqli, $patchOnly ? 'patching' : 'scripts', (int) $session_user_id, (string) $session_name);   // renders the module-off / switch-off / no-access notice and returns null
+$ctx = rivetRmmAutoPage($mysqli, $altFeature, (int) $session_user_id, (string) $session_name);   // renders the module-off / switch-off / no-access notice and returns null
 if ($ctx === null) {
     require_once "../includes/footer.php";   // the notice is printed; close the page
     return;

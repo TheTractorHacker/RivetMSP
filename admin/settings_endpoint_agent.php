@@ -389,6 +389,51 @@ $patchLive = (int) ($patchLimits['patch_live_install'] ?? 0) === 1;
 </div>
 
 <?php
+// RivetCore 1.0.0-rc.21 (RMM Phase 5): software deployment and reporting. Off by default; the numbers are the limits of the module (Core validates them).
+$swLimits = (array) $cfg['limits'];
+$swLive = (int) ($swLimits['software_live_install'] ?? 0) === 1;
+?>
+<div class="card mb-3" id="software-deployment">
+    <div class="card-header"><h4 class="card-title mb-0">Software deployment</h4></div>
+    <div class="card-body">
+        <p class="small text-muted">Install what you assigned, check that it is there, and show the difference. You keep a catalog of packages (a Windows MSI or EXE pinned by its SHA-256 hash, or a package from the machine's own signed apt or dnf repositories), assign a package to everyone, a client, a site, a group, a tag or one device, and a report shows deployed against expected. An installer can only come from a host an administrator listed on the Software catalog page. Needs an agent of RivetCore 1.0.0-rc.21 or later; older agents keep working and are never offered a software job. Switching it off stops it within one check-in and keeps everything you created.</p>
+        <form action="post.php" method="post" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="form-check form-switch mb-2">
+                <input type="checkbox" class="form-check-input" id="ea_sw_software" name="feature_software_deploy" value="1" <?= !empty($cfg['features']['software_deploy']) ? 'checked' : '' ?> aria-describedby="ea_sw_software_h">
+                <label class="form-check-label fw-semibold" for="ea_sw_software">Software deployment (<code>software_deploy</code>)</label>
+            </div>
+            <p class="small text-muted" id="ea_sw_software_h"><strong>Cost:</strong> the catalog keeps a package list. Once you assign a package, every device in that scope is asked what it has about once a day (a short read-only check) and the answer is stored. Nothing is installed until you switch on live installs below; until then you only see what would be installed. Switching it on adds "Software catalog", "Software assignments" and "Software report" to the Endpoints menu (shown to technicians who may view software status) and a Deployment tab to each device. <strong>The Windows install path (MSI, EXE, the pinned download) has not been run on a real machine yet:</strong> add the installer host, run a dry run first, start with one machine in the pilot ring and a small package.</p>
+            <div class="row g-3">
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_sd_h">Ask each device every (hours)</label>
+                    <input type="number" class="form-control" id="ea_sd_h" name="software_detect_hours" min="1" max="168" value="<?= (int) round(((int) ($swLimits['software_detect_interval_s'] ?? 86400)) / 3600) ?>">
+                    <div class="form-text">What does it have? Default 24. Spread so a fleet never answers at once.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_sd_m">Installs at once, all clients</label>
+                    <input type="number" class="form-control" id="ea_sd_m" name="software_max_installs" min="1" max="10000" value="<?= (int) ($swLimits['software_max_installs'] ?? 25) ?>">
+                    <div class="form-text">Default 25.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_sd_c">Installs at once, per client</label>
+                    <input type="number" class="form-control" id="ea_sd_c" name="software_max_installs_per_client" min="1" max="1000" value="<?= (int) ($swLimits['software_max_installs_per_client'] ?? 5) ?>">
+                    <div class="form-text">Default 5.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_sd_y">Keep history (days)</label>
+                    <input type="number" class="form-control" id="ea_sd_y" name="software_deploy_history_days" min="30" max="3650" value="<?= (int) ($swLimits['software_deploy_history_days'] ?? 365) ?>">
+                    <div class="form-text">Default 365.</div></div>
+            </div>
+            <h6 class="mt-4">Live installs</h6>
+            <div class="form-check form-switch mb-1">
+                <input type="checkbox" class="form-check-input" id="ea_sd_live" name="software_live_install" value="1" <?= $swLive ? 'checked' : '' ?> aria-describedby="ea_sd_live_h">
+                <label class="form-check-label" for="ea_sd_live">Let the scheduler install and remove software</label>
+            </div>
+            <div class="form-text mb-2" id="ea_sd_live_h">Off (the default): the scheduler queues dry runs only, one a day per device and package, and a person with the deploy right can still run a real install from a device's Deployment tab. On: devices that an assignment reaches (after their ring's delay, outside a "leave this device alone" window, within the limits above) get the package installed or removed without anyone clicking Install. Removing an assignment never uninstalls anything. A package marked "two people" always needs a second person for every assignment and every manual run.</div>
+            <div class="form-check mb-2">
+                <input type="checkbox" class="form-check-input" id="ea_sd_liveok" name="software_live_confirm" value="1">
+                <label class="form-check-label" for="ea_sd_liveok">I understand that software will be installed on and removed from devices without anyone clicking Install. (Needed only when turning this on.)</label>
+            </div>
+            <button type="submit" name="save_software_settings" class="btn btn-primary mt-2"><i class="fas fa-save me-1"></i>Save software deployment settings</button>
+        </form>
+    </div>
+</div>
+
+<?php
 // RivetCore 1.0.0-rc.11 (RMM Phases 6 and 8 and the scale work): the data for the cards below is read here, the cards are printed by rivetRmmUiScaleCards() (includes/rmm_scale_cards.php).
 // Each part is off by default and is guarded so this page still loads on a database that has not been updated yet.
 $rmm_scale_scripts = true;

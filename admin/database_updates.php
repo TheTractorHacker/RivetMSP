@@ -7228,3 +7228,21 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.96'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.96') {
+        // DB 2.6.97: RivetCore 1.0.0-rc.21 (RMM Phase 5, software deployment and reporting). Core Migration0029SoftwareDeploy: EIGHT new tables, all CREATE TABLE IF NOT EXISTS
+        // (rmm_software_hosts, rmm_packages, rmm_package_versions, rmm_package_assignments, rmm_package_installs, rmm_package_history, rmm_package_jobs, rmm_deploy_state), nothing
+        // existing altered and NO row inserted: the catalog and the list of hosts installers may be downloaded from start empty. Core owns the DDL, so this step runs the Core runner
+        // (idempotent: it skips applied ids, and it applies 0028 first if that is somehow missing, because a device's ring is read from the patch tables). Nothing is switched on:
+        // the `software_deploy` sub-switch is off until an administrator turns it on (Administration > Endpoint agent), an agent that does not announce software:detect /
+        // software:install is never offered a software job, and the scheduler only ever queues dry runs until the limit software_live_install is 1. Skipped (version NOT advanced,
+        // so it retries) until a package that ships migration 0029 is installed. Run it before, or right after, the new code is live; until it is applied the Software pages show a notice.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Rmm\Migration\Migration0029SoftwareDeploy::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.97'");
+        }
+    }

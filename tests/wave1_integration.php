@@ -21,9 +21,9 @@ $read = fn(string $f): string => (string) file_get_contents("$root/$f");
 $upd = $read('admin/database_updates.php');
 preg_match_all('/if \(\$rivetit_db_version\(\) == \'(2\.6\.\d+)\'\) \{/', $upd, $gates);
 $gates = $gates[1];
-$ok(array_slice($gates, -19) === ['2.6.77', '2.6.78', '2.6.79', '2.6.80', '2.6.81', '2.6.82', '2.6.83', '2.6.84', '2.6.85', '2.6.86', '2.6.87', '2.6.88', '2.6.89', '2.6.90', '2.6.91', '2.6.92', '2.6.93', '2.6.94', '2.6.95'], 'the steps run from 2.6.77 to 2.6.95 in order (to 2.6.96)');
+$ok(array_slice($gates, -20) === ['2.6.77', '2.6.78', '2.6.79', '2.6.80', '2.6.81', '2.6.82', '2.6.83', '2.6.84', '2.6.85', '2.6.86', '2.6.87', '2.6.88', '2.6.89', '2.6.90', '2.6.91', '2.6.92', '2.6.93', '2.6.94', '2.6.95', '2.6.96'], 'the steps run from 2.6.77 to 2.6.96 in order (to 2.6.97)');
 $ok(count($gates) === count(array_unique($gates)), 'no step is gated twice');
-foreach (['2.6.77' => '2.6.78', '2.6.78' => '2.6.79', '2.6.79' => '2.6.80', '2.6.80' => '2.6.81', '2.6.81' => '2.6.82', '2.6.82' => '2.6.83', '2.6.83' => '2.6.84', '2.6.84' => '2.6.85', '2.6.85' => '2.6.86', '2.6.86' => '2.6.87', '2.6.87' => '2.6.88', '2.6.88' => '2.6.89', '2.6.89' => '2.6.90', '2.6.90' => '2.6.91', '2.6.91' => '2.6.92', '2.6.92' => '2.6.93', '2.6.93' => '2.6.94', '2.6.94' => '2.6.95', '2.6.95' => '2.6.96'] as $gate => $next) {
+foreach (['2.6.77' => '2.6.78', '2.6.78' => '2.6.79', '2.6.79' => '2.6.80', '2.6.80' => '2.6.81', '2.6.81' => '2.6.82', '2.6.82' => '2.6.83', '2.6.83' => '2.6.84', '2.6.84' => '2.6.85', '2.6.85' => '2.6.86', '2.6.86' => '2.6.87', '2.6.87' => '2.6.88', '2.6.88' => '2.6.89', '2.6.89' => '2.6.90', '2.6.90' => '2.6.91', '2.6.91' => '2.6.92', '2.6.92' => '2.6.93', '2.6.93' => '2.6.94', '2.6.94' => '2.6.95', '2.6.95' => '2.6.96', '2.6.96' => '2.6.97'] as $gate => $next) {
     $a = strpos($upd, "if (\$rivetit_db_version() == '$gate') {");
     $b = strpos($upd, "if (\$rivetit_db_version() == '$next') {");
     $end = $b === false ? strlen($upd) : $b;
@@ -49,7 +49,8 @@ $step92 = substr($upd, strpos($upd, "if (\$rivetit_db_version() == '2.6.91') {")
 $step93 = substr($upd, strpos($upd, "if (\$rivetit_db_version() == '2.6.92') {"), strpos($upd, "if (\$rivetit_db_version() == '2.6.93') {") - strpos($upd, "if (\$rivetit_db_version() == '2.6.92') {"));
 $step94 = substr($upd, strpos($upd, "if (\$rivetit_db_version() == '2.6.93') {"), strpos($upd, "if (\$rivetit_db_version() == '2.6.94') {") - strpos($upd, "if (\$rivetit_db_version() == '2.6.93') {"));
 $step95 = substr($upd, strpos($upd, "if (\$rivetit_db_version() == '2.6.94') {"), strpos($upd, "if (\$rivetit_db_version() == '2.6.95') {") - strpos($upd, "if (\$rivetit_db_version() == '2.6.94') {"));
-$step96 = substr($upd, strpos($upd, "if (\$rivetit_db_version() == '2.6.95') {"));
+$step96 = substr($upd, strpos($upd, "if (\$rivetit_db_version() == '2.6.95') {"), strpos($upd, "if (\$rivetit_db_version() == '2.6.96') {") - strpos($upd, "if (\$rivetit_db_version() == '2.6.95') {"));
+$step97 = substr($upd, strpos($upd, "if (\$rivetit_db_version() == '2.6.96') {"));
 $ok(str_contains($step93, 'CREATE TABLE IF NOT EXISTS `ticket_view_defaults`') && !str_contains($step93, 'ALTER TABLE') && !str_contains($step93, 'DROP ') && str_contains($step93, "config_current_database_version` = '2.6.93'") && str_contains($read('db.sql'), 'CREATE TABLE `ticket_view_defaults`') && !str_contains($read('db.sql'), 'uca1400'), 'the 2.6.93 step only creates ticket_view_defaults (IF NOT EXISTS), db.sql has it and no uca1400');
 $ok(str_contains($step90, 'Migration0024MeshGroupUrl::class') && str_contains($step90, 'CoreMigrations::all()') && str_contains($step90, 'MysqliDatabaseAdapter($mysqli)') && strpos($step90, 'class_exists(') < strpos($step90, "= '2.6.90'"), 'the 2.6.90 step runs the Core migration runner (0024, the Mesh group id URL form) and only advances the version when the package that ships it is installed');
 $ok(!str_contains($step90, 'ALTER TABLE') && str_contains($read('db.sql'), "('0024_rmm_mesh_group_url'") && preg_match('/CREATE TABLE `endpoint_agent_mesh_settings` \((.*?)\n\) ENGINE/s', $read('db.sql'), $m90) === 1 && str_contains($m90[1], "`group_id_url` varchar(64)"), 'the 2.6.90 step alters no table of ours (Core owns the DDL), db.sql records 0024 and has endpoint_agent_mesh_settings.group_id_url');
@@ -80,6 +81,15 @@ $ok(str_contains($step95, 'Migration0027MeshNodeIds::class') && str_contains($st
 $ok(!str_contains($step95, 'ALTER TABLE') && !str_contains($step95, 'mysqli_query($mysqli, "CREATE') && str_contains($read('db.sql'), "('0027_rmm_mesh_node_ids'"), 'the 2.6.95 step alters no table of ours (data only, Core owns it); db.sql records 0027');
 $ok(str_contains($step96, 'Migration0028Patching::class') && str_contains($step96, 'CoreMigrations::all()') && str_contains($step96, 'RivetMSP\\Core\\Adapter\\Database\\MysqliDatabaseAdapter($mysqli)') && strpos($step96, 'class_exists(') < strpos($step96, "= '2.6.96'"), 'the 2.6.96 step runs the Core migration runner (0028, patch management) and only advances the version when the package that ships it is installed');
 $ok(!str_contains($step96, 'ALTER TABLE') && !str_contains($step96, 'mysqli_query($mysqli, "CREATE') && str_contains($read('db.sql'), "('0028_rmm_patching'"), 'the 2.6.96 step alters no table of ours (Core owns the DDL); db.sql records 0028');
+$ok(str_contains($step97, 'Migration0029SoftwareDeploy::class') && str_contains($step97, 'CoreMigrations::all()') && str_contains($step97, 'RivetMSP\\Core\\Adapter\\Database\\MysqliDatabaseAdapter($mysqli)') && strpos($step97, 'class_exists(') < strpos($step97, "= '2.6.97'"), 'the 2.6.97 step runs the Core migration runner (0029, software deployment) and only advances the version when the package that ships it is installed');
+$ok(!str_contains($step97, 'ALTER TABLE') && !str_contains($step97, 'mysqli_query($mysqli, "CREATE') && !str_contains($step97, 'INSERT') && str_contains($read('db.sql'), "('0029_rmm_software_deploy'"), 'the 2.6.97 step alters no table of ours and inserts no row (Core owns the DDL; the catalog starts empty); db.sql records 0029');
+$sqlS = $read('db.sql');
+$swTables = ['rmm_software_hosts', 'rmm_packages', 'rmm_package_versions', 'rmm_package_assignments', 'rmm_package_installs', 'rmm_package_history', 'rmm_package_jobs', 'rmm_deploy_state'];
+$ok(array_sum(array_map(fn ($t) => substr_count($sqlS, "CREATE TABLE `$t` ("), $swTables)) === 8 && !str_contains($sqlS, 'INSERT INTO `rmm_packages`') && !str_contains($sqlS, 'INSERT INTO `rmm_software_hosts`'), 'db.sql carries the eight software deployment tables, each once, and no catalog row (a fresh install never runs migration 0029)');
+foreach ($swTables as $st1) {
+    $ok((int) $one("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='$st1'") === 1, "the scratch database has $st1");
+}
+$ok((int) $one("SELECT COUNT(*) FROM rmm_packages") === 0 && (int) $one("SELECT COUNT(*) FROM rmm_software_hosts") === 0, 'the software catalog and the host list start empty');
 $sqlP = $read('db.sql');
 $ok(preg_match_all('/CREATE TABLE `(rmm_patch_[a-z_]+)`/', $sqlP, $pt) === 8 && count(array_unique($pt[1])) === 8 && str_contains($sqlP, "INSERT INTO `rmm_patch_rings` VALUES (1,'pilot',0,10,") && str_contains($sqlP, "'last',14,30,"), 'db.sql carries the eight rmm_patch_* tables and the three default rings (a fresh install never runs migration 0028)');
 foreach (['rmm_patch_scans', 'rmm_patch_available', 'rmm_patch_history', 'rmm_patch_rings', 'rmm_patch_policies', 'rmm_patch_assignments', 'rmm_patch_rules', 'rmm_patch_jobs'] as $pt1) {
@@ -87,19 +97,19 @@ foreach (['rmm_patch_scans', 'rmm_patch_available', 'rmm_patch_history', 'rmm_pa
 }
 $ok((int) $one("SELECT COUNT(*) FROM rmm_patch_rings WHERE name IN ('pilot','broad','last')") === 3, 'the three default rings exist');
 
-// ------------------------------------------------------------------ the RivetCore pin (rc.20)
+// ------------------------------------------------------------------ the RivetCore pin (rc.21)
 $composer = json_decode($read('composer.json'), true);
 $lock = json_decode($read('composer.lock'), true);
-$ok(($composer['require']['rivet/rivet-core'] ?? '') === '^1.0.0-rc.20', 'composer.json requires rivet/rivet-core ^1.0.0-rc.20');
+$ok(($composer['require']['rivet/rivet-core'] ?? '') === '^1.0.0-rc.21', 'composer.json requires rivet/rivet-core ^1.0.0-rc.21');
 $pkg = null; foreach ($lock['packages'] as $p) { if ($p['name'] === 'rivet/rivet-core') { $pkg = $p; } }
-$ok($pkg && $pkg['version'] === 'v1.0.0-rc.20' && $pkg['source']['reference'] === $pkg['dist']['reference'] && str_contains($pkg['dist']['url'], $pkg['source']['reference']), 'composer.lock pins v1.0.0-rc.20 with one reference for source and dist');
+$ok($pkg && $pkg['version'] === 'v1.0.0-rc.21' && $pkg['source']['reference'] === $pkg['dist']['reference'] && str_contains($pkg['dist']['url'], $pkg['source']['reference']), 'composer.lock pins v1.0.0-rc.21 with one reference for source and dist');
 $ref = $pkg['source']['reference'] ?? '';
 $inst = json_decode($read('vendor/composer/installed.json'), true);
 $ip = null; foreach (($inst['packages'] ?? $inst) as $p) { if (($p['name'] ?? '') === 'rivet/rivet-core') { $ip = $p; } }
-$ok($ip && $ip['version'] === 'v1.0.0-rc.20' && $ip['source']['reference'] === $ref, 'vendor/composer/installed.json agrees with the lock');
+$ok($ip && $ip['version'] === 'v1.0.0-rc.21' && $ip['source']['reference'] === $ref, 'vendor/composer/installed.json agrees with the lock');
 $phpInst = require "$root/vendor/composer/installed.php";
-$ok(($phpInst['versions']['rivet/rivet-core']['reference'] ?? '') === $ref && ($phpInst['versions']['rivet/rivet-core']['pretty_version'] ?? '') === 'v1.0.0-rc.20', 'vendor/composer/installed.php agrees with the lock');
-$ok(is_file("$root/vendor/rivet/rivet-core/src/Mcp/Migration/Migration0017McpIdentityBinaryCollation.php") && str_contains($read('vendor/rivet/rivet-core/CHANGELOG.md'), '## 1.0.0-rc.20') && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0022RemoteAndLogs.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0021ScaleStorage.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0023MeshAgent.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Starter/StarterInstaller.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0024MeshGroupUrl.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0025MsiTemplates.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0028Patching.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Patch/PatchActions.php"), 'the vendored package is rc.20 (ships migrations 0021 to 0028)');
+$ok(($phpInst['versions']['rivet/rivet-core']['reference'] ?? '') === $ref && ($phpInst['versions']['rivet/rivet-core']['pretty_version'] ?? '') === 'v1.0.0-rc.21', 'vendor/composer/installed.php agrees with the lock');
+$ok(is_file("$root/vendor/rivet/rivet-core/src/Mcp/Migration/Migration0017McpIdentityBinaryCollation.php") && str_contains($read('vendor/rivet/rivet-core/CHANGELOG.md'), '## 1.0.0-rc.21') && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0022RemoteAndLogs.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0021ScaleStorage.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0023MeshAgent.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Starter/StarterInstaller.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0024MeshGroupUrl.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0025MsiTemplates.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0028Patching.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Patch/PatchActions.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Migration/Migration0029SoftwareDeploy.php") && is_file("$root/vendor/rivet/rivet-core/src/Rmm/Deploy/DeployActions.php"), 'the vendored package is rc.21 (ships migrations 0021 to 0029)');
 $ok(preg_match('/^[0-9a-f]{40}$/', $ref) === 1, 'the lock reference is a full commit id');
 
 // ------------------------------------------------------------------ mail OAuth secrets: wrapped, read through decryptSetting, written wrapped by the queue

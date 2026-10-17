@@ -10,7 +10,7 @@ use RivetCore\Rmm\Authz\RmmAbility;
 use RivetCore\Testing\AccessPolicyConformanceTestCase;
 
 /**
- * EndpointAccessPolicy: the fifteen rmm.* abilities over RivetMSP's role model (user_role_permissions per module, user_roles.role_is_admin). Roles: an
+ * EndpointAccessPolicy: the eighteen rmm.* abilities over RivetMSP's role model (user_role_permissions per module, user_roles.role_is_admin). Roles: an
  * administrator, a full technician (rmm 3, scripts 3, remote 1), a viewer (rmm 1), a reboot-only technician (scripts 2), and a stock technician
  * with NO rmm module rows (a fresh install has none, so only administrators hold RMM until an admin grants them). Client-portal contacts
  * (user_type 2), disabled and archived accounts hold nothing, whatever role row they carry.
@@ -68,6 +68,10 @@ final class EndpointAccessPolicyConformanceTest extends AccessPolicyConformanceT
             [$u['admin'], RmmAbility::PATCH_VIEW, 'client', 3], [$u['admin'], RmmAbility::PATCH_MANAGE, 'client', 3], [$u['admin'], RmmAbility::PATCH_INSTALL, 'client', 3],
             [$u['viewer'], RmmAbility::PATCH_VIEW, 'client', 3], [$u['reboot'], RmmAbility::PATCH_VIEW, 'client', 3], [$u['reboot'], RmmAbility::PATCH_MANAGE, 'client', 3],
             [$u['tech'], RmmAbility::PATCH_VIEW, 'client', 3], [$u['tech'], RmmAbility::PATCH_MANAGE, 'client', 3], [$u['tech'], RmmAbility::PATCH_INSTALL, 'client', 3],
+            // RMM Phase 5 (rc.21): software view like device.view, manage like run_saved (scripts >= 2), deploy like run_script (scripts >= 3)
+            [$u['admin'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['admin'], RmmAbility::SOFTWARE_MANAGE, 'client', 3], [$u['admin'], RmmAbility::SOFTWARE_DEPLOY, 'client', 3],
+            [$u['viewer'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['reboot'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['reboot'], RmmAbility::SOFTWARE_MANAGE, 'client', 3],
+            [$u['tech'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['tech'], RmmAbility::SOFTWARE_MANAGE, 'client', 3], [$u['tech'], RmmAbility::SOFTWARE_DEPLOY, 'client', 3],
         ];
     }
 
@@ -84,6 +88,10 @@ final class EndpointAccessPolicyConformanceTest extends AccessPolicyConformanceT
             [$u['viewer'], RmmAbility::PATCH_MANAGE, 'client', 3], [$u['viewer'], RmmAbility::PATCH_INSTALL, 'client', 3], [$u['reboot'], RmmAbility::PATCH_INSTALL, 'client', 3],
             [$u['stock'], RmmAbility::PATCH_VIEW, 'client', 3], [$u['stock'], RmmAbility::PATCH_MANAGE, 'client', 3], [$u['stock'], RmmAbility::PATCH_INSTALL, 'client', 3],
             [$u['disabled'], RmmAbility::PATCH_VIEW, 'client', 3], [$u['portal'], RmmAbility::PATCH_VIEW, 'client', 3], [$u['archived'], RmmAbility::PATCH_INSTALL, 'client', 3],
+            // RMM Phase 5: a viewer sees software state and nothing more; reboot-only (scripts 2) manages the catalog but cannot assign or install; nobody without a role row holds anything
+            [$u['viewer'], RmmAbility::SOFTWARE_MANAGE, 'client', 3], [$u['viewer'], RmmAbility::SOFTWARE_DEPLOY, 'client', 3], [$u['reboot'], RmmAbility::SOFTWARE_DEPLOY, 'client', 3],
+            [$u['stock'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['stock'], RmmAbility::SOFTWARE_MANAGE, 'client', 3], [$u['stock'], RmmAbility::SOFTWARE_DEPLOY, 'client', 3],
+            [$u['disabled'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['portal'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['archived'], RmmAbility::SOFTWARE_DEPLOY, 'client', 3],
             // approval is a second person's grant: a level 3 script technician does NOT have it by default; alert management needs RMM write (module_rmm >= 2)
             [$u['tech'], RmmAbility::JOB_APPROVE, 'client', 3], [$u['viewer'], RmmAbility::ALERT_MANAGE, 'client', 3], [$u['reboot'], RmmAbility::ALERT_MANAGE, 'client', 3],
             [$u['disabled'], RmmAbility::ALERT_MANAGE, 'client', 3], [$u['portal'], RmmAbility::JOB_APPROVE, 'client', 3],

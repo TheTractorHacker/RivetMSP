@@ -282,11 +282,18 @@ function rivetRmmAutoNav(?int $userId = null): array
         ['patching', '/agent/rmm_patch_compliance.php', 'Patch compliance', 'fa-shield-alt', ['rmm_patch_compliance.php'], 'patching'],
         ['patching', '/agent/rmm_patch_approvals.php', 'Patch approvals', 'fa-clipboard-check', ['rmm_patch_approvals.php'], 'patching'],
         ['patching', '/agent/rmm_patch_policies.php', 'Patch policies', 'fa-calendar-check', ['rmm_patch_policies.php'], 'patching'],
+        // RMM Phase 5 (RivetCore 1.0.0-rc.21), sub-switch `software_deploy` (off by default): the package catalog, the assignments and the deployed-versus-expected report. Shown only to a user
+        // holding rmm.software.view (the pages read with view; their forms need rmm.software.manage / .deploy and Core decides again).
+        ['software_deploy', '/agent/rmm_software_catalog.php', 'Software catalog', 'fa-boxes', ['rmm_software_catalog.php'], 'software'],
+        ['software_deploy', '/agent/rmm_software_assignments.php', 'Software assignments', 'fa-bullseye', ['rmm_software_assignments.php'], 'software'],
+        ['software_deploy', '/agent/rmm_software_report.php', 'Software report', 'fa-chart-bar', ['rmm_software_report.php'], 'software'],
     ];
     $abilities = ['/agent/rmm_logs.php' => \RivetCore\Rmm\Authz\RmmAbility::JOB_RUN_SAVED, '/agent/rmm_log_rules.php' => \RivetCore\Rmm\Authz\RmmAbility::ALERT_MANAGE,
         '/agent/rmm_starter_pack.php' => \RivetCore\Rmm\Authz\RmmAbility::ADMIN,
         '/agent/rmm_patch_compliance.php' => \RivetCore\Rmm\Authz\RmmAbility::PATCH_VIEW, '/agent/rmm_patch_approvals.php' => \RivetCore\Rmm\Authz\RmmAbility::PATCH_VIEW,
-        '/agent/rmm_patch_policies.php' => \RivetCore\Rmm\Authz\RmmAbility::PATCH_VIEW];
+        '/agent/rmm_patch_policies.php' => \RivetCore\Rmm\Authz\RmmAbility::PATCH_VIEW,
+        '/agent/rmm_software_catalog.php' => \RivetCore\Rmm\Authz\RmmAbility::SOFTWARE_VIEW, '/agent/rmm_software_assignments.php' => \RivetCore\Rmm\Authz\RmmAbility::SOFTWARE_VIEW,
+        '/agent/rmm_software_report.php' => \RivetCore\Rmm\Authz\RmmAbility::SOFTWARE_VIEW];
     $out = [];
     foreach ($all as [$feature, $href, $label, $icon, $pages, $group]) {
         if (rivetRmmFeatureOn($feature)) {

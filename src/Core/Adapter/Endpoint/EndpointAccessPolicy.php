@@ -9,7 +9,7 @@ use RivetCore\Database\DatabaseInterface;
 use RivetCore\Rmm\Authz\RmmAbility;
 
 /**
- * Maps the fifteen rmm.* abilities onto RivetMSP's role model: the permission level of a role for a module (user_role_permissions joined to
+ * Maps the eighteen rmm.* abilities onto RivetMSP's role model: the permission level of a role for a module (user_role_permissions joined to
  * modules, the lookup lookupUserPermission() does for the signed-in user, here keyed by user id) and the administrator flag
  * (user_roles.role_is_admin). Same matrix as RivetIT minus module-only logins, which RivetMSP does not have:
  *
@@ -33,6 +33,11 @@ use RivetCore\Rmm\Authz\RmmAbility;
  *   rmm.patch.manage (RMM Phase 4)           view + module_rmm_scripts >= 2 (the same as rmm.job.run_saved): scan, approve, decline, dry run, rules, rings, patch policies
  *   rmm.patch.install (RMM Phase 4)          view + module_rmm_scripts >= 3 (the same as rmm.job.run_script, STRONGER than reboot): a real installation of approved updates
  *                                            on devices. A second person's approval of a patch request (kind `patch`) additionally needs rmm.job.approve, which is unchanged.
+ *   rmm.software.view (RMM Phase 5)          view + module_rmm >= 1 (the same as rmm.device.view): the software catalog, assignments, what each device has and the deployment report
+ *   rmm.software.manage (RMM Phase 5)        view + module_rmm_scripts >= 2 (the same as rmm.job.run_saved): edit the catalog (packages, versions), ask a device what it has, a dry run
+ *   rmm.software.deploy (RMM Phase 5)        view + module_rmm_scripts >= 3 (the same as rmm.job.run_script, STRONGER than reboot): assignments (they change machines by themselves
+ *                                            later), a real install or removal, and deciding a software approval (kind `software`, which additionally needs rmm.job.approve). The list of hosts
+ *                                            installers may be downloaded from, and LOWERING a package's two-person flag, stay rmm.admin (administrators only).
  *
  * An administrator holds every module at full access (as lookupUserPermission() does). Only active agents (staff, users.user_type 1) hold
  * anything: a client-portal contact, a disabled or an archived account is denied every ability, whatever role row it carries. The client
@@ -90,6 +95,9 @@ final class EndpointAccessPolicy implements AccessPolicyInterface
             RmmAbility::PATCH_VIEW => true,
             RmmAbility::PATCH_MANAGE => $this->level($roleId, 'module_rmm_scripts') >= 2,
             RmmAbility::PATCH_INSTALL => $this->level($roleId, 'module_rmm_scripts') >= 3,
+            RmmAbility::SOFTWARE_VIEW => true,
+            RmmAbility::SOFTWARE_MANAGE => $this->level($roleId, 'module_rmm_scripts') >= 2,
+            RmmAbility::SOFTWARE_DEPLOY => $this->level($roleId, 'module_rmm_scripts') >= 3,
             RmmAbility::REMOTE_MANAGE => $this->level($roleId, 'module_rmm_scripts') >= 3 && $this->level($roleId, 'module_rmm_remote_connect') >= 1 && $this->level3MayManageRemote(),
             RmmAbility::JOB_APPROVE => $this->level($roleId, 'module_rmm_scripts') >= 3 && $this->level3MayApprove(),
             default => false,

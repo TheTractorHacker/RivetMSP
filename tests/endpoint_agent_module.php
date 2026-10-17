@@ -238,6 +238,9 @@ $mk = function (string $suffix, bool $withRmm) use ($db, $root): array {
         $sql = (string) preg_replace('/DROP TABLE IF EXISTS `rmm_patch_[a-z_]+`;\n.*?\/\*!40101 SET character_set_client = @saved_cs_client \*\/;\n/s', '', $sql);
         $sql = (string) preg_replace("/INSERT INTO `rivet_core_migrations` VALUES \('0028_[a-z_]+','[^']+'\);\n/", '', $sql);
         $sql = (string) preg_replace("/INSERT INTO `rmm_patch_rings` VALUES [^\n]*\n/", '', $sql);
+        // RivetCore 1.0.0-rc.21 (0029 software deployment): eight tables (rmm_deploy_state, rmm_package_*, rmm_packages, rmm_software_hosts) and one ledger row, no data row; DB 2.6.97 runs the migration.
+        $sql = (string) preg_replace('/DROP TABLE IF EXISTS `rmm_(deploy_state|package_[a-z]+|packages|software_hosts)`;\n.*?\/\*!40101 SET character_set_client = @saved_cs_client \*\/;\n/s', '', $sql);
+        $sql = (string) preg_replace("/INSERT INTO `rivet_core_migrations` VALUES \('0029_[a-z_]+','[^']+'\);\n/", '', $sql);
         $sql = (string) preg_replace('/  `config_rmm_(remote_manage_lvl3|extstore_[a-z_]+)` [^\n]*,\n/', '', $sql);
         $sql = str_replace(["  `config_rmm_approve_scripts_lvl3` tinyint(1) NOT NULL DEFAULT 0,\n", "  `config_rmm_escalation_contact` text DEFAULT NULL,\n"], '', $sql);
         $sql = str_replace("  `config_core_rmm_enabled` tinyint(1) NOT NULL DEFAULT 0,\n", '', $sql);
