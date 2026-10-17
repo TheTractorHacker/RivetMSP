@@ -16,6 +16,8 @@
   function $$(sel, root) { return [].slice.call((root || document).querySelectorAll(sel)); }
   function node(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
   function icon(cls) { var i = document.createElement('i'); i.className = cls; i.setAttribute('aria-hidden', 'true'); return i; }
+  var labelStore = new WeakMap();
+  function setChildren(el, nodes) { while (el.firstChild) el.removeChild(el.firstChild); nodes.forEach(function (n) { el.appendChild(n); }); }
   function csrf() { return window.csrfToken || ($('input[name="csrf_token"]') || {}).value || ''; }
   function store(kind, key, val) {
     try {
@@ -30,10 +32,13 @@
   function copyText(text, btn) {
     var iconOnly = btn.hasAttribute('data-whf-copyval');
     function done(ok) {
-      var old = btn.getAttribute('data-label') || btn.innerHTML;
-      btn.setAttribute('data-label', old);
-      btn.innerHTML = iconOnly ? '<i class="fas ' + (ok ? 'fa-check' : 'fa-times') + '" aria-hidden="true"></i>' : (ok ? '<i class="fas fa-check me-1" aria-hidden="true"></i>Copied' : 'Press Ctrl+C');
-      setTimeout(function () { btn.innerHTML = old; }, 1600);
+      // Keep the original child nodes in a WeakMap (never round-trip markup through an attribute or a string).
+      if (!labelStore.has(btn)) labelStore.set(btn, Array.prototype.slice.call(btn.childNodes));
+      var old = labelStore.get(btn);
+      setChildren(btn, iconOnly
+        ? [icon('fas ' + (ok ? 'fa-check' : 'fa-times'))]
+        : (ok ? [icon('fas fa-check me-1'), document.createTextNode('Copied')] : [document.createTextNode('Press Ctrl+C')]));
+      setTimeout(function () { setChildren(btn, old); labelStore.delete(btn); }, 1600);
     }
     function fallback() {
       var ta = document.createElement('textarea');
@@ -441,7 +446,7 @@
       else if (/only accepts/.test(msg)) f = $('#webhook_method');
       else {
         $$('.mb-3 > label[for]', form).some(function (l) {
-          var t = l.textContent.replace(/\*/, '').trim().split(' ')[0];
+          var t = l.textContent.replace(/\*/g, '').trim().split(' ')[0];
           if (t && msg.indexOf(t) === 0) { f = document.getElementById(l.getAttribute('for')); return true; }
           return false;
         });
@@ -515,7 +520,10 @@
     // ---------- review
     var AUTH_LABEL = { none: 'None', hmac: 'Signature only (HMAC)', bearer: 'Bearer token', basic: 'Basic (username and password)', header: 'Custom header' };
     function maskedUrl(u) {
-      try { var x = new URL(u); return x.protocol + '//' + x.host + (x.pathname && x.pathname !== '/' ? '/…' : ''); } catch (e) { return u ? u.replace(/^(https?:\/\/[^/]+).*/, '$1/…') : ''; }
+      try { var x = new URL(u); return x.protocol + '//' + x.host + (x.pathname && x.pathname !== '/' ? '/…' : ''); } catch (e) {
+        var m = /^(https?:\/\/[^/]+)/.exec(u || '');
+        return m ? m[1] + '/…' : '';
+      }
     }
     function row(dl, label, value, step) {
       var dt = node('dt', null, label), dd = node('dd');
@@ -616,11 +624,11 @@
       if (kind === 'preview') { runPreview(); return; }
       var box = create ? $('[data-wh-result]', form) : $('[data-wh-result-head]', root);
       var params = formParams(); params.action = 'test'; params.csrf_token = csrf();
-      var old = b.innerHTML; b.disabled = true; b.innerHTML = '<i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>Sending...';
+      var old = Array.prototype.slice.call(b.childNodes); b.disabled = true; setChildren(b, [icon('fas fa-spinner fa-spin me-1'), document.createTextNode('Sending...')]);
       postTools(toolsUrl, params)
         .then(function (d) { renderResult(box, 'test', d); box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); })
         .catch(function () { renderResult(box, 'test', { ok: false, errors: ['The request failed. Check your connection and try again.'] }); })
-        .then(function () { b.disabled = false; b.innerHTML = old; });
+        .then(function () { b.disabled = false; setChildren(b, old); });
     });
 
     // ---------- events: quick sets
@@ -909,14 +917,14 @@
     if ((b = t.closest('[data-wh-test-id]'))) {
       ev.preventDefault(); closeMenus(null);
       var id = b.getAttribute('data-wh-test-id'), name = b.getAttribute('data-wh-name') || 'webhook';
-      var old = b.innerHTML; b.disabled = true; b.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i>' + (b.classList.contains('whf-menu-item') ? ' Sending...' : '');
+      var old = Array.prototype.slice.call(b.childNodes); b.disabled = true; setChildren(b, [icon('fas fa-spinner fa-spin')].concat(b.classList.contains('whf-menu-item') ? [document.createTextNode(' Sending...')] : []));
       postTools(b.getAttribute('data-tools-url'), { action: 'test', webhook_id: id, csrf_token: csrf() })
         .then(function (d) {
           openDialog('Send test: ' + name, function (body) {
             var holder = node('div', 'wh-result'); body.appendChild(holder); renderResult(holder, 'test', d); holder.classList.remove('mt-3');
           });
         })
-        .then(function () { b.disabled = false; b.innerHTML = old; });
+        .then(function () { b.disabled = false; setChildren(b, old); });
       return;
     }
     if ((b = t.closest('[data-wh-payload-id]'))) { ev.preventDefault(); viewPayload(b.getAttribute('data-wh-payload-id'), b.getAttribute('data-tools-url') || 'webhook_tools.php'); return; }
