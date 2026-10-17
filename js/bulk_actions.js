@@ -106,12 +106,19 @@ document.addEventListener('DOMContentLoaded', function () {
             params.append(cb.name, cb.value);
         });
 
-        // Safety: only allow same-origin relative paths to prevent open redirect / XSS
+        // Safety: only allow same-origin relative paths to prevent open redirect / XSS.
+        // Rebuild the value from a freshly parsed URL so only the normalised path + query is assigned.
         if (url.origin !== window.location.origin) return;
-        const finalUrl = url.pathname + url.search; // url.search is already encoded by the URL object
+        let safe;
+        try {
+            safe = new URL(url.pathname + url.search, window.location.origin);
+        } catch (err) {
+            return;
+        }
+        if (safe.origin !== window.location.origin) return;
         // A single leading slash: not protocol-relative (//host), not a scheme (javascript:), no control characters.
-        if (!/^\/(?!\/)[^\u0000-\u001f\u007f\\]*$/.test(finalUrl)) return;
-        if (!finalUrl.startsWith('/') || finalUrl.startsWith('//')) return;
+        if (!/^\/(?!\/)[^\u0000-\u001f\u007f\\]*$/.test(safe.pathname)) return;
+        const finalUrl = safe.pathname + safe.search; // already percent-encoded by the URL object
 
         if (trigger.hasAttribute('data-modal-url')) {
             trigger.setAttribute('data-modal-url', finalUrl);
