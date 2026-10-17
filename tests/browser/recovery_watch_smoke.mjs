@@ -26,23 +26,22 @@ const go = async (path) => { await p.goto(BASE + path); await sleep(500); };
 const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
 const nav = async (sel, timeout = 60000) => {
   const origin = await p.eval('performance.timeOrigin');
-  await p.eval(`document.querySelector(${JSON.stringify(sel)}).click()`);
+  await p.evalWith((q) => document.querySelector(q).click(), sel);
   const end = Date.now() + timeout;
   for (;;) {
     await sleep(200);
-    try { if (await p.eval(`performance.timeOrigin !== ${origin} && document.readyState === 'complete'`)) break; } catch { /* mid-navigation */ }
+    try { if (await p.evalWith((o) => performance.timeOrigin !== o && document.readyState === 'complete', origin)) break; } catch { /* mid-navigation */ }
     if (Date.now() > end) throw new Error('page did not navigate after clicking ' + sel);
   }
   await sleep(500);
 };
 async function shotEl(sel, name) {
-  const r = await p.eval(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e)return null;const b=e.getBoundingClientRect();return {x:b.x+scrollX,y:b.y+scrollY,w:b.width,h:b.height}})()`);
+  const r = await p.evalWith((q) => { const e = document.querySelector(q); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x + scrollX, y: b.y + scrollY, w: b.width, h: b.height }; }, sel);
   assert(r, 'no element ' + sel);
   const { data } = await p.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: Math.max(0, r.x), y: Math.max(0, r.y), width: Math.ceil(r.w), height: Math.min(Math.ceil(r.h), 6000), scale: 1 } });
   writeFileSync(join(shotDir, name + '.png'), Buffer.from(data, 'base64'));
 }
-const rowOf = (name) => `(()=>{const rows=[...document.querySelectorAll('#sync-watch tbody tr:not(.collapse)')];return rows.find(r=>r.innerText.includes(${JSON.stringify(name)}))})()`;
-const stateOf = (name) => p.eval(`(()=>{const r=${rowOf(name)};return r?r.querySelector('.badge').innerText.trim():null})()`);
+const stateOf = (name) => p.evalWith((n) => { const r = [...document.querySelectorAll('#sync-watch tbody tr:not(.collapse)')].find((x) => x.innerText.includes(n)); return r ? r.querySelector('.badge').innerText.trim() : null; }, name);
 const flash = () => p.eval(`[...document.querySelectorAll('.alert, .toast-message')].map(a=>a.innerText).join(' | ')`);
 
 await T('login: real form signs in', async () => {
@@ -68,10 +67,10 @@ await T('the watcher card shows every state, with last run and expected interval
 await T('Edit: declare "every 24 hours" with a note through the real form', async () => {
   await go('/admin/backup.php');
   await p.waitSel('#sync-watch');
-  const id = await p.eval(`(()=>{const r=${rowOf('SW Stale')};return r.querySelector('[data-bs-target]').getAttribute('data-bs-target')})()`);
-  await p.eval(`document.querySelector('#sync-watch [data-bs-target="${id}"]').click()`);
+  const id = await p.evalWith((n) => [...document.querySelectorAll('#sync-watch tbody tr:not(.collapse)')].find((x) => x.innerText.includes(n)).querySelector('[data-bs-target]').getAttribute('data-bs-target'), 'SW Stale');
+  await p.evalWith((i) => document.querySelector('#sync-watch [data-bs-target="' + i + '"]').click(), id);
   await sleep(600);
-  await p.eval(`(()=>{const f=document.querySelector('${id}');f.querySelector('input[name=watch_expected_hours]').value='24';f.querySelector('input[name=watch_note]').value='synced by /opt/scripts/x.py';})()`);
+  await p.evalWith((i) => { const f = document.querySelector(i); f.querySelector('input[name=watch_expected_hours]').value = '24'; f.querySelector('input[name=watch_note]').value = 'synced by /opt/scripts/x.py'; }, id);
   await nav(`${id} button[name=save_watch_override]`);
   assert(/Watcher setting saved/.test(await flash()), 'no confirmation: ' + await flash());
   assert((await stateOf('SW Stale')) === 'healthy', 'a run 5 h ago against a declared 24 h interval should be healthy');
@@ -88,18 +87,18 @@ await T('Mute and Unmute one-click, state follows', async () => {
 });
 async function nav2(name, btn) {
   const origin = await p.eval('performance.timeOrigin');
-  await p.eval(`${rowOf(name)}.querySelector('button[name=${btn}]').click()`);
-  for (let i = 0; i < 300; i++) { await sleep(200); try { if (await p.eval(`performance.timeOrigin !== ${origin} && document.readyState === 'complete'`)) break; } catch { /* navigating */ } }
+  await p.evalWith((n, b) => [...document.querySelectorAll('#sync-watch tbody tr:not(.collapse)')].find((x) => x.innerText.includes(n)).querySelector('button[name=' + b + ']').click(), name, btn);
+  for (let i = 0; i < 300; i++) { await sleep(200); try { if (await p.evalWith((o) => performance.timeOrigin !== o && document.readyState === 'complete', origin)) break; } catch { /* navigating */ } }
   await sleep(500);
 }
 
 await T('Forget history needs its confirmation box (native validation), then removes the runs', async () => {
   await go('/admin/backup.php');
   await p.waitSel('#sync-watch');
-  await p.eval(`${rowOf('SW Dormant')}.querySelector('button[name=forget_watch_history]').click()`);
+  await p.evalWith((n) => [...document.querySelectorAll('#sync-watch tbody tr:not(.collapse)')].find((x) => x.innerText.includes(n)).querySelector('button[name=forget_watch_history]').click(), 'SW Dormant');
   await sleep(800);
   assert((await stateOf('SW Dormant')) === 'dormant' && /backup\.php/.test(await p.url()) && !/Forgot/.test(await flash()), 'it should not submit without the box ticked');
-  await p.eval(`${rowOf('SW Dormant')}.querySelector('input[name=watch_confirm]').checked=true`);
+  await p.evalWith((n) => { [...document.querySelectorAll('#sync-watch tbody tr:not(.collapse)')].find((x) => x.innerText.includes(n)).querySelector('input[name=watch_confirm]').checked = true; }, 'SW Dormant');
   await nav2('SW Dormant', 'forget_watch_history');
   assert(/Forgot the sync history/.test(await flash()), 'no confirmation: ' + await flash());
 });

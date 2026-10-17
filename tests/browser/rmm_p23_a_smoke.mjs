@@ -68,8 +68,8 @@ const setTheme = async (value) => {
 const trapDialogs = () => p.eval(`window.__dialogs = 0; window.confirm = window.alert = window.prompt = function () { window.__dialogs++; return true; }; true`);
 
 
-const setSelect = (sel, value) => p.eval(`(()=>{const s=document.querySelector(${JSON.stringify(sel)});s.value=${JSON.stringify(value)};s.dispatchEvent(new Event('change',{bubbles:true}));return s.value})()`);
-const selectText = (sel, text) => p.eval(`(()=>{const s=document.querySelector(${JSON.stringify(sel)});const o=[...s.options].find(x=>x.textContent.trim()===${JSON.stringify(text)});if(!o)return null;s.value=o.value;s.dispatchEvent(new Event('change',{bubbles:true}));return o.value})()`);
+const setSelect = (sel, value) => p.evalWith((q, v) => { const s = document.querySelector(q); s.value = v; s.dispatchEvent(new Event('change', { bubbles: true })); return s.value; }, sel, value);
+const selectText = (sel, text) => p.evalWith((q, t) => { const s = document.querySelector(q); const o = [...s.options].find((x) => x.textContent.trim() === t); if (!o) return null; s.value = o.value; s.dispatchEvent(new Event('change', { bubbles: true })); return o.value; }, sel, text);
 const FL = `((document.querySelector('#toast-container')||{}).innerText||'')`;   // the app shows flash messages as toasts
 const flash = async () => { await p.waitFor(`${FL}.length > 0`, { label: 'a flash message' }).catch(() => {}); return p.eval(FL); };
 const submit = (form) => p.clickNav(`${form} button[type=submit]:not([name=clear])`);

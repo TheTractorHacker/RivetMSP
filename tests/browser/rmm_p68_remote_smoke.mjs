@@ -47,7 +47,7 @@ async function shot(name) {
 }
 // a screenshot of one element (a dialog, a card)
 async function shotEl(name, sel) {
-  const r = await p.eval(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e)return null;const b=e.getBoundingClientRect();return {x:Math.max(0,b.left+scrollX),y:Math.max(0,b.top+scrollY),w:Math.ceil(b.width),h:Math.min(Math.ceil(b.height),4000)}})()`);
+  const r = await p.evalWith((q) => { const e = document.querySelector(q); if (!e) return null; const b = e.getBoundingClientRect(); return { x: Math.max(0, b.left + scrollX), y: Math.max(0, b.top + scrollY), w: Math.ceil(b.width), h: Math.min(Math.ceil(b.height), 4000) }; }, sel);
   if (!r) throw new Error('no element ' + sel);
   const { data } = await p.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: r.x, y: r.y, width: r.w, height: r.h, scale: 1 } });
   writeFileSync(join(shotDir, name + '.png'), Buffer.from(data, 'base64'));
@@ -69,7 +69,7 @@ const setTheme = async (value) => {
   await p.clickNav('button[name=edit_your_user_preferences]');
 };
 const trapDialogs = () => p.eval(`window.__dialogs = 0; window.confirm = window.alert = window.prompt = function () { window.__dialogs++; return true; }; true`);
-const setVal = (sel, v) => p.eval(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e)throw new Error('no ${sel}');e.value=${JSON.stringify(v)};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+const setVal = (sel, v) => p.evalWith((q, val) => { const e = document.querySelector(q); if (!e) throw new Error('no ' + q); e.value = val; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); }, sel, v);
 const unlabeled = () => p.eval(`[...document.querySelectorAll('#rmm-pane-remote input, #rmm-pane-remote select, #rmm-pane-remote textarea, #rmmRemUpload input, #rmmRemConfirm input')].filter(e=>{
   if(e.type==='hidden'||e.disabled)return false;
   const lab=(e.labels&&e.labels.length)||e.getAttribute('aria-label')||e.getAttribute('aria-labelledby')||e.getAttribute('title');return !lab}).map(e=>e.name||e.id||e.tagName)`);
@@ -109,7 +109,7 @@ const signIn = async (email, password) => {
   await p.clickNav('button[name=login], button[type=submit]');
   assert(!/login\.php/.test(await p.url()), 'still on the login page');
 };
-const text = (sel) => p.eval(`(document.querySelector(${JSON.stringify(sel)})||{}).innerText||''`);
+const text = (sel) => p.evalWith((q) => (document.querySelector(q) || {}).innerText || '', sel);
 
 // ------------------------------------------------------------------------------------------------ sign in and fixtures
 await T('login: real form signs in', async () => { await signIn(EMAIL, PASSWORD); }, { allowHttp: [/\/agent\/clients\.php/] });

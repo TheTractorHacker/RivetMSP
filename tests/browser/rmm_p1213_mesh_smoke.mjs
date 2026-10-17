@@ -81,7 +81,7 @@ async function shot(name) {
 }
 /** A screenshot of one element (a card), however far down the page it is. */
 async function shotEl(sel, name) {
-  const r = await p.eval(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e)return null;const b=e.getBoundingClientRect();return {x:b.x+scrollX,y:b.y+scrollY,w:b.width,h:b.height}})()`);
+  const r = await p.evalWith((q) => { const e = document.querySelector(q); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x + scrollX, y: b.y + scrollY, w: b.width, h: b.height }; }, sel);
   assert(r, 'no element ' + sel);
   const { data } = await p.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: Math.max(0, r.x), y: Math.max(0, r.y), width: Math.ceil(r.w), height: Math.min(Math.ceil(r.h), 6000), scale: 1 } });
   writeFileSync(join(shotDir, name + '.png'), Buffer.from(data, 'base64'));
@@ -108,7 +108,7 @@ const unlabeled = () => p.eval(`[...document.querySelectorAll('#mesh input, #mes
   if(e.type==='hidden'||e.disabled)return false;const r=e.getBoundingClientRect();if(!(r.width>0&&r.height>0))return false;
   const lab=(e.labels&&e.labels.length)||e.getAttribute('aria-label')||e.getAttribute('aria-labelledby')||e.getAttribute('title');return !lab}).map(e=>e.name||e.id||e.tagName)`);
 const msgIn = (card) => p.eval(`(()=>{const e=document.querySelector('#${card} [data-rmm-scale-msg]');return e?e.innerText.trim():''})()`);
-const checked = (sel) => p.eval(`!!document.querySelector(${JSON.stringify(sel)}).checked`);
+const checked = (sel) => p.evalWith((q) => !!document.querySelector(q).checked, sel);
 // a person clicks the label of a switch or box (the input itself is a few pixels)
 const setChecked = async (sel, want) => {
   for (let i = 0; i < 3 && (await checked(sel)) !== want; i++) { await click(`label[for="${sel.slice(1)}"]`); await sleep(350); }
@@ -283,7 +283,7 @@ await T('group id: an address for a different host is saved with a visible warni
   await nav('button[name=save_mesh_settings]');
   await p.waitSel('#mesh [data-rmm-scale-msg]');
   const m = await msgIn('mesh');
-  assert(/Saved, with a warning/.test(m) && /other\.example\.test/.test(m) && new RegExp(meshHost.split(':')[0].replace(/\./g, '\\.')).test(m), 'warning text: ' + m);
+  assert(/Saved, with a warning/.test(m) && /other\.example\.test/.test(m) && new RegExp(meshHost.split(':')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(m), 'warning text: ' + m);
   assert((await p.eval(`document.querySelector('#mesh [data-rmm-scale-msg]').getAttribute('role')`)) === 'alert', 'the warning should be role=alert');
   assert((await readGroup()) === C.url, 'the id should still be saved');
   await shotEl('#mesh', 'card-mesh-warning-desktop-light');

@@ -24,13 +24,13 @@ const p = page;
 const go = async (path) => { await p.goto(BASE + path); await sleep(600); };
 const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
 const shot = async (name) => { const { data } = await p.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }); writeFileSync(join(shotDir, name + '.png'), Buffer.from(data, 'base64')); };
-const nav = async (js, timeout = 60000) => {
+const nav = async (js, timeout = 60000, ...args) => {
   const origin = await p.eval('performance.timeOrigin');
-  await p.eval(js);
+  if (typeof js === 'function') await p.evalWith(js, ...args); else await p.eval(js);
   const end = Date.now() + timeout;
   for (;;) {
     await sleep(200);
-    try { if (await p.eval(`performance.timeOrigin !== ${origin} && document.readyState === 'complete'`)) break; } catch { /* navigating */ }
+    try { if (await p.evalWith((o) => performance.timeOrigin !== o && document.readyState === 'complete', origin)) break; } catch { /* navigating */ }
     if (Date.now() > end) throw new Error('page did not navigate');
   }
   await sleep(600);
@@ -38,9 +38,9 @@ const nav = async (js, timeout = 60000) => {
 const rows = () => p.eval(`[...new Set((document.body.innerText.match(/tvT\\d{2}/g)||[]))].sort().join(',')`);
 const loc = () => p.eval(`decodeURIComponent(location.search)`);
 // open a quick-filter dropdown by its toggle id, tick options by label text
-const openDd = async (id) => { await p.eval(`document.getElementById(${JSON.stringify(id)}).click()`); await sleep(350); };
-const tick = (label) => p.eval(`(()=>{const l=[...document.querySelectorAll('.dropdown-menu.show label.form-check-label, .modal.show label.form-check-label, #advancedFilter label.form-check-label')].find(x=>x.innerText.trim()===${JSON.stringify(label)});if(!l)throw new Error('no option '+${JSON.stringify(label)});l.click();})()`);
-const closeDdAndWait = async (id) => nav(`document.getElementById(${JSON.stringify(id)}).click()`); // closing a changed menu submits the filter form
+const openDd = async (id) => { await p.evalWith((i) => document.getElementById(i).click(), id); await sleep(350); };
+const tick = (label) => p.evalWith((t) => { const l = [...document.querySelectorAll('.dropdown-menu.show label.form-check-label, .modal.show label.form-check-label, #advancedFilter label.form-check-label')].find((x) => x.innerText.trim() === t); if (!l) throw new Error('no option ' + t); l.click(); }, label);
+const closeDdAndWait = async (id) => nav((i) => document.getElementById(i).click(), 60000, id); // closing a changed menu submits the filter form
 
 await T('login: real form signs in', async () => {
   await go('/login.php');

@@ -70,9 +70,9 @@ const setTheme = async (value) => {
 const trapDialogs = () => p.eval(`window.__dialogs = 0; window.confirm = window.alert = window.prompt = function () { window.__dialogs++; return true; }; true`);
 
 
-const pick = (sel, val) => p.eval(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});e.value=${JSON.stringify(String(val))};e.dispatchEvent(new Event('change',{bubbles:true}));return e.value})()`);
-const optionValue = (sel, text) => p.eval(`(()=>{const o=[...document.querySelector(${JSON.stringify(sel)}).options].find(x=>x.text.includes(${JSON.stringify(text)}));return o?o.value:null})()`);
-const setBody = (text) => p.eval(`(()=>{const e=document.getElementById('scr_body');e.value=${JSON.stringify(text)};e.dispatchEvent(new Event('input',{bubbles:true}));return e.value.length})()`);
+const pick = (sel, val) => p.evalWith((q, v) => { const e = document.querySelector(q); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); return e.value; }, sel, String(val));
+const optionValue = (sel, text) => p.evalWith((q, t) => { const o = [...document.querySelector(q).options].find((x) => x.text.includes(t)); return o ? o.value : null; }, sel, text);
+const setBody = (text) => p.evalWith((v) => { const e = document.getElementById('scr_body'); e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); return e.value.length; }, text);
 const SECRET = 'SMOKE-SECRET-123';
 const saved = {};
 const waitText = (re, label) => p.waitFor(`/${re}/.test(document.body.innerText) || /${re}/.test(document.documentElement.innerHTML)`, { timeout: 12000, label: label || String(re) });
@@ -170,7 +170,7 @@ await T('run panel: confirmation dialog names script, version and target; the jo
   assert((await p.eval('window.__dialogs')) === 0, 'window.confirm/alert was used');
   await p.click('#rmmAutoConfirmGo');
   await waitText('1 job queued for 1 device', 'flash: job queued');
-  assert(!(await p.eval(`document.documentElement.outerHTML.includes(${JSON.stringify(SECRET)})`)), 'the secret is in the page');
+  assert(!(await p.evalWith((x) => document.documentElement.outerHTML.includes(x), SECRET)), 'the secret is in the page');
   await waitText('LNX1', 'the run is listed');
 });
 await T('run panel: a single device needs no dialog', async () => {
