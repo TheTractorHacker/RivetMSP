@@ -251,11 +251,36 @@ foreach ($platform_order as $plat):
                     <label class="text-muted small">Check Interval (seconds)</label>
                     <input type="number" class="form-control form-control-sm" id="p_interval" value="120" min="30">
                 </div>
-                <div class="form-group">
-                    <label class="text-muted small" id="p_params_label">Extra Parameters (JSON)</label>
-                    <input type="text" class="form-control form-control-sm font-monospace" id="p_params"
-                           placeholder='{"disk":"C"}'>
-                    <small class="text-muted" id="p_params_hint">For disk checks: {"disk":"C"}. For service: {"svc_name":"spooler","restart_if_stopped":true}. For ping: {"ip":"8.8.8.8"}</small>
+                <div id="pp_groups" class="mb-2">
+                    <div data-pp-type="diskspace" class="form-group">
+                        <label class="text-muted small" for="pp_disk">Drive letter</label>
+                        <input type="text" class="form-control form-control-sm" id="pp_disk" maxlength="1" placeholder="C" style="max-width:6rem">
+                        <small class="text-muted">One letter such as C. On Linux and macOS type / instead.</small>
+                    </div>
+                    <div data-pp-type="ping" class="form-group">
+                        <label class="text-muted small" for="pp_ip">Address to ping</label>
+                        <input type="text" class="form-control form-control-sm" id="pp_ip" maxlength="253" placeholder="8.8.8.8">
+                        <label class="text-muted small mt-2" for="pp_failures">Alert after this many failed pings in a row</label>
+                        <input type="number" class="form-control form-control-sm" id="pp_failures" min="1" max="100" placeholder="5" style="max-width:8rem">
+                    </div>
+                    <div data-pp-type="winsvc" class="form-group">
+                        <label class="text-muted small" for="pp_svc_name">Service name</label>
+                        <input type="text" class="form-control form-control-sm" id="pp_svc_name" maxlength="128" placeholder="Spooler">
+                        <small class="text-muted">The service name, not the display name.</small>
+                        <div class="form-check mt-2"><input type="checkbox" class="form-check-input" id="pp_restart"><label class="form-check-label small" for="pp_restart">Start it again automatically when it is stopped</label></div>
+                    </div>
+                    <div data-pp-type="eventlog" class="form-group">
+                        <div class="row">
+                            <div class="col-6"><label class="text-muted small" for="pp_log_name">Look in</label>
+                                <select class="form-control form-control-sm" id="pp_log_name"><option>Application</option><option>System</option><option>Security</option></select></div>
+                            <div class="col-6"><label class="text-muted small" for="pp_event_type">Kind of event</label>
+                                <select class="form-control form-control-sm" id="pp_event_type"><option value="ERROR">Error</option><option value="WARNING">Warning</option><option value="INFO">Information</option><option value="AUDIT_SUCCESS">Audit success</option><option value="AUDIT_FAILURE">Audit failure</option></select></div>
+                            <div class="col-4 mt-2"><label class="text-muted small" for="pp_event_id">Event number</label><input type="number" class="form-control form-control-sm" id="pp_event_id" min="0" max="65535" placeholder="any"><small class="text-muted">Empty = any.</small></div>
+                            <div class="col-4 mt-2"><label class="text-muted small" for="pp_fail_count">Alert at this many</label><input type="number" class="form-control form-control-sm" id="pp_fail_count" min="1" max="1000" placeholder="1"></div>
+                            <div class="col-4 mt-2"><label class="text-muted small" for="pp_days">Look back (days)</label><input type="number" class="form-control form-control-sm" id="pp_days" min="1" max="365" placeholder="1"></div>
+                        </div>
+                    </div>
+                    <small class="text-muted" id="pp_none">This check type needs nothing more than the limits above.</small>
                 </div>
                 <div class="form-group">
                     <label class="text-muted small">Description</label>
@@ -318,6 +343,11 @@ function confirmAction(message, callback) {
 }
 
 function doPushPolicy(policyId, cb) {
+    const type = params.check_type;
+    Object.keys(PP[type] || {}).forEach(f => {
+        const el = document.getElementById(PP[type][f]);
+        params['pp[' + f + ']'] = el.type === 'checkbox' ? (el.checked ? '1' : '') : el.value;
+    });
     fetch('/agent/post/rmm_check.php', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -401,7 +431,7 @@ function openNewPolicy() {
     document.getElementById('p_warn').value = '80';
     document.getElementById('p_crit').value = '90';
     document.getElementById('p_interval').value = '120';
-    document.getElementById('p_params').value = '{"disk":"C"}';
+    fillParams('diskspace', {disk: 'C'});
     document.getElementById('p_description').value = '';
     document.getElementById('p_enabled').checked = true;
     updateParamsHint();
@@ -417,24 +447,35 @@ function editPolicy(pol) {
     document.getElementById('p_warn').value        = pol.warning_threshold || '';
     document.getElementById('p_crit').value        = pol.critical_threshold || '';
     document.getElementById('p_interval').value    = pol.check_interval;
-    document.getElementById('p_params').value      = pol.check_params || '{}';
+    let cp = {}; try { cp = JSON.parse(pol.check_params || '{}') || {}; } catch (e) { cp = {}; }
+    fillParams(pol.check_type, cp);
     document.getElementById('p_description').value = pol.description || '';
     document.getElementById('p_enabled').checked   = pol.enabled == 1;
     updateParamsHint();
     $('#policyModal').modal('show');
 }
 
+const PP = {
+    diskspace: {disk: 'pp_disk'},
+    ping: {ip: 'pp_ip', failures: 'pp_failures'},
+    winsvc: {svc_name: 'pp_svc_name', restart_if_stopped: 'pp_restart'},
+    eventlog: {log_name: 'pp_log_name', event_type: 'pp_event_type', event_id: 'pp_event_id', fail_count: 'pp_fail_count', search_last_days: 'pp_days'},
+};
+function fillParams(type, p) {
+    Object.keys(PP).forEach(t => Object.keys(PP[t]).forEach(f => {
+        const el = document.getElementById(PP[t][f]);
+        if (el.type === 'checkbox') { el.checked = false; } else if (el.tagName === 'SELECT') { el.selectedIndex = 0; } else { el.value = ''; }
+    }));
+    Object.keys(PP[type] || {}).forEach(f => {
+        const el = document.getElementById(PP[type][f]);
+        if (!(f in p)) { return; }
+        if (el.type === 'checkbox') { el.checked = !!p[f]; } else { el.value = String(p[f]); }
+    });
+}
 function updateParamsHint() {
     const type = document.getElementById('p_type').value;
-    const hints = {
-        diskspace: '{"disk":"C"}  — use "/" for Linux/macOS',
-        cpuload:   'No extra params needed',
-        memory:    'No extra params needed',
-        ping:      '{"ip":"8.8.8.8"}',
-        winsvc:    '{"svc_name":"spooler","restart_if_stopped":true}',
-        eventlog:  '{"log_name":"Application","event_type":"ERROR","fail_count":1,"search_last_days":1}',
-    };
-    document.getElementById('p_params_hint').textContent = hints[type] || '';
+    document.querySelectorAll('[data-pp-type]').forEach(g => { g.style.display = g.getAttribute('data-pp-type') === type ? '' : 'none'; });
+    document.getElementById('pp_none').style.display = PP[type] ? 'none' : '';
     const noThresh = ['ping','winsvc','eventlog'].includes(type);
     document.getElementById('threshold_row').style.display = noThresh ? 'none' : '';
 }
@@ -450,7 +491,6 @@ function savePolicy() {
         warning_threshold:  document.getElementById('p_warn').value,
         critical_threshold: document.getElementById('p_crit').value,
         check_interval:     document.getElementById('p_interval').value,
-        check_params:       document.getElementById('p_params').value,
         description:        document.getElementById('p_description').value,
         enabled:            document.getElementById('p_enabled').checked ? '1' : '',
     };

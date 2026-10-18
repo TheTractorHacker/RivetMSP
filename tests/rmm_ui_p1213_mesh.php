@@ -49,7 +49,7 @@ $ok($rmm->meshAgents()->installRefusal() !== null && str_contains((string) $rmm-
 [$c, $body] = $mPg();
 $ok($c === 200 && !str_contains($body, 'Fatal error') && !str_contains($body, 'Warning:') && !str_contains($body, 'Deprecated:'), 'Administration loads with the Mesh install fields and no PHP notice (' . $c . ')');
 $ok(str_contains($body, 'name="mesh_group_id"') && preg_match('/<input type="password"[^>]*id="mc_group"/', $body) === 1, 'the device group id field is a masked password input (it is a secret)');
-$ok(str_contains($body, 'name="mesh_server_cert_pin"') && str_contains($body, 'name="mesh_auto_map_overwrite"') && str_contains($body, 'name="mesh_agent_ids"') && str_contains($body, 'name="mesh_install_args"') && str_contains($body, 'name="mesh_install_fields"'), 'pin, overwrite switch, the two corrections and the marker field are on the form');
+$ok(str_contains($body, 'name="mesh_server_cert_pin"') && str_contains($body, 'name="mesh_auto_map_overwrite"') && str_contains($body, 'name="mesh_agent_id[windows/amd64]"') && str_contains($body, 'name="mesh_install_arg[linux]"') && !str_contains($body, 'name="mesh_agent_ids"') && str_contains($body, 'name="mesh_install_fields"'), 'pin, overwrite switch, the two corrections and the marker field are on the form');
 $ok(!preg_match('/name="mesh_auto_map_overwrite"[^>]*checked/', $body), 'the overwrite switch is off by default');
 $ok(str_contains($body, 'id="mesh-pin-probe"') && preg_match('/<button type="submit" form="mesh-pin-probe"/', $body) === 1 && str_contains($body, 'Read it from the server'), 'the "Read it from the server" button belongs to its own form (forms cannot nest) and the page has that form');
 $ok(str_contains($body, 'was checked against a real MeshCentral') && str_contains($body, 'were not: check them against your Mesh version') && str_contains($body, 'Verify these against your own Mesh server') && str_contains($body, '<details class="rmm-mesh-advanced"'), 'the advanced section carries Core\'s note (what was checked against a real MeshCentral and what was not) and our verify warning');
@@ -91,20 +91,20 @@ $ok($mMsg($body) === '' && str_contains($body, 'value="' . hash('sha384', 'pin-o
 $mAdm($full + ['mesh_group_id' => 'xyz not hex', 'mesh_server_cert_pin' => '']);
 [$c, $body] = $mPg();
 $ok(str_contains($mMsg($body), 'device group id') && $mCfg()->get()['group_id'] === $mGroup, 'a bad group id is refused with Core\'s sentence and nothing is written');
-$mAdm($full + ['mesh_group_id' => $mGroup, 'mesh_server_cert_pin' => '', 'mesh_agent_ids' => '{not json']);
+$mAdm($full + ['mesh_group_id' => $mGroup, 'mesh_server_cert_pin' => '', 'mesh_agent_id' => ['windows/amd64' => 'abc']]);
 [$c, $body] = $mPg();
-$ok(str_contains($mMsg($body), 'must be a JSON object') && str_contains($body, '{not json'), 'invalid JSON in a correction box is refused before Core is asked, and the text stays in the box');
-$mAdm($full + ['mesh_group_id' => $mGroup, 'mesh_server_cert_pin' => '', 'mesh_agent_ids' => '{"windows/amd64": 999}']);
+$ok(str_contains($mMsg($body), 'must be a whole number from 1 to 255') && str_contains($body, 'value="abc"'), 'a non-number in an agent id box is refused before Core is asked (plain words), and the text stays in the box');
+$mAdm($full + ['mesh_group_id' => $mGroup, 'mesh_server_cert_pin' => '', 'mesh_agent_id' => ['windows/amd64' => '999']]);
 [$c, $body] = $mPg();
-$ok(str_contains($mMsg($body), 'agent ids between 1 and 255') && $mCfg()->get()['agent_ids'] === [], 'an out-of-range agent id is refused by Core');
+$ok(str_contains($mMsg($body), 'whole number from 1 to 255') && $mCfg()->get()['agent_ids'] === [], 'an out-of-range agent id is refused by Core');
 
 // the corrections
-$mAdm($full + ['mesh_group_id' => $mGroup, 'mesh_server_cert_pin' => '', 'mesh_agent_ids' => '{"windows/arm64": 40}', 'mesh_install_args' => '{"linux": ["-install", "--installPath=/opt/mesh"]}']);
+$mAdm($full + ['mesh_group_id' => $mGroup, 'mesh_server_cert_pin' => '', 'mesh_agent_id' => ['windows/arm64' => '40'], 'mesh_install_arg' => ['linux' => '-install --installPath=/opt/mesh']]);
 $mCfg()->refresh();
-$ok($mCfg()->get()['agent_ids'] === ['windows/arm64' => 40] && $mCfg()->get()['install_args'] === ['linux' => ['-install', '--installPath=/opt/mesh']] && $mCfg()->get()['server_cert_pin'] === '', 'the corrections are saved as JSON, and an empty pin clears the pin');
+$ok($mCfg()->get()['agent_ids'] === ['windows/arm64' => 40] && $mCfg()->get()['install_args'] === ['linux' => ['-install', '--installPath=/opt/mesh']] && $mCfg()->get()['server_cert_pin'] === '', 'the corrections are saved, and an empty pin clears the pin');
 [$c, $body] = $mPg();
-$ok(str_contains($body, 'rmm-mesh-advanced" data-rmm-mesh-advanced open') && str_contains($body, '&quot;windows/arm64&quot;: 40'), 'with corrections stored the advanced section opens and shows them');
-$mAdm($full + ['mesh_group_id' => $mGroup, 'mesh_server_cert_pin' => '', 'mesh_agent_ids' => '', 'mesh_install_args' => '']);
+$ok(str_contains($body, 'rmm-mesh-advanced" data-rmm-mesh-advanced open') && preg_match('/name="mesh_agent_id\[windows\/arm64\]"[^>]*value="40"/', $body) === 1 && str_contains($body, 'value="-install --installPath=/opt/mesh"'), 'with corrections stored the advanced section opens and shows them in plain boxes');
+$mAdm($full + ['mesh_group_id' => $mGroup, 'mesh_server_cert_pin' => '', 'mesh_agent_id' => ['windows/arm64' => ''], 'mesh_install_arg' => ['linux' => '']]);
 $mCfg()->refresh();
 $ok($mCfg()->get()['agent_ids'] === [] && $mCfg()->get()['install_args'] === [], 'empty boxes clear the corrections (the built-in tables apply again)');
 

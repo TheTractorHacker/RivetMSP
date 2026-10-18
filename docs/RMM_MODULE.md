@@ -290,6 +290,12 @@ Tests: `tests/rmm_ui_p16_mesh_push.php` (the Remote tab controls, the handler, t
 * **Install now**: the live-install switches (`patch_live_install`, `software_live_install`) gate only the scheduler; a person with the install / deploy right installs on one device with confirmation and audit.
 * Tests: `tests/rmm_agent_feed.php` (+ `tests/support/mock_github.py`, fragments in `tests/support/`), `tests/browser/rmm_agent_feed_smoke.mjs`.
 
+## 6j. Plain options instead of JSON (26.10.29, no DB change)
+
+* **Check schedule** (Administration > Endpoint agent > "What the agent checks"): `includes/rmm_checks_simple.php` (`RivetChecksSimple`: `decompose()` stored list -> options, `compose()` posted options -> list, then `ChecksValidator`), `includes/rmm_checks_simple_ui.php`, `js/rmm_checks_simple.js`, handler in `admin/post/settings_endpoint_agent.php` (`$_POST['cs']`; a posted `checks_json` is ignored). Presets, intervals, the disk limits, the services checklist and the script limits are constants of the class. Checks without an option stay as "other checks" and are copied from the stored list by key. A refused save keeps the options in `$_SESSION['ea_checks_draft']` for one page view (ten minutes).
+* **Policy editor**: the original types use `RivetChecksSimple::legacyFields()` (service, disk, script, restart) rendered by the same field renderer as the newer types; `legacyProblems()` gives the plain-word refusals. **Mesh card**: `mesh_agent_id[<platform>]` and `mesh_install_arg[<platform>]` boxes (`includes/rmm_mesh_admin.php`), Core still validates. **Older check policies** (`agent/rmm_checks.php`): `RivetChecksSimple::policyParams()` builds the stored settings from `pp[...]`.
+* Tests: `tests/rmm_checks_simple.php`, `tests/browser/rmm_checks_simple_smoke.mjs`.
+
 ## 7. Not verified
 
 A real MeshCentral server (only Core's mock and our local TLS stand-in; this includes the optional Mesh agent install of 6e), the Windows agent and installer on a Windows host (including the MSI installer of 6g and the pushed Mesh install on Windows) and the Windows scripts of the starter pack (6f), and a production-sized fleet (see Core's `docs/rmm/CAPACITY.md`).

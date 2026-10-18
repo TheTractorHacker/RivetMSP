@@ -17,6 +17,7 @@
  */
 
 require_once __DIR__ . '/rmm_automation.php';
+require_once __DIR__ . '/rmm_checks_simple.php';   // 26.10.29: the plain fields of the four original check types
 
 use RivetCore\Rmm\RmmProtocol;
 
@@ -267,16 +268,10 @@ function rivetRmmPolBuildSettings(array $in, array $catalog): array
         $params = [];
         $spec = $catalog[$type] ?? ['fields' => [], 'legacy' => in_array($type, RIVET_RMM_POL_LEGACY_TYPES, true), 'reports_value' => false];
         if (!empty($spec['legacy'])) {
-            $json = trim((string) ($row['params_json'] ?? ''));
-            if ($json !== '') {
-                $dec = json_decode($json, true);
-                if (!is_array($dec) || ($dec !== [] && array_is_list($dec))) {
-                    $errors[] = "Check $key: the extra settings must be a JSON object such as {\"name\": \"Spooler\"}.";
-                } else {
-                    $params = $dec;
-                }
-            }
-        } else {
+            // 26.10.29: the four original types use plain fields (RivetChecksSimple::legacyFields()), not a JSON box.
+            $spec['fields'] = RivetChecksSimple::legacyFields()[$type] ?? [];
+        }
+        {
             $own = is_array($row['p'][$type] ?? null) ? $row['p'][$type] : [];
             foreach ((array) ($spec['fields'] ?? []) as $name => $f) {
                 $raw = $own[$name] ?? null;
@@ -298,8 +293,17 @@ function rivetRmmPolBuildSettings(array $in, array $catalog): array
                     if ($items !== []) {
                         $params[$name] = $items;
                     }
+                } elseif ($kind === 'text') {
+                    if (is_string($raw) && trim($raw) !== '') {
+                        $params[$name] = str_replace("\r\n", "\n", $raw);
+                    }
                 } elseif (is_string($raw) && trim($raw) !== '') {
                     $params[$name] = trim($raw);
+                }
+            }
+            if (!empty($spec['legacy'])) {
+                foreach (RivetChecksSimple::legacyProblems($type, $params) as $pr) {
+                    $errors[] = "Check $key: $pr";
                 }
             }
         }
@@ -404,12 +408,12 @@ function rivetRmmPolParamInput(string $idBase, string $nameBase, string $name, a
     $nm = $nameBase . '[' . $name . ']';
     $kind = (string) ($f['kind'] ?? 'str');
     $req = !empty($f['required']);
-    $label = '<label class="form-label small mb-1" for="' . rmmH($id) . '">' . rmmH(str_replace('_', ' ', $name)) . ($req ? ' <span class="text-danger" title="required">*</span>' : '') . '</label>';
+    $label = '<label class="form-label small mb-1" for="' . rmmH($id) . '">' . rmmH(isset($f['label']) ? (string) $f['label'] : str_replace('_', ' ', $name)) . ($req ? ' <span class="text-danger" title="required">*</span>' : '') . '</label>';
     switch ($kind) {
         case 'int':
             $hint = 'from ' . (int) $f['min'] . ' to ' . (int) $f['max'] . ($req ? '' : ', default ' . (int) $f['default']);
             $in = '<input type="number" step="1" class="form-control form-control-sm" id="' . rmmH($id) . '" name="' . rmmH($nm) . '" min="' . (int) $f['min'] . '" max="' . (int) $f['max']
-                . '" value="' . rmmH(is_scalar($current) ? (string) $current : '') . '" placeholder="' . (!$req ? (int) $f['default'] : '') . '">';
+                . '" value="' . rmmH(is_scalar($current) ? (string) $current : '') . '" placeholder="' . (!$req && (int) $f['default'] !== 0 ? (int) $f['default'] : '') . '">';
             break;
         case 'enum':
             $hint = 'default ' . (string) ($f['default'] ?? '');
@@ -425,6 +429,10 @@ function rivetRmmPolParamInput(string $idBase, string $nameBase, string $name, a
             $in = '<select class="form-select form-select-sm" id="' . rmmH($id) . '" name="' . rmmH($nm) . '"><option value="">Default (' . (!empty($f['default']) ? 'yes' : 'no') . ')</option>'
                 . '<option value="true"' . ($cur === 'true' ? ' selected' : '') . '>Yes</option><option value="false"' . ($cur === 'false' ? ' selected' : '') . '>No</option></select>';
             break;
+        case 'text':
+            $hint = 'up to ' . (int) ($f['max_length'] ?? 0) . ' characters';
+            $in = '<textarea class="form-control form-control-sm font-monospace" rows="5" id="' . rmmH($id) . '" name="' . rmmH($nm) . '" spellcheck="false">' . rmmH(is_scalar($current) ? (string) $current : '') . '</textarea>';
+            break;
         case 'list':
             $hint = 'one value per line, at most ' . (int) ($f['max_items'] ?? 0);
             $in = '<textarea class="form-control form-control-sm" rows="2" id="' . rmmH($id) . '" name="' . rmmH($nm) . '">' . rmmH(is_array($current) ? implode("\n", array_map('strval', $current)) : (string) $current) . '</textarea>';
@@ -434,7 +442,11 @@ function rivetRmmPolParamInput(string $idBase, string $nameBase, string $name, a
             $in = '<input type="text" class="form-control form-control-sm" id="' . rmmH($id) . '" name="' . rmmH($nm) . '" maxlength="' . (int) ($f['max_length'] ?? 255) . '" value="' . rmmH(is_scalar($current) ? (string) $current : '') . '">';
     }
 
-    return '<div class="col-sm-6 col-lg-4">' . $label . $in . '<div class="form-text mt-0">' . rmmH($hint) . '</div></div>';
+    if (isset($f['help'])) {
+        $hint = (string) $f['help'];
+    }
+
+    return '<div class="' . ($kind === 'text' ? 'col-12' : 'col-sm-6 col-lg-4') . '">' . $label . $in . '<div class="form-text mt-0">' . rmmH($hint) . '</div></div>';
 }
 
 /**
@@ -467,31 +479,23 @@ function rivetRmmPolCheckRow(string $i, array $row, array $catalog): string
         . '<div class="col-sm-4 col-lg-2"><label class="form-label small mb-1" for="' . $id . '_iv">Run every (seconds)</label><input type="number" step="1" min="30" max="86400" class="form-control form-control-sm" id="' . $id . '_iv" name="' . $nm . '[interval_s]" value="' . rmmH($row['interval_s'] ?? '') . '" placeholder="60"></div>'
         . '<div class="col-sm-2 col-lg-2 text-end"><button type="button" class="btn btn-sm btn-outline-danger rmm-row-remove" data-rmm-remove="1" aria-label="Remove this check row" title="Remove this row"><i class="fas fa-times" aria-hidden="true"></i></button></div></div>'
         . '<p class="form-text mb-1">Choosing "Remove this check" takes the key out of the device\'s check list (also one from the global list); the type and settings are then ignored.</p>';
-    // the type's own params
-    $legacy = [];
     foreach ($catalog as $t => $spec) {
-        if (!empty($spec['legacy'])) {
-            $legacy[] = $t;
-        }
-    }
-    if ($legacy !== []) {
-        $json = '';
-        if (in_array($type, $legacy, true) && is_array($row['own'] ?? null) && $row['own'] !== []) {
-            $json = (string) json_encode($row['own'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        }
-        $o .= '<div class="mt-2" data-rmm-when="#' . $id . '_type=' . rmmH(implode(',', $legacy)) . '"><label class="form-label small mb-1" for="' . $id . '_pj">Extra settings of this type (JSON object)</label>'
-            . '<textarea class="form-control form-control-sm rmm-mono" rows="2" id="' . $id . '_pj" name="' . $nm . '[params_json]" placeholder="{&quot;name&quot;: &quot;Spooler&quot;}">' . rmmH($json) . '</textarea>'
-            . '<div class="form-text">These older check types take free-form settings; RivetCore checks them when you save and shows what it refuses.</div></div>';
-    }
-    foreach ($catalog as $t => $spec) {
-        if (!empty($spec['legacy'])) {
-            continue;
-        }
-        $o .= '<div class="mt-2" data-rmm-when="#' . $id . '_type=' . rmmH($t) . '"><div class="small text-muted mb-1">Runs on '
-            . rmmH(implode(' and ', array_map('ucfirst', (array) ($spec['platforms'] ?? [])))) . '.' . (!empty($spec['reports_value']) ? ' Reports a value in ' . rmmH((string) $spec['unit']) . '.' : ' Does not report a value, so it has no thresholds.')
-            . '</div><div class="row g-2">';
+        $legacyType = !empty($spec['legacy']);
+        $fields = $legacyType ? RivetChecksSimple::legacyFields()[$t] ?? [] : (array) $spec['fields'];
         $cur = $type === $t && is_array($row['own'] ?? null) ? $row['own'] : [];
-        foreach ((array) $spec['fields'] as $name => $f) {
+        $o .= '<div class="mt-2" data-rmm-when="#' . $id . '_type=' . rmmH($t) . '"><div class="small text-muted mb-1">'
+            . ($legacyType ? ($fields === [] ? 'This check has no settings of its own.' : 'Settings of this check.') : 'Runs on '
+            . rmmH(implode(' and ', array_map('ucfirst', (array) ($spec['platforms'] ?? [])))) . '.' . (!empty($spec['reports_value']) ? ' Reports a value in ' . rmmH((string) $spec['unit']) . '.' : ' Does not report a value, so it has no thresholds.'))
+            . '</div>';
+        if ($t === 'script') {
+            $o .= '<div class="alert alert-warning py-1 small mb-2" role="note">A script runs as code on every computer this policy reaches. Only use one you trust. It is signed before it is sent.</div>';
+        }
+        $o .= '<div class="row g-2">';
+        $gone = $legacyType && $type === $t ? RivetChecksSimple::legacyUnknown($t, $cur) : [];
+        if ($gone !== []) {
+            $o .= '<div class="col-12"><div class="alert alert-info py-1 small mb-0" role="note">This check also has settings this form cannot show (' . rmmH(implode(', ', $gone)) . '). They are removed when you save.</div></div>';
+        }
+        foreach ($fields as $name => $f) {
             $o .= rivetRmmPolParamInput($id . '_' . $t, $nm . '[p][' . $t . ']', (string) $name, is_array($f) ? $f : [], $cur[$name] ?? null);
         }
         $o .= '</div></div>';

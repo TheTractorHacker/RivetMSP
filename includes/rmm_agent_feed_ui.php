@@ -16,7 +16,7 @@ function rivetAgentFeedBadge(array $vm): string
         return '';
     }
 
-    return '<span class="badge bg-warning text-dark ms-2" data-feed-badge title="Newer than the newest agent hosted here"><i class="fas fa-arrow-up me-1" aria-hidden="true"></i>New version available: '
+    return '<span class="badge bg-warning text-dark text-wrap ms-2" data-feed-badge title="Newer than the newest agent hosted here"><i class="fas fa-arrow-up me-1" aria-hidden="true"></i>New version available: '
         . nullable_htmlentities((string) $vm['newer']) . ($vm['newer_pre'] ? ' (pre-release)' : '') . '</span>';
 }
 
@@ -30,8 +30,9 @@ function rivetAgentFeedCard(array $vm, ?array $msg, array $steps, string $csrf, 
 {
     $h = static fn ($v): string => nullable_htmlentities((string) $v);
     $o = '<div class="card mb-3" id="agent-updates"><div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2"><h4 class="card-title mb-0">Agent updates' . rivetAgentFeedBadge($vm) . '</h4>'
+        . '<div class="d-flex flex-wrap gap-2"><a href="/agent/rmm_add_device.php" class="btn btn-sm btn-primary" data-feed-build-installer><i class="fas fa-hammer me-1" aria-hidden="true"></i>Add device / Build installer</a>'
         . '<form action="post.php" method="post" class="d-inline"><input type="hidden" name="csrf_token" value="' . $h($csrf) . '">'
-        . '<button type="submit" class="btn btn-sm btn-outline-primary" name="agent_feed_refresh" value="1"><i class="fas fa-sync me-1" aria-hidden="true"></i>Check for updates</button></form></div><div class="card-body">';
+        . '<button type="submit" class="btn btn-sm btn-outline-primary" name="agent_feed_refresh" value="1"><i class="fas fa-sync me-1" aria-hidden="true"></i>Check for updates</button></form></div></div><div class="card-body">';
     $o .= '<p class="small text-muted">Releases of the public repository <a href="https://github.com/' . $h($vm['repo']) . '/releases" rel="noopener noreferrer" target="_blank">' . $h($vm['repo']) . '</a> whose tag starts with <code>agent-v</code>. '
         . '<strong>Publish</strong> downloads the Windows agent (x64 and ARM64) and the MSI template, checks each file against the release\'s own <code>SHA256SUMS</code> BEFORE storing it, and stores it exactly as an upload would '
         . '(same checks, same audit). The Linux files (install script, tarballs, .deb, .rpm) are not copied here: they are recorded as links with their SHA-256, and the <a href="/agent/rmm_add_device.php">Build installer</a> page uses them. '

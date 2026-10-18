@@ -61,24 +61,50 @@ function rivetRmmMeshInstallRead(array $post): array
         return [$hideFields, [], $hideOld];
     }
     $str = static fn (string $k, int $max): string => is_string($post[$k] ?? null) ? mb_substr(trim($post[$k]), 0, $max) : '';
+    $keyOk = static fn ($k): bool => is_string($k) && preg_match('~^[a-z0-9]{1,20}(/[a-z0-9_]{1,20})?$~', $k) === 1;
+    // 26.10.29: one plain box per platform instead of two JSON boxes. Empty = no correction (Core's built-in table applies). Core still validates what it is given.
+    $idsIn = is_array($post['mesh_agent_id'] ?? null) ? array_slice($post['mesh_agent_id'], 0, 40, true) : [];
+    $argsIn = is_array($post['mesh_install_arg'] ?? null) ? array_slice($post['mesh_install_arg'], 0, 40, true) : [];
     $old = ['group_id' => $str('mesh_group_id', 2001), 'pin' => $str('mesh_server_cert_pin', 300), 'overwrite' => !empty($post['mesh_auto_map_overwrite']) ? '1' : '',
-        'agent_ids' => is_string($post['mesh_agent_ids'] ?? null) ? mb_substr((string) $post['mesh_agent_ids'], 0, 4000) : '',
-        'install_args' => is_string($post['mesh_install_args'] ?? null) ? mb_substr((string) $post['mesh_install_args'], 0, 4000) : ''];
+        'agent_ids' => [], 'install_args' => []];
     $fields = ['mesh_group_id' => $old['group_id'], 'mesh_server_cert_pin' => $old['pin'], 'mesh_auto_map_overwrite' => $old['overwrite'] === '1'];
     $errors = [];
-    foreach (['agent_ids' => ['mesh_agent_ids', 'The agent id corrections'], 'install_args' => ['mesh_install_args', 'The install argument corrections']] as $k => [$field, $label]) {
-        $text = trim($old[$k]);
-        if ($text === '') {
-            $fields[$field] = [];   // empty = no corrections, Core's built-in table applies
+    $ids = [];
+    foreach ($idsIn as $k => $v) {
+        if (!$keyOk($k) || !is_string($v)) {
+            $errors[] = 'The form sent a platform this page does not know. Reload the page and try again.';
             continue;
         }
-        $d = json_decode($text, true);
-        if (!is_array($d) || json_last_error() !== JSON_ERROR_NONE) {
-            $errors[] = $label . ' must be a JSON object, for example {"windows/amd64": 3}, or empty to use the built-in table.';
+        $v = trim($v);
+        $old['agent_ids'][$k] = mb_substr($v, 0, 10);
+        if ($v === '') {
             continue;
         }
-        $fields[$field] = $d;
+        if (preg_match('/^[0-9]{1,3}$/', $v) !== 1 || (int) $v < 1 || (int) $v > 255) {
+            $errors[] = 'The agent id for ' . $k . ' must be a whole number from 1 to 255, or empty to use the built-in one.';
+            continue;
+        }
+        $ids[$k] = (int) $v;
     }
+    $fields['mesh_agent_ids'] = $ids;
+    $args = [];
+    foreach ($argsIn as $k => $v) {
+        if (!$keyOk($k) || !is_string($v)) {
+            $errors[] = 'The form sent a platform this page does not know. Reload the page and try again.';
+            continue;
+        }
+        $old['install_args'][$k] = mb_substr($v, 0, 1000);
+        $parts = preg_split('/\s+/', trim($v), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if ($parts === []) {
+            continue;
+        }
+        if (count($parts) > 20 || array_filter($parts, static fn (string $a): bool => strlen($a) > 100 || preg_match('/[\x00-\x1f\x7f]/', $a) === 1) !== []) {
+            $errors[] = 'The install arguments for ' . $k . ' may be at most 20 words of up to 100 characters.';
+            continue;
+        }
+        $args[$k] = $parts;
+    }
+    $fields['mesh_install_args'] = $args;
 
     return [$fields + $hideFields, $errors, $old + $hideOld];
 }
@@ -140,13 +166,28 @@ function rivetRmmMeshInstallCard(?array $v, array $old, ?array $probe, string $c
     $group = array_key_exists('group_id', $old) ? $old['group_id'] : (string) (($v['mesh_group_id_url'] ?? '') !== '' ? $v['mesh_group_id_url'] : ($v['mesh_group_id'] ?? ''));
     $pin = array_key_exists('pin', $old) ? $old['pin'] : (string) $v['mesh_server_cert_pin'];
     $over = array_key_exists('overwrite', $old) ? $old['overwrite'] === '1' : !empty($v['mesh_auto_map_overwrite']);
-    $ids = array_key_exists('agent_ids', $old) ? $old['agent_ids'] : ((array) $v['mesh_agent_ids'] === [] ? '' : (string) json_encode($v['mesh_agent_ids'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    $args = array_key_exists('install_args', $old) ? $old['install_args'] : ((array) $v['mesh_install_args'] === [] ? '' : (string) json_encode($v['mesh_install_args'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    $ids = array_key_exists('agent_ids', $old) && is_array($old['agent_ids']) ? $old['agent_ids'] : array_map('strval', (array) $v['mesh_agent_ids']);
+    $args = array_key_exists('install_args', $old) && is_array($old['install_args']) ? $old['install_args'] : array_map(static fn ($a): string => implode(' ', array_map('strval', (array) $a)), (array) $v['mesh_install_args']);
     $ready = !empty($v['install_ready']);
     $state = $ready ? '<span class="badge text-bg-success">Installers can include the MeshCentral agent</span>'
         : '<span class="badge text-bg-secondary">Not ready</span> <span class="small text-muted">' . nullable_htmlentities((string) ($v['install_refusal'] ?? '')) . '</span>';
     $probeDisabled = $urlSaved ? '' : ' disabled aria-disabled="true"';
     $e = static fn ($x): string => nullable_htmlentities((string) $x);
+    // one labelled box per platform: the shown platforms are the built-in ones plus any with a correction already saved
+    $platRows = static function (array $cur, array $builtin, string $name, string $idp, string $type, string $label) use ($e): string {
+        $keys = array_values(array_unique(array_merge(array_keys($builtin), array_keys($cur))));
+        sort($keys);
+        $o = '';
+        foreach ($keys as $i => $k) {
+            $b = $builtin[$k] ?? '';
+            $b = is_array($b) ? implode(' ', array_map('strval', $b)) : (string) $b;
+            $o .= '<div class="row g-2 align-items-center mb-1"><div class="col-5"><label class="form-label mb-0" for="' . $idp . $i . '"><code>' . $e($k) . '</code></label></div><div class="col-7">'
+                . '<input type="' . ($type === 'number' ? 'number" min="1" max="255" step="1' : 'text" maxlength="1000') . '" class="form-control form-control-sm" id="' . $idp . $i . '" name="' . $name . '[' . $e($k) . ']" value="' . $e($cur[$k] ?? '')
+                . '" placeholder="' . $e($b) . '" aria-label="' . $e($label . $k) . '" autocomplete="off" spellcheck="false"></div></div>';
+        }
+
+        return $o;
+    };
 
     $hide = '';
     if (!empty($v['hide_available'])) {
@@ -175,13 +216,16 @@ function rivetRmmMeshInstallCard(?array $v, array $old, ?array $probe, string $c
         . ($urlSaved ? '' : ' Save the MeshCentral address first.') . '</div></div>'
         . '<div class="col-12"><div class="form-check form-switch"><input type="checkbox" class="form-check-input" id="mc_over" name="mesh_auto_map_overwrite" value="1"' . ($over ? ' checked' : '') . ' aria-describedby="mc_over_h"><label class="form-check-label" for="mc_over">Let the agent\'s node id replace a node an administrator mapped by hand</label></div>'
         . '<div class="form-text" id="mc_over_h">Off (recommended): a node set by hand is kept and the device shows a hint when the agent reports a different one. A node already mapped to another live device is never taken over, whatever this switch says.</div></div>'
-        . '<div class="col-12"><details class="rmm-mesh-advanced" data-rmm-mesh-advanced' . ($ids !== '' || $args !== '' ? ' open' : '') . '><summary class="fw-semibold">Advanced: agent ids and install arguments</summary>'
+        . '<div class="col-12"><details class="rmm-mesh-advanced" data-rmm-mesh-advanced' . (array_filter($ids, static fn ($x) => (string) $x !== '') !== [] || array_filter($args, static fn ($x) => (string) $x !== '') !== [] ? ' open' : '') . '><summary class="fw-semibold">Advanced: agent numbers and install arguments</summary>'
         . '<div class="alert alert-warning py-2 my-2" role="note"><div><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' . $e((string) ($v['note'] ?? 'The agent ids, download address and install arguments were not verified against a real MeshCentral server: check them against your Mesh version.'))
         . ' Verify these against your own Mesh server before rolling out to a fleet. Leave both boxes empty to use the built-in tables.</div></div>'
-        . '<div class="row g-3"><div class="col-lg-6"><label class="form-label" for="mc_ids">Agent id corrections (JSON)</label><textarea class="form-control font-monospace" id="mc_ids" name="mesh_agent_ids" rows="5" maxlength="4000" spellcheck="false" aria-describedby="mc_ids_h" placeholder="{&quot;windows/amd64&quot;: 3}">' . $e($ids) . '</textarea>'
-        . '<div class="form-text" id="mc_ids_h">Keys like <code>windows/amd64</code> or <code>linux/arm64</code>, values 1 to 255. Built-in table: <code class="text-break">' . $e((string) json_encode($v['default_agent_ids'] ?? [], JSON_UNESCAPED_SLASHES)) . '</code></div></div>'
-        . '<div class="col-lg-6"><label class="form-label" for="mc_args">Install argument corrections (JSON)</label><textarea class="form-control font-monospace" id="mc_args" name="mesh_install_args" rows="5" maxlength="4000" spellcheck="false" aria-describedby="mc_args_h" placeholder="{&quot;linux&quot;: [&quot;-install&quot;]}">' . $e($args) . '</textarea>'
-        . '<div class="form-text" id="mc_args_h">Effective now: <code class="text-break">' . $e((string) json_encode($v['effective_install_args'] ?? [], JSON_UNESCAPED_SLASHES)) . '</code></div></div></div></details></div>'
+        . '<div class="row g-3"><div class="col-lg-6"><div class="fw-semibold mb-1">Agent id for each platform</div>'
+        . '<div class="form-text mb-2" id="mc_ids_h">MeshCentral numbers its agent downloads by platform. Leave a box empty to use the built-in number (shown in grey). Change one only if your MeshCentral version uses a different number (1 to 255).</div>'
+        . $platRows($ids, (array) ($v['default_agent_ids'] ?? []), 'mesh_agent_id', 'mc_id', 'number', 'Agent id for ')
+        . '</div><div class="col-lg-6"><div class="fw-semibold mb-1">Extra install arguments for each platform</div>'
+        . '<div class="form-text mb-2" id="mc_args_h">Words added to the MeshCentral install command, separated by spaces. Leave a box empty to use the built-in ones (shown in grey).</div>'
+        . $platRows($args, (array) ($v['effective_install_args'] ?? []), 'mesh_install_arg', 'mc_ar', 'text', 'Install arguments for ')
+        . '</div></div></details></div>'
         . '<div class="col-12" id="mesh-pin-proposal" aria-live="polite">' . rivetRmmMeshPinProposalHtml($probe) . '</div>';
 
     $form = '<form id="mesh-pin-probe" action="post.php" method="post" class="d-none"><input type="hidden" name="csrf_token" value="' . $e($csrf) . '"><input type="hidden" name="probe_mesh_pin" value="1"></form>';

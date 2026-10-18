@@ -4,6 +4,7 @@ require_once "includes/inc_all_admin.php";
 require_once dirname(__DIR__) . '/includes/rmm_bootstrap.php';
 require_once dirname(__DIR__) . '/includes/rmm_mesh_admin.php';    // RivetCore 1.0.0-rc.12: the install settings of the optional MeshCentral agent
 require_once dirname(__DIR__) . '/includes/rmm_scale_cards.php';   // RivetCore 1.0.0-rc.11 cards (remote tools, file transfer, logs, scale, partitioning, external store)
+require_once dirname(__DIR__) . '/includes/rmm_checks_simple_ui.php';   // 26.10.29: the check schedule as plain options
 require_once dirname(__DIR__) . '/includes/rmm_agent_feed_ui.php';   // 26.10.28: Agent updates (the public agent releases on GitHub)
 
 use RivetCore\Rmm\Binaries\BinaryStore;
@@ -58,6 +59,18 @@ $msiCur = rivetRmmUiMsiCurrent($msiTemplates);
 $releases = $read->releases(30);
 $counts = $read->fleetCounts();
 $checksText = json_encode($cfg['checks'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+// 26.10.29: the check schedule is edited as plain options (includes/rmm_checks_simple.php). After a refused save the options as typed are put back with the reasons.
+$csDefault = RivetChecksSimple::isDefault($rmm->settings());
+$csDraft = $_SESSION['ea_checks_draft'] ?? null;
+unset($_SESSION['ea_checks_draft']);
+if (is_array($csDraft) && time() - (int) ($csDraft['at'] ?? 0) > 600) {
+    $csDraft = null;   // a refused save is shown once, and only soon after it
+}
+$csErrors = is_array($csDraft) ? (array) ($csDraft['errors'] ?? []) : [];
+$csState = is_array($csDraft) && is_array($csDraft['state'] ?? null) ? $csDraft['state'] : ($csDefault ? RivetChecksSimple::recommendedState() : RivetChecksSimple::decompose($cfg['checks']));
+if (is_array($csDraft)) {
+    $csDefault = false;
+}
 $badge = ['online' => 'success', 'offline' => 'danger', 'stale' => 'secondary', 'never' => 'secondary'];
 $serviceUrlHint = 'https://' . $config_base_url;
 ?>
@@ -202,11 +215,7 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
                     <textarea class="form-control font-monospace" id="ea_ca" name="ca_pem" rows="4" maxlength="8000" placeholder="-----BEGIN CERTIFICATE-----"><?= $h($cfg['ca_pem'] ?? '') ?></textarea>
                     <div class="form-text">Only for servers whose certificate is issued by a private CA. Per-client installers embed it so the agent trusts this server. Leave empty when the certificate comes from a public CA. Public information, not a secret.</div>
                 </div>
-                <div class="col-12">
-                    <label class="form-label" for="ea_checks">Check schedule delivered to agents (JSON)</label>
-                    <textarea class="form-control font-monospace" id="ea_checks" name="checks_json" rows="9"><?= $h($checksText) ?></textarea>
-                    <div class="form-text">Types: <code>service</code>, <code>disk</code>, <code>pending_reboot</code>, <code>script</code> (bounded, at most 8 KiB and 60 s). Every entry is signed. Leave empty to restore the defaults.</div>
-                </div>
+                <?= rivetChecksSimpleCard($csState, $csDefault, $checksText, $csErrors) ?>
                 <div class="col-12">
                     <label class="form-label" for="ea_co">Coexistence and ownership policy (shown to technicians)</label>
                     <textarea class="form-control" id="ea_co" name="coexistence_policy" rows="3" maxlength="4000"><?= $h($cfg['coexistence_policy']) ?></textarea>
@@ -821,6 +830,7 @@ $meshCard = rivetRmmMeshInstallCard(rivetRmmMeshInstallView($rmm, $meshWho), $me
     </div>
 </div>
 
+<script src="/js/rmm_checks_simple.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/js/rmm_checks_simple.js') ?>" defer></script>
 <script src="/js/rmm_binary_upload.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/js/rmm_binary_upload.js') ?>" defer></script>
 <script src="/js/rmm_msi_admin.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/js/rmm_msi_admin.js') ?>" defer></script>
 <script nonce="<?= $h($csp_nonce ?? '') ?>">

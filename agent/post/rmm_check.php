@@ -7,6 +7,7 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/check_login.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/load_global_settings.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/load_user_session.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/rmm_client_factory.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/rmm_checks_simple.php';
 
 header('Content-Type: application/json');
 
@@ -164,7 +165,11 @@ if ($action === 'save_policy') {
     $crit        = intval($_POST['critical_threshold'] ?? 0) ?: 'NULL';
     $interval    = intval($_POST['check_interval'] ?? 120);
     $description = sanitizeInput($_POST['description'] ?? '');
-    $params      = sanitizeInput($_POST['check_params'] ?? '{}');
+    // 26.10.29: the type's own settings arrive as plain fields (pp[...]) and the stored JSON is built here from the known ones; a posted `check_params` is ignored.
+    [$params, $ppErr] = RivetChecksSimple::policyParams($check_type, is_array($_POST['pp'] ?? null) ? $_POST['pp'] : []);
+    if ($ppErr !== null) {
+        echo json_encode(['success' => false, 'error' => $ppErr]); exit;
+    }
     $enabled     = isset($_POST['enabled']) ? 1 : 0;
     $edit_id     = intval($_POST['edit_id'] ?? 0);
 
@@ -268,3 +273,4 @@ function buildTacticalCheckPayload(array $policy, array $params): array {
     }
     return $base;
 }
+

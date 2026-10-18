@@ -81,10 +81,23 @@ if (isset($_POST['save_agent_settings'])) {
     $in = [];
     foreach (['service_url', 'check_in_interval_s', 'collect_interval_s', 'offline_after_s', 'stale_after_s', 'failure_debounce', 'recovery_debounce', 'retention_days',
         'job_retention_days', 'job_output_max_bytes', 'job_default_timeout_s', 'job_max_timeout_s', 'job_expiry_s', 'job_ack_timeout_s', 'job_max_attempts',
-        'enroll_max_ttl_h', 'unmatched_policy', 'checks_json', 'coexistence_policy', 'ca_pem'] as $k) {
+        'enroll_max_ttl_h', 'unmatched_policy', 'coexistence_policy', 'ca_pem'] as $k) {
         if (isset($_POST[$k])) {
             $in[$k] = is_string($_POST[$k]) ? $_POST[$k] : '';
         }
+    }
+    // 26.10.29: the check schedule arrives as plain options (cs[...]), never as JSON text. A `checks_json` field in the request is ignored.
+    if (isset($_POST['cs'])) {
+        require_once dirname(__DIR__, 2) . '/includes/rmm_checks_simple.php';
+        $csPost = is_array($_POST['cs']) ? $_POST['cs'] : [];
+        [$csList, $csErr, $csTyped, $csReset] = RivetChecksSimple::compose($csPost, $rmm->settings()->checks());
+        if ($csList === null) {
+            $_SESSION['ea_checks_draft'] = ['errors' => $csErr, 'state' => $csTyped, 'at' => time()];
+            flash_alert('The settings were not saved: ' . nullable_htmlentities(implode(' ', $csErr)), 'error');
+            redirect();
+        }
+        unset($_SESSION['ea_checks_draft']);
+        $in['checks_json'] = $csReset ? '' : json_encode(\RivetCore\Rmm\Settings\ChecksValidator::toWire($csList));
     }
     ea_flash_result($ea_admin->saveSettings($ea_who, $in));
 }
