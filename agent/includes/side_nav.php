@@ -18,7 +18,7 @@ $section_pages = [
     'work'          => ['projects.php', 'project_details.php', 'calendar.php'],
     'billing'       => ['quotes.php', 'quote.php', 'invoices.php', 'invoice.php', 'recurring_invoices.php', 'recurring_invoice.php', 'revenues.php', 'products.php'],
     'finance'       => ['payments.php', 'vendors.php', 'expenses.php', 'recurring_expenses.php', 'accounts.php', 'transfers.php', 'trips.php'],
-    'endpoint'      => ['rmm_dashboard.php', 'rmm_fleet.php', 'rmm_assets.php', 'rmm_asset.php', 'rmm_alerts.php', 'rmm_scripts.php', 'rmm_checks.php', 'network.php', 'firewalls.php',
+    'endpoint'      => ['rmm_dashboard.php', 'rmm_fleet.php', 'rmm_add_device.php', 'rmm_assets.php', 'rmm_asset.php', 'rmm_alerts.php', 'rmm_scripts.php', 'rmm_checks.php', 'network.php', 'firewalls.php',
         // RMM Phase 2 and 3 pages (shown only while the module and the sub-switch are on)
         'rmm_policies.php', 'rmm_script_library.php', 'rmm_script_run.php', 'rmm_starter_pack.php', 'rmm_schedules.php', 'rmm_approvals.php', 'rmm_fields.php', 'rmm_agent_alerts.php', 'rmm_maintenance.php', 'rmm_escalations.php',
         // RMM Phase 8 (sub-switch `logs`)
@@ -348,6 +348,10 @@ foreach ($section_pages as $key => $pages) {
                         <a href="/agent/rmm_fleet.php?add=1" class="dropdown-item" data-nav-add-device>
                             <span class="dropdown-item-icon"><i class="fas fa-download"></i></span>
                             <span class="text-truncate">Add device</span>
+                        </a>
+                        <a href="/agent/rmm_add_device.php" class="dropdown-item<?php if ($current_page == 'rmm_add_device.php') { echo ' active'; } ?>" data-nav-build-installer>
+                            <span class="dropdown-item-icon"><i class="fas fa-box-open"></i></span>
+                            <span class="text-truncate">Build installer</span>
                         </a>
                         <?php } ?>
                         <?php foreach (rivetRmmAutoNav((int) $session_user_id) as $nav_auto) { // policies / scripts / alerting sub-switches (state file; no query) ?>

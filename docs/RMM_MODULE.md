@@ -282,6 +282,14 @@ Tests: `tests/rmm_ui_p16_mesh_push.php` (the Remote tab controls, the handler, t
 
 **Connect.** MeshCentral does not connect by itself from a URL (its page only selects the device and the view): the tab shows the Desktop with MeshCentral's own **Connect** button. **Not verified on a live MeshCentral:** `tests/browser/rmm_rc17_remote_smoke.mjs` runs against a mock Mesh server, and the `hide` bits are from MeshCentral's source, not from a live server of every version.
 
+## 6i. Agent updates and Build installer (26.10.28, DB 2.6.98)
+
+* **Agent updates card** (Administration > Endpoint agent): `includes/rmm_agent_feed.php` (`RivetMsp\AgentFeed\Feed`, `FeedHttp`, `LinuxInstall`), `includes/rmm_agent_feed_ui.php`, handlers at the end of `admin/post/settings_endpoint_agent.php`. State lives in `endpoint_agent_feed_state` (keys `repo`, `badge`, `cache`, `checked_at`, `last_error`, `linux:<version>`).
+* **Publish** = checksum lists, download and SHA-256 check of every Windows file, then `RmmAdmin::uploadBinary()` / `uploadMsiTemplate()`, then the Linux links. Nothing is stored unless every Windows file verified. The test seam `RIVET_AGENT_FEED_TEST_ORIGIN` (a `config.php` constant, loopback mock only) is never read from the database, a request or the environment by the code itself.
+* **Build installer page** `agent/rmm_add_device.php` + `js/rmm_add_device.js`; handler `agent/post/rmm_installer.php` (modes `download` and `commands`, Windows and Linux).
+* **Install now**: the live-install switches (`patch_live_install`, `software_live_install`) gate only the scheduler; a person with the install / deploy right installs on one device with confirmation and audit.
+* Tests: `tests/rmm_agent_feed.php` (+ `tests/support/mock_github.py`, fragments in `tests/support/`), `tests/browser/rmm_agent_feed_smoke.mjs`.
+
 ## 7. Not verified
 
 A real MeshCentral server (only Core's mock and our local TLS stand-in; this includes the optional Mesh agent install of 6e), the Windows agent and installer on a Windows host (including the MSI installer of 6g and the pushed Mesh install on Windows) and the Windows scripts of the starter pack (6f), and a production-sized fleet (see Core's `docs/rmm/CAPACITY.md`).

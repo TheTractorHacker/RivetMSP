@@ -327,7 +327,7 @@ function rivetRmmSoftwarePanelHtml(array $pv): string
     }
     $o .= '<div class="row g-3 mb-3"><div class="col-lg-7"><div class="mb-2">' . ($expected === 0 ? '<span class="text-muted">No package is assigned to this device.</span>' : $tiles) . '</div>';
     if (!$pv['live']) {
-        $o .= '<div class="alert alert-info small mb-2" role="note"><i class="fas fa-shield-alt me-2" aria-hidden="true"></i><strong>Live installs are off.</strong> The scheduler only queues dry runs (they show what would be installed and change nothing). A person with the deploy right can still run a real install or removal from here.</div>';
+        $o .= '<div class="alert alert-info small mb-2" role="note"><i class="fas fa-shield-alt me-2" aria-hidden="true"></i><strong>Automatic installs are off.</strong> The scheduler only queues dry runs (they show what would be installed and change nothing). A person with the deploy right can still install or remove a package on this one device with <strong>Install now</strong> below: it needs no switch, only your confirmation, and it is written to the audit log.</div>';
     }
     $o .= '</div><div class="col-lg-5">';
     if ($pv['usable'] && $perm['manage']) {
@@ -369,9 +369,9 @@ function rivetRmmSoftwarePanelHtml(array $pv): string
             . '<div class="col-md-3"><label class="form-label small" for="sw_act">Do</label><select class="form-select form-select-sm" id="sw_act" name="run_action"><option value="install">Install</option><option value="uninstall">Remove</option></select></div>'
             . '<div class="col-md-2"><button type="submit" name="action" value="dry_run" class="btn btn-sm btn-outline-primary w-100"><i class="fas fa-flask me-1" aria-hidden="true"></i>Dry run</button></div></div>';
         if ($perm['deploy']) {
-            $o .= '<div class="border-top pt-2 mt-2"><div class="form-check"><input class="form-check-input" type="checkbox" id="sw_confirm" name="confirm_run" value="1"><label class="form-check-label" for="sw_confirm">I confirm: do it now on this device. It runs as '
+            $o .= '<div class="border-top pt-2 mt-2"><div class="form-check"><input class="form-check-input" type="checkbox" id="sw_confirm" name="confirm_run" value="1"><label class="form-check-label" for="sw_confirm">I confirm: do it now, on this one device. It runs as '
                 . ($pv['platform'] === 'windows' ? 'SYSTEM' : 'root') . ' and cannot be undone from here. A package marked "two people" waits for a second person first.</label></div>'
-                . '<button type="submit" name="action" value="run" class="btn btn-sm btn-danger mt-2" data-rmm-confirm="Install or remove this package on this device now? Only the catalog entry is used; the device never receives an address or argument typed here. The device is never restarted by this." data-rmm-confirm-label="Do it"><i class="fas fa-download me-1" aria-hidden="true"></i>Run now</button></div>';
+                . '<button type="submit" name="action" value="run" class="btn btn-sm btn-danger mt-2" data-rmm-confirm="Install or remove this package on this one device now? Only the catalog entry is used; the device never receives an address or argument typed here. The device is never restarted by this." data-rmm-confirm-label="Install now"><i class="fas fa-download me-1" aria-hidden="true"></i>Install now</button></div>';
         } else {
             $o .= '<p class="small text-muted border-top pt-2 mt-2 mb-0">A real installation or removal needs a role with the deploy right. A dry run shows what it would do.</p>';
         }

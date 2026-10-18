@@ -4,6 +4,7 @@ require_once "includes/inc_all_admin.php";
 require_once dirname(__DIR__) . '/includes/rmm_bootstrap.php';
 require_once dirname(__DIR__) . '/includes/rmm_mesh_admin.php';    // RivetCore 1.0.0-rc.12: the install settings of the optional MeshCentral agent
 require_once dirname(__DIR__) . '/includes/rmm_scale_cards.php';   // RivetCore 1.0.0-rc.11 cards (remote tools, file transfer, logs, scale, partitioning, external store)
+require_once dirname(__DIR__) . '/includes/rmm_agent_feed_ui.php';   // 26.10.28: Agent updates (the public agent releases on GitHub)
 
 use RivetCore\Rmm\Binaries\BinaryStore;
 
@@ -378,7 +379,7 @@ $patchLive = (int) ($patchLimits['patch_live_install'] ?? 0) === 1;
                 <input type="checkbox" class="form-check-input" id="ea_ps_live" name="patch_live_install" value="1" <?= $patchLive ? 'checked' : '' ?> aria-describedby="ea_ps_live_h">
                 <label class="form-check-label" for="ea_ps_live">Let the scheduler install approved updates</label>
             </div>
-            <div class="form-text mb-2" id="ea_ps_live_h">Off (the default): the scheduler queues dry runs only, one a day per device, and a person can still run a real install from a device's Patches tab. On: devices whose patch policy allows installing install their approved updates inside the policy's window, within the limits above.</div>
+            <div class="form-text mb-2" id="ea_ps_live_h">Off (the default): the scheduler queues dry runs only, one a day per device. This switch gates ONLY the scheduler's automatic installs across the fleet: a technician with the install right can still press <strong>Install now</strong> on ONE device's Patches tab (with their own confirmation, written to the audit log). On: devices whose patch policy allows installing install their approved updates inside the policy's window, within the limits above.</div>
             <div class="form-check mb-2">
                 <input type="checkbox" class="form-check-input" id="ea_ps_liveok" name="patch_live_confirm" value="1">
                 <label class="form-check-label" for="ea_ps_liveok">I understand that updates will be installed on devices without anyone clicking Install. (Needed only when turning this on.)</label>
@@ -423,7 +424,7 @@ $swLive = (int) ($swLimits['software_live_install'] ?? 0) === 1;
                 <input type="checkbox" class="form-check-input" id="ea_sd_live" name="software_live_install" value="1" <?= $swLive ? 'checked' : '' ?> aria-describedby="ea_sd_live_h">
                 <label class="form-check-label" for="ea_sd_live">Let the scheduler install and remove software</label>
             </div>
-            <div class="form-text mb-2" id="ea_sd_live_h">Off (the default): the scheduler queues dry runs only, one a day per device and package, and a person with the deploy right can still run a real install from a device's Deployment tab. On: devices that an assignment reaches (after their ring's delay, outside a "leave this device alone" window, within the limits above) get the package installed or removed without anyone clicking Install. Removing an assignment never uninstalls anything. A package marked "two people" always needs a second person for every assignment and every manual run.</div>
+            <div class="form-text mb-2" id="ea_sd_live_h">Off (the default): the scheduler queues dry runs only, one a day per device and package. This switch gates ONLY the scheduler's automatic installs and removals across the fleet: a technician with the deploy right can still press <strong>Install now</strong> on ONE device's Deployment tab (with their own confirmation, written to the audit log). On: devices that an assignment reaches (after their ring's delay, outside a "leave this device alone" window, within the limits above) get the package installed or removed without anyone clicking Install. Removing an assignment never uninstalls anything. A package marked "two people" always needs a second person for every assignment and every manual run.</div>
             <div class="form-check mb-2">
                 <input type="checkbox" class="form-check-input" id="ea_sd_liveok" name="software_live_confirm" value="1">
                 <label class="form-check-label" for="ea_sd_liveok">I understand that software will be installed on and removed from devices without anyone clicking Install. (Needed only when turning this on.)</label>
@@ -506,6 +507,27 @@ if ($__flags['enabled']) {
 }
 $scaleCtx['ext'] = ['flags' => $__flags, 'buffer' => $__buf];
 echo rivetRmmUiScaleCards($scaleCtx);
+?>
+
+<?php
+// 26.10.28: Agent updates. The page only READS the cached list here; GitHub is asked by the Check for updates button, by Publish, and (when the badge is on and the list is
+// more than six hours old) once per page load at most every 15 minutes, with a short time limit so an offline server never holds the page.
+$feed = new \RivetMsp\AgentFeed\Feed($mysqli);
+if ($feed->ready()) {
+    if ($feed->badgeOn() && ((int) ($_SESSION['rmm_feed_auto'] ?? 0)) < time() - 900) {
+        $_SESSION['rmm_feed_auto'] = time();
+        $__c = $feed->cached();
+        if ($__c === null || time() - $__c['fetched_at'] > \RivetMsp\AgentFeed\Feed::CACHE_TTL_S) {
+            $feed->refresh(false, 4);
+        }
+    }
+    [$feedMsg] = rivetRmmScaleTake('agent-updates');
+    $feedSteps = $_SESSION['rmm_feed_steps'] ?? [];
+    unset($_SESSION['rmm_feed_steps']);
+    echo rivetAgentFeedCard($feed->view(), $feedMsg, is_array($feedSteps) ? $feedSteps : [], (string) $csrf, ['service_ready' => ($cfg['service_base'] ?? null) !== null]);
+} else {
+    echo '<div class="card mb-3" id="agent-updates"><div class="card-header"><h4 class="card-title mb-0">Agent updates</h4></div><div class="card-body"><div class="alert alert-warning mb-0">Run the database update first (Administration &rarr; Updates, DB 2.6.98), then reload this page.</div></div></div>';
+}
 ?>
 
 <div class="card mb-3" id="binaries">

@@ -7246,3 +7246,17 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.97'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.97') {
+        // DB 2.6.98: Administration > Endpoint agent > Agent updates (the public rivet-core agent releases on GitHub). ONE new table, CREATE TABLE IF NOT EXISTS (re-running is harmless,
+        // nothing existing is altered, no row is inserted): a small key/value store for the feed's settings (repository, badge), its cached release list and the Linux asset links recorded
+        // when a release is published. Until it exists the card says so and everything else works.
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `endpoint_agent_feed_state` (
+          `state_key` varchar(64) NOT NULL,
+          `state_value` mediumtext DEFAULT NULL,
+          `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
+          PRIMARY KEY (`state_key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.98'");
+    }

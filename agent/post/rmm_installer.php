@@ -58,8 +58,12 @@ if (!in_array($inst_os, ['windows', 'linux'], true)) {
     $inst_fail(422, 'invalid', 'Choose Windows or Linux.');
 }
 $inst_mode = (string) ($_POST['mode'] ?? ($inst_os === 'linux' ? 'commands' : 'download'));
-if (($inst_os === 'linux') !== ($inst_mode === 'commands')) {
-    $inst_fail(422, 'invalid', $inst_os === 'linux' ? 'Linux has no installer download; create the install command instead.' : 'A Windows installer is a download.');
+// 26.10.28: Windows may also ask for its deployment commands (PowerShell, msiexec) on the Build installer page; Linux has no download, only commands.
+if (!in_array($inst_mode, ['download', 'commands'], true)) {
+    $inst_fail(422, 'invalid', 'Choose download or commands.');
+}
+if ($inst_os === 'linux' && $inst_mode !== 'commands') {
+    $inst_fail(422, 'invalid', 'Linux has no installer download; create the install command instead.');
 }
 $inst_arch = (string) ($_POST['arch'] ?? 'amd64');
 $inst_ring = (string) ($_POST['ring'] ?? 'stable');
@@ -92,8 +96,26 @@ if ($inst_mode === 'commands') {
     }
     header('Content-Type: application/json');
     header('Cache-Control: no-store');
-    echo json_encode(['success' => true, 'linux' => $r->data['commands']['linux'], 'department' => $r->data['department'], 'expires_at' => str_replace('T', ' ', rtrim((string) $r->data['token']['expires_at'], 'Z')),
-        'max_uses' => (int) $r->data['token']['max_uses'], 'arch' => $inst_arch, 'install_mesh_agent' => $inst_mesh]);
+    $inst_out = ['success' => true, 'linux' => $r->data['commands']['linux'], 'department' => $r->data['department'], 'expires_at' => str_replace('T', ' ', rtrim((string) $r->data['token']['expires_at'], 'Z')),
+        'max_uses' => (int) $r->data['token']['max_uses'], 'arch' => $inst_arch, 'install_mesh_agent' => $inst_mesh];
+    if ($inst_os === 'windows') {
+        // The PowerShell deployment snippet, and for format=msi the msiexec / properties / uninstall commands of the stamped package (RivetCore InstallerService::deploymentCommands).
+        $inst_out['windows'] = ['powershell' => $r->data['commands']['powershell'], 'filename' => $r->data['commands']['filename'], 'msi' => $r->data['commands']['msi'] ?? null];
+    } else {
+        // 26.10.28: the Linux commands that need no files next to them: built from the Linux assets a published release recorded (Administration > Endpoint agent > Agent updates).
+        require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/rmm_agent_feed.php';
+        $inst_feed = new \RivetMsp\AgentFeed\Feed($mysqli);
+        $inst_rec = $inst_feed->ready() ? $inst_feed->linuxRecord() : null;
+        $inst_cfg = $inst_rmm->readModel()->settingsSummary();
+        if ($inst_rec !== null) {
+            $inst_srv = (string) ($r->data['commands']['server'] ?? '');
+            $inst_out['release'] = (string) ($inst_rec['version'] ?? '');
+            $inst_out['linux_script'] = \RivetMsp\AgentFeed\LinuxInstall::script($inst_rec, (string) $r->data['commands']['linux'], (string) $r->data['department']);
+            $inst_out['linux_deb'] = \RivetMsp\AgentFeed\LinuxInstall::package($inst_rec, 'deb', (string) $r->data['commands']['linux'], (string) $r->data['token_plain'], $inst_srv, $inst_cfg['ca_pem'] ?? null, (string) $r->data['department']);
+            $inst_out['linux_rpm'] = \RivetMsp\AgentFeed\LinuxInstall::package($inst_rec, 'rpm', (string) $r->data['commands']['linux'], (string) $r->data['token_plain'], $inst_srv, $inst_cfg['ca_pem'] ?? null, (string) $r->data['department']);
+        }
+    }
+    echo json_encode($inst_out);
     exit;
 }
 

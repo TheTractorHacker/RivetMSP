@@ -257,7 +257,7 @@ $ok($c === 409 && $swPkgId('Acme Agent') === $pkgA, 'packages: an assigned packa
 $q("INSERT INTO rmm_device_state SET device_id=$swWin, platform='windows', capabilities_json='[\"software:detect\",\"software:install\"]' ON DUPLICATE KEY UPDATE capabilities_json=VALUES(capabilities_json), platform='windows'");
 $q("INSERT INTO rmm_device_state SET device_id=$swLnx, platform='linux', capabilities_json='[\"software:detect\",\"software:install\"]' ON DUPLICATE KEY UPDATE capabilities_json=VALUES(capabilities_json), platform='linux'");
 [$c, $body] = $swGet('admin', '/agent/asset_details.php?asset_id=' . $swWinAsset);
-$ok($c === 200 && str_contains($body, 'id="rmm-tab-deploy"') && str_contains($body, 'id="rmm-pane-deploy"') && str_contains($body, 'Live installs are off') && str_contains($body, 'Check now') && str_contains($body, 'name="action" value="dry_run"'), 'asset page: the Deployment tab, the live-installs-off note and the actions');
+$ok($c === 200 && str_contains($body, 'id="rmm-tab-deploy"') && str_contains($body, 'id="rmm-pane-deploy"') && str_contains($body, 'Automatic installs are off') && str_contains($body, 'Check now') && str_contains($body, 'name="action" value="dry_run"'), 'asset page: the Deployment tab, the live-installs-off note and the actions');
 $ok(substr_count($body, 'id="rmmAutoConfirm"') === 1, 'asset page: the in-page confirmation dialog is present exactly once even with the Patches tab');
 [$c, $b] = $swJson('viewer', ['action' => 'detect', 'device_id' => $swWin]);
 $ok($c === 403 && $swJobs($swWin, 'software_detect') === 0, 'detect: a view-only role cannot ask a device (' . $c . ')');
@@ -309,6 +309,9 @@ $ok($c === 422 && $swJobs($swLnx, 'software_install') === 0, 'dry run: a package
 $job = $swRows("SELECT * FROM endpoint_agent_jobs WHERE device_id=$swWin AND type='software_install' ORDER BY created_at DESC LIMIT 1")[0] ?? [];
 $ok($c === 200 && $job !== [] && (json_decode((string) ($job['params_json'] ?? ''), true)['mode'] ?? '') === 'run', 'run: a technician with the deploy right queues a real install (' . $c . ')');
 $ok((int) $one("SELECT COUNT(*) FROM logs WHERE log_action='Software Job Queued'") === 1, 'run: the real install is audited by Core');
+// 26.10.28 (safety UX): "Install now" on ONE device needs no global switch. The live-install switch is OFF right here, and the real install was still queued as a real one, by a person, with their id.
+$ok((int) ($rmm->readModel()->settingsSummary()['limits']['software_live_install'] ?? 0) === 0 && (json_decode((string) ($job['params_json'] ?? ''), true)['mode'] ?? '') === 'run', 'install now: with the global live-install switch OFF a technician with the deploy right still installs on one device (the switch gates only the scheduler)');
+$ok(str_contains((string) $one("SELECT log_description FROM logs WHERE log_action='Software Job Queued' ORDER BY log_id DESC LIMIT 1"), 'run') || (int) $one("SELECT COUNT(*) FROM logs WHERE log_action='Software Job Queued'") === 1, 'install now: the audit row of the person\'s real install exists');
 // the device answers: fabricate the result of that job as the agent would report it (Core applies it)
 $jobId = (string) ($job['job_id'] ?? '');
 $q("UPDATE rmm_package_installs SET last_action='install', last_result='hash_mismatch', last_code='hash_mismatch', last_detail=" . "'" . $esc($swHostile) . "', fail_count=2, attempts=2 WHERE device_id=$swWin AND package_id=$pkgA");
@@ -320,9 +323,10 @@ $ok(str_contains($body, 'Failed') && str_contains($body, 'Hash did not match') &
 [$c, $body] = $swGet('viewer', '/agent/asset_details.php?asset_id=' . $swWinAsset);
 $ok(str_contains($body, 'id="rmm-tab-deploy"') && !str_contains($body, 'name="package_id"') && !str_contains($body, 'value="dry_run"') && str_contains($body, 'can see software state but not change it'), 'asset page: a view-only role sees the list and no action');
 [$c, $body] = $swGet('rebootonly', '/agent/asset_details.php?asset_id=' . $swWinAsset);
-$ok(str_contains($body, 'name="action" value="dry_run"') && !str_contains($body, 'name="action" value="run"') && str_contains($body, 'needs a role with the deploy right'), 'asset page: a role that manages but cannot deploy gets a dry run and no Run now button');
+$ok(str_contains($body, 'name="action" value="dry_run"') && !str_contains($body, 'name="action" value="run"') && str_contains($body, 'needs a role with the deploy right'), 'asset page: a role that manages but cannot deploy gets a dry run and no Install now button');
 [$c, $body] = $swGet('tech', '/agent/asset_details.php?asset_id=' . $swWinAsset);
-$ok(str_contains($body, 'name="action" value="run"') && str_contains($body, 'name="confirm_run"'), 'asset page: a role with the deploy right is offered Run now with its own confirmation box');
+$ok(str_contains($body, 'name="action" value="run"') && str_contains($body, 'name="confirm_run"'), 'asset page: a role with the deploy right is offered Install now with its own confirmation box');
+$ok(str_contains($body, '>Install now</button>') && str_contains($body, 'on this one device') && str_contains($body, 'needs no switch') , 'asset page: the button says Install now, the box says it is for this one device, and the note explains that no switch is needed');
 [$c, $body] = $swGet('stock', '/agent/asset_details.php?asset_id=' . $swWinAsset);
 $ok(!str_contains($body, 'id="rmm-tab-deploy"') && !str_contains($body, 'Acme Agent'), 'asset page: a technician with no RMM role rows gets no Deployment tab and no package text');
 [$c, $body] = $swGet('clientb', '/agent/asset_details.php?asset_id=' . $swWinAsset);
@@ -455,7 +459,7 @@ $adm(['save_software_settings' => 1, 'feature_software_deploy' => '1', 'software
 $fresh();
 $ok((int) ($limits()['software_live_install'] ?? 0) === 1, 'admin card: live installs are switched on with the acknowledgement');
 [$c, $body] = $swGet('admin', '/agent/asset_details.php?asset_id=' . $swWinAsset);
-$ok(!str_contains($body, 'Live installs are off'), 'asset page: with live installs on, the note is gone');
+$ok(!str_contains($body, 'Automatic installs are off'), 'asset page: with live installs on, the note is gone');
 $ok(str_contains((string) $one("SELECT log_description FROM logs WHERE log_type='RMM' AND log_description LIKE '%software deployment settings%' ORDER BY log_id DESC LIMIT 1"), 'live installs on'), 'admin card: the change is written to the audit log');
 $adm(['save_software_settings' => 1, 'feature_software_deploy' => '1']);
 $fresh();

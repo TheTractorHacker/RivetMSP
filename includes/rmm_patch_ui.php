@@ -297,7 +297,7 @@ function rivetRmmPatchPanelHtml(array $pv): string
     }
     $o .= '<div class="row g-3 mb-3"><div class="col-lg-7">' . $tiles . '</div><div class="col-lg-5">';
     if (empty($pol['live_install'])) {
-        $o .= '<div class="alert alert-info small mb-2" role="note"><i class="fas fa-shield-alt me-2" aria-hidden="true"></i><strong>Live installs are off.</strong> A patch policy can only queue dry runs (they list what would be installed and change nothing). A real install from this tab still works for a person with the install right, once an update is approved.</div>';
+        $o .= '<div class="alert alert-info small mb-2" role="note"><i class="fas fa-shield-alt me-2" aria-hidden="true"></i><strong>Automatic installs are off.</strong> The scheduler only queues dry runs (they list what would be installed and change nothing). <strong>Install now</strong> on this one device still works for a person with the install right, once an update is approved: it needs no switch, only your confirmation, and it is written to the audit log.</div>';
     }
     if ($pv['usable'] && $perm['manage']) {
         $o .= '<form method="post" action="/agent/post/' . RIVET_RMM_PATCH_HANDLER . '.php" class="d-inline">' . rivetRmmAutoHidden($csrf, $ret) . '<input type="hidden" name="action" value="scan"><input type="hidden" name="device_id" value="' . $dev
@@ -390,7 +390,7 @@ function rivetRmmPatchActionForm(array $pv, string $csrf, string $ret): string
         $o .= '<div class="border-top pt-2"><div class="form-check"><input class="form-check-input" type="checkbox" id="pt_confirm" name="confirm_install" value="1"><label class="form-check-label" for="pt_confirm">I confirm: install the approved updates on this device now. It runs as '
             . ($pv['platform'] === 'windows' ? 'SYSTEM' : 'root') . ' and cannot be undone from here.</label></div>'
             . '<div class="form-check"><input class="form-check-input" type="checkbox" id="pt_reboot" name="confirm_reboot" value="1"><label class="form-check-label" for="pt_reboot">Restart the device afterwards if an update needs it (needs the right to restart devices). Off: the device is never restarted by this install.</label></div>'
-            . '<button type="submit" name="action" value="install" class="btn btn-sm btn-danger mt-2" data-rmm-confirm="Install the approved updates on this device now? Only approved updates are installed. Nothing is restarted unless you ticked that too." data-rmm-confirm-label="Install"><i class="fas fa-download me-1" aria-hidden="true"></i>Install approved</button>'
+            . '<button type="submit" name="action" value="install" class="btn btn-sm btn-danger mt-2" data-rmm-confirm="Install the approved updates on this device now? Only approved updates are installed, on this device only. Nothing is restarted unless you ticked that too." data-rmm-confirm-label="Install now"><i class="fas fa-download me-1" aria-hidden="true"></i>Install now</button>'
             . '</div>';
     } else {
         $o .= '<p class="small text-muted border-top pt-2 mb-0">A real installation needs a role with the install right. A dry run shows what it would do.</p>';

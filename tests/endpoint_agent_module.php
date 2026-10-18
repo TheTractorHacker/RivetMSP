@@ -241,6 +241,8 @@ $mk = function (string $suffix, bool $withRmm) use ($db, $root): array {
         // RivetCore 1.0.0-rc.21 (0029 software deployment): eight tables (rmm_deploy_state, rmm_package_*, rmm_packages, rmm_software_hosts) and one ledger row, no data row; DB 2.6.97 runs the migration.
         $sql = (string) preg_replace('/DROP TABLE IF EXISTS `rmm_(deploy_state|package_[a-z]+|packages|software_hosts)`;\n.*?\/\*!40101 SET character_set_client = @saved_cs_client \*\/;\n/s', '', $sql);
         $sql = (string) preg_replace("/INSERT INTO `rivet_core_migrations` VALUES \('0029_[a-z_]+','[^']+'\);\n/", '', $sql);
+        // 26.10.28 (DB 2.6.98, Agent updates): one table of ours; the updater creates it.
+        $sql = (string) preg_replace('/DROP TABLE IF EXISTS `endpoint_agent_feed_state`;\n.*?\/\*!40101 SET character_set_client = @saved_cs_client \*\/;\n/s', '', $sql);
         $sql = (string) preg_replace('/  `config_rmm_(remote_manage_lvl3|extstore_[a-z_]+)` [^\n]*,\n/', '', $sql);
         $sql = str_replace(["  `config_rmm_approve_scripts_lvl3` tinyint(1) NOT NULL DEFAULT 0,\n", "  `config_rmm_escalation_contact` text DEFAULT NULL,\n"], '', $sql);
         $sql = str_replace("  `config_core_rmm_enabled` tinyint(1) NOT NULL DEFAULT 0,\n", '', $sql);
@@ -260,14 +262,14 @@ $shape = function (mysqli $c): array {
     return $o;
 };
 [$fresh, $cf] = $mk('fresh', true);
-$ok($tableCount($cf) === 20, 'FRESH install (db.sql): the twenty endpoint_agent_* tables exist (ten original ones, the check history of RivetCore rc.9, the five of rc.11: remote settings, transfers, log events, log state, log rules, the three of rc.12: Mesh settings, Mesh agents, installer options, and the MSI templates of rc.16)');
+$ok($tableCount($cf) === 21, 'FRESH install (db.sql): the twenty-one endpoint_agent_* tables exist (the 26.10.28 feed state table of DB 2.6.98, ten original ones, the check history of RivetCore rc.9, the five of rc.11: remote settings, transfers, log events, log state, log rules, the three of rc.12: Mesh settings, Mesh agents, installer options, and the MSI templates of rc.16)');
 $ok((int) $cf->query('SELECT COUNT(*) FROM endpoint_agent_settings')->fetch_row()[0] === 1 && (int) $cf->query('SELECT enabled FROM endpoint_agent_settings WHERE id=1')->fetch_row()[0] === 0, 'FRESH install: one settings row, master switch off');
 $ok((int) $cf->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'settings' AND column_name = 'config_core_rmm_enabled' AND column_default = '0' AND is_nullable = 'NO'")->fetch_row()[0] === 1, 'FRESH install: settings.config_core_rmm_enabled exists and defaults to 0');
 $cf->query("INSERT INTO companies SET company_id = 1, company_name = 'x'"); $cf->query("INSERT INTO settings SET company_id = 1, config_current_database_version = '2.6.77'");
 $ok((int) $cf->query('SELECT config_core_rmm_enabled FROM settings WHERE company_id=1')->fetch_row()[0] === 0, 'FRESH install: a new settings row has the edition flag off');
 $ok((int) $cf->query("SELECT COUNT(*) FROM rivet_core_migrations WHERE migration_id IN ('0014_endpoint_agent_core','0015_endpoint_agent_converge','0016_rmm_module_switches')")->fetch_row()[0] === 3, 'FRESH install: the three RMM migrations are recorded (tables and ledger rows travel together)');
 (new \RivetCore\Migration\MigrationRunner(new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($cf), \RivetCore\Migration\CoreMigrations::all(), new \RivetCore\Support\SystemClock()))->run();
-$ok($tableCount($cf) === 20 && (int) $cf->query('SELECT enabled FROM endpoint_agent_settings WHERE id=1')->fetch_row()[0] === 0, 'FRESH install: running the Core migrations again changes nothing (still off)');
+$ok($tableCount($cf) === 21 && (int) $cf->query('SELECT enabled FROM endpoint_agent_settings WHERE id=1')->fetch_row()[0] === 0, 'FRESH install: running the Core migrations again changes nothing (still off)');
 
 // the real updater (scripts/update_cli.php --update_db) on a 2.6.76-shaped install
 [$up, $cu] = $mk('upgrade', false);
@@ -280,7 +282,7 @@ $updOut = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); proc_
 $ok(strpos($updOut, 'from version 2.6.76') !== false, 'UPGRADE: update_cli --update_db reports the update from 2.6.76');
 $ok(preg_match_all('/2\.6\.(\d+)/', $updOut, $um) > 0 && max(array_map('intval', $um[1])) >= 77, 'UPGRADE: update_cli --update_db reports 2.6.77 or later');
 $ok(version_compare((string) $cu->query('SELECT config_current_database_version FROM settings WHERE company_id=1')->fetch_row()[0], '2.6.77', '>='), 'UPGRADE: the database is at 2.6.77 or later');
-$ok($tableCount($cu) === 20 && (int) $cu->query('SELECT enabled FROM endpoint_agent_settings WHERE id=1')->fetch_row()[0] === 0 && (int) $cu->query('SELECT config_core_rmm_enabled FROM settings WHERE company_id=1')->fetch_row()[0] === 0, 'UPGRADE: the twenty tables exist and the module is OFF (neither switch is turned on by the update)');
+$ok($tableCount($cu) === 21 && (int) $cu->query('SELECT enabled FROM endpoint_agent_settings WHERE id=1')->fetch_row()[0] === 0 && (int) $cu->query('SELECT config_core_rmm_enabled FROM settings WHERE company_id=1')->fetch_row()[0] === 0, 'UPGRADE: the twenty-one tables exist and the module is OFF (neither switch is turned on by the update)');
 if ($shape($cf) !== $shape($cu)) { foreach (array_slice(array_merge(array_map(fn ($x) => "fresh only: $x", array_diff($shape($cf), $shape($cu))), array_map(fn ($x) => "upgraded only: $x", array_diff($shape($cu), $shape($cf)))), 0, 12) as $__d) { echo "      $__d\n"; } }
 $ok($shape($cf) === $shape($cu), 'UPGRADE: the upgraded schema equals a fresh install from db.sql (' . count($shape($cu)) . ' column/index facts compared)');
 // the 2.6.88 step (rc.11) is idempotent: put the version back to 2.6.87 and run the real updater again on the upgraded database

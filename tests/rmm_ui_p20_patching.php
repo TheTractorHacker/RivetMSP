@@ -103,8 +103,9 @@ $ok($c === 200, 'compliance page: odd filter values are ignored, not an error ('
 $ok($c === 200 && str_contains($body, 'id="rmm-tab-patches"') && str_contains($body, 'id="rmm-pane-patches"') && str_contains($body, 'Install history') === false && str_contains($body, 'Cumulative update for Windows 11'), 'asset page: the Patches tab lists the missing updates of the device');
 $ok(!str_contains($body, '<script>alert("pt")') && !str_contains($body, '<img src=x onerror') && str_contains($body, '&lt;script&gt;alert(&quot;pt&quot;)'), 'asset page: the hostile title is escaped in the Patches tab');
 $ok(substr_count($body, 'id="rmmAutoConfirm"') === 1, 'asset page: the in-page confirmation dialog is present exactly once');
-$ok(str_contains($body, 'Live installs are off'), 'asset page: it says plainly that live installs are off');
+$ok(str_contains($body, 'Automatic installs are off'), 'asset page: it says plainly that automatic installs are off');
 $ok(str_contains($body, 'name="action" value="install"') && str_contains($body, 'name="confirm_install"'), 'asset page: an administrator is offered Install with its own confirmation box');
+$ok(str_contains($body, '>Install now</button>') && str_contains($body, 'needs no switch') && str_contains($body, 'Automatic installs are off'), 'asset page: the button is Install now, and the note says automatic installs are off while Install now on one device needs no switch');
 [$c, $body] = $ptGet('rebootonly', '/agent/asset_details.php?asset_id=' . $ptWinAsset);
 $ok(str_contains($body, 'id="rmm-tab-patches"') && str_contains($body, 'name="action" value="approve"') && !str_contains($body, 'name="action" value="install"') && str_contains($body, 'needs a role with the install right'), 'asset page: a role that may manage but not install gets approve and dry run, no Install button');
 [$c, $body] = $ptGet('viewer', '/agent/asset_details.php?asset_id=' . $ptWinAsset);

@@ -1092,3 +1092,56 @@ if (isset($_POST['test_extstore'])) {
     rivetRmmScaleMsg('ext-store', $res['ok'] ? 'success' : 'error', $res['message']);
     ea_scale_back('ext-store');
 }
+// ---------------------------------------------------------------- Agent updates (26.10.28): the public agent releases on GitHub (includes/rmm_agent_feed.php)
+// Administrators only (the administration area, and the explicit ability check below), CSRF on every write. GitHub is contacted only through RivetMsp\AgentFeed\FeedHttp
+// (GitHub hosts over https, size caps, time limits, no redirect off those hosts). Publishing stores nothing before the file's SHA-256 matches the release checksums, and then uses
+// RmmAdmin::uploadBinary() / uploadMsiTemplate(), the code of the upload form, which authorizes and audits.
+require_once dirname(__DIR__, 2) . '/includes/rmm_agent_feed.php';
+
+if (isset($_POST['agent_feed_refresh']) || isset($_POST['agent_feed_settings']) || isset($_POST['publish_agent_release'])) {
+    validateCSRFToken($_POST['csrf_token'] ?? '');
+    ea_scale_require_admin($rmm, (int) $session_user_id, 'agent-updates');
+    $feed = new \RivetMsp\AgentFeed\Feed($mysqli);
+    if (!$feed->ready()) {
+        rivetRmmScaleMsg('agent-updates', 'error', 'Run the database update first (DB 2.6.98).');
+        ea_scale_back('agent-updates');
+    }
+
+    if (isset($_POST['agent_feed_refresh'])) {
+        $r = $feed->refresh(true);
+        logAction('Endpoint Agent', 'Agent Releases Checked', "$session_name checked " . $feed->repo() . ' for agent releases: ' . ($r['ok'] ? 'ok' : 'failed') . ' (' . $r['message'] . ')');
+        rivetRmmScaleMsg('agent-updates', $r['ok'] ? 'success' : ($r['rate_limited'] || $r['from_cache'] ? 'warning' : 'error'), $r['message']);
+        ea_scale_back('agent-updates');
+    }
+
+    if (isset($_POST['agent_feed_settings'])) {
+        $err = $feed->setRepo((string) ($_POST['feed_repo'] ?? ''));
+        if ($err === null) {
+            $feed->setBadge(($_POST['feed_badge'] ?? '') === '1');
+            logAction('Endpoint Agent', 'Agent Feed Settings Changed', "$session_name set the agent release repository to " . $feed->repo() . ' (badge ' . ($feed->badgeOn() ? 'on' : 'off') . ')');
+        }
+        rivetRmmScaleMsg('agent-updates', $err === null ? 'success' : 'error', $err ?? 'Saved. Press Check for updates to read the releases.');
+        ea_scale_back('agent-updates');
+    }
+
+    // publish_agent_release
+    $tag = is_string($_POST['tag'] ?? null) ? $_POST['tag'] : '';
+    $ring = is_string($_POST['release_ring'] ?? null) ? $_POST['release_ring'] : '';
+    $denied = $rmm->authorizer()->check((int) $session_user_id, RmmAbility::BINARY_PUBLISH, 0, false);
+    if ($denied !== null) {
+        rivetRmmScaleMsg('agent-updates', 'error', $denied);
+        ea_scale_back('agent-updates');
+    }
+    @set_time_limit(600);
+    $res = $feed->publish($ea_admin, $ea_who, $tag, [
+        'ring' => in_array($ring, ['pilot', 'stable'], true) ? $ring : '',
+        'pct' => ea_post_int('rollout_pct', 0, 100, 10),
+        'activate' => ($_POST['activate'] ?? '') === '1',
+        'max_bytes' => $rmm->binaryStore()->maxBytes(),
+        'service_ready' => ($rmm->readModel()->settingsSummary()['service_base'] ?? null) !== null,
+    ]);
+    logAction('Endpoint Agent', 'Agent Release Downloaded', "$session_name published agent release $tag from " . $feed->repo() . ' (ring ' . ($ring !== '' ? $ring : 'none') . '): ' . ($res['ok'] ? 'ok' : 'not completely') . ' - ' . $res['message']);
+    $_SESSION['rmm_feed_steps'] = $res['steps'];
+    rivetRmmScaleMsg('agent-updates', $res['ok'] ? 'success' : 'error', $res['message']);
+    ea_scale_back('agent-updates');
+}
