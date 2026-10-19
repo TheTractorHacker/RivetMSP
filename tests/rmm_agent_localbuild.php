@@ -91,6 +91,7 @@ function bh_set(int $ver, array $o = []): array
     foreach ($f as $n => $b) { if (($o['omit_sum'] ?? '') !== $n) { $sums .= (($o['wrong_sum'] ?? '') === $n ? str_repeat('0', 64) : hash('sha256', $b)) . "  $n\n"; } }
     $f['SHA256SUMS'] = $sums;
     $man = ['files' => array_map(fn($b) => hash('sha256', $b), $f), 'commit' => 'abc1234def', 'go_version' => 'go1.23', 'built_at' => '2026-10-19T10:00:00Z'];
+    if (empty($o['with_sums'])) { unset($man['files']['SHA256SUMS']); }   // the build host script lists the built files only
     foreach ($o['manifest_hash'] ?? [] as $n => $h) { $man['files'][$n] = $h; }
     foreach ($o['manifest_drop'] ?? [] as $n) { unset($man['files'][$n]); }
 
@@ -288,6 +289,7 @@ $bin0 = (int) $one('SELECT COUNT(*) FROM endpoint_agent_binaries'); $msi0 = (int
 $noStore = fn(string $l) => $ok((int) $one('SELECT COUNT(*) FROM endpoint_agent_binaries') === $bin0 && (int) $one('SELECT COUNT(*) FROM endpoint_agent_msi_templates') === $msi0, "nothing stored: $l");
 $cases = [
     'a chunk-level hash is fine but the whole file differs from the manifest' => ['manifest_hash' => ['rivetit-agent-windows-arm64.exe' => str_repeat('1', 64)], 'expect' => 'does not match the manifest'],
+    'the manifest carries a wrong hash for SHA256SUMS' => ['with_sums' => true, 'manifest_hash' => ['SHA256SUMS' => str_repeat('2', 64)], 'expect' => 'does not match the manifest'],
     'SHA256SUMS disagrees with the files' => ['wrong_sum' => 'rivetit-agent-windows-arm64.exe', 'expect' => 'SHA256SUMS does not list'],
     'SHA256SUMS omits a file' => ['omit_sum' => 'rivetit-agent-windows-amd64.msi', 'expect' => 'SHA256SUMS does not list'],
     'the manifest omits a required file' => ['manifest_drop' => ['rivetit-agent-windows-amd64.msi'], 'expect' => 'missing from the manifest'],

@@ -674,7 +674,7 @@ final class LocalBuild
             $need[] = 'rivetit-agent-windows-amd64.msi';
         }
         foreach ($need as $n) {
-            if (!isset($manifest[$n])) {
+            if ($n !== 'SHA256SUMS' && !isset($manifest[$n])) {   // the script lists the built files; SHA256SUMS describes them and is checked against them below
                 return ['ok' => false, 'message' => "$n is missing from the manifest."];
             }
         }
@@ -694,9 +694,10 @@ final class LocalBuild
             }
             [$path, $size, $hash] = $r;
             $jobBytes += $size;
-            if (!hash_equals($manifest[$n], $hash)) {
+            if (isset($manifest[$n]) && !hash_equals($manifest[$n], $hash)) {
                 return ['ok' => false, 'message' => "The SHA-256 of $n does not match the manifest."];
             }
+            $manifest[$n] ??= $hash;
             $paths[$n] = $path;
             if ($n === 'SHA256SUMS') {
                 $sums = Feed::parseSums((string) file_get_contents($path));
