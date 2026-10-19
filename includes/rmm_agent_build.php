@@ -241,6 +241,19 @@ final class Build
         $this->feed->statePut('build', (string) json_encode($b));
     }
 
+    /** Whether a page should keep polling: running, or finished but the release (or its automatic publish) is still to come, for 30 minutes at most. */
+    private static function watch(?array $b): bool
+    {
+        if ($b === null) {
+            return false;
+        }
+        if (self::active($b)) {
+            return true;
+        }
+
+        return ($b['state'] ?? '') === 'finished' && time() - (int) ($b['finished_at'] ?? 0) < 1800 && (!$b['release_seen'] || ($b['auto'] && !$b['published']));
+    }
+
     private static function active(?array $b): bool
     {
         return $b !== null && !in_array($b['state'] ?? '', self::TERMINAL, true) && time() - (int) ($b['started_at'] ?? 0) < self::ACTIVE_MAX_S;
@@ -315,7 +328,7 @@ final class Build
             'version' => (string) $b['version'], 'tag' => (string) $b['tag'], 'state' => (string) $b['state'], 'label' => $labels[$b['state']] ?? 'Unknown', 'detail' => (string) ($b['detail'] ?? ''),
             'run_url' => (int) $b['run_id'] > 0 ? "https://github.com/$repo/actions/runs/" . (int) $b['run_id'] : '', 'workflow_url' => "https://github.com/$repo/actions/workflows/" . self::WORKFLOW,
             'started_at' => (int) $b['started_at'], 'by' => (string) $b['by'], 'auto' => (bool) $b['auto'], 'ring' => (string) $b['ring'], 'pct' => (int) $b['pct'], 'release_seen' => (bool) $b['release_seen'],
-            'published' => (bool) $b['published'], 'publish_message' => (string) ($b['publish_message'] ?? ''), 'active' => self::active($b),
+            'published' => (bool) $b['published'], 'publish_message' => (string) ($b['publish_message'] ?? ''), 'active' => self::active($b), 'watch' => self::watch($b),
         ];
     }
 
@@ -333,9 +346,8 @@ final class Build
             return null;
         }
         $now = time();
-        $running = self::active($b);
-        $needPublish = $b['state'] === 'finished' && !$b['published'] && $b['auto'] && $b['release_seen'];
-        if (($running || ($b['state'] === 'finished' && (!$b['release_seen'] || $needPublish))) && $now - (int) $b['checked_at'] >= self::POLL_MIN_S) {
+        $running = self::active($b) && in_array($b["state"], ["queued", "building"], true);
+        if (($running || self::watch($b)) && $now - (int) $b['checked_at'] >= self::POLL_MIN_S) {
             $b['checked_at'] = $now;
             $repo = $this->feed->repo();
             if ($b['state'] === 'queued' || $b['state'] === 'building') {
@@ -369,6 +381,7 @@ final class Build
                         if ($st === 'completed') {
                             if ($co === 'success') {
                                 $b['state'] = 'finished';
+                                $b['finished_at'] = $now;
                                 $b['detail'] = 'The workflow finished. Waiting for the release to appear in the list.';
                             } else {
                                 $b['state'] = 'failed';
