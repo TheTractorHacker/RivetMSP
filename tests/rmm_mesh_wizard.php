@@ -41,7 +41,7 @@ $hex = fn (int $n) => substr(str_repeat('a1b2c3d4e5f60718', 16), 0, $n);
 echo "\n--- Create installer entry ---\n";
 $q("INSERT INTO endpoint_agent_devices SET install_id = 'dev-mw-1', hostname = 'MWPC1', os = 'windows', client_id = 1, link_state = 'linked', last_checkin_at = NOW()");
 $devId = (int) $one('SELECT MAX(device_id) FROM endpoint_agent_devices');
-$q("INSERT INTO assets SET asset_name = 'MWPC1', asset_type = 'Desktop', asset_client_id = 1"); $assetId = (int) $one('SELECT MAX(asset_id) FROM assets'); $q("UPDATE endpoint_agent_devices SET asset_id = $assetId WHERE device_id = $devId");
+$q("INSERT INTO assets SET asset_name = 'MWPC1', asset_type = 'Desktop', asset_client_id = 1"); $assetId = (int) $one('SELECT MAX(asset_id) FROM assets'); $q("UPDATE endpoint_agent_devices SET asset_id = $assetId WHERE device_id = $devId"); $q("INSERT INTO asset_rmm_links SET asset_id = $assetId, tactical_agent_id = 'rivetit:$devId', hostname = 'MWPC1'");
 [$c, $b] = $get('/agent/rmm_fleet.php');
 $ok($c === 200 && str_contains($b, 'data-rmm-build-installer') && str_contains($b, 'Create installer') && str_contains($b, 'href="/agent/rmm_add_device.php" class="btn btn-primary"'), 'fleet header: a primary Create installer button');
 $ok(str_contains($b, 'data-rmm-installer-page-link') && str_contains($b, 'Open the Create installer page'), 'the Add device dialog links to the Create installer page');
