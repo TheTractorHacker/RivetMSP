@@ -57,7 +57,7 @@ if [[ "${EUID}" -ne 0 ]]; then
 fi
 # shellcheck disable=SC2016
 # validation: nothing that could break out of the sourced config is accepted
-for bad in "--name=a b" "--name=\$(id)" "--name=a;b" "--name=" '--name=x"y' "--allowed-refs=main;rm" '--allowed-refs=$(id)' "--allowed-refs=a\`b\`" "--core-repo=http://plain.example.com/x.git" "--core-repo=https://x.example.com/a b" '--core-repo=/tmp/$(id)' "--workdir=relative" "--workdir=/var/lib/a b" "--workdir=/x;y" "--site-url=http://insecure.example.com" "--site-url=https://x.example.com/a b" "--site-url=https://x.example.com;id" "--web-user=ROOT user" "--fetch-base=http://insecure.example.com/x" "--app-dir=relative" "--bogus" "--purge-docker"; do
+for bad in "--name=a b" "--name=\$(id)" "--name=a;b" "--name=" '--name=x"y' "--allowed-refs=main;rm" '--allowed-refs=$(id)' "--allowed-refs=a\`b\`" "--core-repo=http://plain.example.com/x.git" "--core-repo=https://x.example.com/a b" '--core-repo=/tmp/$(id)' "--workdir=relative" "--workdir=/var/lib/a b" "--workdir=/x;y" "--workdir=/etc" "--workdir=/" "--workdir=/var/lib/../etc" "--workdir=/usr/lib/x" "--site-url=http://insecure.example.com" "--site-url=https://x.example.com/a b" "--site-url=https://x.example.com;id" "--web-user=ROOT user" "--fetch-base=http://insecure.example.com/x" "--app-dir=relative" "--bogus" "--purge-docker"; do
     OUTV="$("${S}" --check "${bad}" 2>&1)"; rcv=$?
     [[ ${rcv} -ne 0 ]] && grep -Eq "ERROR: (--[a-z-]+ |unknown option|--purge-docker)" <<<"${OUTV}"; ok $? "refused by validation: ${bad}"
 done

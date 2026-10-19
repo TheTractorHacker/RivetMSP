@@ -41,10 +41,10 @@ PIN_SHA_SERVICE="4d73f42d88876003ab6804b0f3ebffe6e8fb85c7e91bfd9734706eaf64b1a70
 PIN_SHA_TIMER="6cba55037c010ffba258913b265033791c786e6fcf9880805313a3b28b7cd5ba"
 
 BH_USER="rivetit-build"
-BH_OPT_DIR="${BH_OPT_DIR:-/opt/rivetit-build-host}"
-BH_CONF_DIR="${BH_CONF_DIR:-/etc/rivetit}"
+BH_OPT_DIR="/opt/rivetit-build-host"
+BH_CONF_DIR="/etc/rivetit"
 BH_CONF="${BH_CONF_DIR}/build-host.conf"
-UNIT_DIR="${UNIT_DIR:-/etc/systemd/system}"
+UNIT_DIR="/etc/systemd/system"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -102,7 +102,7 @@ if [[ "${EUID}" -ne 0 && "${CHECK}" -ne 1 ]]; then die "this script must run as 
 [[ "${HOST_NAME}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,78}$ ]] || die "--name may only contain letters, numbers, dots, dashes and underscores (got: ${HOST_NAME})"
 [[ "${ALLOWED_REFS}" =~ ^[A-Za-z0-9._*/\ -]{1,200}$ ]] || die "--allowed-refs contains characters that are not allowed"
 [[ "${CORE_REPO}" =~ ^(https://[A-Za-z0-9._~/:@-]{1,300}|/[A-Za-z0-9._/-]{1,300})$ ]] || die "--core-repo must be an https:// URL or an absolute path without special characters"
-[[ "${WORKDIR}" =~ ^/[A-Za-z0-9._/-]{1,200}$ ]] || die "--workdir must be an absolute path without special characters"
+[[ "${WORKDIR}" =~ ^/(var/lib|opt|srv|home)/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$ && "${WORKDIR}" != *..* ]] || die "--workdir must be a plain path below /var/lib, /opt, /srv or /home (it is deleted on --uninstall)"
 [[ "${WEB_USER}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "--web-user is not a valid account name"
 [[ "${APP_DIR}" == /* ]] || die "--app-dir must be an absolute path"
 if [[ -n "${SITE_URL}" ]]; then
@@ -162,7 +162,9 @@ do_uninstall() {
 fetch_verified() { # name expected_sha dest mode
     local name="$1" want="$2" dest="$3" got
     local url="${FETCH_BASE:-${CORE_RAW_BASE}}/${name}"
-    if ! curl --proto '=https,file' --tlsv1.2 -fsS --max-time 60 --max-filesize 1048576 -o "${dest}" "${url}"; then
+    local proto="=https"
+    [[ -n "${FETCH_BASE}" && "${FETCH_BASE}" == file://* ]] && proto="=https,file"
+    if ! curl --proto "${proto}" --tlsv1.2 -fsS --max-time 60 --max-filesize 1048576 -o "${dest}" "${url}"; then
         die "could not download ${name} from ${url}"
     fi
     got="$(sha256sum "${dest}" | cut -d' ' -f1)"

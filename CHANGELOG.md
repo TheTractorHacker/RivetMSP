@@ -4,6 +4,16 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.34] RivetMSP — Build progress and the RMM Agent Builder installer (DB 2.6.100)
+
+**Deploy notes:** back up the database, pull this tag, run **Administration > Updates** (DB 2.6.99 to 2.6.100: four columns added to `endpoint_agent_build_jobs`, no row touched). No RivetCore change in the web app. Build hosts keep working before and after; to get progress they need the build-host script from RivetCore 9d20031 or later (the new installer fetches exactly that). Optional: `sudo deploy/setup-build-host.sh` on this server (see below).
+
+- **Real build progress.** The Local build list shows a progress bar with percent, the current stage in plain words, the host's detail line, the time since the build was requested and a checklist of the stages (done, active, pending; failed marks where a failed build stopped). It updates live. The GitHub build shows the workflow run's steps as the same kind of checklist with a percent estimate.
+- **Strict status fields.** The build host's `status` call accepts optional `stage` (prepare, clone, build_windows_amd64, build_windows_arm64, msi, verify, upload), `pct` (0-100), `detail` (at most 120 printable characters) and `elapsed_s`. Anything else is `422 bad_progress` and stores nothing. The percent never goes backwards for a job, an earlier stage is dropped, a terminal call ignores progress, and a job that returns to the queue forgets it. Every status call renews the lease.
+- **RMM Agent Builder installer.** `deploy/setup-build-host.sh` (idempotent; `--check`, `--uninstall`, `--purge-docker`) installs Docker if needed, the `rivetit-build` account (no login, docker group), the build script and systemd timer from RivetCore at a pinned commit with pinned SHA-256 values (it refuses on any mismatch), creates the build host and its token through the application (`scripts/build_host_setup.php`; the token goes straight into `/etc/rivetit/build-host.conf`, mode 600, and is never printed or logged), enables the timer and runs `--register`. It warns that docker group membership is root-equivalent and refuses to run if the web user is in that group. `deploy/install.sh` asks "Would you like to install the RMM Agent Builder ...? [y/N]" (`--with-build-host`, `--no-build-host`). The one-line command is on Agent updates > Local build.
+- Database: `endpoint_agent_build_jobs.progress_stage / progress_pct / progress_detail / progress_at` (updater step 2.6.100, `db.sql`).
+- Tests: `tests/rmm_agent_localbuild.php` (261 checks), `tests/build_host_setup.php`, `tests/build_host_setup/run.sh`, `container.sh`, `installer_flags.sh`, `tests/browser/rmm_agent_localbuild_smoke.mjs`. Docs: `docs/RMM_MODULE.md` section 6n.
+
 ## [26.10.33] RivetMSP — Build on my build host (DB 2.6.99)
 
 **Deploy notes:** back up the database, pull this tag, then run **Administration > Updates** (DB 2.6.98 to 2.6.99: three new tables, nothing existing is changed). No RivetCore change and no new web server route (the build host uses `/api/v1/agent_build_host/...`, inside the existing `/api/v1/` location). Optional: the folder `backups/endpoint-build/` is created on first use (private to the web user, like the other `backups/` folders).
