@@ -108,6 +108,25 @@ await T('request a build; the host takes it; progress is live without reloading'
   assert(note === 'compiling <b>windows</b> amd64', 'note rendered as text: ' + note);
   assert(!(await p.exists('[data-lb-job] [data-lb-note] b')), 'the note was not interpreted as HTML');
   await shot('localbuild-building');
+  // build progress (stage / pct / detail / elapsed_s): bar, percent, plain-words stage, detail line and the checklist update live
+  assert((await api('status', { job_id: String(id), state: 'building', stage: 'build_windows_arm64', pct: 58, detail: 'go build <i>arm64</i>', elapsed_s: 95 }))[0] === 200, 'progress accepted');
+  await p.waitFor(`document.querySelector('[data-lb-job] [data-lb-pct]').textContent === '58'`, { timeout: 15000, label: 'live: 58 percent' });
+  const prog = await p.evalWith(() => {
+    const r = document.querySelector('[data-lb-job]');
+    return { w: r.querySelector('[data-lb-bar]').style.width, now: r.querySelector('[role=progressbar]').getAttribute('aria-valuenow'), text: r.querySelector('[data-lb-text]').textContent,
+      detail: r.querySelector('[data-lb-detail]').textContent, el: r.querySelector('[data-lb-elapsed]').textContent,
+      steps: [...r.querySelectorAll('[data-lb-steps] li')].map((li) => li.getAttribute('data-stage') + ':' + li.getAttribute('data-status')), italic: !!r.querySelector('[data-lb-detail] i') };
+  });
+  assert(prog.w === '58%' && prog.now === '58', 'bar width and aria-valuenow: ' + JSON.stringify(prog));
+  assert(/Building Windows ARM64/.test(prog.text), 'stage in plain words: ' + prog.text);
+  assert(prog.detail === 'go build <i>arm64</i>' && !prog.italic, 'detail is text, not HTML: ' + prog.detail);
+  assert(/\d/.test(prog.el), 'elapsed shown: ' + prog.el);
+  assert(prog.steps.join(',') === 'prepare:done,clone:done,build_windows_amd64:done,build_windows_arm64:active,msi:pending,verify:pending,upload:pending', 'checklist: ' + prog.steps.join(','));
+  await api('status', { job_id: id, state: 'building', stage: 'msi', pct: 20 });   // pct never goes down
+  await api('status', { job_id: id, state: 'building', stage: 'msi', pct: 70 });
+  await p.waitFor(`document.querySelector('[data-lb-job] [data-lb-pct]').textContent === '70' && document.querySelector('[data-lb-steps] li[data-stage=msi]').getAttribute('data-status') === 'active'`, { timeout: 15000, label: 'live: msi active, 70 percent' });
+  assert((await api('status', { job_id: id, state: 'building', stage: 'nonsense' }))[0] === 422, 'a bad stage is refused');
+  await shot('localbuild-progress');
   await api('status', { job_id: id, state: 'failed', note: 'docker build failed', log_tail: 'step 3/9\n<script>alert(1)</script>\nerror: boom' });
   await p.waitFor(`document.querySelector('[data-lb-job]').getAttribute('data-lb-state') === 'failed'`, { timeout: 15000, label: 'live: failed' });
   await sleep(2500);   // the page reloads once a build ends so the log tail is there
