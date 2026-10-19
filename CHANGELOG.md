@@ -4,6 +4,17 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.32] RivetMSP — Administration > Endpoint agent is now tabs (no database change)
+
+**Deploy notes:** pull this tag; nothing else (no database update, no RivetCore change, no new setting).
+
+- **Eight tabs instead of one long scroll.** Overview (module switch, status, the main defaults, devices waiting for approval, devices), Agent updates (the GitHub list and Build a new version, agent binaries, MSI template, per-client installer, rings), Checks (the plain-language check schedule), Remote and Mesh (remote tools, file transfer, MeshCentral and its setup page link), Inventory and logs (software inventory, log collection, scale, metric storage), Patching, Software deployment, Security and policy (certificate and policy text, policies/scripts/alerting, signing key, enrollment tokens). Every card appears once; no field or button changed.
+- **Accessible.** `role=tablist/tab/tabpanel`, `aria-selected`, `aria-controls`; Left/Right/Home/End move between tabs; the bar scrolls sideways on a phone. Without JavaScript every part is shown one after the other, as before.
+- **The address remembers the tab.** `#tab-checks` opens Checks and every old card anchor (`#inventory`, `#mesh`, `#binaries`, `#tokens`, ...) opens the tab that now holds it. A Save returns to the tab it was pressed in (each form posts a hidden `ea_tab`; a plain redirect goes back to `#tab-...`).
+- **Amber dots** on a tab that needs attention: Overview (service off, state file mismatch, devices waiting), Agent updates (no agent published), Remote and Mesh (MeshCentral not set up), Security and policy (no active enrollment token). Tooltip plus screen-reader text.
+- **One settings form across tabs.** The check schedule and the CA certificate / coexistence fields sit in Checks and Security and policy but stay part of the one "Service and defaults" form (HTML `form=` attribute); one Save writes the same fields as before, and each of the three tabs has its own Save button.
+- Tests: `tests/browser/rmm_eatabs_smoke.mjs` (Chromium over the DevTools protocol); page-structure assertions updated. Files: `includes/rmm_ea_tabs.php`, `js/rmm_ea_tabs.js`, `admin/settings_endpoint_agent.php`, `admin/post/settings_endpoint_agent.php`.
+
 ## [26.10.31] RivetMSP — Build a new agent version from Agent updates
 
 **Deploy notes:** back up the database, pull this tag. **No database step** (DB stays 2.6.98; the state table of 26.10.28 holds the new keys) and RivetCore is unchanged. Optional: the cron job below (`deploy/install.sh` adds it on a fresh install; on an existing server add the line by hand, see `docs/RMM_MODULE.md` 6j). Without a token nothing changes for you except a new box on the card.
