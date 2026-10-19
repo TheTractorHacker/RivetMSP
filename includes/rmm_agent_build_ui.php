@@ -38,6 +38,15 @@ function rivetAgentBuildBox(array $bv, string $csrf, ?array $local = null): stri
             . ($b['auto'] ? '<div class="small mt-1" data-build-auto>Publish automatically when built (' . ($b['ring'] !== '' ? $h($b['ring']) . ' ring, ' . (int) $b['pct'] . '%' : 'no update offer') . ')'
                 . ($b['published'] ? ': ' . $h($b['publish_message'] !== '' ? $b['publish_message'] : 'done') : '') . '.</div>' : '')
             . '</div>';
+        if (in_array($b['state'], ['queued', 'building', 'finished', 'failed'], true)) {
+            $o .= '<div class="mb-3" data-build-progress><div class="progress" style="height:.5rem" role="progressbar" aria-label="GitHub build progress (estimate)" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' . (int) $b['est_pct'] . '"><div class="progress-bar" data-build-bar style="width:' . (int) $b['est_pct'] . '%"></div></div>'
+                . '<div class="small text-muted mt-1"><span data-build-pct>' . (int) $b['est_pct'] . '</span>% (an estimate from the workflow steps that have finished)</div>'
+                . '<ul class="list-unstyled small mb-0 mt-1" data-build-steps>';
+            foreach ($b['steps'] as $stp) {
+                $o .= '<li data-status="' . $h($stp['status']) . '"><i class="fas ' . ['done' => 'fa-check-circle text-success', 'active' => 'fa-circle-notch fa-spin text-primary', 'failed' => 'fa-times-circle text-danger', 'pending' => 'fa-circle text-muted'][$stp['status']] . ' me-1" aria-hidden="true"></i>' . $h($stp['name']) . '<span class="visually-hidden"> (' . $h($stp['status']) . ')</span></li>';
+            }
+            $o .= '</ul></div>';
+        }
     }
 
     if (!$bv['has_token']) {

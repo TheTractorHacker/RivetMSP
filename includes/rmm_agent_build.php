@@ -338,7 +338,51 @@ final class Build
             'run_url' => (int) $b['run_id'] > 0 ? "https://github.com/$repo/actions/runs/" . (int) $b['run_id'] : '', 'workflow_url' => "https://github.com/$repo/actions/workflows/" . self::WORKFLOW,
             'started_at' => (int) $b['started_at'], 'by' => (string) $b['by'], 'auto' => (bool) $b['auto'], 'ring' => (string) $b['ring'], 'pct' => (int) $b['pct'], 'release_seen' => (bool) $b['release_seen'],
             'published' => (bool) $b['published'], 'publish_message' => (string) ($b['publish_message'] ?? ''), 'active' => self::active($b), 'watch' => self::watch($b),
+            'steps' => self::cleanSteps($b['steps'] ?? [], $b['state'] === 'finished'), 'est_pct' => $b['state'] === 'finished' ? 100 : max(0, min(95, (int) ($b['est_pct'] ?? 0))),
         ];
+    }
+
+    /**
+     * The workflow job's steps as a done/active/pending checklist (names are GitHub's, shown as text only). GitHub's own bookkeeping steps (set up, post, complete) are left out.
+     *
+     * @return list<array{name:string,status:string}>
+     */
+    private static function cleanSteps(mixed $raw, bool $allDone = false): array
+    {
+        $out = [];
+        foreach (is_array($raw) ? array_slice($raw, 0, 30) : [] as $st) {
+            $n = is_array($st) && is_string($st['name'] ?? null) ? trim((string) preg_replace('/[^\x20-\x7e]/', '', $st['name'])) : '';
+            $s = is_array($st) && in_array($st['status'] ?? null, ['done', 'active', 'pending', 'failed'], true) ? $st['status'] : 'pending';
+            if ($n !== '') {
+                $out[] = ['name' => substr($n, 0, 80), 'status' => $allDone && $s !== 'failed' ? 'done' : $s];
+            }
+        }
+
+        return $out;
+    }
+
+    /** @return array{0:list<array{name:string,status:string}>,1:int} the steps of the run's job and a percent estimate (finished steps / all steps) */
+    private function runSteps(int $runId): array
+    {
+        $r = $this->call($this->repoPath() . '/actions/runs/' . $runId . '/jobs?per_page=10');
+        if (!$r['ok']) {
+            return [[], 0];
+        }
+        $steps = [];
+        foreach ((array) (json_decode((string) $r['body'], true)['jobs'] ?? []) as $job) {
+            foreach ((array) ($job['steps'] ?? []) as $st) {
+                $name = is_string($st['name'] ?? null) ? $st['name'] : '';
+                if ($name === '' || preg_match('/^(Set up job|Complete job|Post )/', $name) === 1) {
+                    continue;
+                }
+                $status = (string) ($st['status'] ?? '');
+                $steps[] = ['name' => $name, 'status' => $status === 'completed' ? (in_array($st['conclusion'] ?? '', ['failure', 'cancelled'], true) ? 'failed' : 'done') : ($status === 'in_progress' ? 'active' : 'pending')];
+            }
+        }
+        $steps = self::cleanSteps($steps);
+        $done = count(array_filter($steps, static fn (array $x): bool => $x['status'] === 'done'));
+
+        return [$steps, $steps === [] ? 0 : (int) floor(95 * $done / count($steps))];
     }
 
     /**
@@ -394,12 +438,14 @@ final class Build
                                 $b['detail'] = 'The workflow finished. Waiting for the release to appear in the list.';
                             } else {
                                 $b['state'] = 'failed';
+                                [$b['steps'], $b['est_pct']] = $this->runSteps((int) $b['run_id']);
                                 $b['detail'] = 'The workflow ended with: ' . (preg_replace('/[^a-z_]/', '', $co) ?: 'unknown') . '. Open the run on GitHub to see why.';
                             }
                             ($this->audit)('Agent Build Finished', 'build of agent ' . $b['version'] . ' in ' . $repo . ': ' . $b['state'] . ($co !== '' ? ' (' . preg_replace('/[^a-z_]/', '', $co) . ')' : ''));
                         } elseif ($st === 'in_progress') {
                             $b['state'] = 'building';
                             $b['detail'] = 'GitHub is building the agents and the installer package.';
+                            [$b['steps'], $b['est_pct']] = $this->runSteps((int) $b['run_id']);
                         } else {
                             $b['state'] = 'queued';
                             $b['detail'] = 'The run is waiting for a GitHub runner.';

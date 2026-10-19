@@ -12,6 +12,7 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/load_user_session.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/vendor/autoload.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/rmm_bootstrap.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/rmm_agent_localbuild.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/rmm_agent_localbuild_ui.php';
 
 mysqli_report(MYSQLI_REPORT_OFF);
 $lp_out = static function (int $status, array $body): void {
@@ -44,7 +45,8 @@ if (!$lp->ready()) {
 $lp_jobs = [];
 foreach ($lp->jobs() as $j) {
     $lp_jobs[] = ['id' => (int) $j['job_id'], 'state' => (string) $j['state'], 'label' => ucfirst((string) $j['state']), 'text' => (string) $j['progress']['text'], 'pct' => (int) $j['progress']['pct'], 'note' => (string) $j['note'],
-        'log_tail' => (string) $j['log_tail'], 'result' => (string) $j['result'], 'active' => (bool) $j['active']];
+        'log_tail' => (string) $j['log_tail'], 'result' => (string) $j['result'], 'active' => (bool) $j['active'],
+        'detail' => (string) $j['progress']['detail'], 'stage' => (string) $j['progress']['stage'], 'real' => (bool) $j['progress']['real'], 'steps' => $j['progress']['steps'], 'elapsed_s' => (int) $j['elapsed_s'], 'elapsed' => rivetLocalBuildElapsed((int) $j['elapsed_s'])];
 }
 $lp_hosts = [];
 foreach ($lp->hosts() as $hRow) {

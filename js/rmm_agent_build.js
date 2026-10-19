@@ -24,6 +24,20 @@
           if (t) t.textContent = b.detail;
           if (a && b.run_url) { a.href = b.run_url; a.textContent = 'Open the run on GitHub'; }
         }
+        var bar = box.querySelector('[data-build-bar]'), pc = box.querySelector('[data-build-pct]'), ul = box.querySelector('[data-build-steps]');
+        if (bar) { bar.style.width = (b.est_pct || 0) + '%'; if (bar.parentNode) bar.parentNode.setAttribute('aria-valuenow', String(b.est_pct || 0)); }
+        if (pc) pc.textContent = String(b.est_pct || 0);
+        if (ul && b.steps) {
+          var icons = { done: 'fa-check-circle text-success', active: 'fa-circle-notch fa-spin text-primary', failed: 'fa-times-circle text-danger', pending: 'fa-circle text-muted' };
+          while (ul.firstChild) ul.removeChild(ul.firstChild);
+          b.steps.forEach(function (s) {
+            var li = document.createElement('li'), i = document.createElement('i'), sr = document.createElement('span');
+            li.setAttribute('data-status', s.status);
+            i.className = 'fas ' + (icons[s.status] || icons.pending) + ' me-1'; i.setAttribute('aria-hidden', 'true');
+            sr.className = 'visually-hidden'; sr.textContent = ' (' + s.status + ')';
+            li.appendChild(i); li.appendChild(document.createTextNode(s.name)); li.appendChild(sr); ul.appendChild(li);
+          });
+        }
         var done = b.state === 'finished' && b.release_seen && (!status || !status.querySelector('[data-build-auto]') || b.published);
         if (done || b.state === 'failed' || b.state === 'lost') {
           clearInterval(timer);

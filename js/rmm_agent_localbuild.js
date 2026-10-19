@@ -46,6 +46,19 @@
 
   document.addEventListener('focusin', function (ev) { if (ev.target && ev.target.hasAttribute && ev.target.hasAttribute('data-lb-token')) ev.target.select(); });
 
+  var ICONS = { done: 'fa-check-circle text-success', active: 'fa-circle-notch fa-spin text-primary', failed: 'fa-times-circle text-danger', pending: 'fa-circle text-muted' };
+  // the stage checklist: rebuilt from plain text (the server's labels), never as HTML
+  function renderSteps(ul, steps) {
+    while (ul.firstChild) ul.removeChild(ul.firstChild);
+    steps.forEach(function (s) {
+      var li = document.createElement('li'), i = document.createElement('i'), sr = document.createElement('span');
+      li.setAttribute('data-stage', s.key); li.setAttribute('data-status', s.status);
+      i.className = 'fas ' + (ICONS[s.status] || ICONS.pending) + ' me-1'; i.setAttribute('aria-hidden', 'true');
+      sr.className = 'visually-hidden'; sr.textContent = ' (' + s.status + ')';
+      li.appendChild(i); li.appendChild(document.createTextNode(s.label)); li.appendChild(sr); ul.appendChild(li);
+    });
+  }
+
   // ---- live progress
   var box = document.querySelector('[data-lb-box]');
   if (!box || box.getAttribute('data-lb-active') !== '1') return;
@@ -74,6 +87,11 @@
           if (t) t.textContent = j.text;
           if (n) n.textContent = j.note;
           if (bar) { bar.style.width = j.pct + '%'; if (bar.parentNode) bar.parentNode.setAttribute('aria-valuenow', String(j.pct)); }
+          var pc = row.querySelector('[data-lb-pct]'), el = row.querySelector('[data-lb-elapsed]'), dt = row.querySelector('[data-lb-detail]'), ul = row.querySelector('[data-lb-steps]');
+          if (pc) pc.textContent = String(j.pct);
+          if (el) el.textContent = j.elapsed;
+          if (dt) dt.textContent = j.detail || '';
+          if (ul) renderSteps(ul, j.steps || []);
         });
         (d.hosts || []).forEach(function (h) {
           var dot = box.querySelector('[data-lb-host="' + h.id + '"] [data-lb-dot]');

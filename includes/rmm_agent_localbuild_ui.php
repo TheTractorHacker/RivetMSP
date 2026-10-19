@@ -5,6 +5,24 @@
  * A new build host token is printed ONCE: the handler puts it in the session, this function prints it and removes it.
  */
 
+/** "3 min 05 s" */
+function rivetLocalBuildElapsed(int $s): string
+{
+    return $s < 60 ? $s . ' s' : intdiv($s, 60) . ' min ' . sprintf('%02d', $s % 60) . ' s';
+}
+
+/** The stage checklist (done / active / pending / failed) as list items; the page script rebuilds the same markup on every poll. @param list<array{key:string,label:string,status:string}> $steps */
+function rivetLocalBuildSteps(array $steps, callable $h): string
+{
+    $icon = ['done' => 'fa-check-circle text-success', 'active' => 'fa-circle-notch fa-spin text-primary', 'failed' => 'fa-times-circle text-danger', 'pending' => 'fa-circle text-muted'];
+    $o = '';
+    foreach ($steps as $s) {
+        $o .= '<li data-stage="' . $h($s['key']) . '" data-status="' . $h($s['status']) . '"><i class="fas ' . $icon[$s['status']] . ' me-1" aria-hidden="true"></i>' . $h($s['label']) . '<span class="visually-hidden"> (' . $h($s['status']) . ')</span></li>';
+    }
+
+    return $o;
+}
+
 /**
  * @param array{ready:bool,hosts:list<array<string,mixed>>,jobs:list<array<string,mixed>>,suggest:string,server_url:string,active:bool,token:?array{name:string,token:string,rotated:bool}} $lv
  */
@@ -93,7 +111,10 @@ function rivetLocalBuildBox(array $lv, string $csrf): string
             $st = (string) $j['state'];
             $o .= '<tr data-lb-job="' . $id . '" data-lb-state="' . $h($st) . '"><td class="font-monospace">' . $h($j['version']) . '<div class="small text-muted">' . $h($j['source_ref']) . '</div></td>'
                 . '<td style="min-width:14rem"><span class="badge bg-' . ($cls[$st] ?? 'secondary') . '" data-lb-label>' . $h(ucfirst($st)) . '</span> <span class="small" data-lb-text>' . $h($j['progress']['text']) . '</span>'
-                . ($j['active'] || $st === 'built' ? '<div class="progress mt-1" style="height:.4rem" role="progressbar" aria-label="Build progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' . (int) $j['progress']['pct'] . '"><div class="progress-bar" data-lb-bar style="width:' . (int) $j['progress']['pct'] . '%"></div></div>' : '')
+                . ($j['active'] || $st === 'built' ? '<div class="progress mt-1" style="height:.5rem" role="progressbar" aria-label="Build progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' . (int) $j['progress']['pct'] . '"><div class="progress-bar" data-lb-bar style="width:' . (int) $j['progress']['pct'] . '%"></div></div>'
+                    . '<div class="small text-muted"><span data-lb-pct>' . (int) $j['progress']['pct'] . '</span>% &middot; <span data-lb-elapsed>' . $h(rivetLocalBuildElapsed((int) $j['elapsed_s'])) . '</span> since requested</div>'
+                    . '<div class="small text-break text-muted" data-lb-detail>' . $h($j['progress']['detail']) . '</div>' : '')
+                . '<ul class="list-unstyled small mb-0 mt-1" data-lb-steps>' . rivetLocalBuildSteps($j['progress']['steps'], $h) . '</ul>'
                 . ($j['note'] !== '' ? '<div class="small text-break" data-lb-note>' . $h($j['note']) . '</div>' : '<div class="small text-break" data-lb-note></div>')
                 . ($j['result'] !== '' ? '<div class="small text-break" data-lb-result>' . $h($j['result']) . '</div>' : '')
                 . ($j['log_tail'] !== '' ? '<details class="small"><summary>Log tail</summary><pre class="small border rounded p-2 mb-0 bg-body-tertiary" data-lb-log style="white-space:pre-wrap;max-height:14rem;overflow:auto">' . $h($j['log_tail']) . '</pre></details>' : '')
