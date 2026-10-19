@@ -30,6 +30,9 @@ if (isset($_POST['wiz_save1']) || isset($_POST['wiz_test']) || isset($_POST['wiz
     $step = isset($_POST['wiz_save2']) ? 2 : (isset($_POST['wiz_save3']) ? 3 : 1);
     $r = $ea_admin->saveMesh($ea_who, $in, isset($_POST['wiz_test']));
     $rmm->syncState();   // the remote sub-switch follows mesh_enabled
+    if (!isset($_POST['wiz_test']) && isset($_POST['wiz_save1'])) {
+        unset($_SESSION['rmm_mesh_wiz_test']);   // the settings changed: an older test result no longer describes them
+    }
     if (isset($_POST['wiz_test'])) {
         $_SESSION['rmm_mesh_wiz_test'] = ['ok' => $r->ok, 'text' => $r->ok ? 'MeshCentral answered.' : mb_substr((string) $r->message, 0, 300), 'at' => time()];
     }
