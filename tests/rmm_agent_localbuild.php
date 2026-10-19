@@ -228,6 +228,74 @@ $ok($r[0] === 200 && $jr['state'] === 'building' && mb_strlen($jr['note']) <= 50
 $pg = $page();
 $ok(str_contains($pg, '&lt;script&gt;alert(1)&lt;/script&gt;') && !str_contains($pg, '<script>alert(1)'), 'the note is escaped on the page');
 
+echo "\n--- build progress (stage, pct, detail, elapsed_s; DB 2.6.100) ---\n";
+$pj = fn() => $jobRow($J1);
+$ok($pj()['progress_stage'] === '' && (int) $pj()['progress_pct'] === 0 && $pj()['progress_at'] === null, 'a job that reported no progress has empty progress columns (an old host keeps working)');
+$r = $st($T1, $J1, ['state' => 'building', 'stage' => 'clone', 'pct' => 12, 'detail' => 'cloning rivet-core at main', 'elapsed_s' => 7]);
+$ok($r[0] === 200 && $pj()['progress_stage'] === 'clone' && (int) $pj()['progress_pct'] === 12 && $pj()['progress_detail'] === 'cloning rivet-core at main' && $pj()['progress_at'] !== null, 'stage, pct and detail are stored');
+$r = $st($T1, (string) $J1, ['state' => 'building', 'stage' => 'build_windows_amd64', 'pct' => '30', 'elapsed_s' => '20']);
+$ok($r[0] === 200 && (int) $pj()['progress_pct'] === 30 && $pj()['progress_stage'] === 'build_windows_amd64', 'digit strings are accepted for pct and elapsed_s (the shell script sends strings)');
+$r = $st($T1, $J1, ['state' => 'building', 'pct' => 10]);
+$ok($r[0] === 200 && (int) $pj()['progress_pct'] === 30, 'pct never moves backwards for a job');
+$r = $st($T1, $J1, ['state' => 'building', 'stage' => 'clone', 'pct' => 40, 'detail' => 'late replay']);
+$ok($r[0] === 200 && $pj()['progress_stage'] === 'build_windows_amd64' && (int) $pj()['progress_pct'] === 40 && $pj()['progress_detail'] === 'cloning rivet-core at main', 'a stage earlier than the recorded one (and its detail) is dropped, a higher pct still counts');
+$before = $pj();
+foreach ([['stage' => 'rm -rf'], ['stage' => ''], ['stage' => ['clone']], ['stage' => 5], ['stage' => 'CLONE'], ['stage' => "clone\n"], ['pct' => -1], ['pct' => 101], ['pct' => 'abc'], ['pct' => 1.5], ['pct' => '1e1'], ['pct' => '012'], ['pct' => [1]], ['pct' => null], ['pct' => true],
+         ['detail' => str_repeat('x', 121)], ['detail' => "tab\there"], ['detail' => "new\nline"], ['detail' => "\x07bell"], ['detail' => 'caf' . "\xc3\xa9"], ['detail' => ['a']], ['detail' => 7], ['elapsed_s' => -3], ['elapsed_s' => 'soon'], ['elapsed_s' => 9999999], ['elapsed_s' => 1.2]] as $bad) {
+    $x = $st($T1, $J1, ['state' => 'building', 'note' => 'should not land'] + $bad);
+    $ok($x[0] === 422 && ($x[1]['code'] ?? '') === 'bad_progress', 'refused (422 bad_progress): ' . json_encode($bad));
+}
+$ok($pj() === $before, 'a refused progress call changed nothing in the job row');
+$ok($st($T1, $J1, ['state' => 'building', 'detail' => str_repeat('x', 120), 'pct' => 41])[0] === 200 && mb_strlen($pj()['progress_detail']) === 120, 'a detail of exactly 120 printable characters is accepted');
+$r = $st($T1, $J1, ['state' => 'building', 'detail' => 'token ' . $T2]);
+$ok($r[0] === 200 && !str_contains($pj()['progress_detail'], substr($T2, 21)), 'a token inside the detail is masked');
+$r = $st($T1, $J1, ['state' => 'uploading', 'stage' => 'upload', 'pct' => 90, 'detail' => '']);
+$ok($r[0] === 200 && $pj()['progress_stage'] === 'upload' && (int) $pj()['progress_pct'] === 90 && $pj()['progress_detail'] === '' && $pj()['state'] === 'uploading', 'an empty detail clears the line; state uploading with stage upload');
+foreach (['prepare', 'clone', 'build_windows_amd64', 'build_windows_arm64', 'msi', 'verify', 'upload'] as $stg) { $ok(isset(LocalBuild::STAGES[$stg]), "stage $stg is on the allowlist"); }
+$pg = $page();
+$ok(str_contains($pg, 'data-lb-steps') && str_contains($pg, 'data-lb-pct') && str_contains($pg, 'data-stage="upload" data-status="active"') && str_contains($pg, 'data-stage="clone" data-status="done"') && str_contains($pg, 'data-stage="verify" data-status="done"'), 'the page draws the checklist: earlier stages done, the current one (upload) active');
+$q("UPDATE endpoint_agent_build_jobs SET progress_stage = 'build_windows_arm64' WHERE job_id = $J1");
+$ok(str_contains($page(), 'data-stage="msi" data-status="pending"') && str_contains($page(), 'data-stage="build_windows_amd64" data-status="done"'), 'stages after the current one are pending');
+$q("UPDATE endpoint_agent_build_jobs SET progress_stage = 'upload' WHERE job_id = $J1");
+$cl = $lb->jobs(); $row1 = array_values(array_filter($cl, fn($j) => (int) $j['job_id'] === $J1))[0];
+$ok($row1['progress']['real'] === true && $row1['progress']['pct'] === 90 && $row1['progress']['text'] === LocalBuild::STAGES['upload'], 'jobs(): the percent is the host\'s, the text the stage in plain words');
+$ok(count($row1['progress']['steps']) === 7 && $row1['elapsed_s'] >= 0, 'seven steps when the MSI is wanted, plus an elapsed time');
+$pj1 = web($wb, 'POST', '/admin/post/agent_localbuild_poll.php', $sidAdmin, ['csrf_token' => 'csrftok1']);
+$pd = json_decode($pj1[1], true); $pjob = array_values(array_filter($pd['jobs'] ?? [], fn($j) => $j['id'] === $J1))[0] ?? [];
+$ok(($pd['ok'] ?? false) === true && ($pjob['pct'] ?? -1) === 90 && ($pjob['stage'] ?? '') === 'upload' && count($pjob['steps'] ?? []) === 7 && ($pjob['steps'][0]['status'] ?? '') === 'done' && isset($pjob['elapsed']), 'the live poll returns pct, stage, steps and elapsed');
+// a job that wants no MSI has no MSI step; an unknown stored stage draws the coarse estimate instead
+$q("UPDATE endpoint_agent_build_jobs SET want_msi = 0 WHERE job_id = $J1");
+$row1 = array_values(array_filter($lb->jobs(), fn($j) => (int) $j['job_id'] === $J1))[0];
+$ok(count($row1['progress']['steps']) === 6 && !in_array('msi', array_column($row1['progress']['steps'], 'key'), true), 'without the MSI the checklist has no MSI step');
+$q("UPDATE endpoint_agent_build_jobs SET want_msi = 1 WHERE job_id = $J1");
+$q("UPDATE endpoint_agent_build_jobs SET progress_stage = 'bogus' WHERE job_id = $J1");
+$row1 = array_values(array_filter($lb->jobs(), fn($j) => (int) $j['job_id'] === $J1))[0];
+$ok($row1['progress']['real'] === false && $row1['progress']['steps'] === [], 'a stored stage outside the list falls back to the coarse estimate');
+$q("UPDATE endpoint_agent_build_jobs SET progress_stage = 'upload' WHERE job_id = $J1");
+// terminal state ignores progress: a failed call stores none
+$pf = $T3;
+$fx = bh('poll', $caps, $T3); $fjob = (int) ($fx[1]['job']['id'] ?? $J3);
+$r = $st($T3, $fjob, ['state' => 'failed', 'stage' => 'verify', 'pct' => 77, 'detail' => 'nope', 'note' => 'boom']);
+$fr = $jobRow($fjob);
+$ok($r[0] === 200 && $fr['state'] === 'failed' && $fr['progress_stage'] === '' && (int) $fr['progress_pct'] === 0 && $fr['progress_detail'] === '', 'a failed call ignores progress (nothing stored for a terminal state)');
+$r = $st($T3, $fjob, ['state' => 'building', 'stage' => 'clone', 'pct' => 5]);
+$ok($r[0] === 409 && $jobRow($fjob)['progress_stage'] === '', 'progress for a finished job is refused (409) and stores nothing');
+$fcl = array_values(array_filter($lb->jobs(), fn($j) => (int) $j['job_id'] === $fjob))[0];
+$ok($fcl['progress']['real'] === false && $fcl['active'] === false, 'a failed job without progress draws the coarse state');
+$q("UPDATE endpoint_agent_build_jobs SET progress_stage = 'verify', progress_pct = 80, state = 'building', finished_at = NULL WHERE job_id = $fjob");
+$fcl2 = array_values(array_filter($lb->jobs(), fn($j) => (int) $j['job_id'] === $fjob))[0];
+$q("UPDATE endpoint_agent_build_jobs SET state = 'failed', finished_at = NOW() WHERE job_id = $fjob");
+$fcl = array_values(array_filter($lb->jobs(), fn($j) => (int) $j['job_id'] === $fjob))[0];
+$ok(in_array('failed', array_column($fcl['progress']['steps'], 'status'), true) && $fcl2['progress']['real'] === true, 'a failed job with progress marks the stage it stopped at as failed');
+$q("UPDATE endpoint_agent_build_jobs SET progress_stage = '', progress_pct = 0 WHERE job_id = $fjob");
+$q("UPDATE endpoint_agent_build_jobs SET state = 'claimed', host_id = $T3id, finished_at = NULL, note = '', lease_expires_at = '" . gmdate('Y-m-d H:i:s', time() + 600) . "' WHERE job_id = $fjob");   // back to what the later sections expect
+// a lease expiry returns the claim to the queue and clears the progress
+$q("UPDATE endpoint_agent_build_jobs SET state = 'claimed', progress_stage = 'clone', progress_pct = 20, lease_expires_at = '2000-01-01 00:00:00' WHERE job_id = $J2");
+$lb->sweep();
+$jj = $jobRow($J2);
+$ok($jj['state'] === 'queued' && $jj['progress_stage'] === '' && (int) $jj['progress_pct'] === 0, 'an unstarted claim that returns to the queue forgets its progress');
+$q("UPDATE endpoint_agent_build_jobs SET state = 'claimed', host_id = $h2id, lease_expires_at = '" . gmdate('Y-m-d H:i:s', time() + 600) . "' WHERE job_id = $J2");
+
 echo "\n--- upload: rules ---\n";
 $set1 = bh_set(1); [$files1, $man1] = $set1;
 $up = fn(array $x, string $tok = null) => bh('upload', $x + ['job_id' => $J1], $tok ?? $T1);
@@ -460,13 +528,22 @@ foreach ($rows('SELECT log_description FROM logs') as $r) { $blob .= $r['log_des
 foreach ($rows('SELECT note, log_tail, result FROM endpoint_agent_build_jobs') as $r) { $blob .= implode('', $r); }
 $blob .= (string) @file_get_contents($web['log']);
 $ok(!str_contains($blob, substr($T1, 21)) && !str_contains($blob, substr($T2, 21)) && !str_contains($blob, substr($T3, 21)), 'no build host token secret appears in any log row, job text or the server error log');
-// DB 2.6.98 -> 2.6.99
+// DB 2.6.98 -> 2.6.99 -> 2.6.100
 foreach (['endpoint_agent_build_chunks', 'endpoint_agent_build_jobs', 'endpoint_agent_build_hosts'] as $t) { $q("DROP TABLE $t"); }
 $q("UPDATE settings SET config_current_database_version = '2.6.98'");
 $ok(!(new LocalBuild($db, '/nonexistent'))->ready(), 'with the tables missing the section says to run the database update');
 $out = shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1');
-$ok((string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === '2.6.99' && (new LocalBuild($db, '/nonexistent'))->ready(), 'the updater step 2.6.98 -> 2.6.99 creates the three tables and sets the version');
+$ok((string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === '2.6.100' && (new LocalBuild($db, '/nonexistent'))->ready(), 'the updater steps 2.6.98 -> 2.6.99 -> 2.6.100 create the tables (with the progress columns) and set the version');
+$cols = array_column($rows("SHOW COLUMNS FROM endpoint_agent_build_jobs"), 'Type', 'Field');
+$ok(($cols['progress_stage'] ?? '') === 'varchar(24)' && str_starts_with($cols['progress_pct'] ?? '', 'tinyint') && ($cols['progress_detail'] ?? '') === 'varchar(120)' && ($cols['progress_at'] ?? '') === 'datetime', 'the four progress columns exist with the documented types');
 $out = shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1');
-$ok((string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === '2.6.99', 'running it again is harmless');
+$ok((string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === '2.6.100', 'running it again is harmless');
+// DB 2.6.99 -> 2.6.100 on a job table that already holds rows: rows survive, columns appear with defaults
+$q("ALTER TABLE endpoint_agent_build_jobs DROP COLUMN progress_stage, DROP COLUMN progress_pct, DROP COLUMN progress_detail, DROP COLUMN progress_at");
+$q("INSERT INTO endpoint_agent_build_jobs (version, state, note) VALUES ('7.7.7', 'built', 'kept')");
+$q("UPDATE settings SET config_current_database_version = '2.6.99'");
+$ok(!(new LocalBuild($db, '/nonexistent'))->ready(), 'a 2.6.99 job table without the progress columns is not "ready" (the page asks for the update)');
+$out = shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1');
+$ok((string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === '2.6.100' && (string) $one("SELECT note FROM endpoint_agent_build_jobs WHERE version = '7.7.7'") === 'kept' && (string) $one("SELECT progress_stage FROM endpoint_agent_build_jobs WHERE version = '7.7.7'") === '' && (new LocalBuild($db, '/nonexistent'))->ready(), 'the 2.6.99 -> 2.6.100 step keeps existing rows and adds the columns with empty defaults');
 echo "\n";
 exit($fails > 0 ? 1 : 0);
