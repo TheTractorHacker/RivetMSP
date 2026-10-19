@@ -141,7 +141,7 @@ $ok(preg_match('/id="rmm-act-remote"[^>]*disabled/', $rebootOnlyStrip) === 1 && 
 // ============================================================ Mesh not configured
 $rmm->settings()->set(['mesh_enabled' => 0]);
 $nm = $panel('WIN1', 'tech');
-$ok($nm['mesh']['configured'] === false && !str_contains(rivetRmmUiStrip($nm), 'rmm-act-remote') && rivetRmmUiRemoteCard($nm) === '', 'Mesh not configured: no remote button for a technician, no remote card');
+$ok($nm['mesh']['configured'] === false && (preg_match('/id="rmm-act-remote"[^>]*disabled[^>]*not set up yet/', rivetRmmUiStrip($nm)) === 1) && rivetRmmUiRemoteCard($nm) === '', 'Mesh not configured: a technician gets a DISABLED Remote button with the reason (26.10.30), no remote card');
 $ok(str_contains(rivetRmmUiRemoteCard($panel('WIN1', 'admin')), 'MeshCentral is not configured'), 'Mesh not configured: the administrator is told where to set it up');
 $rmm->settings()->set(['mesh_enabled' => 1]);
 

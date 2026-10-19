@@ -11,6 +11,7 @@
 require_once "includes/inc_all.php";
 enforceUserPermission('module_rmm');
 require_once dirname(__DIR__) . '/includes/rmm_ui_render.php';
+require_once dirname(__DIR__) . '/includes/rmm_installer_entry.php';
 
 mysqli_report(MYSQLI_REPORT_OFF);
 
@@ -21,7 +22,7 @@ $rmm_denied = static function (string $title, string $detail): void {
 };
 
 if (!$config_core_rmm_enabled || !rivetRmmEnabled($mysqli)) {
-    $rmm_denied('RMM module is turned off', 'The RMM module is switched off. An administrator can turn it on under Administration > Endpoint agent.');
+    $rmm_denied('RMM module is turned off', 'The RMM module is switched off, so there is nothing to show and no installer can be created. An administrator can switch it on under Administration > Endpoint agent (the RMM module card).');
     return;
 }
 
@@ -56,6 +57,7 @@ if ($rmm_installer !== null) {
     $rmm_installer['autoopen'] = isset($_GET['add']);   // the Endpoints menu's "Add device" opens the dialog straight away
 }
 $rmm_installer_scripts = $rmm_installer !== null;   // includes/footer.php links js/rmm_installer.js only when this is set
-echo rivetRmmUiFleetPage($rmm_fleet, (string) ($_SESSION['csrf_token'] ?? ''), $rmm_installer);
+$rmm_entry = rivetRmmInstallerEntry($mysqli, (int) $session_user_id, !empty($session_is_admin), (bool) $config_core_rmm_enabled);
+echo rivetRmmUiFleetPage($rmm_fleet, (string) ($_SESSION['csrf_token'] ?? ''), $rmm_installer, $rmm_entry);
 
 require_once "../includes/footer.php";

@@ -208,6 +208,11 @@ function rivetRmmUiStrip(array $vm): string
         $remoteReason = !$perm['remote'] ? 'Your role cannot open remote sessions.' : (!$vm['mesh']['mapped'] ? 'An administrator maps this device to a MeshCentral node first.'
             : (!$dev ? 'The device is not approved or no longer active.' : 'Available after the first check-in.'));
         $actions .= $btn('rmm-act-remote', 'btn-success', 'fas fa-desktop', 'Remote access', $perm['remote'] && $vm['mesh']['mapped'] && $dev && !$never, $remoteReason);
+    } elseif ($perm['admin']) {
+        // 26.10.30: Mesh is not set up: the button leads to the setup wizard instead of vanishing
+        $actions .= '<a href="/admin/rmm_mesh_wizard.php" class="btn btn-outline-success btn-sm" id="rmm-act-remote-setup" data-rmm-remote-setup><i class="fas fa-desktop me-1" aria-hidden="true"></i>Set up remote access</a>';
+    } else {
+        $actions .= $btn('rmm-act-remote', 'btn-outline-success', 'fas fa-desktop', 'Remote access', false, 'Remote access is not set up yet. An administrator can set it up under Administration > Remote access (MeshCentral) setup.');
     }
     $more = '';
     if ($perm['run_saved'] && $dev && !$never) {
@@ -420,7 +425,7 @@ function rivetRmmUiRemoteCard(array $vm): string
             $body .= '<p class="text-muted small mt-2 mb-0">The device is offline. A session can be forced but will likely fail.</p>';
         }
     } else {
-        $body .= '<p class="text-muted small mb-0">MeshCentral is not configured. An administrator can set it up under Administration, Endpoint agent.</p>';
+        $body .= '<p class="text-muted small mb-0">MeshCentral is not configured. ' . ($perm['admin'] ? '<a href="/admin/rmm_mesh_wizard.php" data-rmm-remote-setup-link>Open the Remote access setup</a>.' : 'An administrator can set it up under Administration, Remote access (MeshCentral) setup.') . '</p>';
     }
     $body .= '</div>' . rivetRmmUiMeshAgentHtml($vm['mesh_agent'] ?? null, (bool) $perm['admin']);
     if ($perm['admin']) {
@@ -933,7 +938,7 @@ function rivetRmmUiDeviceLink(array $d): string
 }
 
 /** @param array<string,mixed>|null $installer the "Add device" view-model (rivetRmmUiInstaller()), null when the user may not add devices */
-function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null): string
+function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null, ?array $entry = null): string
 {
     $c = $f['counts'];
     $names = $f['client_names'];
@@ -1086,11 +1091,12 @@ function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null): 
     $swCard = $f['outdated_sw'] !== null ? rivetRmmUiOutdatedSoftware($f['outdated_sw'], $cn, $f) : '';
 
     return '<div class="d-flex align-items-center flex-wrap mb-3" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-satellite me-2" aria-hidden="true"></i>Agent fleet</h4>'
-        . ($installer !== null ? rivetRmmUiInstallerButton($installer, 'Add device', 'btn btn-primary', null, 'fa-plus')
-            . '<a href="/agent/rmm_add_device.php" class="btn btn-outline-primary" data-rmm-build-installer><i class="fas fa-hammer me-1" aria-hidden="true"></i>Build installer</a>' : '')
+        . ($entry !== null ? $entry['button'] : ($installer !== null ? '<a href="/agent/rmm_add_device.php" class="btn btn-primary" data-rmm-build-installer><i class="fas fa-hammer me-1" aria-hidden="true"></i>Create installer</a>' : ''))
+        . ($installer !== null ? rivetRmmUiInstallerButton($installer, 'Add device', 'btn btn-outline-primary', null, 'fa-plus') : '')
         . '<a href="/agent/rmm_assets.php" class="btn btn-info btn-sm"><i class="fas fa-desktop me-1" aria-hidden="true"></i>All RMM assets</a>'
         . '<a href="/agent/rmm_alerts.php" class="btn btn-warning btn-sm"><i class="fas fa-bell me-1" aria-hidden="true"></i>Alerts</a>'
         . ($f['perm']['admin'] ? '<a href="/admin/settings_endpoint_agent.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-cog me-1" aria-hidden="true"></i>Administration</a>' : '') . '</div>'
+        . ($entry !== null ? $entry['notice'] : '')
         . ($c['total'] === 0 && $f['filters'] === [] ? '<section class="card card-dark mb-3"><div class="card-body">' . rivetRmmUiEmpty('fas fa-satellite-dish', 'No agent is enrolled yet',
             $installer !== null ? 'Use Add device to download an installer, then run it on a PC.' : ($f['perm']['admin'] ? 'Create an enrollment token under Administration, Endpoint agent, then install the agent on a device.' : 'An administrator creates an enrollment token and installs the agent.'),
             $installer !== null ? rivetRmmUiInstallerButton($installer, 'Download installer', 'btn btn-primary', null, 'fa-download') : '') . '</div></section>' : '')
@@ -1416,6 +1422,7 @@ function rivetRmmUiInstallerModal(array $ins, string $csrf): string
         . '<input type="hidden" name="csrf_token" value="' . rmmH($csrf) . '"><input type="hidden" name="os" id="rmm-inst-os" value="windows">'
         . '<div class="modal-header"><h5 class="modal-title" id="' . $m . 'Title"><i class="fas fa-download me-2" aria-hidden="true"></i>Add a device</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>'
         . '<div class="modal-body">'
+        . '<p class="small text-muted mb-3" data-rmm-installer-page-link>Need an .msi, PowerShell deployment commands or the Linux packages? <a href="/agent/rmm_add_device.php" class="fw-semibold">Open the Create installer page</a>.</p>'
         . '<ul class="nav nav-tabs mb-3" role="tablist" aria-label="Operating system">'
         . '<li class="nav-item" role="presentation"><button type="button" class="nav-link active" id="rmm-inst-tab-windows" role="tab" aria-selected="true" aria-controls="rmm-inst-pane-windows" data-os="windows"><i class="fab fa-windows me-1" aria-hidden="true"></i>Windows</button></li>'
         . '<li class="nav-item" role="presentation"><button type="button" class="nav-link" id="rmm-inst-tab-linux" role="tab" aria-selected="false" aria-controls="rmm-inst-pane-linux" tabindex="-1" data-os="linux"><i class="fab fa-linux me-1" aria-hidden="true"></i>Linux</button></li></ul>'

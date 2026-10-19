@@ -4,6 +4,13 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.30] RivetMSP — Create installer is easy to find, and a step-by-step Remote access (MeshCentral) setup wizard (no DB change)
+
+- **Create installer.** A primary **Create installer** button in the header of the RMM dashboard and the Agent fleet page, and a link to the full page from the **Add device** dialog. A viewer who cannot use it no longer loses the entry silently: a disabled button and a plain message name what is missing (the RMM module is off; or the permission **Create enrollment tokens**, `rmm.token.manage`). When no Windows agent (or no MSI template) is published the page says so and links to Administration > Endpoint agent > Agent updates. New `includes/rmm_installer_entry.php`.
+- **Remote access (MeshCentral) setup** (`Administration > Remote access (MeshCentral) setup`, `admin/rmm_mesh_wizard.php`). Five numbered steps with a live green tick or amber to-do for each: connect the server (address, domain, login token key, Save and test connection), create the device group and paste its download address, set trust (leave the pin empty for a public CA; Read it from the server for a private CA), tick *Also install the MeshCentral agent* in the installer, test Remote on an enrolled device. Plus Troubleshooting (Remote lands on the Mesh home page, node id not mapped, agent not installed, certificate errors). Reachable from Administration, the Endpoint agent page header and Mesh card, and the **Remote** button of a device when Mesh is not set up (administrators; others get a disabled button with the reason).
+- Uses the existing Mesh settings and RivetCore calls (`RmmAdmin::saveMesh`, the certificate read); no wire or Core change, no migration. The login key and the device group id are never printed back as text.
+- Tests: `tests/rmm_mesh_wizard.php` (70 checks incl. role matrix, CSRF, hostile input), `tests/browser/rmm_mesh_wizard_smoke.mjs` (Chromium over the DevTools protocol, 10 checks). `tests/rmm_ui.php` now expects a disabled Remote button when Mesh is not set up.
+
 ## [26.10.29] RivetMSP — plain options instead of JSON boxes (check schedule, policy check types, Mesh, check policies) and a visible Build installer button
 
 **Deploy notes:** back up the database, pull this tag. **No database step** (DB stays 2.6.98) and RivetCore is unchanged (1.0.0-rc.21). Nothing is migrated: the stored check list keeps its format, the signed output sent to agents is byte for byte what the validator already produced, and a list written by hand or by an older release still loads.

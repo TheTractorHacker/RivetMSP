@@ -253,8 +253,13 @@ while ($r = mysqli_fetch_assoc($sql_noisy_clients)) {
 $has_alert_analytics = array_sum($alert_trend_data) > 0 || !empty($sev_counts);
 ?>
 
+<?php
+require_once dirname(__DIR__) . '/includes/rmm_installer_entry.php';
+$rmm_entry = rivetRmmInstallerEntry($mysqli, (int) $session_user_id, !empty($session_is_admin), (bool) $config_core_rmm_enabled, 'btn btn-primary btn-sm me-2');
+?>
 <div class="d-flex align-items-center mb-3">
     <h4 class="mb-0 mr-auto"><i class="fas fa-tachometer-alt me-2"></i>RMM Dashboard</h4>
+    <?= $rmm_entry['button'] ?>
     <?php if ($last_sync_row): ?>
     <small class="text-muted me-3">
         <i class="fas fa-sync-alt me-1 text-success"></i>Last sync: <?= nullable_htmlentities($last_sync_row['finished_at']) ?>
@@ -282,6 +287,7 @@ $has_alert_analytics = array_sum($alert_trend_data) > 0 || !empty($sev_counts);
     <?php endif; ?>
 </div>
 
+<?= $rmm_entry['notice'] ?>
 <!-- Stat cards -->
 <div class="row mb-3">
     <div class="col-6 col-md-2">
