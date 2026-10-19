@@ -78,6 +78,7 @@ RESTORE_FROM=""
 RESTORE_PASSPHRASE_FILE=""
 RESTORE_KEY_FILE=""
 INSTALL_BACKUP_TIMERS=0
+WITH_BUILD_HOST=""   # "" = ask (interactive only), 1 = --with-build-host, 0 = --no-build-host
 
 # Populated later in main(), after DOMAIN/PROXY_MODE/SKIP_TLS are known.
 NEED_CERTBOT=0
@@ -126,6 +127,17 @@ Deployment options:
                             by creating /etc/itflow/offsite.conf from
                             deploy/etc/offsite.conf.example. See
                             docs/RECOVERY_RUNBOOK.md.
+  --with-build-host          Also install the RMM Agent Builder (build the agent
+                            .exe/.msi on this server from the web UI): runs
+                            deploy/setup-build-host.sh after the install (Docker,
+                            a locked-down 'rivetit-build' account, a pinned and
+                            SHA-256-checked build script, a systemd timer).
+                            Docker group membership is root-equivalent for that
+                            account. Without this flag, or --no-build-host, an
+                            interactive install asks; a --non-interactive one
+                            installs nothing. Can be run later on its own:
+                            sudo deploy/setup-build-host.sh
+  --no-build-host            Do not install it and do not ask.
   --skip-firewall            Do not touch ufw.
   --skip-fail2ban             Do not touch fail2ban.
   --non-interactive           Fail instead of prompting for anything missing.
@@ -200,6 +212,8 @@ parse_args() {
             --default-vhost)            DEFAULT_VHOST=1 ;;
             --skip-tls)                 SKIP_TLS=1 ;;
             --install-backup-timers)    INSTALL_BACKUP_TIMERS=1 ;;
+            --with-build-host)            WITH_BUILD_HOST=1 ;;
+            --no-build-host)              WITH_BUILD_HOST=0 ;;
             --skip-firewall)             SKIP_FIREWALL=1 ;;
             --skip-fail2ban)              SKIP_FAIL2BAN=1 ;;
             --non-interactive)             NON_INTERACTIVE=1 ;;
@@ -278,6 +292,35 @@ validate_args() {
     if [[ "${PROXY_MODE}" -eq 0 && "${SKIP_TLS}" -eq 0 && -z "${CERTBOT_EMAIL}" && "${NON_INTERACTIVE}" -eq 0 ]]; then
         read -r -p "Let's Encrypt contact email for ${DOMAIN}: " CERTBOT_EMAIL
         [[ -n "${CERTBOT_EMAIL}" ]] || die "--email is required for a direct-TLS install (or pass --proxy-mode / --skip-tls)."
+    fi
+
+    ask_build_host
+}
+
+# RMM Agent Builder (deploy/setup-build-host.sh): asked only when no flag decided it and a person is at the keyboard.
+ask_build_host() {
+    [[ -z "${WITH_BUILD_HOST}" ]] || return 0
+    if [[ "${NON_INTERACTIVE}" -eq 1 || ! -t 0 ]]; then
+        WITH_BUILD_HOST=0
+        return 0
+    fi
+    local answer
+    read -r -p "Would you like to install the RMM Agent Builder (build the agent .exe/.msi on this server from the web UI)? [y/N] " answer
+    if [[ "${answer}" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        WITH_BUILD_HOST=1
+    else
+        WITH_BUILD_HOST=0
+    fi
+}
+
+# Runs after the application is installed and migrated. A failure never fails the install: the helper can be re-run on its own.
+install_build_host() {
+    [[ "${WITH_BUILD_HOST}" == "1" ]] || return 0
+    info "Installing the RMM Agent Builder (deploy/setup-build-host.sh)"
+    local url_args=()
+    [[ "${SKIP_TLS}" -eq 1 && "${PROXY_MODE}" -ne 1 ]] || url_args=(--site-url="https://${DOMAIN}")
+    if ! "${SCRIPT_DIR}/setup-build-host.sh" --yes --app-dir="${APP_DIR}" "${url_args[@]}"; then
+        warn "The RMM Agent Builder setup did not finish. The rest of the install is fine; run 'sudo ${SCRIPT_DIR}/setup-build-host.sh' to retry (add --site-url=https://... if the site address is not set yet)."
     fi
 }
 
@@ -913,6 +956,7 @@ main() {
         run_fresh_setup
     fi
     run_db_migrations || true
+    install_build_host
 
     set +x
     success "=== Install complete for ${DOMAIN} ==="
