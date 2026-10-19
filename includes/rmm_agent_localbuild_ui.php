@@ -27,9 +27,9 @@ function rivetLocalBuildBox(array $lv, string $csrf): string
     if ($t !== null) {
         $o .= '<div class="alert alert-warning py-2" role="alert" data-lb-token-box><strong>' . $h($t['rotated'] ? 'New token for' : 'Build host added:') . ' ' . $h($t['name']) . '.</strong> '
             . 'Copy the token now. It is shown <strong>once</strong>; this server keeps only a salted hash and cannot show it again (you can create a new one with Rotate).'
-            . '<div class="input-group input-group-sm my-2"><input type="text" readonly class="form-control font-monospace" id="lb_new_token" value="' . $h($t['token']) . '" aria-label="Build host token" data-lb-token onfocus="this.select()">'
+            . '<div class="input-group input-group-sm my-2"><input type="text" readonly class="form-control font-monospace" id="lb_new_token" value="' . $h($t['token']) . '" aria-label="Build host token" data-lb-token>'
             . '<button type="button" class="btn btn-outline-secondary" data-lb-copy="lb_new_token"><i class="far fa-copy me-1" aria-hidden="true"></i>Copy token</button></div>'
-            . '<div class="small mb-1">Put this in the build host\'s config file (<code>/etc/rivet-build-host.conf</code>, mode 0600):</div>'
+            . '<div class="small mb-1">Put this in the build host\'s config file (<code>/etc/rivetit/build-host.conf</code>, mode 0600):</div>'
             . $cfgSnippet($lv['server_url'], $t['token'])
             . '<button type="button" class="btn btn-sm btn-outline-secondary" data-lb-copy-pre="1"><i class="far fa-copy me-1" aria-hidden="true"></i>Copy config</button></div>';
     }
@@ -62,7 +62,7 @@ function rivetLocalBuildBox(array $lv, string $csrf): string
     $o .= '<details class="small mb-3" id="agent-localbuild-setup"><summary>How to set up a build host (about 10 minutes)</summary><ol class="mt-2">'
         . '<li>On a Linux computer that can reach this site over https, install <strong>Docker</strong> and <strong>git</strong>, and clone RivetCore: <code>git clone https://github.com/TheTractorHacker/rivet-core /opt/rivet-core</code>.</li>'
         . '<li>Press <strong>Add build host</strong> above and copy the token (shown once).</li>'
-        . '<li>Create <code>/etc/rivet-build-host.conf</code> (mode 0600, readable by the service user only) with these lines; the address is this site:' . $cfgSnippet($lv['server_url'], 'paste the token here') . '</li>'
+        . '<li>Create <code>/etc/rivetit/build-host.conf</code> (mode 0600, readable by the service user only) with these lines; the address is this site:' . $cfgSnippet($lv['server_url'], 'paste the token here') . '</li>'
         . '<li>Install the timer from <code>endpoint-agent/scripts/</code> (<code>build-host.service</code> and <code>build-host.timer</code>) so the script runs every minute, then run <code>build-host.sh --register</code>. The status dot above turns green.</li>'
         . '<li>Fill in <strong>Request a build</strong> below. Within a minute the host takes the job, builds, uploads, and this page shows the progress.</li></ol>'
         . '<p class="mb-0">Full guide: <a href="' . $h($docs) . '" rel="noopener noreferrer" target="_blank">docs/rmm/BUILD_HOST.md</a> in RivetCore.</p></details>';

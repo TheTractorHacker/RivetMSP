@@ -437,6 +437,9 @@ final class LocalBuild
         $docker = ($caps['docker'] ?? false) === true;
         $msi = ($caps['msi'] ?? false) === true;
         $this->touch($hostId, $ip, is_string($in['host_version'] ?? null) ? $in['host_version'] : '', ($docker ? 'docker' : '') . ($msi ? ' msi' : ''));
+        if (!array_key_exists('capabilities', $in)) {
+            return [200, ['job' => null]];   // `build-host.sh --register`: records last seen only, never claims
+        }
         $mine = $this->rows("SELECT * FROM endpoint_agent_build_jobs WHERE host_id = ? AND state IN ('claimed','building','uploading','verifying') ORDER BY job_id LIMIT 1", [$hostId])[0] ?? null;
         if ($mine !== null) {
             // one job per host: a claimed job is handed out again (a lost answer); a running one is not followed by a second

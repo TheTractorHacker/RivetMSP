@@ -44,6 +44,8 @@
     else { var pre = b.parentNode.querySelector('[data-lb-config]'); if (pre) copy(pre.textContent, b); }
   });
 
+  document.addEventListener('focusin', function (ev) { if (ev.target && ev.target.hasAttribute && ev.target.hasAttribute('data-lb-token')) ev.target.select(); });
+
   // ---- live progress
   var box = document.querySelector('[data-lb-box]');
   if (!box || box.getAttribute('data-lb-active') !== '1') return;

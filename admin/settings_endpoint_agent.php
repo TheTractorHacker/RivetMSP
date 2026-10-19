@@ -570,7 +570,7 @@ if ($feed->ready()) {
     $feedSteps = $_SESSION['rmm_feed_steps'] ?? [];
     unset($_SESSION['rmm_feed_steps']);
     echo rivetAgentFeedCard($feed->view(), $feedMsg, is_array($feedSteps) ? $feedSteps : [], (string) $csrf, ['service_ready' => ($cfg['service_base'] ?? null) !== null, 'build' => ($__bv = (new \RivetMsp\AgentFeed\Build($feed))->view()),
-        'local' => \RivetMsp\AgentFeed\rivetLocalBuildView(\RivetMsp\AgentFeed\rivetLocalBuild($mysqli, $rmm), $feed, (string) (($cfg['service_base'] ?? null) ?: ($config_base_url ? 'https://' . $config_base_url : '')), $__bv, $feed->published()['highest'])]);
+        'local' => \RivetMsp\AgentFeed\rivetLocalBuildView(\RivetMsp\AgentFeed\rivetLocalBuild($mysqli, $rmm), $feed, rtrim((string) (($cfg['service_base'] ?? null) ?: ($config_base_url ? 'https://' . $config_base_url : '')), '/') . '/api/v1/agent_build_host', $__bv, $feed->published()['highest'])]);
 } else {
     echo '<div class="card mb-3" id="agent-updates"><div class="card-header"><h4 class="card-title mb-0">Agent updates</h4></div><div class="card-body"><div class="alert alert-warning mb-0">Run the database update first (Administration &rarr; Updates, DB 2.6.98), then reload this page.</div></div></div>';
 }

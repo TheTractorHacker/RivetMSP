@@ -116,7 +116,7 @@ $p1 = $page();
 preg_match('/id="lb_new_token"[^>]*value="(rbh_[0-9a-f]{16}_[0-9a-f]{48})"/', $p1, $m);
 $T1 = $m[1] ?? '';
 $ok($T1 !== '', 'the token is shown on the page right after adding');
-$ok(str_contains($p1, 'data-lb-copy="lb_new_token"') && (str_contains($p1, 'SERVER_URL=&quot;' . $wb . '&quot;') || str_contains($p1, 'SERVER_URL="' . $wb . '"')), 'the Copy button and the config snippet with the real server URL are there');
+$ok(str_contains($p1, 'data-lb-copy="lb_new_token"') && (str_contains($p1, 'SERVER_URL=&quot;' . $wb . '/api/v1/agent_build_host&quot;')), 'the Copy button and the config snippet with the real server URL are there');
 $ok(!str_contains($page(), $T1), 'the token is gone on the next page view (shown once)');
 $secret = substr($T1, 21);
 $all = '';
@@ -191,6 +191,7 @@ $r = bh('poll', ['host_version' => '1', 'capabilities' => ['docker' => false, 'm
 $ok($r[1]['job'] === null, 'a host without docker is handed nothing');
 $r = bh('poll', ['host_version' => '1', 'capabilities' => ['docker' => true, 'msi' => false]], $T1);
 $ok($r[1]['job'] === null, 'a host without msi is handed no job that wants the MSI');
+$ok(bh('poll', ['host_version' => '1'], $T1)[1]['job'] === null, '--register (no capabilities) never claims a job');
 $r = bh('poll', $caps, $T1);
 $job = $r[1]['job'] ?? [];
 $ok($r[0] === 200 && $job['id'] === $J1 && $job['version'] === '9.0.0' && $job['source_ref'] === 'main' && $job['targets'] === ['windows-amd64', 'windows-arm64', 'linux-amd64', 'linux-arm64'] && $job['msi'] === true && preg_match('/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/', $job['expires_at']) === 1, 'poll hands out the oldest job in the spec shape');
