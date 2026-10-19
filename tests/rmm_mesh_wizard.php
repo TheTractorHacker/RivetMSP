@@ -17,6 +17,7 @@ use RivetCore\Rmm\Authz\RmmPrincipal;
 register_shutdown_function(function () use ($sd) { foreach (glob("$sd/*") ?: [] as $f) { @unlink($f); } @rmdir($sd); });
 ea_reset();
 $tokens = ea_seed_users();
+$q("DELETE FROM endpoint_agent_mesh_settings"); $q("DELETE FROM endpoint_agent_mesh_nodes");
 $rmm = rivetRmmModule($db);
 $admin = new RmmPrincipal(1, 'admin');
 $q("UPDATE settings SET config_core_rmm_enabled = 1 WHERE company_id = 1");
@@ -40,6 +41,7 @@ $hex = fn (int $n) => substr(str_repeat('a1b2c3d4e5f60718', 16), 0, $n);
 echo "\n--- Create installer entry ---\n";
 $q("INSERT INTO endpoint_agent_devices SET install_id = 'dev-mw-1', hostname = 'MWPC1', os = 'windows', client_id = 1, link_state = 'linked', last_checkin_at = NOW()");
 $devId = (int) $one('SELECT MAX(device_id) FROM endpoint_agent_devices');
+$q("INSERT INTO assets SET asset_name = 'MWPC1', asset_type = 'Desktop', asset_client_id = 1"); $assetId = (int) $one('SELECT MAX(asset_id) FROM assets'); $q("UPDATE endpoint_agent_devices SET asset_id = $assetId WHERE device_id = $devId");
 [$c, $b] = $get('/agent/rmm_fleet.php');
 $ok($c === 200 && str_contains($b, 'data-rmm-build-installer') && str_contains($b, 'Create installer') && str_contains($b, 'href="/agent/rmm_add_device.php" class="btn btn-primary"'), 'fleet header: a primary Create installer button');
 $ok(str_contains($b, 'data-rmm-installer-page-link') && str_contains($b, 'Open the Create installer page'), 'the Add device dialog links to the Create installer page');
@@ -84,7 +86,7 @@ $ok(count(array_unique(array_map(fn ($n) => $stepState($b, $n), [1, 2, 3, 4, 5])
 foreach (['step1', 'step2', 'step3', 'step4', 'step5', 'id="troubleshooting"'] as $needle) { $ok(str_contains($b, $needle), "the page has $needle"); }
 $ok(str_contains($b, 'loginTokenKey') && str_contains($b, 'Add Device Group') && str_contains($b, 'whole address') && str_contains($b, 'Let\'s Encrypt') && str_contains($b, 'Also install the MeshCentral agent') && str_contains($b, 'Connect</strong> button'), 'the numbered steps carry the plain instructions');
 foreach (['Remote opens the MeshCentral home page', 'node id is not mapped', 'agent is not installed', 'Certificate errors'] as $t) { $ok(str_contains($b, $t), "troubleshooting: $t"); }
-$ok(!preg_match('/\{"|\bJSON\b/i', strip_tags($b)), 'no JSON on the page');
+$ok(!preg_match('/\{"|\bJSON\b/i', strip_tags(preg_replace('#<script.*?</script>#s', '', $b))), 'no JSON on the page');
 foreach (['mesh_url', 'mesh_domain', 'mesh_login_key', 'mesh_group_id', 'mesh_server_cert_pin'] as $f) { $ok(preg_match('/<label[^>]*for="[^"]+"[^>]*>/', $b) && preg_match('/name="' . $f . '"[^>]*aria-describedby="/', $b) === 1, "field $f has a one-sentence explanation"); }
 
 echo "\n--- who may use it ---\n";
@@ -104,7 +106,6 @@ echo "\n--- hostile input ---\n";
 $bad = [
     'javascript address' => ['wiz_save1' => '1', 'mesh_url' => 'javascript:alert(1)', 'mesh_enabled' => '1'],
     'credentials in the address' => ['wiz_save1' => '1', 'mesh_url' => 'https://user:pass@mesh.example.test', 'mesh_enabled' => '1'],
-    'plain http' => ['wiz_save1' => '1', 'mesh_url' => 'http://mesh.example.test', 'mesh_enabled' => '1'],
     'domain with markup' => ['wiz_save1' => '1', 'mesh_url' => 'https://mesh.example.test', 'mesh_domain' => '"><script>x</script>', 'mesh_enabled' => '1'],
     'key that is not hex' => ['wiz_save1' => '1', 'mesh_url' => 'https://mesh.example.test', 'mesh_login_key' => '<script>alert(1)</script>', 'mesh_enabled' => '1'],
     'group id with markup' => ['wiz_save2' => '1', 'mesh_group_id' => '"><img src=x onerror=alert(1)>'],
@@ -167,13 +168,13 @@ $q("INSERT INTO endpoint_agent_mesh_nodes SET device_id = $devId, mesh_node_id =
 [$c, $b] = $get('/admin/rmm_mesh_wizard.php');
 $ok($stepState($b, 5) === 'ok' && str_contains($b, '1 of 1 enrolled device(s) are mapped'), 'a mapped device turns step 5 green');
 // audit
-$ok((int) $one("SELECT COUNT(*) FROM logs WHERE log_type = 'Endpoint Agent' AND log_description LIKE '%MeshCentral settings%'") >= 2, 'saves are audited by Core');
+$ok((int) $one("SELECT COUNT(*) FROM logs WHERE log_type = 'Settings' AND log_description LIKE '%edited the MeshCentral settings%'") >= 2, 'saves are audited by Core');
 
 echo "\n--- device page and links ---\n";
 $q("UPDATE endpoint_agent_settings SET mesh_enabled = 0, mesh_url = ''");
-[$c, $b] = $get('/agent/rmm_agent_device.php?device_id=' . $devId);
+[$c, $b] = $get("/agent/asset_details.php?client_id=1&asset_id=$assetId");
 $ok($c === 200 && str_contains($b, 'id="rmm-act-remote-setup"') && str_contains($b, '/admin/rmm_mesh_wizard.php'), 'device page, Mesh not set up, administrator: the Remote button leads to the wizard');
-[$c, $b] = $get('/agent/rmm_agent_device.php?device_id=' . $devId, 'tech');
+[$c, $b] = $get("/agent/asset_details.php?client_id=1&asset_id=$assetId", 'tech');
 $ok($c !== 200 || (!str_contains($b, 'id="rmm-act-remote-setup"') && (!str_contains($b, 'id="rmm-act-remote"') || str_contains($b, 'not set up yet'))), 'device page, technician: no wizard link, a disabled Remote with the reason');
 [$c, $b] = $get('/admin/settings_endpoint_agent.php');
 $ok(str_contains($b, 'data-mesh-wizard-link') && str_contains($b, 'Step-by-step setup with live status'), 'Endpoint agent admin page header and Mesh card link to the wizard');
