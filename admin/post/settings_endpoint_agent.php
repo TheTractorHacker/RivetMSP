@@ -1166,7 +1166,7 @@ if (isset($_POST['agent_feed_refresh']) || isset($_POST['agent_feed_settings']) 
         } else {
             $ring = is_string($_POST['build_ring'] ?? null) ? $_POST['build_ring'] : '';
             $r = $bld->start(is_string($_POST['build_version'] ?? null) ? $_POST['build_version'] : '', (string) $session_name, [
-                'auto' => ($_POST['build_auto'] ?? '') === '1', 'ring' => $ring, 'pct' => ea_post_int('build_pct', 0, 100, 10), 'activate' => ($_POST['build_activate'] ?? '') === '1',
+                'auto' => ($_POST['build_auto'] ?? '') === '1', 'ring' => $ring, 'pct' => ea_post_int('build_pct', 0, 100, 10), 'activate' => ($_POST['build_activate'] ?? '') === '1', 'by_id' => (int) $session_user_id,
             ]);
             rivetRmmScaleMsg('agent-updates', $r['ok'] ? 'success' : 'error', $r['message']);
         }

@@ -369,6 +369,9 @@ final class Feed
         }
         if ($repo !== $this->repo()) {
             $this->put('repo', $repo);
+            $this->put('gh_token', '');   // 26.10.31: a build token belongs to one repository; another repository needs its own
+            $this->put('gh_token_test', '');
+            $this->put('build', '');
             $this->put('cache', '');   // another repository, another list
             $this->put('checked_at', '0');
         }

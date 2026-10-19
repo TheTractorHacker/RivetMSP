@@ -42,7 +42,7 @@ function rivetAgentBuildBox(array $bv, string $csrf): string
             . '<div class="d-flex flex-wrap gap-2 align-items-center mt-1 small"><select name="build_ring" class="form-select form-select-sm w-auto" aria-label="Offer to ring"><option value="">No update offer</option><option value="pilot" selected>Pilot ring</option><option value="stable">Stable ring</option></select>'
             . '<input type="number" name="build_pct" min="0" max="100" value="10" class="form-control form-control-sm" style="width:4.5rem" aria-label="Rollout percent">'
             . '<div class="form-check mb-0"><input type="checkbox" class="form-check-input" id="ab_act" name="build_activate" value="1" checked><label class="form-check-label" for="ab_act">Make current</label></div>'
-            . '<span class="text-muted">Used only when the box above is ticked. This happens while an administrator has this page open.</span></div></div>'
+            . '<span class="text-muted">Used only when the box above is ticked. This is done by this page while it is open, and otherwise by the cron job within five minutes.</span></div></div>'
             . '<div class="col-12"><button type="submit" class="btn btn-sm btn-primary" name="agent_build_start" value="1" data-ea-confirm="Start a build on GitHub for this version? It takes about 10 minutes and creates a public release on ' . $h($repo) . '."><i class="fas fa-hammer me-1" aria-hidden="true"></i>Build</button></div></form>';
     }
 

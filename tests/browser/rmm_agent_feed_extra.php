@@ -4,7 +4,8 @@ if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests 
  * Fixture for tests/browser/rmm_agent_feed_smoke.mjs: writes one agent release (agent-v0.9.1 and an older agent-v0.9.0) into the directory of the LOCAL GitHub mock
  * (tests/support/mock_github.py) -- api.json, files/<tag>/<asset>, ctl.json. Touches neither the database nor the network.
  *
- *   php tests/browser/rmm_agent_feed_extra.php <mock dir>
+ *   php tests/browser/rmm_agent_feed_extra.php <mock dir> [<version>]
+ * With a version (26.10.31, the build smoke): ADDS that release (not a pre-release) to the existing api.json, as if a GitHub workflow had just published it.
  */
 $dir = rtrim((string) ($argv[1] ?? ''), '/');
 if ($dir === '' || !is_dir($dir)) { fwrite(STDERR, "usage: php rmm_agent_feed_extra.php <mock dir>\n"); exit(2); }
@@ -16,7 +17,9 @@ $pe = function (int $machine, int $size, string $fill): string {
 };
 $msi = (string) file_get_contents(dirname(__DIR__) . '/fixtures/msi/template-x64.msi');
 $out = [];
-foreach (['0.9.1' => '2026-10-18T17:16:53Z', '0.9.0' => '2026-10-01T10:00:00Z'] as $ver => $at) {
+$only = isset($argv[2]) && preg_match('/^\d+\.\d+\.\d+\z/', $argv[2]) ? $argv[2] : null;
+$set = $only !== null ? [$only => gmdate('Y-m-d\TH:i:s\Z')] : ['0.9.1' => '2026-10-18T17:16:53Z', '0.9.0' => '2026-10-01T10:00:00Z'];
+foreach ($set as $ver => $at) {
     $tag = "agent-v$ver";
     @mkdir("$dir/files/$tag", 0700, true);
     $tarball = (string) @shell_exec('cd ' . escapeshellarg(sys_get_temp_dir()) . ' && true');
@@ -32,8 +35,11 @@ foreach (['0.9.1' => '2026-10-18T17:16:53Z', '0.9.0' => '2026-10-01T10:00:00Z'] 
     $files['SHA256SUMS'] = $sums; $files['SHA256SUMS.msi'] = $msiSums;
     $assets = [];
     foreach ($files as $n => $b) { file_put_contents("$dir/files/$tag/$n", $b); $assets[] = ['name' => $n, 'size' => strlen($b), 'digest' => 'sha256:' . hash('sha256', $b)]; }
-    $out[] = ['tag_name' => $tag, 'name' => "Agent $ver", 'prerelease' => $ver === '0.9.1', 'draft' => false, 'published_at' => $at, 'body' => 'notes', 'assets' => $assets];
+    $out[] = ['tag_name' => $tag, 'name' => "Agent $ver", 'prerelease' => $only === null && $ver === '0.9.1', 'draft' => false, 'published_at' => $at, 'body' => 'notes', 'assets' => $assets];
+}
+if ($only !== null) {
+    $out = array_merge($out, (array) json_decode((string) @file_get_contents("$dir/api.json"), true));
 }
 file_put_contents("$dir/api.json", json_encode($out));
-file_put_contents("$dir/ctl.json", json_encode(['api' => 'ok', 'download' => 'cdn', 'etag' => '"smoke"']));
+file_put_contents("$dir/ctl.json", json_encode(['api' => 'ok', 'download' => 'cdn', 'etag' => '"smoke' . ($only ?? '') . '"', 'token' => (string) getenv('MOCK_GH_BEARER') ?: null]));
 echo "wrote " . count($out) . " releases to $dir\n";

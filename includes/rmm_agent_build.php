@@ -48,7 +48,7 @@ final class Build
     }
 
     /** @return string|null an error message, null when stored */
-    public function saveToken(string $token): ?string
+    public function saveToken(#[\SensitiveParameter] string $token): ?string
     {
         $token = trim($token);
         if (preg_match(self::TOKEN_RE, $token) !== 1) {
@@ -261,7 +261,7 @@ final class Build
     }
 
     /**
-     * @param array{auto:bool,ring:string,pct:int,activate:bool} $opts what to do when the release appears
+     * @param array{auto:bool,ring:string,pct:int,activate:bool,by_id?:int} $opts what to do when the release appears
      * @return array{ok:bool,message:string}
      */
     public function start(string $version, string $by, array $opts): array
@@ -307,12 +307,20 @@ final class Build
         $ring = in_array($opts['ring'], ['pilot', 'stable'], true) ? $opts['ring'] : '';
         $this->save([
             'repo' => $repo, 'version' => $version, 'tag' => "agent-v$version", 'state' => 'queued', 'detail' => 'waiting for GitHub to start the run', 'run_id' => 0, 'before_id' => $before,
-            'started_at' => $now, 'checked_at' => 0, 'by' => mb_substr($by, 0, 80), 'auto' => (bool) $opts['auto'], 'ring' => $ring, 'pct' => max(0, min(100, (int) $opts['pct'])),
+            'started_at' => $now, 'checked_at' => 0, 'by' => mb_substr($by, 0, 80), 'by_id' => (int) ($opts['by_id'] ?? 0), 'auto' => (bool) $opts['auto'], 'ring' => $ring, 'pct' => max(0, min(100, (int) $opts['pct'])),
             'activate' => (bool) $opts['activate'], 'release_seen' => false, 'published' => false, 'publish_message' => '',
         ]);
         ($this->audit)('Agent Build Started', "$by started a build of agent $version in $repo" . ($opts['auto'] ? ' (publish automatically, ring ' . ($ring !== '' ? $ring : 'none') . ')' : ''));
 
         return ['ok' => true, 'message' => "The build of agent $version was started on GitHub. This card follows it."];
+    }
+
+    /** For the cron job: who started the build while there is something to follow (a running build, or a finished one still to publish), else null. @return array{by_id:int,by:string}|null */
+    public function pending(): ?array
+    {
+        $b = $this->load();
+
+        return $b !== null && self::watch($b) ? ['by_id' => (int) ($b['by_id'] ?? 0), 'by' => (string) $b['by']] : null;
     }
 
     /** Whether a person can still tell the build apart from "nothing happened": the display data for the card and the poll. @return array<string,mixed>|null */

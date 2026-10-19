@@ -159,6 +159,24 @@ $dl1 = $ghHits('/releases/download/'); $bset(['checked_at' => 0]); $bpoll(); $bs
 $ok($ghHits('/releases/download/') === $dl1 && $dl1 > $dl0, 'auto: published once; later polls download nothing');
 $ok($audit('Agent Release Downloaded') >= 1, 'auto: the publish is audited like the button');
 
+// ---- the cron job follows and publishes with nobody on the page
+$ok($bld->saveToken($TOK) === null, 'token ready for the cron test');
+$q("DELETE FROM endpoint_agent_binaries WHERE version = '0.9.8'");
+$writeApi(array_merge($noise, [$r090, $r091, $r092, $r093, $r094, $r095, $r096, $r097])); $bctl(['etag' => '"v3"']);
+$feed->statePut('build', ''); $bstart(['build_version' => '0.9.8', 'build_auto' => '1', 'build_ring' => 'stable', 'build_pct' => '5', 'build_activate' => '1']);
+$cron = fn(): string => (string) shell_exec('cd ' . escapeshellarg($root) . ' && php cron/agent_build_check.php 2>&1');
+$bset(['checked_at' => 0]); $o1 = $cron();
+$runs = json_decode((string) file_get_contents("$ghDir/runs.json"), true);
+$ok($bget()['run_id'] > 0 && str_contains($o1, 'agent build 0.9.8'), 'cron: finds the run of a build nobody is watching (' . trim($o1) . ')');
+foreach ($runs as &$rr) { if ($rr['id'] === $bget()['run_id']) { $rr['status'] = 'completed'; $rr['conclusion'] = 'success'; } } unset($rr);
+file_put_contents("$ghDir/runs.json", json_encode($runs));
+$r098 = $mkRelease('0.9.8', ['pre' => false, 'at' => '2026-10-25T10:00:00Z']);
+$writeApi(array_merge($noise, [$r090, $r091, $r092, $r093, $r094, $r095, $r096, $r097, $r098])); $bctl(['etag' => '"v4"']);
+$q("UPDATE endpoint_agent_feed_state SET state_value = '0' WHERE state_key = 'checked_at'"); $bset(['checked_at' => 0]); $cron();
+$q("UPDATE endpoint_agent_feed_state SET state_value = '0' WHERE state_key = 'checked_at'"); $bset(['checked_at' => 0]); $o2 = $cron();
+$ok($bget()['published'] === true && (int) $one("SELECT COUNT(*) FROM endpoint_agent_binaries WHERE version = '0.9.8'") === 2, 'cron: published the release as the administrator who started the build (' . trim($o2) . ')');
+$ok($cron() === '', 'cron: with nothing to follow it exits at once, silently');
+
 // ---- no run shows up
 $bset(['state' => 'queued', 'run_id' => 0, 'before_id' => 99999, 'started_at' => time() - 900, 'checked_at' => 0, 'published' => false, 'auto' => false, 'release_seen' => false]);
 [, $j] = $bpoll(); $ok($j['build']['state'] === 'lost' && str_contains($j['build']['detail'], 'no run'), 'poll: no run after a few minutes is reported, with the workflow link on the card');
@@ -175,10 +193,12 @@ $ok(str_contains($cardMsg($sidAdmin), 'id="agent-build"'), 'card: garbage build 
 
 // ---- another repository is used for everything, and removing the token
 $feed->statePut('build', ''); $feed->setRepo('Other-Org/other-repo'); $bctl();
-$ok($bld->lastTest() === null, 'repo change: an earlier test result does not apply to another repository');
+$ok(!$bld->hasToken() && $bld->lastTest() === null && (string) $feed->stateGet('build') === '', 'repo change: the token, its test result and the build state are dropped (a token belongs to one repository)');
+$ok($bld->saveToken($TOK) === null, 'repo change: a token can be saved for the new repository');
 $t = $bld->testToken();
 $ok(str_contains((string) file_get_contents("$ghDir/hits.log"), 'GET /repos/Other-Org/other-repo/actions/workflows/endpoint-agent.yml'), 'repo: the configured repository is the one used');
-$feed->setRepo('TheTractorHacker/rivet-core');
+$feed->setRepo('TheTractorHacker/rivet-core'); $ok(!$bld->hasToken(), 'repo change back: the token is dropped again');
+$ok($bld->saveToken($TOK) === null, 'token saved again');
 $ad(['agent_build_token_remove' => '1'], $sidTech);
 $ok($bld->hasToken(), 'remove: a technician cannot');
 $ad(['agent_build_token_remove' => '1']);
