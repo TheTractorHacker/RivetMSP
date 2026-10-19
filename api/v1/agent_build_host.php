@@ -30,8 +30,9 @@ require_once dirname(__DIR__, 2) . '/includes/rmm_agent_localbuild.php';
         $out(405, ['error' => 'POST only.', 'code' => 'method'], ['Allow: POST']);
     }
     $ip = getIP();
+    $mult = defined('EA_BUILD_HOST_RATE_MULT') ? max(1, min(100, (int) EA_BUILD_HOST_RATE_MULT)) : 1;   // tests only (a busy mock host); production leaves the limits as written
     // before any database work: a flood from one address is turned away
-    if (!api_rate_limit('bhost_ip:' . $ip, 300, 60)) {
+    if (!api_rate_limit('bhost_ip:' . $ip, 300 * $mult, 60)) {
         $out(429, ['error' => 'Too many requests.', 'code' => 'rate_limited'], ['Retry-After: 60']);
     }
     if (!rivetRmmEnabled($mysqli)) {
@@ -54,7 +55,7 @@ require_once dirname(__DIR__, 2) . '/includes/rmm_agent_localbuild.php';
     $host = $lb->authenticate($auth);
     if ($host === null) {
         // failed attempts are limited harder than good ones, and audited (once per address and minute, so a flood cannot fill the log)
-        if (!api_rate_limit('bhost_fail:' . $ip, 20, 60)) {
+        if (!api_rate_limit('bhost_fail:' . $ip, 20 * $mult, 60)) {
             $out(429, ['error' => 'Too many requests.', 'code' => 'rate_limited'], ['Retry-After: 60']);
         }
         if (api_rate_limit('bhost_fail_log:' . $ip, 1, 60)) {
@@ -62,7 +63,7 @@ require_once dirname(__DIR__, 2) . '/includes/rmm_agent_localbuild.php';
         }
         $out(401, ['error' => 'Invalid token.', 'code' => 'invalid_token'], ['WWW-Authenticate: Bearer']);
     }
-    if (!api_rate_limit('bhost:' . (int) $host['host_id'], $sub === 'upload' ? 600 : 120, 60)) {
+    if (!api_rate_limit('bhost:' . (int) $host['host_id'], ($sub === 'upload' ? 600 : 120) * $mult, 60)) {
         $out(429, ['error' => 'Too many requests.', 'code' => 'rate_limited'], ['Retry-After: 30']);
     }
     // the body: bounded before it is read, JSON object only

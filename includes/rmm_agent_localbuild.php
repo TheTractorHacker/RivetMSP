@@ -521,8 +521,13 @@ final class LocalBuild
             $n = $this->run("UPDATE endpoint_agent_build_jobs SET state = ?, note = ?, lease_expires_at = ?, updated_at = ? WHERE job_id = ? AND state IN ('claimed','building','uploading')", [$state, $note, gmdate('Y-m-d H:i:s', time() + self::LEASE_S), $now, $id]);
         }
         $this->touch((int) $host['host_id'], $ip);
+        // an UPDATE that changes nothing (the same state and note within one second) reports 0 rows: the job is re-read to tell that from a cancel or an expiry that raced this call
+        $now2 = $this->job($id);
+        if ($n < 0 || $now2 === null || in_array($now2['state'], ['cancelled', 'expired'], true)) {
+            return [409, ['error' => 'The job changed.', 'code' => $now2['state'] ?? 'bad_state']];
+        }
 
-        return $n === 1 ? [200, ['ok' => true]] : [409, ['error' => 'The job changed.', 'code' => 'bad_state']];
+        return [200, ['ok' => true]];
     }
 
     /** @param array<string,mixed> $host @param array<string,mixed> $in @return array{0:int,1:array<string,mixed>} */
