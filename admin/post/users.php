@@ -15,6 +15,12 @@ if (isset($_POST['add_user'])) {
 
     require_once 'user_model.php';
 
+    // Reject a duplicate e-mail (logins look users up by e-mail) before inserting
+    if (mysqli_num_rows(mysqli_query($mysqli, "SELECT user_id FROM users WHERE user_email = '$email' LIMIT 1")) > 0) {
+        flash_alert("A user with the email <strong>$email</strong> already exists", 'error');
+        redirect();
+    }
+
     // Staff password policy: length, not the name / email, optional breach check
     $policy_error = secPasswordPolicyError(trim((string) ($_POST['password'] ?? '')), ['name' => trim((string) ($_POST['name'] ?? '')), 'email' => trim((string) ($_POST['email'] ?? '')), 'username' => trim((string) ($_POST['email'] ?? ''))], $mysqli);
     if ($policy_error !== null) {
@@ -126,6 +132,12 @@ if (isset($_POST['edit_user'])) {
     $audit_old_clients = [];
     $audit_res = mysqli_query($mysqli, "SELECT client_id FROM user_client_permissions WHERE user_id = $user_id ORDER BY client_id");
     while ($audit_res && ($audit_row = mysqli_fetch_row($audit_res))) { $audit_old_clients[] = intval($audit_row[0]); }
+
+    // Reject an e-mail that belongs to a different user
+    if (mysqli_num_rows(mysqli_query($mysqli, "SELECT user_id FROM users WHERE user_email = '$email' AND user_id != $user_id LIMIT 1")) > 0) {
+        flash_alert("A user with the email <strong>$email</strong> already exists", 'error');
+        redirect();
+    }
 
     // Update Client Access
     mysqli_query($mysqli,"DELETE FROM user_client_permissions WHERE user_id = $user_id");

@@ -5452,3 +5452,21 @@ function rivetSettingsCipherFallback(bool $encrypt, string $value): string {
     $pt = openssl_decrypt(substr($data, 16), 'aes-128-cbc', substr(hash('sha256', $legacy, true), 0, 16), OPENSSL_RAW_DATA, substr($data, 0, 16));
     return $pt === false ? '' : $pt;
 }
+
+// Validate the network fields of an asset / interface form. Blank is allowed ('DHCP' for the IPv4 field too).
+// Returns an error message, or '' when everything is valid.
+function validateAssetNetworkFields($ip, $nat_ip, $ipv6, $mac) {
+    if ($ip !== '' && $ip !== 'DHCP' && !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        return "IP address is not a valid IPv4 address";
+    }
+    if ($nat_ip !== '' && !filter_var($nat_ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        return "NAT IP is not a valid IPv4 address";
+    }
+    if ($ipv6 !== '' && !filter_var($ipv6, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+        return "IPv6 address is not valid";
+    }
+    if ($mac !== '' && !preg_match('/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$|^[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}$|^[0-9A-Fa-f]{12}$/', $mac)) {
+        return "MAC address is not valid (expected e.g. 00:1A:2B:3C:4D:5E)";
+    }
+    return '';
+}

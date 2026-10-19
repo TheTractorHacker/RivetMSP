@@ -32,6 +32,11 @@ $purifier_config->set('Cache.DefinitionImpl', null); // Disable cache by setting
 $purifier_config->set('URI.AllowedSchemes', ['data' => true, 'src' => true, 'http' => true, 'https' => true]);
 $purifier = new HTMLPurifier($purifier_config);
 
+// No ticket_id at all falls through to the normal "Nothing to see here" page instead of undefined-variable warnings
+if (!isset($_GET['ticket_id'])) {
+    $_GET['ticket_id'] = 0;
+}
+
 if (isset($_GET['ticket_id'])) {
     $ticket_id = intval($_GET['ticket_id']);
 

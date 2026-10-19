@@ -36,6 +36,20 @@
 header("X-Frame-Options: DENY"); // Legacy
 header("X-Content-Type-Options: nosniff");
 header("Referrer-Policy: strict-origin-when-cross-origin");
+
+// Per-request CSP nonce for the portal's inline scripts. Many portal pages send their own
+// "default-src 'self'" policy before including this file, which blocks every inline <script>;
+// re-send whatever policy is queued with a script-src nonce added (or create a minimal one).
+$csp_nonce = base64_encode(random_bytes(16));
+$csp_sent = '';
+foreach (headers_list() as $h) {
+    if (stripos($h, 'Content-Security-Policy:') === 0) {
+        $csp_sent = trim(substr($h, strlen('Content-Security-Policy:')));
+    }
+}
+if ($csp_sent !== '' && stripos($csp_sent, 'script-src') === false) {
+    header("Content-Security-Policy: $csp_sent; script-src 'self' 'nonce-$csp_nonce'");
+}
 ?>
 
 <!DOCTYPE html>
