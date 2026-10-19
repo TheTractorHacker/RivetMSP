@@ -7321,3 +7321,15 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.99'");
     }
+
+    if ($rivetit_db_version() == '2.6.99') {
+        // DB 2.6.100: build progress. FOUR new columns on endpoint_agent_build_jobs (ADD COLUMN IF NOT EXISTS: re-running is harmless, no row is touched): the stage the build host
+        // reports on its status calls (a fixed list), the overall percent, a short detail line and when the progress last moved.
+        mysqli_query($mysqli, "ALTER TABLE `endpoint_agent_build_jobs`
+            ADD COLUMN IF NOT EXISTS `progress_stage` varchar(24) NOT NULL DEFAULT '',
+            ADD COLUMN IF NOT EXISTS `progress_pct` tinyint(3) unsigned NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `progress_detail` varchar(120) NOT NULL DEFAULT '',
+            ADD COLUMN IF NOT EXISTS `progress_at` datetime DEFAULT NULL");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.100'");
+    }

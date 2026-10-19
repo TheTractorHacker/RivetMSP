@@ -1701,6 +1701,10 @@ CREATE TABLE `endpoint_agent_build_jobs` (
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
   `finished_at` datetime DEFAULT NULL,
+  `progress_stage` varchar(24) NOT NULL DEFAULT '',
+  `progress_pct` tinyint(3) unsigned NOT NULL DEFAULT 0,
+  `progress_detail` varchar(120) NOT NULL DEFAULT '',
+  `progress_at` datetime DEFAULT NULL,
   PRIMARY KEY (`job_id`),
   KEY `idx_state` (`state`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

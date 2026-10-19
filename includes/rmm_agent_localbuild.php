@@ -33,6 +33,10 @@ final class LocalBuild
     public const BODY_MAX = 1800000;            // a request body: 1 MiB raw as base64 plus the JSON around it
     public const TOKEN_RE = '/^rbh_([0-9a-f]{16})_([0-9a-f]{48})\z/';
     public const REF_RE = '/^(?:main|(?:agent-)?v[0-9]{1,5}(?:\.[0-9]{1,5}){1,3}(?:-[0-9A-Za-z.]{1,18})?)\z/';
+    /** The stages a build host may report, in order, with the label the page shows (progress is strictly allowlisted: anything else is refused). */
+    public const STAGES = ['prepare' => 'Preparing the build', 'clone' => 'Fetching the source', 'build_windows_amd64' => 'Building Windows x64', 'build_windows_arm64' => 'Building Windows ARM64',
+        'msi' => 'Packaging the MSI', 'verify' => 'Verifying the files', 'upload' => 'Uploading to this server'];
+    public const DETAIL_RE = '/^[\x20-\x7e]{0,120}\z/';
     public const HOST_NAME_RE = '/^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,78}\z/u';
 
     /** @var callable(string,string):void */
@@ -52,6 +56,10 @@ final class LocalBuild
             if (!$r || mysqli_num_rows($r) === 0) {
                 return false;
             }
+        }
+        $r = @mysqli_query($this->db, "SHOW COLUMNS FROM endpoint_agent_build_jobs LIKE 'progress_at'");   // DB 2.6.100
+        if (!$r || mysqli_num_rows($r) === 0) {
+            return false;
         }
 
         return true;
@@ -330,19 +338,56 @@ final class LocalBuild
     {
         $this->sweep();
         $out = [];
-        foreach ($this->rows('SELECT j.job_id, j.version, j.source_ref, j.state, j.note, j.log_tail, j.result, j.auto_publish, j.ring, j.rollout_pct, j.activate, j.requested_by_name, j.created_at, j.updated_at, j.finished_at, h.host_name
+        foreach ($this->rows('SELECT j.job_id, j.version, j.source_ref, j.state, j.note, j.log_tail, j.result, j.auto_publish, j.ring, j.rollout_pct, j.activate, j.want_msi, j.progress_stage, j.progress_pct, j.progress_detail, j.progress_at, j.requested_by_name, j.created_at, j.updated_at, j.finished_at, h.host_name
             FROM endpoint_agent_build_jobs j LEFT JOIN endpoint_agent_build_hosts h ON h.host_id = j.host_id ORDER BY j.job_id DESC LIMIT ' . max(1, min(50, $limit))) as $r) {
             $r['idle_s'] = max(0, time() - (int) strtotime($r['updated_at'] . ' UTC'));
             $r['active'] = in_array($r['state'], ['queued', 'claimed', 'building', 'uploading', 'verifying'], true);
-            $r['progress'] = $this->progress((int) $r['job_id'], (string) $r['state']);
+            $r['progress'] = $this->progress((int) $r['job_id'], (string) $r['state'], $r);
+            $end = $r['finished_at'] !== null ? (int) strtotime($r['finished_at'] . ' UTC') : time();
+            $r['elapsed_s'] = max(0, $end - (int) strtotime($r['created_at'] . ' UTC'));
             $out[] = $r;
         }
 
         return $out;
     }
 
+    /**
+     * The progress the page draws. When the build host reports stages (build host protocol 1.1) the bar is its percent and the checklist its stages; otherwise the coarse state-based
+     * estimate below is used and the checklist is empty.
+     *
+     * @param array<string,mixed> $row @return array{pct:int,text:string,real:bool,stage:string,detail:string,steps:list<array{key:string,label:string,status:string}>}
+     */
+    private function progress(int $jobId, string $state, array $row = []): array
+    {
+        $coarse = $this->coarseProgress($jobId, $state);
+        $stage = (string) ($row['progress_stage'] ?? '');
+        if (!isset(self::STAGES[$stage]) && !in_array($state, ['built', 'published'], true)) {
+            return $coarse + ['real' => false, 'stage' => '', 'detail' => '', 'steps' => []];
+        }
+        $keys = array_keys(self::STAGES);
+        if ((int) ($row['want_msi'] ?? 1) !== 1) {
+            $keys = array_values(array_diff($keys, ['msi']));
+        }
+        $done = in_array($state, ['built', 'published'], true);
+        $cur = $done ? count($keys) : (int) array_search($stage, $keys, true);
+        if (!$done && !in_array($stage, $keys, true)) {
+            $cur = 0;
+        }
+        $steps = [];
+        foreach ($keys as $i => $k) {
+            $st = $i < $cur ? 'done' : ($i === $cur ? 'active' : 'pending');
+            if ($st === 'active' && in_array($state, ['failed', 'cancelled', 'expired'], true)) {
+                $st = 'failed';
+            }
+            $steps[] = ['key' => $k, 'label' => self::STAGES[$k], 'status' => $st];
+        }
+        $pct = $done ? 100 : max(0, min(99, (int) ($row['progress_pct'] ?? 0)));
+
+        return ['pct' => $pct, 'text' => $done ? $coarse['text'] : self::STAGES[$stage], 'real' => true, 'stage' => $stage, 'detail' => $done ? '' : (string) ($row['progress_detail'] ?? ''), 'steps' => $steps];
+    }
+
     /** @return array{pct:int,text:string} */
-    private function progress(int $jobId, string $state): array
+    private function coarseProgress(int $jobId, string $state): array
     {
         $steps = ['queued' => [0, 'waiting for a build host'], 'claimed' => [10, 'a build host took the job'], 'building' => [35, 'building'], 'uploading' => [65, 'uploading'], 'verifying' => [85, 'verifying'], 'built' => [95, 'built, ready to publish'], 'published' => [100, 'published']];
         [$p, $t] = $steps[$state] ?? [0, $state];
@@ -369,7 +414,7 @@ final class LocalBuild
     public function sweep(): void
     {
         $now = self::now();
-        $this->run("UPDATE endpoint_agent_build_jobs SET state = 'queued', host_id = NULL, lease_expires_at = NULL, updated_at = ? WHERE state = 'claimed' AND lease_expires_at < ?", [$now, $now]);
+        $this->run("UPDATE endpoint_agent_build_jobs SET state = 'queued', host_id = NULL, lease_expires_at = NULL, progress_stage = '', progress_pct = 0, progress_detail = '', progress_at = NULL, updated_at = ? WHERE state = 'claimed' AND lease_expires_at < ?", [$now, $now]);
         $cut = gmdate('Y-m-d H:i:s', time() - self::EXPIRE_S);
         foreach ($this->rows("SELECT job_id, version, state FROM endpoint_agent_build_jobs WHERE state IN ('queued','building','uploading','verifying') AND updated_at < ?", [$cut]) as $j) {
             if ($this->run("UPDATE endpoint_agent_build_jobs SET state = 'expired', note = 'No status for 60 minutes; the job expired.', finished_at = ?, updated_at = ? WHERE job_id = ? AND state = ?", [$now, $now, (int) $j['job_id'], $j['state']]) === 1) {
@@ -454,7 +499,7 @@ final class LocalBuild
                 continue;
             }
             // atomic: only one poller wins the queued row
-            if ($this->run("UPDATE endpoint_agent_build_jobs SET state = 'claimed', host_id = ?, lease_expires_at = ?, updated_at = ?, note = '', log_tail = '' WHERE job_id = ? AND state = 'queued'", [$hostId, $lease, self::now(), (int) $j['job_id']]) === 1) {
+            if ($this->run("UPDATE endpoint_agent_build_jobs SET state = 'claimed', host_id = ?, lease_expires_at = ?, updated_at = ?, note = '', log_tail = '', progress_stage = '', progress_pct = 0, progress_detail = '', progress_at = NULL WHERE job_id = ? AND state = 'queued'", [$hostId, $lease, self::now(), (int) $j['job_id']]) === 1) {
                 $this->say('Agent Build Claimed', 'build host "' . $host['host_name'] . '" took the build of agent ' . $j['version'] . ' (job #' . (int) $j['job_id'] . ')');
 
                 return [200, ['job' => $this->jobOut($this->job((int) $j['job_id']) ?? $j)]];
@@ -515,6 +560,11 @@ final class LocalBuild
         $note = self::cleanText(is_string($in['note'] ?? null) ? $in['note'] : '', 500);
         $id = (int) $j['job_id'];
         $now = self::now();
+        // optional progress (build host protocol: stage, pct, detail, elapsed_s). Validated strictly when present, whatever the state; STORED only for a live state (a terminal call ignores it)
+        $prog = self::parseProgress($in);
+        if (is_string($prog)) {
+            return [422, ['error' => $prog, 'code' => 'bad_progress']];
+        }
         if ($state === 'failed') {
             $raw = is_string($in['log_tail'] ?? null) ? $in['log_tail'] : (is_string($in['log'] ?? null) ? $in['log'] : '');
             $tail = self::cleanText(mb_strcut($raw, max(0, strlen($raw) - 4096)), 4096);
@@ -523,6 +573,9 @@ final class LocalBuild
             $this->say('Agent Build Finished', 'build of agent ' . $j['version'] . " (job #$id) on \"" . $host['host_name'] . '": failed');
         } else {
             $n = $this->run("UPDATE endpoint_agent_build_jobs SET state = ?, note = ?, lease_expires_at = ?, updated_at = ? WHERE job_id = ? AND state IN ('claimed','building','uploading')", [$state, $note, gmdate('Y-m-d H:i:s', time() + self::LEASE_S), $now, $id]);
+            if ($prog !== []) {
+                $this->storeProgress($id, $prog, $now);
+            }
         }
         $this->touch((int) $host['host_id'], $ip);
         // an UPDATE that changes nothing (the same state and note within one second) reports 0 rows: the job is re-read to tell that from a cancel or an expiry that raced this call
@@ -532,6 +585,80 @@ final class LocalBuild
         }
 
         return [200, ['ok' => true]];
+    }
+
+    /**
+     * Validate the optional progress fields of a status call. Absent fields are fine; a present one must be exactly right (the stage on the allowlist, pct an integer 0-100,
+     * detail at most 120 printable ASCII characters, elapsed_s a non-negative integer up to a week). Integers may arrive as JSON numbers or digit strings (the shell script sends strings).
+     *
+     * @param array<string,mixed> $in @return array<string,mixed>|string the accepted fields (stage, pct, detail), or the refusal text
+     */
+    public static function parseProgress(array $in): array|string
+    {
+        $out = [];
+        $int = static function (mixed $v, int $max): ?int {
+            if (is_int($v)) {
+                return $v >= 0 && $v <= $max ? $v : null;
+            }
+
+            return is_string($v) && preg_match('/^(?:0|[1-9][0-9]{0,8})\z/', $v) === 1 && (int) $v <= $max ? (int) $v : null;
+        };
+        if (array_key_exists('stage', $in)) {
+            if (!is_string($in['stage']) || !isset(self::STAGES[$in['stage']])) {
+                return 'stage must be one of ' . implode(', ', array_keys(self::STAGES)) . '.';
+            }
+            $out['stage'] = $in['stage'];
+        }
+        if (array_key_exists('pct', $in)) {
+            $p = $int($in['pct'], 100);
+            if ($p === null) {
+                return 'pct must be a whole number from 0 to 100.';
+            }
+            $out['pct'] = $p;
+        }
+        if (array_key_exists('detail', $in)) {
+            if (!is_string($in['detail']) || preg_match(self::DETAIL_RE, $in['detail']) !== 1) {
+                return 'detail must be at most 120 printable characters.';
+            }
+            $out['detail'] = self::cleanText($in['detail'], 120);
+        }
+        if (array_key_exists('elapsed_s', $in) && $int($in['elapsed_s'], 604800) === null) {
+            return 'elapsed_s must be a whole number of seconds (0 to 604800).';
+        }
+
+        return $out;
+    }
+
+    /**
+     * Store accepted progress. It never moves backwards: the percent only rises (GREATEST, in SQL, so two racing calls cannot lower it) and a stage earlier than the recorded one,
+     * with its detail, is dropped.
+     *
+     * @param array<string,mixed> $p
+     */
+    private function storeProgress(int $jobId, array $p, string $now): void
+    {
+        $cur = $this->rows('SELECT progress_stage FROM endpoint_agent_build_jobs WHERE job_id = ?', [$jobId])[0]['progress_stage'] ?? '';
+        $order = array_keys(self::STAGES);
+        $curIdx = $cur === '' ? -1 : (int) array_search($cur, $order, true);
+        if (isset($p['stage']) && array_search($p['stage'], $order, true) < $curIdx) {
+            unset($p['stage'], $p['detail']);   // a late or replayed call about an earlier stage
+        }
+        $sets = ['progress_at = ?'];
+        $args = [$now];
+        if (isset($p['stage'])) {
+            $sets[] = 'progress_stage = ?';
+            $args[] = $p['stage'];
+        }
+        if (isset($p['pct'])) {
+            $sets[] = 'progress_pct = GREATEST(progress_pct, ?)';
+            $args[] = $p['pct'];
+        }
+        if (isset($p['detail'])) {
+            $sets[] = 'progress_detail = ?';
+            $args[] = $p['detail'];
+        }
+        $args[] = $jobId;
+        $this->run('UPDATE endpoint_agent_build_jobs SET ' . implode(', ', $sets) . " WHERE job_id = ? AND state IN ('claimed','building','uploading')", $args);
     }
 
     /** @param array<string,mixed> $host @param array<string,mixed> $in @return array{0:int,1:array<string,mixed>} */

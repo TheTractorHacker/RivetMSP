@@ -17,7 +17,7 @@ function rivetLocalBuildBox(array $lv, string $csrf): string
         . '<p class="small text-muted mb-2">A computer you own (Linux with Docker and git) builds the agents and the MSI from the RivetCore source and hands them to this server. '
         . 'It only makes <strong>outbound</strong> requests to this site, so nothing is opened on your network, and this server needs no compiler. Every file is checked here (SHA-256, executable type, architecture) before anything is stored.</p>';
     if (!$lv['ready']) {
-        return $o . '<div class="alert alert-warning py-2 mb-0">Run the database update first (Administration &rarr; Updates, DB 2.6.99), then reload this page.</div></div>';
+        return $o . '<div class="alert alert-warning py-2 mb-0">Run the database update first (Administration &rarr; Updates, DB 2.6.100), then reload this page.</div></div>';
     }
     $t = $lv['token'];
     $cfgSnippet = static function (string $url, string $tok) use ($h): string {
