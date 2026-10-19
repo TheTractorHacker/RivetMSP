@@ -6,6 +6,7 @@ require_once dirname(__DIR__) . '/includes/rmm_mesh_admin.php';    // RivetCore 
 require_once dirname(__DIR__) . '/includes/rmm_scale_cards.php';   // RivetCore 1.0.0-rc.11 cards (remote tools, file transfer, logs, scale, partitioning, external store)
 require_once dirname(__DIR__) . '/includes/rmm_checks_simple_ui.php';   // 26.10.29: the check schedule as plain options
 require_once dirname(__DIR__) . '/includes/rmm_agent_build.php';   // 26.10.31: Build a new version
+require_once dirname(__DIR__) . '/includes/rmm_agent_localbuild.php';   // 26.10.33: Build on my build host
 require_once dirname(__DIR__) . '/includes/rmm_agent_feed_ui.php';   // 26.10.28: Agent updates (the public agent releases on GitHub)
 
 use RivetCore\Rmm\Binaries\BinaryStore;
@@ -568,7 +569,8 @@ if ($feed->ready()) {
     [$feedMsg] = rivetRmmScaleTake('agent-updates');
     $feedSteps = $_SESSION['rmm_feed_steps'] ?? [];
     unset($_SESSION['rmm_feed_steps']);
-    echo rivetAgentFeedCard($feed->view(), $feedMsg, is_array($feedSteps) ? $feedSteps : [], (string) $csrf, ['service_ready' => ($cfg['service_base'] ?? null) !== null, 'build' => (new \RivetMsp\AgentFeed\Build($feed))->view()]);
+    echo rivetAgentFeedCard($feed->view(), $feedMsg, is_array($feedSteps) ? $feedSteps : [], (string) $csrf, ['service_ready' => ($cfg['service_base'] ?? null) !== null, 'build' => ($__bv = (new \RivetMsp\AgentFeed\Build($feed))->view()),
+        'local' => \RivetMsp\AgentFeed\rivetLocalBuildView(\RivetMsp\AgentFeed\rivetLocalBuild($mysqli, $rmm), $feed, (string) (($cfg['service_base'] ?? null) ?: ($config_base_url ? 'https://' . $config_base_url : '')), $__bv, $feed->published()['highest'])]);
 } else {
     echo '<div class="card mb-3" id="agent-updates"><div class="card-header"><h4 class="card-title mb-0">Agent updates</h4></div><div class="card-body"><div class="alert alert-warning mb-0">Run the database update first (Administration &rarr; Updates, DB 2.6.98), then reload this page.</div></div></div>';
 }
@@ -888,6 +890,7 @@ echo rivetEaRenderTabs($eaTabs, $eaDots, $h);
 <script src="/js/rmm_checks_simple.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/js/rmm_checks_simple.js') ?>" defer></script>
 <script src="/js/rmm_binary_upload.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/js/rmm_binary_upload.js') ?>" defer></script>
 <script src="/js/rmm_agent_build.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/js/rmm_agent_build.js') ?>" defer></script>
+<script src="/js/rmm_agent_localbuild.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/js/rmm_agent_localbuild.js') ?>" defer></script>
 <script src="/js/rmm_msi_admin.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/js/rmm_msi_admin.js') ?>" defer></script>
 <script nonce="<?= $h($csp_nonce ?? '') ?>">
 document.querySelectorAll('form[data-ea-confirm]').forEach(function (f) {

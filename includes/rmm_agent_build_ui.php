@@ -5,10 +5,13 @@
  * write-only: the page never contains a stored token, not even a part of it.
  */
 
+require_once __DIR__ . '/rmm_agent_localbuild_ui.php';
+
 /**
  * @param array<string,mixed> $bv Build::view()
+ * @param array<string,mixed>|null $local 26.10.33: LocalBuild view; when given, the box offers the provider choice (GitHub | your own build host)
  */
-function rivetAgentBuildBox(array $bv, string $csrf): string
+function rivetAgentBuildBox(array $bv, string $csrf, ?array $local = null): string
 {
     $h = static fn ($v): string => nullable_htmlentities((string) $v);
     $repo = (string) $bv['repo'];
@@ -19,6 +22,14 @@ function rivetAgentBuildBox(array $bv, string $csrf): string
         . '<p class="small text-muted mb-2">Builds the Windows and Linux agents and the MSI from the <code>main</code> branch of <strong>' . $h($repo) . '</strong> on GitHub and publishes them there as a release. '
         . 'Latest known: <strong>' . ($bv['latest'] !== null ? $h($bv['latest']) : 'none') . '</strong>. A version with a suffix (for example <code>0.9.2-rc1</code>) becomes a pre-release.</p>';
 
+    $hasLocal = $local !== null;
+    if ($hasLocal) {
+        $pick = $local['default'] ?? 'github';
+        $o .= '<fieldset class="mb-3" data-bp-choice><legend class="form-label small mb-1">Where should the build run?</legend><div class="btn-group" role="group" aria-label="Build provider">'
+            . '<input type="radio" class="btn-check" name="build_provider" id="bp_gh" value="github" autocomplete="off"' . ($pick === 'github' ? ' checked' : '') . '><label class="btn btn-sm btn-outline-primary" for="bp_gh"><i class="fab fa-github me-1" aria-hidden="true"></i>Build on GitHub</label>'
+            . '<input type="radio" class="btn-check" name="build_provider" id="bp_lo" value="local" autocomplete="off"' . ($pick === 'local' ? ' checked' : '') . '><label class="btn btn-sm btn-outline-primary" for="bp_lo"><i class="fas fa-server me-1" aria-hidden="true"></i>Build on my build host</label></div></fieldset>'
+            . '<div data-bp-panel="github">';
+    }
     if ($b !== null) {
         $cls = ['queued' => 'secondary', 'building' => 'primary', 'finished' => 'success', 'failed' => 'danger', 'lost' => 'warning'][$b['state']] ?? 'secondary';
         $o .= '<div class="alert alert-' . ($cls === 'secondary' || $cls === 'primary' ? 'info' : $cls) . ' py-2" role="status" data-build-status data-build-state="' . $h($b['state']) . '">'
@@ -60,7 +71,10 @@ function rivetAgentBuildBox(array $bv, string $csrf): string
             . '<button class="btn btn-sm btn-outline-danger" type="submit" name="agent_build_token_remove" value="1" formnovalidate data-ea-confirm="Remove the saved GitHub token? Builds can then only be started on GitHub.">Remove token</button>' : '') . '</div></form>'
         . '<div class="form-text">The token is stored encrypted, sent only to api.github.com, and never shown again.</div>'
         . ($t !== null ? '<div class="mt-1" data-build-test><span class="badge bg-' . ($t['ok'] ? 'success' : 'danger') . '">' . ($t['ok'] ? 'Test passed' : 'Test failed') . '</span> ' . $h($t['message']) . ' <span class="text-muted">(' . $h(gmdate('Y-m-d H:i', (int) $t['at'])) . ' UTC)</span></div>' : '')
-        . '</details></div>';
+        . '</details>';
+    if ($hasLocal) {
+        $o .= '</div><div data-bp-panel="local">' . rivetLocalBuildBox($local, $csrf) . '</div>';
+    }
 
-    return $o;
+    return $o . '</div>';
 }

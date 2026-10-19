@@ -39,7 +39,7 @@ function rivetAgentFeedCard(array $vm, ?array $msg, array $steps, string $csrf, 
         . '(same checks, same audit). The Linux files (install script, tarballs, .deb, .rpm) are not copied here: they are recorded as links with their SHA-256, and the <a href="/agent/rmm_add_device.php">Build installer</a> page uses them. '
         . 'Only <code>github.com</code> and GitHub\'s release download hosts are ever contacted.</p>';
     if (isset($ctx['build'])) {
-        $o .= rivetAgentBuildBox($ctx['build'], $csrf);
+        $o .= rivetAgentBuildBox($ctx['build'], $csrf, $ctx['local'] ?? null);
     }
     if ($msg !== null) {
         $o .= '<div class="alert alert-' . ($msg['type'] === 'error' ? 'danger' : ($msg['type'] === 'warning' ? 'warning' : 'success')) . ' py-2" role="alert" data-feed-msg>' . $h($msg['text']) . '</div>';

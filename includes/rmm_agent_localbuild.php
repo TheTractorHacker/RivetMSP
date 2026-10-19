@@ -862,3 +862,38 @@ function rivetLocalBuildPublisher(object $rmm, object $who, int $userId): callab
         return ['ok' => $res->ok, 'message' => (string) $res->message];
     };
 }
+
+/** The LocalBuild object for the admin page and the post handlers (audit rows go through logAction()). */
+function rivetLocalBuild(\mysqli $db, object $rmm): LocalBuild
+{
+    return new LocalBuild($db, defined('EA_BUILD_DIR') ? (string) EA_BUILD_DIR : dirname(__DIR__) . '/backups/endpoint-build', $rmm->binaryStore()->maxBytes(), static function (string $a, string $t): void {
+        logAction('Endpoint Agent', $a, $t);
+    });
+}
+
+/**
+ * What the Local build section shows. The new-token flash is consumed here (printed once).
+ *
+ * @param array<string,mixed> $buildView Build::view() (for the suggested version and the default provider)
+ * @return array<string,mixed>
+ */
+function rivetLocalBuildView(LocalBuild $lb, Feed $feed, string $serverUrl, array $buildView, ?string $highestHosted): array
+{
+    $ready = $lb->ready();
+    $token = null;
+    if (isset($_SESSION['rmm_bh_token']) && is_array($_SESSION['rmm_bh_token'])) {
+        $t = $_SESSION['rmm_bh_token'];
+        unset($_SESSION['rmm_bh_token']);
+        if (is_string($t['name'] ?? null) && is_string($t['token'] ?? null) && time() - (int) ($t['at'] ?? 0) < 600) {
+            $token = ['name' => $t['name'], 'token' => $t['token'], 'rotated' => !empty($t['rotated'])];
+        }
+    }
+    $hosts = $ready ? $lb->hosts() : [];
+    $latest = $buildView['latest'] ?? null;
+    if ($highestHosted !== null && ($latest === null || version_compare($highestHosted, (string) $latest) > 0)) {
+        $latest = $highestHosted;
+    }
+
+    return ['ready' => $ready, 'hosts' => $hosts, 'jobs' => $ready ? $lb->jobs() : [], 'suggest' => Build::suggest($latest), 'server_url' => $serverUrl, 'active' => $ready && $lb->hasActive(), 'token' => $token,
+        'default' => !empty($buildView['has_token']) || $hosts === [] ? 'github' : 'local'];
+}

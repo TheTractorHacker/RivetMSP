@@ -1117,6 +1117,63 @@ if (isset($_POST['test_extstore'])) {
 require_once dirname(__DIR__, 2) . '/includes/rmm_agent_feed.php';
 require_once dirname(__DIR__, 2) . '/includes/rmm_agent_build.php';   // 26.10.31: Build a new version
 
+// ---------------------------------------------------------------- Build on my build host (26.10.33; includes/rmm_agent_localbuild.php)
+// Administrators only, CSRF on every write. Every id is cast to an integer and looked up; a token is created here, kept in the session for ONE page view and never logged.
+require_once dirname(__DIR__, 2) . '/includes/rmm_agent_localbuild.php';
+$bhKeys = ['agent_bh_add', 'agent_bh_enable', 'agent_bh_disable', 'agent_bh_rotate', 'agent_bh_delete', 'agent_bh_request', 'agent_bh_cancel', 'agent_bh_publish'];
+if (array_filter($bhKeys, static fn (string $k): bool => isset($_POST[$k])) !== []) {
+    validateCSRFToken($_POST['csrf_token'] ?? '');
+    ea_scale_require_admin($rmm, (int) $session_user_id, 'agent-updates');
+    $feed = new \RivetMsp\AgentFeed\Feed($mysqli);
+    $lb = \RivetMsp\AgentFeed\rivetLocalBuild($mysqli, $rmm);
+    if (!$feed->ready() || !$lb->ready()) {
+        rivetRmmScaleMsg('agent-updates', 'error', 'Run the database update first (DB 2.6.99).');
+        ea_scale_back('agent-localbuild');
+    }
+    $bhId = is_string($_POST['bh_id'] ?? null) && ctype_digit($_POST['bh_id']) && strlen($_POST['bh_id']) < 10 ? (int) $_POST['bh_id'] : 0;
+    $bhJob = is_string($_POST['bh_job'] ?? null) && ctype_digit($_POST['bh_job']) && strlen($_POST['bh_job']) < 10 ? (int) $_POST['bh_job'] : 0;
+    $res = ['ok' => false, 'message' => 'Nothing was done.'];
+    if (isset($_POST['agent_bh_add'])) {
+        $res = $lb->addHost(is_string($_POST['bh_name'] ?? null) ? $_POST['bh_name'] : '', (int) $session_user_id);
+        if ($res['ok']) {
+            $_SESSION['rmm_bh_token'] = ['name' => trim((string) $_POST['bh_name']), 'token' => $res['token'], 'at' => time(), 'rotated' => false];
+            $res['message'] = 'The build host was added. Copy its token below: it is shown once.';
+        }
+    } elseif (isset($_POST['agent_bh_rotate'])) {
+        $res = $lb->rotate($bhId);
+        if ($res['ok']) {
+            $_SESSION['rmm_bh_token'] = ['name' => (string) ($lb->host($bhId)['host_name'] ?? ''), 'token' => $res['token'], 'at' => time(), 'rotated' => true];
+            $res['message'] = 'A new token was created. Copy it below: it is shown once, and the old one no longer works.';
+        }
+    } elseif (isset($_POST['agent_bh_enable']) || isset($_POST['agent_bh_disable'])) {
+        $res = $lb->setEnabled($bhId, isset($_POST['agent_bh_enable']));
+    } elseif (isset($_POST['agent_bh_delete'])) {
+        $res = $lb->deleteHost($bhId);
+    } elseif (isset($_POST['agent_bh_cancel'])) {
+        $res = $lb->cancel($bhJob, (string) $session_name);
+    } elseif (isset($_POST['agent_bh_publish'])) {
+        $denied = $rmm->authorizer()->check((int) $session_user_id, \RivetCore\Rmm\Authz\RmmAbility::BINARY_PUBLISH, 0, false);
+        if ($denied !== null) {
+            $res = ['ok' => false, 'message' => $denied];
+        } else {
+            @set_time_limit(600);
+            $res = $lb->publish($bhJob, \RivetMsp\AgentFeed\rivetLocalBuildPublisher($rmm, $ea_who, (int) $session_user_id));
+        }
+    } else {
+        $kind = is_string($_POST['bh_ref_kind'] ?? null) ? $_POST['bh_ref_kind'] : 'main';
+        $ref = $kind === 'tag' ? trim(is_string($_POST['bh_ref_tag'] ?? null) ? $_POST['bh_ref_tag'] : '') : 'main';
+        $feed->refresh(false, 6);
+        $cache = $feed->cached();
+        $bg = (new \RivetMsp\AgentFeed\Build($feed))->display();
+        $res = $lb->request(is_string($_POST['bh_version'] ?? null) ? $_POST['bh_version'] : '', [
+            'auto' => ($_POST['bh_auto'] ?? '') === '1', 'ring' => is_string($_POST['bh_ring'] ?? null) ? $_POST['bh_ring'] : '', 'pct' => ea_post_int('bh_pct', 0, 100, 10),
+            'activate' => ($_POST['bh_activate'] ?? '') === '1', 'msi' => true, 'ref' => $ref,
+        ], (int) $session_user_id, (string) $session_name, $cache['items'] ?? [], $bg !== null && $bg['active'] ? (string) $bg['version'] : null, $feed->published()['highest']);
+    }
+    rivetRmmScaleMsg('agent-updates', $res['ok'] ? 'success' : 'error', (string) $res['message']);
+    ea_scale_back('agent-localbuild');
+}
+
 if (isset($_POST['agent_feed_refresh']) || isset($_POST['agent_feed_settings']) || isset($_POST['publish_agent_release']) || isset($_POST['agent_build_token_save']) || isset($_POST['agent_build_token_test'])
     || isset($_POST['agent_build_token_remove']) || isset($_POST['agent_build_start'])) {
     validateCSRFToken($_POST['csrf_token'] ?? '');
