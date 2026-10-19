@@ -86,6 +86,8 @@ await T('Test token button answers in words', async () => {
 });
 
 await T('Build: an existing version is refused in words and nothing starts', async () => {
+  await go('/admin/settings_endpoint_agent.php');
+  await p.waitSel('#ab_ver');
   await setVal('#ab_ver', '0.9.1');
   await p.clickNav('button[name=agent_build_start]');
   await flash(/already exists/, 'refused');

@@ -4,6 +4,16 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.31] RivetMSP — Build a new agent version from Agent updates
+
+**Deploy notes:** back up the database, pull this tag. **No database step** (DB stays 2.6.98; the state table of 26.10.28 holds the new keys) and RivetCore is unchanged. Optional: the cron job below (`deploy/install.sh` adds it on a fresh install; on an existing server add the line by hand, see `docs/RMM_MODULE.md` 6j). Without a token nothing changes for you except a new box on the card.
+
+- **Build a new version** (Administration > Endpoint agent > Agent updates). The new version number is prefilled (latest known + 1); **Build** starts RivetCore's `endpoint-agent.yml` workflow on GitHub (`POST /repos/<repo>/actions/workflows/endpoint-agent.yml/dispatches`, ref `main`, input `version`), which builds the Windows and Linux agents and the MSI and creates the release `agent-v<version>` (a suffix such as `-rc1` makes it a pre-release). The card follows the run (queued, building, finished or failed, with a link to the run) and, once the release is in the list, it appears with the usual Publish. **Publish automatically when built** (ring, rollout, make current) publishes it with the same code as the Publish button, by the page while it is open and otherwise by the new cron job `cron/agent_build_check.php`, as the administrator who started the build.
+- **Server-side rules.** The version must be `X.Y.Z` or `X.Y.Z-suffix` (no leading zeros); a version that already exists or is not higher than the latest known release is refused; one build at a time. The repository is only ever the configured one.
+- **The GitHub token** (fine-grained, **Actions: Read and write** on the one repository) is stored encrypted, sent only to `api.github.com`, never shown again, never in a log row or message. Step-by-step "How to create the token", **Test token**, **Remove token**; administrators only, CSRF on every action, audit rows (`Agent Build Token Saved/Tested/Removed`, `Agent Build Started`, `Agent Build Finished`). Changing the repository drops the token. A request that carries the token is refused for any other host and a redirect is never followed.
+- **No token?** The card says so and offers **Start the build on GitHub** (opens the workflow page) with three plain steps; press Check for updates afterwards.
+- Tests: `tests/rmm_agent_feed.php` (259 checks, mock GitHub extended with dispatch/runs; no network) and `tests/browser/rmm_agent_build_smoke.mjs`.
+
 ## [26.10.29] RivetMSP — plain options instead of JSON boxes (check schedule, policy check types, Mesh, check policies) and a visible Build installer button
 
 **Deploy notes:** back up the database, pull this tag. **No database step** (DB stays 2.6.98) and RivetCore is unchanged (1.0.0-rc.21). Nothing is migrated: the stored check list keeps its format, the signed output sent to agents is byte for byte what the validator already produced, and a list written by hand or by an older release still loads.

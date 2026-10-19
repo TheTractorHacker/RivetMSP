@@ -290,6 +290,16 @@ Tests: `tests/rmm_ui_p16_mesh_push.php` (the Remote tab controls, the handler, t
 * **Install now**: the live-install switches (`patch_live_install`, `software_live_install`) gate only the scheduler; a person with the install / deploy right installs on one device with confirmation and audit.
 * Tests: `tests/rmm_agent_feed.php` (+ `tests/support/mock_github.py`, fragments in `tests/support/`), `tests/browser/rmm_agent_feed_smoke.mjs`.
 
+
+## 6j. Build a new agent version (26.10.31, no DB change)
+
+* Code: `includes/rmm_agent_build.php` (`RivetMsp\AgentFeed\Build`, `rivetAgentBuildPublisher()`), `includes/rmm_agent_build_ui.php` (the box inside the Agent updates card), `js/rmm_agent_build.js` (8 s poll while a build is running), `admin/post/agent_build_poll.php` (POST, CSRF, administrators; the poll also does the automatic publish), `cron/agent_build_check.php` (every 5 minutes, exits at once when nothing is running), handlers in `admin/post/settings_endpoint_agent.php`. `FeedHttp::get()` gained a POST body and the token rule.
+* State: `endpoint_agent_feed_state` keys `gh_token` (encrypted with `encryptSetting()`, context `agent_feed_token`), `gh_token_test`, `build` (JSON: version, run id, state, auto-publish options, who started it).
+* GitHub calls (all through `FeedHttp`, token only to api.github.com, no redirects for token requests): `GET .../workflows/endpoint-agent.yml` (Test token), `GET .../workflows/endpoint-agent.yml/runs`, `POST .../dispatches` `{"ref":"main","inputs":{"version":"X.Y.Z"}}`, `GET .../actions/runs/<id>`. The run created by the dispatch is the earliest run with an id higher than the newest one seen just before.
+* Token: fine-grained, one repository, **Actions: Read and write**, nothing else. Test token proves read access only; the first build proves write access.
+* Cron (existing server): `*/5 * * * * www-data /usr/bin/php <app>/cron/agent_build_check.php >> /var/log/itflow-agent-build-cron.log 2>&1` and create that log file (www-data writable).
+* Tests: `php tests/rmm_agent_feed.php` (mock: `tests/support/mock_github.py` handles dispatch, runs, token check; part `tests/support/rmm_agent_build_part.php`), browser: `tests/browser/rmm_agent_build_smoke.mjs` with `tests/browser/rmm_agent_feed_extra.php <dir> <version>` adding a release to the mock.
+
 ## 6j. Plain options instead of JSON (26.10.29, no DB change)
 
 * **Check schedule** (Administration > Endpoint agent > "What the agent checks"): `includes/rmm_checks_simple.php` (`RivetChecksSimple`: `decompose()` stored list -> options, `compose()` posted options -> list, then `ChecksValidator`), `includes/rmm_checks_simple_ui.php`, `js/rmm_checks_simple.js`, handler in `admin/post/settings_endpoint_agent.php` (`$_POST['cs']`; a posted `checks_json` is ignored). Presets, intervals, the disk limits, the services checklist and the script limits are constants of the class. Checks without an option stay as "other checks" and are copied from the stored list by key. A refused save keeps the options in `$_SESSION['ea_checks_draft']` for one page view (ten minutes).
