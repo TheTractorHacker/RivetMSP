@@ -77,6 +77,7 @@ $serviceUrlHint = 'https://' . $config_base_url;
 <div class="card mb-3">
     <div class="card-header py-3 d-flex align-items-center justify-content-between">
         <h3 class="card-title mb-0"><i class="fas fa-fw fa-satellite me-2"></i>Endpoint agent</h3>
+        <span class="ms-auto me-3"><a href="/admin/rmm_mesh_wizard.php" class="small" data-mesh-wizard-link><i class="fas fa-fw fa-desktop me-1" aria-hidden="true"></i>Remote access (MeshCentral) setup</a></span>
         <span class="badge bg-<?= $cfg['enabled'] ? 'success' : 'secondary' ?> fs-6"><?= $cfg['enabled'] ? 'On' : 'Off' ?></span>
     </div>
     <div class="card-body">
@@ -810,7 +811,7 @@ unset($_SESSION['rmm_mesh_pin_probe']);
 $meshCard = rivetRmmMeshInstallCard(rivetRmmMeshInstallView($rmm, $meshWho), $meshOld, is_array($meshProbe) ? $meshProbe : null, (string) $csrf, trim((string) $cfg['mesh_url']) !== '');
 ?>
 <div class="card mb-3" id="mesh">
-    <div class="card-header"><h4 class="card-title mb-0">MeshCentral remote access</h4></div>
+    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2"><h4 class="card-title mb-0">MeshCentral remote access</h4><a href="/admin/rmm_mesh_wizard.php" class="btn btn-sm btn-outline-primary">Step-by-step setup with live status</a></div>
     <div class="card-body">
         <p class="small text-muted">Technicians with the "RMM remote connect" permission can open a session from the device or asset page. RivetMSP signs a one-click MeshCentral login token for ONE limited MeshCentral account (no shared administrator credential) at the moment of the click; nothing is stored or logged. The login token key is the value printed by <code>node node_modules/meshcentral --loginTokenKey</code> on the MeshCentral server.</p>
         <?= rivetRmmScaleMsgHtml($meshMsg) ?>

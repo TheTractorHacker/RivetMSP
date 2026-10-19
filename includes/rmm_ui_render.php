@@ -208,6 +208,11 @@ function rivetRmmUiStrip(array $vm): string
         $remoteReason = !$perm['remote'] ? 'Your role cannot open remote sessions.' : (!$vm['mesh']['mapped'] ? 'An administrator maps this device to a MeshCentral node first.'
             : (!$dev ? 'The device is not approved or no longer active.' : 'Available after the first check-in.'));
         $actions .= $btn('rmm-act-remote', 'btn-success', 'fas fa-desktop', 'Remote access', $perm['remote'] && $vm['mesh']['mapped'] && $dev && !$never, $remoteReason);
+    } elseif ($perm['admin']) {
+        // 26.10.30: Mesh is not set up: the button leads to the setup wizard instead of vanishing
+        $actions .= '<a href="/admin/rmm_mesh_wizard.php" class="btn btn-outline-success btn-sm" id="rmm-act-remote-setup" data-rmm-remote-setup><i class="fas fa-desktop me-1" aria-hidden="true"></i>Set up remote access</a>';
+    } else {
+        $actions .= $btn('rmm-act-remote', 'btn-outline-success', 'fas fa-desktop', 'Remote access', false, 'Remote access is not set up yet. An administrator can set it up under Administration > Remote access (MeshCentral) setup.');
     }
     $more = '';
     if ($perm['run_saved'] && $dev && !$never) {
@@ -420,7 +425,7 @@ function rivetRmmUiRemoteCard(array $vm): string
             $body .= '<p class="text-muted small mt-2 mb-0">The device is offline. A session can be forced but will likely fail.</p>';
         }
     } else {
-        $body .= '<p class="text-muted small mb-0">MeshCentral is not configured. An administrator can set it up under Administration, Endpoint agent.</p>';
+        $body .= '<p class="text-muted small mb-0">MeshCentral is not configured. ' . ($perm['admin'] ? '<a href="/admin/rmm_mesh_wizard.php" data-rmm-remote-setup-link>Open the Remote access setup</a>.' : 'An administrator can set it up under Administration, Remote access (MeshCentral) setup.') . '</p>';
     }
     $body .= '</div>' . rivetRmmUiMeshAgentHtml($vm['mesh_agent'] ?? null, (bool) $perm['admin']);
     if ($perm['admin']) {
