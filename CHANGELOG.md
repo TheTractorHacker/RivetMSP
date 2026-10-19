@@ -4,6 +4,16 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.33] RivetMSP — Build on my build host (DB 2.6.99)
+
+**Deploy notes:** back up the database, pull this tag, then run **Administration > Updates** (DB 2.6.98 to 2.6.99: three new tables, nothing existing is changed). No RivetCore change and no new web server route (the build host uses `/api/v1/agent_build_host/...`, inside the existing `/api/v1/` location). Optional: the folder `backups/endpoint-build/` is created on first use (private to the web user, like the other `backups/` folders).
+
+- **Build on my build host.** Administration > Endpoint agent > Agent updates > Build a new version now asks where the build runs: **Build on GitHub** (as before) or **Build on my build host**. A build host is a Linux machine you own with Docker and git that runs RivetCore's `endpoint-agent/scripts/build-host.sh` every minute. It only makes outbound requests to this site; this server needs no compiler and no inbound connection to your network. Protocol: RivetCore `docs/rmm/BUILD_HOST_PROTOCOL.md`; setup: `docs/rmm/BUILD_HOST.md`.
+- **Local build section.** Add build host (the token is shown once, with a Copy button and the exact `build-host.conf` lines containing this site's address), a host list with a status dot, last seen and address, Disable / Enable / Rotate token / Delete, a Request form (version, main or a tag, publish automatically with ring and rollout, make current), and a job list with live progress, the host's note, the failure log tail and Cancel / Publish.
+- **Security.** The token authenticates the four build calls only. It is stored as a per-token salted SHA-256, compared in constant time, revocable, rate limited and audited. Files go to a per-job quarantine folder under random names; names come from a fixed list; chunks (1 MiB at most) and files have size caps; the assembled files are re-hashed against the manifest and `SHA256SUMS` and checked by the existing PE / architecture / MSI validators, then published through the existing upload code (ring, rollout and make-current from the request). Any mismatch stores nothing.
+- Database: `endpoint_agent_build_hosts`, `endpoint_agent_build_jobs`, `endpoint_agent_build_chunks` (updater step 2.6.99, `db.sql`).
+- Tests: `tests/rmm_agent_localbuild.php` (mock build host through the real endpoints, 195 checks) and `tests/browser/rmm_agent_localbuild_smoke.mjs`. Files: `includes/rmm_agent_localbuild.php`, `includes/rmm_agent_localbuild_ui.php`, `api/v1/agent_build_host.php`, `admin/post/agent_localbuild_poll.php`, `js/rmm_agent_localbuild.js`.
+
 ## [26.10.32] RivetMSP — Administration > Endpoint agent is now tabs (no database change)
 
 **Deploy notes:** pull this tag; nothing else (no database update, no RivetCore change, no new setting).
