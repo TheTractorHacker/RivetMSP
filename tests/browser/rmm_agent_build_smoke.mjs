@@ -51,7 +51,7 @@ await T('login', async () => {
 }, { allowHttp: [/\/agent\/clients\.php/] });
 
 await T('no token: the fallback shows the GitHub button and three steps, and no Build form', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-updates');
   await p.waitSel('#agent-build');
   const t = await card();
   assert(/Start the build on GitHub/.test(t) && /Run workflow/.test(t) && /Check for updates/.test(t) && /0\.9\.2/.test(t), 'fallback text: ' + t.slice(0, 500));
@@ -78,7 +78,7 @@ await T('save a token through the form: stored, tested, and the page never shows
 });
 
 await T('Test token button answers in words', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-updates');
   await p.waitSel('#agent-build');
   await p.evalWith(() => { document.getElementById('agent-build-token').open = true; });
   await p.clickNav('button[name=agent_build_token_test]');
@@ -86,7 +86,7 @@ await T('Test token button answers in words', async () => {
 });
 
 await T('Build: an existing version is refused in words and nothing starts', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-updates');
   await p.waitSel('#ab_ver');
   await setVal('#ab_ver', '0.9.1');
   await p.clickNav('button[name=agent_build_start]');
@@ -95,7 +95,7 @@ await T('Build: an existing version is refused in words and nothing starts', asy
 });
 
 await T('Build 0.9.2 with publish automatically: queued, then the page follows GitHub (building, finished) without a reload, and publishes the release into the pilot ring', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-updates');
   await p.waitSel('#ab_ver');
   await p.click('#ab_auto');
   await p.clickNav('button[name=agent_build_start]');
@@ -119,7 +119,7 @@ await T('Build 0.9.2 with publish automatically: queued, then the page follows G
 }, { allowHttp: [/agent_build_poll/] });
 
 await T('a failed build shows Failed and the link to the run; the token can be removed', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-updates');
   await p.waitSel('#ab_ver');
   await setVal('#ab_ver', '0.9.3');
   await p.clickNav('button[name=agent_build_start]');

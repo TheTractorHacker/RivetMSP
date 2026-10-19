@@ -90,7 +90,7 @@ const saveSettings = async () => { await p.clickNav('button[name=save_agent_sett
 await T('login: real form signs in', async () => { await login(EMAIL, PASSWORD); }, { allowHttp: [/\/agent\/clients\.php/] });
 
 await T('check schedule: plain cards, no JSON field, the built-in note and the recommended summary', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-checks');
   await p.waitSel(CARD);
   await pageHasNoJsonBox();
   const t = await p.eval(`document.querySelector('${CARD}').innerText`);
@@ -145,7 +145,7 @@ await T('check schedule: Save stores it; the page reloads with the same options,
   await setVal('#cs_disk_free', '10');
   await saveSettings();
   await flash(/settings|saved|updated/i, 'save message');
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-checks');
   await p.waitSel(CARD);
   assert(!(await p.exists('[data-cs-default-note]')), 'the built-in note is still shown after saving');
   assert(await p.eval(`document.querySelector('#cs_every').value`) === '1800' && await p.eval(`document.querySelector('#cs_disk_free').value`) === '10', 'interval/disk not kept');
@@ -170,17 +170,17 @@ await T('check schedule: a refused save keeps what was typed and says why in pla
   assert(!(await p.eval(`document.querySelector('[data-cs-saved]').textContent.includes('bad name')`)), 'refused value reached the saved list');
   assert(!(await p.eval(`document.querySelector('#ea_checks_simple').innerHTML.includes('<b>')`)), 'markup was not escaped');
   await shot('checks-refused');
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-checks');
   assert(!(await p.exists('[data-cs-errors]')), 'the refusal is shown only once');
 });
 
 await T('check schedule: Restore defaults clears the stored list (the built-in note returns)', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-checks');
   await p.waitSel(CARD);
   await click('[data-cs-restore]');
   assert(/built-in checks will be used/.test(await summaryText()), 'summary after restore: ' + await summaryText());
   await saveSettings();
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-checks');
   await p.waitSel(CARD);
   assert(await p.exists('[data-cs-default-note]'), 'built-in note not back after Restore defaults');
   assert(/disk_c/.test(await p.eval(`document.querySelector('[data-cs-saved]').textContent`)), 'the module is not serving its three built-in checks');
@@ -189,14 +189,14 @@ await T('check schedule: Restore defaults clears the stored list (the built-in n
 await T('check schedule: the built-in disk and service checks are shown as "other checks" once a list is saved, and stay when kept', async () => {
   await click('[data-cs-preset=light]');
   await saveSettings();
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-checks');
   await p.waitSel(CARD);
   assert(!(await p.exists('[data-cs-others]')), 'unexpected other checks for a list this form wrote');
 });
 
 await T('check schedule: phone width has no sideways scroll and every control is labelled', async () => {
   await p.setViewport(390, 800, true);
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-checks');
   await p.waitSel(CARD);
   await noOverflow('check schedule');
   assert((await unlabeled(CARD)).length === 0, 'unlabeled: ' + (await unlabeled(CARD)).join(','));
@@ -205,14 +205,14 @@ await T('check schedule: phone width has no sideways scroll and every control is
 });
 
 await T('check schedule: keyboard only (the preset buttons and switches are real controls in the tab order)', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-checks');
   await p.waitSel(CARD);
   const ok = await p.eval(`[...document.querySelectorAll('${CARD} button, ${CARD} input:not([type=hidden]), ${CARD} select, ${CARD} textarea')].every(e => e.tabIndex >= 0)`);
   assert(ok, 'a control is not keyboard reachable');
 });
 
 await T('Agent updates card and Agent fleet page: a prominent Add device / Build installer button', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-updates');
   await p.waitSel('#agent-updates [data-feed-build-installer]');
   const t = await p.eval(`document.querySelector('#agent-updates [data-feed-build-installer]').innerText + '|' + document.querySelector('#agent-updates [data-feed-build-installer]').className`);
   assert(/Build installer/.test(t) && /btn-primary/.test(t), 'agent updates button: ' + t);
@@ -244,7 +244,7 @@ await T('policy editor: the original check types have plain fields and no JSON b
 });
 
 await T('Mesh settings: platform boxes instead of two JSON boxes', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-checks');
   assert(await p.eval(`!!document.querySelector('input[name="mesh_agent_id[windows/amd64]"]')`), 'platform box missing');
   assert(await p.eval(`!!document.querySelector('input[name="mesh_install_arg[linux]"]')`), 'install argument box missing');
   assert(!(await p.eval(`!!document.querySelector('textarea[name=mesh_agent_ids], textarea[name=mesh_install_args]')`)), 'JSON textarea still present');

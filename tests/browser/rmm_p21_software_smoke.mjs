@@ -333,14 +333,14 @@ await T('phone width and dark mode keep their layout on the catalog, assignments
 
 // ------------------------------------------------------------------------------------------------ administration
 await T('administration: the Software deployment card; live installs need the acknowledgement, the limits save', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-software');
   await trapDialogs();
   await p.waitSel('#software-deployment');
   assert(/about once a day/.test(await p.eval(`document.getElementById('software-deployment').innerText`)) && /has not been run on a real machine/.test(await p.eval(`document.getElementById('software-deployment').innerText`)), 'cost or Windows text missing');
   await p.eval(`(()=>{const c=document.querySelector('#ea_sd_live');c.scrollIntoView();c.checked=true;c.dispatchEvent(new Event('change',{bubbles:true}))})()`);
   await p.clickNav('#software-deployment button[name=save_software_settings]');
   await flash(/tick the confirmation box/, 'live install refusal');
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-software');
   await p.waitSel('#ea_sd_h');
   await p.type('#ea_sd_h', '12');
   await p.clickNav('#software-deployment button[name=save_software_settings]');

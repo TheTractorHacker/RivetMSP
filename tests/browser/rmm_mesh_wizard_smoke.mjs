@@ -71,7 +71,7 @@ await T('Add device dialog links to the Create installer page', async () => {
 });
 
 await T('wizard: reachable from the Endpoint agent header; five steps', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-remote');
   await p.waitSel('[data-mesh-wizard-link]');
   await p.clickNav('[data-mesh-wizard-link]');
   await p.waitSel('[data-wiz-step="5"]');

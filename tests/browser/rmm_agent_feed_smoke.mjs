@@ -78,7 +78,7 @@ const trapDownloads = () => p.eval(`(()=>{ if (window.__trapped) return true; wi
 await T('login: real form signs in', async () => { await login(EMAIL, PASSWORD); }, { allowHttp: [/\/agent\/clients\.php/] });
 
 await T('Agent updates: the card lists the releases (the badge is on, so the first visit read the mock), the newer one is badged', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-updates');
   await p.waitSel('#agent-updates');
   const t = await p.eval(`document.getElementById('agent-updates').innerText`);
   assert(/0\.9\.1/.test(t) && /0\.9\.0/.test(t) && /Pre-release/.test(t), 'releases not listed: ' + t.slice(0, 400));
@@ -88,13 +88,13 @@ await T('Agent updates: the card lists the releases (the badge is on, so the fir
 });
 
 await T('Agent updates: Check for updates answers in words', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-updates');
   await p.clickNav('#agent-updates button[name=agent_feed_refresh]');
   await flash(/Checked just now|Nothing new|agent release/, 'check message');
 });
 
 await T('Agent updates: Publish 0.9.1 to the pilot ring through the form; every file is verified and shown, then the row says what is hosted', async () => {
-  await go('/admin/settings_endpoint_agent.php');
+  await go('/admin/settings_endpoint_agent.php#tab-updates');
   const row = '[data-feed-row="0.9.1"]';
   await p.waitSel(row + ' button[name=publish_agent_release]');
   await setVal(row + ' select[name=release_ring]', 'pilot');
