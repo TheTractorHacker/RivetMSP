@@ -528,6 +528,21 @@ foreach ($rows('SELECT log_description FROM logs') as $r) { $blob .= $r['log_des
 foreach ($rows('SELECT note, log_tail, result FROM endpoint_agent_build_jobs') as $r) { $blob .= implode('', $r); }
 $blob .= (string) @file_get_contents($web['log']);
 $ok(!str_contains($blob, substr($T1, 21)) && !str_contains($blob, substr($T2, 21)) && !str_contains($blob, substr($T3, 21)), 'no build host token secret appears in any log row, job text or the server error log');
+echo "\n--- GitHub provider: workflow steps as a checklist ---\n";
+$feed = new \RivetMsp\AgentFeed\Feed($db); $gb = new \RivetMsp\AgentFeed\Build($feed);
+$bstate = ['repo' => $feed->repo(), 'version' => '9.9.9', 'tag' => 'agent-v9.9.9', 'state' => 'building', 'run_id' => 5, 'before_id' => 1, 'started_at' => time(), 'checked_at' => time(), 'by' => 'admin', 'auto' => false, 'ring' => '', 'pct' => 10,
+    'release_seen' => false, 'published' => false, 'detail' => '', 'est_pct' => 40, 'steps' => [['name' => 'Checkout', 'status' => 'done'], ['name' => "Build <b>agents</b>\x07", 'status' => 'active'], ['name' => 'Make MSI', 'status' => 'pending'], ['name' => 'Evil', 'status' => 'bogus'], ['name' => '', 'status' => 'done']]];
+$feed->statePut('build', json_encode($bstate));
+$d = $gb->display();
+$ok($d['est_pct'] === 40 && count($d['steps']) === 4 && $d['steps'][0] === ['name' => 'Checkout', 'status' => 'done'] && $d['steps'][1]['status'] === 'active' && $d['steps'][3]['status'] === 'pending' && !str_contains($d['steps'][1]['name'], "\x07"), 'display(): steps cleaned (unknown status becomes pending, empty names and control characters dropped), percent estimate carried');
+$bstate['est_pct'] = 500; $feed->statePut('build', json_encode($bstate));
+$ok($gb->display()['est_pct'] === 95, 'a running build is never shown above 95 percent');
+$bstate['state'] = 'finished'; $feed->statePut('build', json_encode($bstate)); $d = $gb->display();
+$ok($d['est_pct'] === 100 && array_unique(array_column($d['steps'], 'status')) === ['done'], 'a finished build shows 100 percent and every step done');
+$bstate['state'] = 'building'; $feed->statePut('build', json_encode($bstate));
+$ghp = web($wb, 'GET', '/admin/settings_endpoint_agent.php', $sidAdmin)[1];
+$ok(str_contains($ghp, 'data-build-steps') && str_contains($ghp, 'data-build-bar') && str_contains($ghp, '&lt;b&gt;agents&lt;/b&gt;') && !str_contains($ghp, '<b>agents</b>'), 'the GitHub build box draws the checklist and escapes step names');
+$q("DELETE FROM endpoint_agent_feed_state WHERE state_key = 'build'");
 // DB 2.6.98 -> 2.6.99 -> 2.6.100
 foreach (['endpoint_agent_build_chunks', 'endpoint_agent_build_jobs', 'endpoint_agent_build_hosts'] as $t) { $q("DROP TABLE $t"); }
 $q("UPDATE settings SET config_current_database_version = '2.6.98'");
