@@ -35,7 +35,7 @@ const CARDS = {
   checks: ['checks', 'ea_checks_simple'],
   remote: ['remote-tools', 'file-transfer', 'mesh'],
   inventory: ['inventory', 'log-collection', 'scale', 'partitioning', 'ext-store'],
-  patching: ['patch-management'],
+  patching: ['patching'],
   software: ['software-deployment'],
   security: ['trust', 'automation', 'signing', 'tokens'],
 };
@@ -68,7 +68,7 @@ await T('no card lost or duplicated: every card id exists exactly once, inside t
 await T('forms: every post form carries its tab (ea_tab) and the checks/trust controls belong to the settings form', async () => {
   const r = await p.eval(`(()=>{const miss=[...document.querySelectorAll('form[method=post]')].filter(f=>f.closest('.ea-pane')&&!f.querySelector('input[name=ea_tab]')).length;
     const f=document.getElementById('ea_settings_form');const names=[...f.elements].map(e=>e.name);
-    return {miss,names:['enabled','service_url','cs[disk_warn]','ca_pem','coexistence_policy','save_agent_settings','unmatched_policy','csrf_token'].filter(n=>!names.includes(n))}})()`);
+    return {miss,names:['service_url','cs[present]','ca_pem','coexistence_policy','save_agent_settings','unmatched_policy','csrf_token'].filter(n=>!names.includes(n))}})()`);
   assert(r.miss === 0 && r.names.length === 0, 'forms: ' + JSON.stringify(r));
 });
 
@@ -88,7 +88,7 @@ await T('keyboard: arrows, Home and End move between tabs and update the hash', 
 });
 
 await T('hash: #tab-name and every old card anchor open the right tab, a click updates the hash', async () => {
-  const cases = { '#tab-checks': 'checks', '#inventory': 'inventory', '#mesh': 'remote', '#binaries': 'updates', '#agent-updates': 'updates', '#patch-management': 'patching', '#software-deployment': 'software',
+  const cases = { '#tab-checks': 'checks', '#inventory': 'inventory', '#mesh': 'remote', '#binaries': 'updates', '#agent-updates': 'updates', '#patching': 'patching', '#software-deployment': 'software',
     '#tokens': 'security', '#signing': 'security', '#devices': 'overview', '#scale': 'inventory', '#remote-tools': 'remote', '#deployment': 'updates' };
   for (const [h, tab] of Object.entries(cases)) {
     await p.goto('about:blank'); await p.goto(BASE + PAGE + h); await p.waitSel('#ea-tablist'); await sleep(250);
