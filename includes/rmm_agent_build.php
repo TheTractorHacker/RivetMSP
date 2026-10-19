@@ -138,6 +138,7 @@ final class Build
             $st === 403 => "The token is valid but not allowed to $what. Give it the permission Actions: Read and write on $repo.",
             $st === 404 => "GitHub cannot find $repo or its workflow with this token. Check the repository name above, and that the token has access to exactly this repository.",
             $st === 422 => "GitHub refused the request: the workflow may not allow a manual run on the main branch or may not accept the version.",
+            $st >= 300 && $st < 400 && (string) $r['error'] !== '' => (string) $r['error'],
             $st > 0 => 'GitHub answered HTTP ' . $st . '.',
             default => (string) ($r['error'] !== '' ? $r['error'] : 'GitHub could not be reached.'),
         } . ($gh !== '' && $st > 0 ? ' GitHub says: ' . $gh : '');

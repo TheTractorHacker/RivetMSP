@@ -60,10 +60,10 @@ final class FeedHttp
      * @param list<string> $headers extra request headers
      * @return array{ok:bool,status:int,body:string,error:string,headers:array<string,string>,bytes:int,rate_limited:bool,reset:?int,host:string}
      */
-    public function get(string $url, int $maxBytes, int $timeoutS, array $headers = [], ?string $toFile = null, ?string $body = null): array
+    public function get(string $url, int $maxBytes, int $timeoutS, array $headers = [], ?string $toFile = null, ?string $postBody = null): array
     {
         // 26.10.31: a request that carries an Authorization header (the build token) goes to api.github.com ONLY and is never redirected: the token must not follow
-        // a Location to the download hosts. With $body the request is a POST (the workflow dispatch).
+        // a Location to the download hosts. With $postBody the request is a POST (the workflow dispatch).
         $authed = false;
         foreach ($headers as $hd) {
             if (stripos(ltrim($hd), 'authorization:') === 0) {
@@ -154,9 +154,9 @@ final class FeedHttp
                     return strlen($chunk);
                 },
             ]);
-            if ($body !== null) {
+            if ($postBody !== null) {
                 curl_setopt($ch, CURLOPT_POST, true);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $postBody);
             }
             if (defined('CURLOPT_PROTOCOLS_STR')) {
                 curl_setopt($ch, CURLOPT_PROTOCOLS_STR, $isTest ? 'http,https' : 'https');

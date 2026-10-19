@@ -45,5 +45,5 @@ if (!$bp_feed->ready()) {
 $bp = new \RivetMsp\AgentFeed\Build($bp_feed, static function (string $a, string $t): void {
     logAction('Endpoint Agent', $a, $t);
 });
-$bp_d = $bp->poll(rivetAgentBuildPublisher($bp_rmm, $bp_feed, $bp_rmm->admin(), rivetRmmPrincipal((int) $session_user_id, (string) $session_name), (int) $session_user_id, (string) $session_name));
+$bp_d = $bp->poll(\RivetMsp\AgentFeed\rivetAgentBuildPublisher($bp_rmm, $bp_feed, $bp_rmm->admin(), rivetRmmPrincipal((int) $session_user_id, (string) $session_name), (int) $session_user_id, (string) $session_name));
 $bp_out(200, ['ok' => true, 'build' => $bp_d === null ? null : array_intersect_key($bp_d, array_flip(['version', 'state', 'label', 'detail', 'run_url', 'release_seen', 'published', 'publish_message', 'active']))]);

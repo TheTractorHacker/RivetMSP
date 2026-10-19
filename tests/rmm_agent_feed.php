@@ -383,3 +383,6 @@ if (getenv('RMM_TEST_REAL_RELEASE_DIR')) {
     echo "\n--- the REAL agent-v0.9.1 release files (read-only copy) ---\n";
     require __DIR__ . '/support/rmm_agent_feed_real_part.php';
 }
+
+echo "\n--- Build a new version (26.10.31) ---\n";
+require __DIR__ . '/support/rmm_agent_build_part.php';
