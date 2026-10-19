@@ -81,7 +81,7 @@ for arg in "$@"; do
         --keep-workdir) KEEP_WORKDIR=1 ;;
         --no-register) NO_REGISTER=1 ;;
         --app-dir=*) APP_DIR="${arg#*=}" ;;
-        --name=*) HOST_NAME="${arg#*=}" ;;
+        --name=*) HOST_NAME="${arg#*=}"; [[ -n "${HOST_NAME}" ]] || die "--name must not be empty" ;;
         --site-url=*) SITE_URL="${arg#*=}" ;;
         --core-repo=*) CORE_REPO="${arg#*=}" ;;
         --allowed-refs=*) ALLOWED_REFS="${arg#*=}" ;;
