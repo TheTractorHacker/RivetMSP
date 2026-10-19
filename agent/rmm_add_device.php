@@ -22,12 +22,12 @@ $rmm_denied = static function (string $title, string $detail): void {
 };
 
 if (!$config_core_rmm_enabled || !rivetRmmEnabled($mysqli)) {
-    $rmm_denied('RMM module is turned off', 'The RMM module is switched off. An administrator can turn it on under Administration > Endpoint agent.');
+    $rmm_denied('RMM module is turned off', 'The RMM module is switched off, so installers cannot be created. An administrator can switch it on under Administration > Endpoint agent (the RMM module card).');
     return;
 }
 $rmm_installer = rivetRmmUiInstaller($mysqli, (int) $session_user_id, null, (int) ($_GET['client_id'] ?? 0) ?: null);
 if ($rmm_installer === null) {
-    $rmm_denied('No access', 'Your role cannot create enrollment tokens, so it cannot build installers.');
+    $rmm_denied('No access', 'Your role lacks the permission "Create enrollment tokens" (rmm.token.manage), so it cannot build installers. Ask an administrator to grant it under Administration > Roles.');
     return;
 }
 $rmm_feed = new \RivetMsp\AgentFeed\Feed($mysqli);
