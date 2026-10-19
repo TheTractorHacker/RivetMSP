@@ -60,8 +60,16 @@ final class FeedHttp
      * @param list<string> $headers extra request headers
      * @return array{ok:bool,status:int,body:string,error:string,headers:array<string,string>,bytes:int,rate_limited:bool,reset:?int,host:string}
      */
-    public function get(string $url, int $maxBytes, int $timeoutS, array $headers = [], ?string $toFile = null): array
+    public function get(string $url, int $maxBytes, int $timeoutS, array $headers = [], ?string $toFile = null, ?string $postBody = null): array
     {
+        // 26.10.31: a request that carries an Authorization header (the build token) goes to api.github.com ONLY and is never redirected: the token must not follow
+        // a Location to the download hosts. With $postBody the request is a POST (the workflow dispatch).
+        $authed = false;
+        foreach ($headers as $hd) {
+            if (stripos(ltrim($hd), 'authorization:') === 0) {
+                $authed = true;
+            }
+        }
         $res = ['ok' => false, 'status' => 0, 'body' => '', 'error' => '', 'headers' => [], 'bytes' => 0, 'rate_limited' => false, 'reset' => null, 'host' => ''];
         if (!function_exists('curl_init')) {
             $res['error'] = 'The PHP curl extension is not installed.';
@@ -77,6 +85,11 @@ final class FeedHttp
             $p = parse_url($url);
             $host = strtolower((string) $p['host']);
             $isTest = $this->testOrigin !== null && $host === strtolower((string) (parse_url($this->testOrigin)['host'] ?? ''));
+            if ($authed && !$isTest && $host !== 'api.github.com') {
+                $res['error'] = 'That address is not one this server may contact with a token.';
+
+                return $res;
+            }
             $port = (int) ($p['port'] ?? 443);
             $pin = [];
             if (!$isTest) {
@@ -141,6 +154,10 @@ final class FeedHttp
                     return strlen($chunk);
                 },
             ]);
+            if ($postBody !== null) {
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $postBody);
+            }
             if (defined('CURLOPT_PROTOCOLS_STR')) {
                 curl_setopt($ch, CURLOPT_PROTOCOLS_STR, $isTest ? 'http,https' : 'https');
             }
@@ -159,6 +176,11 @@ final class FeedHttp
             $res['bytes'] = $bytes;
             if ($tooBig) {
                 $res['error'] = 'The file is larger than the limit of ' . self::human($maxBytes) . '.';
+
+                return $res;
+            }
+            if ($authed && $status >= 300 && $status < 400) {
+                $res['error'] = 'GitHub answered with a redirect, which is not followed for a request that carries a token.';
 
                 return $res;
             }
@@ -297,6 +319,40 @@ final class Feed
         }
     }
 
+    /** 26.10.31: the same key/value store for the build feature (includes/rmm_agent_build.php). */
+    public function stateGet(string $key): ?string
+    {
+        return $this->get($key);
+    }
+
+    public function statePut(string $key, string $value): void
+    {
+        $this->put($key, $value);
+    }
+
+    public function lock(string $name): bool
+    {
+        $r = @mysqli_query($this->db, "SELECT GET_LOCK('" . mysqli_real_escape_string($this->db, $name) . "', 0)");
+        $row = $r ? $r->fetch_row() : null;
+
+        return $row !== null && (int) $row[0] === 1;
+    }
+
+    public function unlock(string $name): void
+    {
+        @mysqli_query($this->db, "SELECT RELEASE_LOCK('" . mysqli_real_escape_string($this->db, $name) . "')");
+    }
+
+    public function http(): FeedHttp
+    {
+        return $this->http;
+    }
+
+    public function apiOrigin(): string
+    {
+        return $this->apiBase();
+    }
+
     public function repo(): string
     {
         $r = $this->get('repo');
@@ -313,6 +369,9 @@ final class Feed
         }
         if ($repo !== $this->repo()) {
             $this->put('repo', $repo);
+            $this->put('gh_token', '');   // 26.10.31: a build token belongs to one repository; another repository needs its own
+            $this->put('gh_token_test', '');
+            $this->put('build', '');
             $this->put('cache', '');   // another repository, another list
             $this->put('checked_at', '0');
         }

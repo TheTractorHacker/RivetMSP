@@ -664,9 +664,11 @@ install_cron() {
 * * * * * www-data /usr/bin/php ${APP_DIR}/cron/ticket_email_parser.php >> /var/log/itflow-mail-parser-cron.log 2>&1
 # Nightly restore drill of the newest in-app backup zip. Does nothing until an admin enables it (Admin > Backup > Restore drill).
 45 3 * * * www-data /usr/bin/php ${APP_DIR}/cron/restore_drill.php >> /var/log/itflow-restore-drill-cron.log 2>&1
+# Follows an agent build started from Administration > Endpoint agent > Agent updates and publishes it when asked to. Exits at once when no build is running.
+*/5 * * * * www-data /usr/bin/php ${APP_DIR}/cron/agent_build_check.php >> /var/log/itflow-agent-build-cron.log 2>&1
 EOF
     # cron's ">>" cannot create a file in /var/log as www-data; a missing log file silently stops the job.
-    for _log in /var/log/itflow-cron.log /var/log/itflow-mail-queue-cron.log /var/log/itflow-mail-parser-cron.log /var/log/itflow-restore-drill-cron.log; do
+    for _log in /var/log/itflow-cron.log /var/log/itflow-mail-queue-cron.log /var/log/itflow-mail-parser-cron.log /var/log/itflow-restore-drill-cron.log /var/log/itflow-agent-build-cron.log; do
         [[ -f "${_log}" ]] || install -m 640 -o www-data -g adm /dev/null "${_log}"
     done
     chmod 644 "${cron_file}"

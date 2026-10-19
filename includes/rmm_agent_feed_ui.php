@@ -6,6 +6,7 @@
  */
 
 require_once __DIR__ . '/rmm_agent_feed.php';
+require_once __DIR__ . '/rmm_agent_build_ui.php';
 
 use RivetMsp\AgentFeed\Feed;
 
@@ -24,7 +25,7 @@ function rivetAgentFeedBadge(array $vm): string
  * @param array<string,mixed> $vm Feed::view()
  * @param array{type:string,text:string}|null $msg the card's message
  * @param list<array{label:string,state:string,detail:string}> $steps what the last publish did, step by step
- * @param array{service_ready:bool} $ctx
+ * @param array{service_ready:bool,build?:array<string,mixed>} $ctx
  */
 function rivetAgentFeedCard(array $vm, ?array $msg, array $steps, string $csrf, array $ctx): string
 {
@@ -37,6 +38,9 @@ function rivetAgentFeedCard(array $vm, ?array $msg, array $steps, string $csrf, 
         . '<strong>Publish</strong> downloads the Windows agent (x64 and ARM64) and the MSI template, checks each file against the release\'s own <code>SHA256SUMS</code> BEFORE storing it, and stores it exactly as an upload would '
         . '(same checks, same audit). The Linux files (install script, tarballs, .deb, .rpm) are not copied here: they are recorded as links with their SHA-256, and the <a href="/agent/rmm_add_device.php">Build installer</a> page uses them. '
         . 'Only <code>github.com</code> and GitHub\'s release download hosts are ever contacted.</p>';
+    if (isset($ctx['build'])) {
+        $o .= rivetAgentBuildBox($ctx['build'], $csrf);
+    }
     if ($msg !== null) {
         $o .= '<div class="alert alert-' . ($msg['type'] === 'error' ? 'danger' : ($msg['type'] === 'warning' ? 'warning' : 'success')) . ' py-2" role="alert" data-feed-msg>' . $h($msg['text']) . '</div>';
     }
