@@ -228,6 +228,8 @@ $ok($r[0] === 200 && $jr['state'] === 'building' && mb_strlen($jr['note']) <= 50
 $pg = $page();
 $ok(str_contains($pg, '&lt;script&gt;alert(1)&lt;/script&gt;') && !str_contains($pg, '<script>alert(1)'), 'the note is escaped on the page');
 
+$pgc = $page();
+$ok(str_contains($pgc, 'data-lb-onecmd') && str_contains($pgc, 'value="sudo ' . $root . '/deploy/setup-build-host.sh"') && str_contains($pgc, 'data-lb-copy="lb_onecmd"'), 'the page shows the one-line setup command (deploy/setup-build-host.sh) with a copy button');
 echo "\n--- build progress (stage, pct, detail, elapsed_s; DB 2.6.100) ---\n";
 $pj = fn() => $jobRow($J1);
 $ok($pj()['progress_stage'] === '' && (int) $pj()['progress_pct'] === 0 && $pj()['progress_at'] === null, 'a job that reported no progress has empty progress columns (an old host keeps working)');

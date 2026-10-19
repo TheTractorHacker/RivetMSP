@@ -77,6 +77,10 @@ function rivetLocalBuildBox(array $lv, string $csrf): string
         }
         $o .= '</tbody></table></div>';
     }
+    $setupCmd = 'sudo ' . dirname(__DIR__) . '/deploy/setup-build-host.sh';
+    $o .= '<div class="alert alert-info py-2 small mb-2" data-lb-onecmd><strong>Easiest: use this server.</strong> Run this one command on the server that hosts this site (as root). It installs Docker, a locked-down <code>rivetit-build</code> account, the pinned and checksum-verified build script and a timer, creates the build host and its token for you, and checks the connection. Safe to run again; add <code>--uninstall</code> to remove it.'
+        . '<div class="input-group input-group-sm mt-1"><input class="form-control font-monospace" id="lb_onecmd" readonly value="' . $h($setupCmd) . '" aria-label="One-line setup command" data-lb-onecmd-input><button type="button" class="btn btn-outline-secondary" data-lb-copy="lb_onecmd">Copy</button></div>'
+        . '<div class="mt-1 text-muted">Docker group membership is root-equivalent for that one account; it is never given to the web server. The token goes straight into <code>/etc/rivetit/build-host.conf</code> (mode 600) and is never shown. Add <code>--check</code> to preview. Prefer a separate computer? Use the steps below.</div></div>';
     $o .= '<details class="small mb-3" id="agent-localbuild-setup"><summary>How to set up a build host (about 10 minutes)</summary><ol class="mt-2">'
         . '<li>On a Linux computer that can reach this site over https, install <strong>Docker</strong> and <strong>git</strong>, and clone RivetCore: <code>git clone https://github.com/TheTractorHacker/rivet-core /opt/rivet-core</code>.</li>'
         . '<li>Press <strong>Add build host</strong> above and copy the token (shown once).</li>'

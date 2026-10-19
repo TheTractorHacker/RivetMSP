@@ -87,6 +87,10 @@ await T('status dot turns green after the host polls; setup steps link the Core 
   await p.evalWith(() => { document.getElementById('agent-localbuild-setup').open = true; });
   const href = await p.eval(`[...document.querySelectorAll('#agent-localbuild-setup a')].map(a => a.href).join(' ')`);
   assert(/rivet-core\/blob\/main\/docs\/rmm\/BUILD_HOST\.md/.test(href), 'docs link: ' + href);
+  const cmd = await p.eval(`document.querySelector('[data-lb-onecmd-input]').value`);
+  assert(/^sudo \/.+\/deploy\/setup-build-host\.sh$/.test(cmd), 'one-line setup command: ' + cmd);
+  await p.click('[data-lb-copy=lb_onecmd]');
+  await p.waitFor(`document.querySelector('[data-lb-copy=lb_onecmd]').textContent.trim() === 'Copied'`, { label: 'copy feedback on the setup command' });
   await shot('localbuild-host');
 }, { allowHttp: [/agent_localbuild_poll/] });
 
