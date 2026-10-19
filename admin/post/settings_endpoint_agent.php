@@ -1110,8 +1110,10 @@ if (isset($_POST['test_extstore'])) {
 // (GitHub hosts over https, size caps, time limits, no redirect off those hosts). Publishing stores nothing before the file's SHA-256 matches the release checksums, and then uses
 // RmmAdmin::uploadBinary() / uploadMsiTemplate(), the code of the upload form, which authorizes and audits.
 require_once dirname(__DIR__, 2) . '/includes/rmm_agent_feed.php';
+require_once dirname(__DIR__, 2) . '/includes/rmm_agent_build.php';   // 26.10.31: Build a new version
 
-if (isset($_POST['agent_feed_refresh']) || isset($_POST['agent_feed_settings']) || isset($_POST['publish_agent_release'])) {
+if (isset($_POST['agent_feed_refresh']) || isset($_POST['agent_feed_settings']) || isset($_POST['publish_agent_release']) || isset($_POST['agent_build_token_save']) || isset($_POST['agent_build_token_test'])
+    || isset($_POST['agent_build_token_remove']) || isset($_POST['agent_build_start'])) {
     validateCSRFToken($_POST['csrf_token'] ?? '');
     ea_scale_require_admin($rmm, (int) $session_user_id, 'agent-updates');
     $feed = new \RivetMsp\AgentFeed\Feed($mysqli);
@@ -1134,6 +1136,40 @@ if (isset($_POST['agent_feed_refresh']) || isset($_POST['agent_feed_settings']) 
             logAction('Endpoint Agent', 'Agent Feed Settings Changed', "$session_name set the agent release repository to " . $feed->repo() . ' (badge ' . ($feed->badgeOn() ? 'on' : 'off') . ')');
         }
         rivetRmmScaleMsg('agent-updates', $err === null ? 'success' : 'error', $err ?? 'Saved. Press Check for updates to read the releases.');
+        ea_scale_back('agent-updates');
+    }
+
+    // 26.10.31: Build a new version. The token field is read once, stored encrypted and never echoed; nothing below puts it in a message, a log row or the page.
+    if (isset($_POST['agent_build_token_save']) || isset($_POST['agent_build_token_test']) || isset($_POST['agent_build_token_remove']) || isset($_POST['agent_build_start'])) {
+        $bld = new \RivetMsp\AgentFeed\Build($feed, static function (string $a, string $t) use ($session_name): void {
+            logAction('Endpoint Agent', $a, ($a === 'Agent Build Token Tested' ? "$session_name: " : '') . $t);
+        });
+        if (isset($_POST['agent_build_token_save'])) {
+            $tokIn = is_string($_POST['gh_token'] ?? null) ? $_POST['gh_token'] : '';
+            unset($_POST['gh_token']);
+            $err = $bld->saveToken($tokIn);
+            unset($tokIn);
+            if ($err === null) {
+                logAction('Endpoint Agent', 'Agent Build Token Saved', "$session_name saved the GitHub build token for " . $feed->repo());
+                $t = $bld->testToken();
+                rivetRmmScaleMsg('agent-updates', $t['ok'] ? 'success' : 'warning', 'The token was saved (encrypted). ' . $t['message']);
+            } else {
+                rivetRmmScaleMsg('agent-updates', 'error', $err);
+            }
+        } elseif (isset($_POST['agent_build_token_remove'])) {
+            $bld->removeToken();
+            logAction('Endpoint Agent', 'Agent Build Token Removed', "$session_name removed the GitHub build token");
+            rivetRmmScaleMsg('agent-updates', 'success', 'The token was removed.');
+        } elseif (isset($_POST['agent_build_token_test'])) {
+            $t = $bld->testToken();
+            rivetRmmScaleMsg('agent-updates', $t['ok'] ? 'success' : 'error', $t['message']);
+        } else {
+            $ring = is_string($_POST['build_ring'] ?? null) ? $_POST['build_ring'] : '';
+            $r = $bld->start(is_string($_POST['build_version'] ?? null) ? $_POST['build_version'] : '', (string) $session_name, [
+                'auto' => ($_POST['build_auto'] ?? '') === '1', 'ring' => $ring, 'pct' => ea_post_int('build_pct', 0, 100, 10), 'activate' => ($_POST['build_activate'] ?? '') === '1',
+            ]);
+            rivetRmmScaleMsg('agent-updates', $r['ok'] ? 'success' : 'error', $r['message']);
+        }
         ea_scale_back('agent-updates');
     }
 

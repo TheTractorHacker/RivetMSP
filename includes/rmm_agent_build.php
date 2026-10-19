@@ -445,3 +445,26 @@ final class Build
         ];
     }
 }
+
+/**
+ * The publisher the automatic "publish when built" uses: the same ability check, size limit, service check and Feed::publish() as the Publish button.
+ *
+ * @return callable(string,array<string,mixed>):array{ok:bool,message:string}
+ */
+function rivetAgentBuildPublisher(object $rmm, Feed $feed, object $admin, object $who, int $userId, string $userName): callable
+{
+    return static function (string $tag, array $o) use ($rmm, $feed, $admin, $who, $userId, $userName): array {
+        $denied = $rmm->authorizer()->check($userId, \RivetCore\Rmm\Authz\RmmAbility::BINARY_PUBLISH, 0, false);
+        if ($denied !== null) {
+            return ['ok' => false, 'message' => 'Not published automatically: ' . $denied];
+        }
+        @set_time_limit(600);
+        $res = $feed->publish($admin, $who, $tag, [
+            'ring' => in_array($o['ring'] ?? '', ['pilot', 'stable'], true) ? $o['ring'] : '', 'pct' => (int) ($o['pct'] ?? 10), 'activate' => (bool) ($o['activate'] ?? false),
+            'max_bytes' => $rmm->binaryStore()->maxBytes(), 'service_ready' => ($rmm->readModel()->settingsSummary()['service_base'] ?? null) !== null,
+        ]);
+        logAction('Endpoint Agent', 'Agent Release Downloaded', "$userName's automatic publish of $tag from " . $feed->repo() . ' (ring ' . (($o['ring'] ?? '') !== '' ? $o['ring'] : 'none') . '): ' . ($res['ok'] ? 'ok' : 'not completely') . ' - ' . $res['message']);
+
+        return ['ok' => $res['ok'], 'message' => $res['message']];
+    };
+}
