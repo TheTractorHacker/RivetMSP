@@ -272,6 +272,17 @@ $q("UPDATE endpoint_agent_build_jobs SET progress_stage = 'bogus' WHERE job_id =
 $row1 = array_values(array_filter($lb->jobs(), fn($j) => (int) $j['job_id'] === $J1))[0];
 $ok($row1['progress']['real'] === false && $row1['progress']['steps'] === [], 'a stored stage outside the list falls back to the coarse estimate');
 $q("UPDATE endpoint_agent_build_jobs SET progress_stage = 'upload' WHERE job_id = $J1");
+// every status call renews the lease (the build host script now heartbeats every 15 s), with or without progress fields
+$q("UPDATE endpoint_agent_build_jobs SET lease_expires_at = '" . gmdate('Y-m-d H:i:s', time() + 5) . "' WHERE job_id = $J1");
+$st($T1, $J1, ['state' => 'uploading', 'stage' => 'upload', 'pct' => 91]);
+$ok(strtotime($jobRow($J1)['lease_expires_at'] . ' UTC') > time() + 600, 'a status call with progress renews the lease');
+$q("UPDATE endpoint_agent_build_jobs SET lease_expires_at = '" . gmdate('Y-m-d H:i:s', time() + 5) . "' WHERE job_id = $J1");
+$st($T1, $J1, ['state' => 'uploading']);
+$ok(strtotime($jobRow($J1)['lease_expires_at'] . ' UTC') > time() + 600, 'and one without');
+$ok($st($T1, $J1, ['state' => 'uploading', 'stage' => 'upload', 'pct' => 100, 'detail' => 'all files uploaded'])[0] === 200 && (int) $jobRow($J1)['progress_pct'] === 100, 'pct 100 is accepted while the job is still uploading (the script sends it BEFORE complete)');
+$pg100 = array_values(array_filter($lb->jobs(), fn($j) => (int) $j['job_id'] === $J1))[0];
+$ok($pg100['progress']['pct'] === 99 && $pg100['active'] === true, 'a running job shows 99 percent until the server has verified it');
+$q("UPDATE endpoint_agent_build_jobs SET progress_pct = 91 WHERE job_id = $J1");
 // terminal state ignores progress: a failed call stores none
 $pf = $T3;
 $fx = bh('poll', $caps, $T3); $fjob = (int) ($fx[1]['job']['id'] ?? $J3);
