@@ -482,7 +482,8 @@ final class LocalBuild
     private function mine(array $host, mixed $jobId, array $states): array
     {
         $this->sweep();
-        $id = is_int($jobId) ? $jobId : 0;
+        // the build host script sends job_id as a string of digits (JSON), the spec's reply has an integer: both are accepted, nothing else
+        $id = is_int($jobId) ? $jobId : (is_string($jobId) && preg_match('/^[1-9][0-9]{0,8}\z/', $jobId) === 1 ? (int) $jobId : 0);
         $j = $id > 0 ? $this->job($id) : null;
         if ($j === null || (int) ($j['host_id'] ?? 0) !== (int) $host['host_id']) {
             return [null, [404, ['error' => 'No such job.', 'code' => 'no_job']]];

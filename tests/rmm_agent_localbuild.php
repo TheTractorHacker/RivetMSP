@@ -215,9 +215,10 @@ $T3id = (int) $one("SELECT host_id FROM endpoint_agent_build_hosts WHERE host_na
 
 echo "\n--- status ---\n";
 $st = fn(string $tok, int $job, array $x) => bh('status', ['job_id' => $job] + $x, $tok);
-$ok($st($T2, $J1, ['state' => 'building'])[0] === 404, "another host's job id answers exactly like a missing one (404 no_job)");
+$ok($st($T2, (string) $J1, ['state' => 'building'])[0] === 404, "another host's job id answers exactly like a missing one (404 no_job)");
 $ok($st($T1, 999999, ['state' => 'building'])[0] === 404 && $st($T1, -1, ['state' => 'building'])[0] === 404, 'a missing or negative job id is 404');
-foreach (['1', [1], null, 1.5, true, '1 OR 1=1'] as $badId) { $x = bh('status', ['job_id' => $badId, 'state' => 'building'], $T1); $ok($x[0] === 404, 'job_id of the wrong type is 404: ' . json_encode($badId)); }
+foreach ([[1], null, 1.5, true, '1 OR 1=1', '01', '-1', '1e3', ' 1', "1\n"] as $badId) { $x = bh('status', ['job_id' => $badId, 'state' => 'building'], $T1); $ok($x[0] === 404, 'job_id of the wrong type is 404: ' . json_encode($badId)); }
+$ok($st($T1, (string) $J1, ['state' => 'building'])[0] === 200, 'job_id sent as a string of digits (as the build host script does) is accepted');
 $ok($st($T1, $J1, ['state' => 'done'])[0] === 422 && $st($T1, $J1, ['state' => ['x']])[0] === 422 && $st($T1, $J1, [])[0] === 422, 'a state outside building/uploading/failed is 422');
 $note = '<script>alert(1)</script> ' . str_repeat('n', 600) . ' token ' . $T2;
 $r = $st($T1, $J1, ['state' => 'building', 'note' => $note]);
