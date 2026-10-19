@@ -1641,6 +1641,70 @@ CREATE TABLE `endpoint_agent_enrollment_tokens` (
   UNIQUE KEY `uniq_selector` (`token_selector`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `endpoint_agent_build_chunks`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `endpoint_agent_build_chunks` (
+  `job_id` int(11) NOT NULL,
+  `file_name` varchar(64) NOT NULL,
+  `chunk_index` int(11) NOT NULL,
+  `chunk_total` int(11) NOT NULL,
+  `chunk_sha256` char(64) NOT NULL,
+  `size_bytes` int(11) NOT NULL,
+  `storage_name` char(32) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`job_id`,`file_name`,`chunk_index`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `endpoint_agent_build_hosts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `endpoint_agent_build_hosts` (
+  `host_id` int(11) NOT NULL AUTO_INCREMENT,
+  `host_name` varchar(80) NOT NULL,
+  `token_selector` char(16) NOT NULL,
+  `token_salt` char(32) NOT NULL,
+  `token_hash` char(64) NOT NULL,
+  `enabled` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `created_by` int(11) NOT NULL DEFAULT 0,
+  `rotated_at` datetime DEFAULT NULL,
+  `last_seen_at` datetime DEFAULT NULL,
+  `last_ip` varchar(45) DEFAULT NULL,
+  `last_version` varchar(40) DEFAULT NULL,
+  `last_caps` varchar(80) DEFAULT NULL,
+  PRIMARY KEY (`host_id`),
+  UNIQUE KEY `uniq_selector` (`token_selector`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `endpoint_agent_build_jobs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `endpoint_agent_build_jobs` (
+  `job_id` int(11) NOT NULL AUTO_INCREMENT,
+  `version` varchar(30) NOT NULL,
+  `source_ref` varchar(64) NOT NULL DEFAULT 'main',
+  `want_msi` tinyint(1) NOT NULL DEFAULT 1,
+  `state` varchar(16) NOT NULL DEFAULT 'queued',
+  `host_id` int(11) DEFAULT NULL,
+  `lease_expires_at` datetime DEFAULT NULL,
+  `auto_publish` tinyint(1) NOT NULL DEFAULT 0,
+  `ring` varchar(8) NOT NULL DEFAULT '',
+  `rollout_pct` tinyint(3) unsigned NOT NULL DEFAULT 10,
+  `activate` tinyint(1) NOT NULL DEFAULT 0,
+  `requested_by` int(11) NOT NULL DEFAULT 0,
+  `requested_by_name` varchar(80) NOT NULL DEFAULT '',
+  `note` varchar(500) NOT NULL DEFAULT '',
+  `log_tail` varchar(4200) NOT NULL DEFAULT '',
+  `manifest` mediumtext DEFAULT NULL,
+  `result` varchar(500) NOT NULL DEFAULT '',
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `finished_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`job_id`),
+  KEY `idx_state` (`state`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `endpoint_agent_feed_state`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
