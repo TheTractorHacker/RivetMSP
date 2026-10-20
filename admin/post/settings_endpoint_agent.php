@@ -130,6 +130,22 @@ if (isset($_POST['reconcile_checks'])) {
     redirect();
 }
 
+// 26.10.38 (RivetCore rc.22): the change_monitor switch. Core (ChangeActions::updateSettings) checks rmm.admin, refuses to turn it on without the storage acknowledgement and audits.
+if (isset($_POST['save_change_monitor'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $want = !empty($_POST['change_monitor']);
+    $cur = $rmm->readModel()->settingsSummary();
+    if ($want === !empty($cur['features']['change_monitor'])) {
+        flash_alert('No change to save.', 'info');
+        redirect();
+    }
+    $r = $rmm->changeActions()->updateSettings($ea_who, ['features' => ['change_monitor' => $want], 'accept_change_storage' => !empty($_POST['accept_change_storage'])]);
+    if ($r->ok) {
+        logAction('RMM', 'Settings Changed', "$session_name turned change monitoring " . ($want ? 'on' : 'off'));
+    }
+    ea_flash_result($r, 'Change monitoring is now ' . ($want ? 'on' : 'off') . '.');
+}
+
 // Software inventory switch and the two history limits (RivetCore 1.0.0-rc.9). RmmAdmin validates and audits; only values that changed are written, so an install on
 // the legacy feature defaults (features_json NULL) or the default limits stays that way until an administrator actually changes something here.
 if (isset($_POST['save_inventory_settings'])) {
@@ -152,6 +168,14 @@ if (isset($_POST['save_inventory_settings'])) {
         $v = max($lo, min($hi, (int) $_POST[$k]));
         if ($v !== (int) ($cur['limits'][$k] ?? -1)) {
             $stored[$k] = $v;
+            $changed = true;
+        }
+    }
+    // 26.10.38 (RivetCore rc.25): the "Send extra health details" switch (limit metrics_extended, 0 or 1, default 1)
+    if (isset($_POST['metrics_extended_present'])) {
+        $mx = !empty($_POST['metrics_extended']) ? 1 : 0;
+        if ($mx !== (int) ($cur['limits']['metrics_extended'] ?? 1)) {
+            $stored['metrics_extended'] = $mx;
             $changed = true;
         }
     }

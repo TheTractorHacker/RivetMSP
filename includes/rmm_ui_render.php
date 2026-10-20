@@ -10,7 +10,7 @@
 
 require_once __DIR__ . '/rmm_ui.php';
 // RMM Phase 2 and 3 sections of the asset page (RivetCore 1.0.0-rc.10). Each file defines the section hooks used by rivetRmmUiTabs() below.
-foreach (['rmm_pol_ui.php', 'rmm_scr_ui.php', 'rmm_alr_ui.php', 'rmm_rem_ui.php', 'rmm_log_ui.php', 'rmm_patch_ui.php', 'rmm_software_ui.php'] as $__rmm_p23) {
+foreach (['rmm_pol_ui.php', 'rmm_scr_ui.php', 'rmm_alr_ui.php', 'rmm_rem_ui.php', 'rmm_log_ui.php', 'rmm_patch_ui.php', 'rmm_software_ui.php', 'rmm_change_ui.php'] as $__rmm_p23) {
     if (is_file(__DIR__ . '/' . $__rmm_p23)) {
         require_once __DIR__ . '/' . $__rmm_p23;
     }
@@ -852,7 +852,7 @@ function rivetRmmUiTabs(array $vm, string $performanceHtml, string $performanceN
     }
     // RMM Phase 6 and 8 (RivetCore 1.0.0-rc.11): the Remote tab (services, processes, files, Mesh; includes/rmm_rem_ui.php) and the Logs tab (includes/rmm_log_ui.php). Each function
     // checks the module, its own sub-switch and the viewer's ability itself and returns '' when there is nothing to show, and then neither the tab nor the pane is drawn.
-    $remHtml = $logHtml = $patHtml = $swdHtml = '';
+    $remHtml = $logHtml = $patHtml = $swdHtml = $chgHtml = '';
     if ($mysqli instanceof \mysqli) {
         $remHtml = function_exists('rivetRmmRemPanelSection') ? rivetRmmRemPanelSection($vm, $mysqli, $csrf) : '';
         $logHtml = function_exists('rivetRmmLogPanelSection') ? rivetRmmLogPanelSection($vm, $mysqli, $csrf) : '';
@@ -860,13 +860,15 @@ function rivetRmmUiTabs(array $vm, string $performanceHtml, string $performanceN
         $patHtml = function_exists('rivetRmmPatchPanelSection') ? rivetRmmPatchPanelSection($vm, $mysqli, $csrf) : '';
         // RMM Phase 5 (RivetCore 1.0.0-rc.21): the Deployment tab (includes/rmm_software_ui.php); '' while the `software_deploy` switch is off or the viewer lacks rmm.software.view
         $swdHtml = function_exists('rivetRmmSoftwarePanelSection') ? rivetRmmSoftwarePanelSection($vm, $mysqli, $csrf) : '';
+        // RMM change monitoring (RivetCore 1.0.0-rc.22, 26.10.38): the read-only Changes tab (includes/rmm_change_ui.php); '' while the `change_monitor` switch is off or the viewer lacks rmm.change.view
+        $chgHtml = function_exists('rivetRmmChangePanelSection') ? rivetRmmChangePanelSection($vm, $mysqli, $csrf) : '';
     }
 
     return '<div class="card card-dark mb-3" id="rmm-panel" data-device-id="' . (int) $vm['device_id'] . '" data-csrf="' . rmmH($csrf) . '" data-post-url="/agent/post/rmm_agent.php" data-output-url="/agent/rmm_job_output.php" '
         . 'data-platform="' . rmmH($vm['platform']) . '" data-offline="' . ($vm['offline'] ? '1' : '0') . '">'
         . '<div class="card-header p-0 border-bottom-0"><ul class="nav nav-tabs px-3 pt-2 rmm-tabbar" role="tablist" aria-label="RMM device sections">'
         . $tab('overview', 'tachometer-alt', 'Overview', true) . $tab('inventory', 'microchip', 'Inventory', false) . ($vm['software'] !== null ? $tab('software', 'cube', 'Software', false) : '') . $tab('jobs', 'tasks', 'Jobs', false)
-        . ($polHtml !== '' ? $tab('policy', 'sliders-h', 'Policy and fields', false) : '') . ($alrHtml !== '' ? $tab('alerting', 'bell', 'Alerting', false) : '') . ($remHtml !== '' ? $tab('remote', 'terminal', 'Remote', false) : '') . ($logHtml !== '' ? $tab('logs', 'scroll', 'Logs', false) : '') . ($patHtml !== '' ? $tab('patches', 'shield-alt', 'Patches', false) : '') . ($swdHtml !== '' ? $tab('deploy', 'boxes', 'Deployment', false) : '') . '</ul></div>'
+        . ($polHtml !== '' ? $tab('policy', 'sliders-h', 'Policy and fields', false) : '') . ($alrHtml !== '' ? $tab('alerting', 'bell', 'Alerting', false) : '') . ($remHtml !== '' ? $tab('remote', 'terminal', 'Remote', false) : '') . ($logHtml !== '' ? $tab('logs', 'scroll', 'Logs', false) : '') . ($patHtml !== '' ? $tab('patches', 'shield-alt', 'Patches', false) : '') . ($swdHtml !== '' ? $tab('deploy', 'boxes', 'Deployment', false) : '') . ($chgHtml !== '' ? $tab('changes', 'history', 'Changes', false) : '') . '</ul></div>'
         . '<div class="px-3 pt-3"><div id="rmm-msg" class="alert d-none mb-0" role="status" aria-live="polite"></div></div>'
         . '<div class="tab-content"><div class="tab-pane active p-3" id="rmm-pane-overview" role="tabpanel" aria-labelledby="rmm-tab-overview" tabindex="0">' . rivetRmmUiOverview($vm, $performanceHtml, $performanceNote) . '</div>'
         . '<div class="tab-pane p-3" id="rmm-pane-inventory" role="tabpanel" aria-labelledby="rmm-tab-inventory" tabindex="0">' . rivetRmmUiInventory($vm) . '</div>'
@@ -877,7 +879,8 @@ function rivetRmmUiTabs(array $vm, string $performanceHtml, string $performanceN
         . ($remHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-remote" role="tabpanel" aria-labelledby="rmm-tab-remote" tabindex="0">' . $remHtml . '</div>' : '')
         . ($logHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-logs" role="tabpanel" aria-labelledby="rmm-tab-logs" tabindex="0">' . $logHtml . '</div>' : '')
         . ($patHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-patches" role="tabpanel" aria-labelledby="rmm-tab-patches" tabindex="0">' . $patHtml . '</div>' : '')
-        . ($swdHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-deploy" role="tabpanel" aria-labelledby="rmm-tab-deploy" tabindex="0">' . $swdHtml . '</div>' : '') . '</div></div>'
+        . ($swdHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-deploy" role="tabpanel" aria-labelledby="rmm-tab-deploy" tabindex="0">' . $swdHtml . '</div>' : '')
+        . ($chgHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-changes" role="tabpanel" aria-labelledby="rmm-tab-changes" tabindex="0">' . $chgHtml . '</div>' : '') . '</div></div>'
         . rivetRmmUiDialogs($vm, $csrf)
         . ($polHtml . $scrHtml . $alrHtml . $patHtml . $swdHtml !== '' ? rivetRmmAutoConfirmModal() . rivetRmmAutoScriptsOn() : '');
 }

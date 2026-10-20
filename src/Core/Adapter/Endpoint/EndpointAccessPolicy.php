@@ -38,6 +38,8 @@ use RivetCore\Rmm\Authz\RmmAbility;
  *   rmm.software.deploy (RMM Phase 5)        view + module_rmm_scripts >= 3 (the same as rmm.job.run_script, STRONGER than reboot): assignments (they change machines by themselves
  *                                            later), a real install or removal, and deciding a software approval (kind `software`, which additionally needs rmm.job.approve). The list of hosts
  *                                            installers may be downloaded from, and LOWERING a package's two-person flag, stay rmm.admin (administrators only).
+ *   rmm.change.view (RMM change monitoring)   view + module_rmm_scripts >= 2 (the same as rmm.job.run_saved): a change record can hold configuration text
+ *   rmm.change.manage (RMM change monitoring) view + module_rmm >= 2 (the same as rmm.alert.manage): presets, custom watches and rules. The change_monitor switch and the caps stay rmm.admin.
  *
  * An administrator holds every module at full access (as lookupUserPermission() does). Only active agents (staff, users.user_type 1) hold
  * anything: a client-portal contact, a disabled or an archived account is denied every ability, whatever role row it carries. The client
@@ -98,6 +100,9 @@ final class EndpointAccessPolicy implements AccessPolicyInterface
             RmmAbility::SOFTWARE_VIEW => true,
             RmmAbility::SOFTWARE_MANAGE => $this->level($roleId, 'module_rmm_scripts') >= 2,
             RmmAbility::SOFTWARE_DEPLOY => $this->level($roleId, 'module_rmm_scripts') >= 3,
+            // RMM change monitoring (rc.22): a change record can hold configuration text, so view is like run_saved; presets, custom watches and rules are like alert.manage
+            RmmAbility::CHANGE_VIEW => $this->level($roleId, 'module_rmm_scripts') >= 2,
+            RmmAbility::CHANGE_MANAGE => $this->level($roleId, 'module_rmm') >= 2,
             RmmAbility::REMOTE_MANAGE => $this->level($roleId, 'module_rmm_scripts') >= 3 && $this->level($roleId, 'module_rmm_remote_connect') >= 1 && $this->level3MayManageRemote(),
             RmmAbility::JOB_APPROVE => $this->level($roleId, 'module_rmm_scripts') >= 3 && $this->level3MayApprove(),
             default => false,
