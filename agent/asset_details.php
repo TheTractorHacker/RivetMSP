@@ -344,7 +344,7 @@ if (isset($_GET['asset_id'])) {
                                 }
                             ?><i class="fab <?= $rmm_os_icon ?> me-1"></i><?= nullable_htmlentities($rmm_link['os_name']) ?>&nbsp;<?php endif; ?>
                             <?php if ($rmm_link['logged_in_user']): ?>&bull;&nbsp;<i class="fas fa-user mx-1"></i><?= nullable_htmlentities($rmm_link['logged_in_user']) ?>&nbsp;<?php endif; ?>
-                            <?php if ($rmm_link['last_seen']): ?>&bull;&nbsp;<i class="fas fa-clock mx-1"></i>Last seen <?= nullable_htmlentities($rmm_link['last_seen']) ?><?php endif; ?>
+                            <?php if ($rmm_link['last_seen']): ?>&bull;&nbsp;<i class="fas fa-clock mx-1"></i>Last seen <?= nullable_htmlentities(rivetRmmTime($rmm_link['last_seen'], false, true, 'Y-m-d H:i', (string) $rmm_link['last_seen'])) ?><?php endif; ?>
                         </div>
                         <?php
                         $hcpu = $rmm_link['rmm_cpu_percent']; $hram = $rmm_link['rmm_ram_percent']; $hdisk = $rmm_link['rmm_disk_percent'];
@@ -699,8 +699,8 @@ if (isset($_GET['asset_id'])) {
                                     <table class="table table-sm table-borderless mb-0">
                                         <?php
                                         $rdt('Logged-in User', nullable_htmlentities($rmm_link['logged_in_user']));
-                                        $rdt('Last Seen',  nullable_htmlentities($rmm_link['last_seen']));
-                                        $rdt('Last Sync',  nullable_htmlentities($rmm_link['last_sync']));
+                                        $rdt('Last Seen',  nullable_htmlentities(rivetRmmTime($rmm_link['last_seen'], false, true, 'Y-m-d H:i', (string) $rmm_link['last_seen'])));
+                                        $rdt('Last Sync',  nullable_htmlentities(rivetRmmTime($rmm_link['last_sync'], false, true, 'Y-m-d H:i', (string) $rmm_link['last_sync'])));
                                         echo "<tr><td class='text-muted pe-3'>Status</td><td><span class='badge {$rmm_badge}'>".ucfirst($rmm_link['rmm_status'])."</span></td></tr>";
                                         $rdt('Agent ID', '<code class="small">'.nullable_htmlentities($rmm_link['tactical_agent_id']).'</code>');
                                         ?>
@@ -896,7 +896,7 @@ if (isset($_GET['asset_id'])) {
                                         <?php endif; ?>
                                     </td>
                                     <td><span class="badge <?= $ral_status_badge ?>"><?= nullable_htmlentities($ral['status']) ?></span></td>
-                                    <td class="text-muted small"><?= nullable_htmlentities(substr($ral['created_at'], 0, 16)) ?></td>
+                                    <td class="text-muted small"><?= nullable_htmlentities(rivetRmmTime($ral['created_at'], false, true, 'Y-m-d H:i', (string) $ral['created_at'])) ?></td>
                                     <td class="text-end pe-2">
                                         <?php if ($ral['status'] === 'new' && lookupUserPermission('module_rmm_alerts_ack') >= 1): ?>
                                         <button class="btn btn-xs btn-warning" data-rmm-action="alert" data-alert-id="<?= $ral_id ?>" data-alert-action="acknowledge">Ack</button>
@@ -973,7 +973,7 @@ if (isset($_GET['asset_id'])) {
                                         <tr>
                                             <td class="ps-2 small"><?= nullable_htmlentities($rr['sname'] ?? 'Manual') ?></td>
                                             <td><span class="badge badge-<?= $rr_badge ?>"><?= ucfirst($rr['status']) ?></span></td>
-                                            <td class="small text-muted"><?= nullable_htmlentities(substr($rr['started_at'], 0, 16)) ?></td>
+                                            <td class="small text-muted"><?= nullable_htmlentities(rivetRmmTime($rr['started_at'], false, true, 'Y-m-d H:i', (string) $rr['started_at'])) ?></td>
                                             <td class="text-end pe-2"><a href="/agent/rmm_script_run.php?run_id=<?= intval($rr['id']) ?>" class="btn btn-xs btn-secondary"><i class="fas fa-eye"></i></a></td>
                                         </tr>
                                         <?php endwhile; ?>

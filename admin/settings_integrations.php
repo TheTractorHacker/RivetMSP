@@ -215,7 +215,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                     <td><span class="badge text-bg-<?= $provider_color ?>"><?= $provider_label ?></span></td>
                     <td class="text-muted small"><?= nullable_htmlentities($intg['api_url']) ?></td>
                     <td><?= $intg['enabled'] ? '<span class="badge text-bg-success">Enabled</span>' : '<span class="badge text-bg-secondary">Disabled</span>' ?></td>
-                    <td class="text-muted small"><?= $last_sync_row['ls'] ? nullable_htmlentities($last_sync_row['ls']) : 'Never' ?></td>
+                    <td class="text-muted small"><?= $last_sync_row['ls'] ? nullable_htmlentities(rivetRmmTime($last_sync_row['ls'], false, true, 'Y-m-d H:i', (string) $last_sync_row['ls'])) : 'Never' ?></td>
                     <td class="text-end pe-3" style="white-space:nowrap">
                         <button class="btn btn-xs btn-info js-rmm-test" data-intg-id="<?= $intg_id ?>">
                             <i class="fas fa-plug me-1"></i>Test
@@ -284,7 +284,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                         <tr>
                             <td class="fw-bold"><?= nullable_htmlentities($mp['external_name']) ?></td>
                             <td class="text-muted small"><?= nullable_htmlentities($mp['integration_name'] ?? ('#' . $mp['integration_id'])) ?></td>
-                            <td class="text-muted small"><?= intval($mp['seen_count']) ?>x, last <?= nullable_htmlentities($mp['last_seen_at']) ?></td>
+                            <td class="text-muted small"><?= intval($mp['seen_count']) ?>x, last <?= nullable_htmlentities(rivetRmmTime($mp['last_seen_at'], false, true, 'Y-m-d H:i', (string) $mp['last_seen_at'])) ?></td>
                             <td class="text-muted small"><?= nullable_htmlentities($mp['sample_host'] ?? '') ?></td>
                             <td colspan="2">
                                 <form action="post.php" method="post" class="d-flex gap-2 align-items-center">
@@ -360,8 +360,8 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                         <tr>
                             <td class="fw-bold"><?= nullable_htmlentities($sq['asset_name']) ?></td>
                             <td class="text-muted small"><?= nullable_htmlentities($sq['client_name'] ?? '') ?></td>
-                            <td class="text-muted small"><?= nullable_htmlentities($sq['last_seen']) ?></td>
-                            <td class="text-muted small"><?= nullable_htmlentities($sq['created_at']) ?></td>
+                            <td class="text-muted small"><?= nullable_htmlentities(rivetRmmTime($sq['last_seen'], false, true, 'Y-m-d H:i', (string) $sq['last_seen'])) ?></td>
+                            <td class="text-muted small"><?= nullable_htmlentities(rivetRmmTime($sq['created_at'], false, true, 'Y-m-d H:i', (string) $sq['created_at'])) ?></td>
                             <td class="text-end text-nowrap">
                                 <form action="post.php" method="post" class="d-inline">
                                     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
@@ -420,7 +420,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                         <span class="badge text-bg-secondary ms-1" style="font-size:10px"><?= ['level' => 'Level.io', 'action1' => 'Action1'][$tp] ?? 'Tactical' ?></span>
                         <?php endif; ?>
                     </td>
-                    <td class="text-muted small"><?= nullable_htmlentities($lr['started_at']) ?></td>
+                    <td class="text-muted small"><?= nullable_htmlentities(rivetRmmTime($lr['started_at'], false, true, 'Y-m-d H:i', (string) $lr['started_at'])) ?></td>
                     <td><span class="badge <?= $badge[$lr['status']] ?? 'text-bg-secondary' ?>"><?= htmlspecialchars($lr['status']) ?></span></td>
                     <td><?= intval($lr['assets_created']) ?></td>
                     <td><?= intval($lr['assets_updated']) ?></td>
@@ -751,7 +751,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                 <tr>
                     <td class="ps-3 fw-bold"><?= nullable_htmlentities($intg['name']) ?></td>
                     <td><?= $intg['enabled'] ? '<span class="badge text-bg-success">Enabled</span>' : '<span class="badge text-bg-secondary">Disabled</span>' ?></td>
-                    <td class="text-muted small"><?= $last_sync_row['ls'] ? nullable_htmlentities($last_sync_row['ls']) : 'Never' ?></td>
+                    <td class="text-muted small"><?= $last_sync_row['ls'] ? nullable_htmlentities(rivetRmmTime($last_sync_row['ls'], false, true, 'Y-m-d H:i', (string) $last_sync_row['ls'])) : 'Never' ?></td>
                     <td class="text-end pe-3" style="white-space:nowrap">
                         <button class="btn btn-xs btn-info js-fw-test" data-intg-id="<?= $intg_id ?>">
                             <i class="fas fa-plug me-1"></i>Test
@@ -889,7 +889,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                 ?>
                 <tr>
                     <td class="ps-3"><?= nullable_htmlentities($lr['integration_name']) ?></td>
-                    <td class="text-muted small"><?= nullable_htmlentities($lr['started_at']) ?></td>
+                    <td class="text-muted small"><?= nullable_htmlentities(rivetRmmTime($lr['started_at'], false, true, 'Y-m-d H:i', (string) $lr['started_at'])) ?></td>
                     <td><span class="badge <?= $badge[$lr['status']] ?? 'text-bg-secondary' ?>"><?= htmlspecialchars($lr['status']) ?></span></td>
                     <td><?= intval($lr['assets_created']) ?></td>
                     <td><?= intval($lr['assets_updated']) ?></td>
@@ -1064,7 +1064,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                     </td>
                     <td class="text-muted small"><?= $host_display ?></td>
                     <td><?= $intg['enabled'] ? '<span class="badge text-bg-success">Enabled</span>' : '<span class="badge text-bg-secondary">Disabled</span>' ?></td>
-                    <td class="text-muted small"><?= $last_sync_row['ls'] ? nullable_htmlentities($last_sync_row['ls']) : 'Never' ?></td>
+                    <td class="text-muted small"><?= $last_sync_row['ls'] ? nullable_htmlentities(rivetRmmTime($last_sync_row['ls'], false, true, 'Y-m-d H:i', (string) $last_sync_row['ls'])) : 'Never' ?></td>
                     <td class="text-end pe-3" style="white-space:nowrap">
                         <button class="btn btn-xs btn-info js-unifi-test" data-intg-id="<?= $intg_id ?>">
                             <i class="fas fa-plug me-1"></i>Test
@@ -1146,7 +1146,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                 ?>
                 <tr>
                     <td class="ps-3"><?= nullable_htmlentities($lr['integration_name']) ?></td>
-                    <td class="text-muted small"><?= nullable_htmlentities($lr['started_at']) ?></td>
+                    <td class="text-muted small"><?= nullable_htmlentities(rivetRmmTime($lr['started_at'], false, true, 'Y-m-d H:i', (string) $lr['started_at'])) ?></td>
                     <td><span class="badge <?= $badge[$lr['status']] ?? 'text-bg-secondary' ?>"><?= htmlspecialchars($lr['status']) ?></span></td>
                     <td class="text-muted small">+<?= intval($lr['devices_created']) ?> / ~<?= intval($lr['devices_updated']) ?> / -<?= intval($lr['devices_skipped']) ?></td>
                     <td class="text-muted small">+<?= intval($lr['wifi_created']) ?> / ~<?= intval($lr['wifi_updated']) ?> / -<?= intval($lr['wifi_skipped']) ?></td>
