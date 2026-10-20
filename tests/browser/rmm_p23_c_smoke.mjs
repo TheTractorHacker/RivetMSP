@@ -150,10 +150,10 @@ await T('maintenance: create a one-time mute window for a device with the real f
   await setVal('#w_type', 'device');
   await p.waitSel('#w_id_device');
   await setVal('#w_id_device', String(SEED.dev.WIN1));
-  await setVal('#w-tz', 'America/Chicago');
+  await setVal('#w-tz', 'Pacific/Auckland');   // never the company zone, so the company-time line shows
   await setVal('#w-start', localInput(-30));
   await setVal('#w-end', localInput(120));
-  assert(/^UTC: \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(await p.eval(`document.querySelector('[data-alr-utc=start]').textContent`)), 'the UTC time next to the start did not appear');
+  assert(/^Company time: \d{4}-\d{2}-\d{2} \d{2}:\d{2} \S+$/.test(await p.eval(`document.querySelector('[data-alr-company=start]').textContent`)), 'the company time next to the start did not appear');
   assert((await unlabeled()).length === 0, 'unlabeled controls: ' + (await unlabeled()).join(','));
   await shot('maintenance-form-desktop-light');
   await p.clickNav('form.rmm-alr-form button[type=submit]');
@@ -173,7 +173,7 @@ await T('maintenance: a repeating weekly window, edit it, delete both with the c
   await p.click('#w-day-6');
   await setVal('#local_start', '22:00');
   await setVal('#duration_min', '240');
-  await setVal('#w-tz', 'America/Chicago');
+  await setVal('#w-tz', 'Pacific/Auckland');   // never the company zone, so the company-time line shows
   await shot('maintenance-recurring-form-desktop-light');
   await p.clickNav('form.rmm-alr-form button[type=submit]');
   await flash(/Maintenance window saved/, 'saved flash');

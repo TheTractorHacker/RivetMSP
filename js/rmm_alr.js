@@ -117,7 +117,7 @@
         }).observe(steps, { childList: true, subtree: true });
     }
 
-    // ---- maintenance window: show the UTC time next to a local start/end in the chosen zone
+    // ---- maintenance window: show the company-time equivalent next to a start/end typed in another zone
     function zoneOffsetMs(utcMs, zone) {
         var f = new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
         var p = {};
@@ -138,10 +138,19 @@
     if (tz) {
         var refresh = function () {
             document.querySelectorAll('[data-alr-local]').forEach(function (inp) {
-                var out = document.querySelector('[data-alr-utc="' + inp.getAttribute('data-alr-local') + '"]');
+                var out = document.querySelector('[data-alr-company="' + inp.getAttribute('data-alr-local') + '"]');
                 if (!out) { return; }
-                var d = localToUtc(inp.value, tz.value);
-                out.textContent = d ? 'UTC: ' + d.toISOString().slice(0, 16).replace('T', ' ') : '';
+                var cz = out.getAttribute('data-alr-company-zone');
+                var d = cz && cz !== tz.value ? localToUtc(inp.value, tz.value) : null;
+                out.textContent = '';
+                if (d && cz) {
+                    try {
+                        var p = {};
+                        new Intl.DateTimeFormat('en-CA', { timeZone: cz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })
+                            .formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
+                        out.textContent = 'Company time: ' + p.year + '-' + p.month + '-' + p.day + ' ' + p.hour + ':' + p.minute + ' ' + p.timeZoneName;
+                    } catch (err) { out.textContent = ''; }
+                }
             });
         };
         tz.addEventListener('change', refresh);
