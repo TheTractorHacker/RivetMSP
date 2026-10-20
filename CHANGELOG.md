@@ -4,6 +4,15 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.37] RivetMSP — Choose the ticket category for tickets made from RMM alerts (DB 2.6.101)
+
+**Deploy notes:** back up the database, pull this tag, run **Administration > Updates** (DB 2.6.100 to 2.6.101: one nullable settings column and one new table, no row touched). No RivetCore change. Until an admin chooses something, behaviour is exactly as before (no category).
+
+- **New "Alert tickets" card** (Administration > Integrations > RMM): pick the ticket category tickets from RMM alerts get; "Create a Maintenance category and use it" does it in one click when there is none. Optional special cases: when a check family (disk space, service, patching, reboot needed, agent update, log rule, change monitor), an RMM source or a severity matches, use another category and optionally a priority. A plain-language summary updates as you edit. Most specific wins: check family, source, severity, default.
+- **Applies everywhere an alert becomes a ticket:** automatic ticketing in cron, the "Create ticket" button, the automation action and the endpoint agent's critical-alert escalation (all use `createTicketFromRmmAlert()`). An archived or deleted category is never used.
+- RivetMSP has no ticket boards or queues, so only the category (and priority) is chosen.
+- Tests: `tests/rmm_alert_category.php` (resolver units, hostile input, the updater step, the real cron run, the page, CSRF, admin only, audit), `tests/browser/rmm_alert_category_smoke.mjs`. `tests/rmm_agent_localbuild.php` now compares with `LATEST_DATABASE_VERSION`. Docs: `docs/RMM_MODULE.md` section 6p.
+
 ## [26.10.36] RivetMSP — Every time in the company's time zone (no DB change)
 
 **Deploy notes:** pull this tag; no database update, no RivetCore change, no new web setting. Reload the pages (new `js/rmm_panel.js`, `js/rmm_alr.js`).
