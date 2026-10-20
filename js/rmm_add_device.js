@@ -147,7 +147,7 @@
                         block(out, 'msiexec with properties (the unstamped template)', d.windows.msi.properties);
                         block(out, 'Uninstall', d.windows.msi.uninstall);
                     }
-                    say('Commands created for ' + d.department + '. They are valid until ' + d.expires_at + ' UTC and work on ' + d.max_uses + ' machine' + (d.max_uses === 1 ? '' : 's') + '.', 'success');
+                    say('Commands created for ' + d.department + '. They are valid until ' + d.expires_at + ' and work on ' + d.max_uses + ' machine' + (d.max_uses === 1 ? '' : 's') + '.', 'success');
                 });
             });
         });
@@ -167,7 +167,7 @@
                     }
                     if (d.linux_deb) { block(out, 'Debian / Ubuntu (.deb, as root)', d.linux_deb, 'Installs the package after checking its SHA-256, then enrolls with the packaged agent.'); }
                     if (d.linux_rpm) { block(out, 'RHEL / Rocky / Fedora / SUSE (.rpm, as root)', d.linux_rpm, 'Installs the package after checking its SHA-256, then enrolls with the packaged agent.'); }
-                    say('Install commands created for ' + d.department + '. They are valid until ' + d.expires_at + ' UTC and work on ' + d.max_uses + ' machine' + (d.max_uses === 1 ? '' : 's') + '.' + (d.install_mesh_agent ? ' They also install the MeshCentral agent after the RivetMSP agent.' : ''), 'success');
+                    say('Install commands created for ' + d.department + '. They are valid until ' + d.expires_at + ' and work on ' + d.max_uses + ' machine' + (d.max_uses === 1 ? '' : 's') + '.' + (d.install_mesh_agent ? ' They also install the MeshCentral agent after the RivetMSP agent.' : ''), 'success');
                 });
             });
         });

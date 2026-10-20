@@ -153,7 +153,7 @@
                     if (!d || !d.success) { return say((d && d.error) || 'The command could not be created.', 'danger'); }
                     cmdText.textContent = d.linux;
                     cmdBox.hidden = false;
-                    say('Install command created for ' + d.department + '. It is valid until ' + d.expires_at + ' UTC and works on ' + d.max_uses + ' machine' + (d.max_uses === 1 ? '' : 's') + '.' + (d.install_mesh_agent ? ' It also installs the MeshCentral agent after the RivetMSP agent.' : ''), 'success');
+                    say('Install command created for ' + d.department + '. It is valid until ' + d.expires_at + ' and works on ' + d.max_uses + ' machine' + (d.max_uses === 1 ? '' : 's') + '.' + (d.install_mesh_agent ? ' It also installs the MeshCentral agent after the RivetMSP agent.' : ''), 'success');
                     cmdText.focus();
                 });
             }

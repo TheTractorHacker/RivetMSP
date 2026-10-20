@@ -96,7 +96,7 @@ if ($inst_mode === 'commands') {
     }
     header('Content-Type: application/json');
     header('Cache-Control: no-store');
-    $inst_out = ['success' => true, 'linux' => $r->data['commands']['linux'], 'department' => $r->data['department'], 'expires_at' => str_replace('T', ' ', rtrim((string) $r->data['token']['expires_at'], 'Z')),
+    $inst_out = ['success' => true, 'linux' => $r->data['commands']['linux'], 'department' => $r->data['department'], 'expires_at' => rivetRmmTime($r->data['token']['expires_at'], true, true, 'Y-m-d H:i', (string) $r->data['token']['expires_at'])   /* UTC in storage, company time on screen */,
         'max_uses' => (int) $r->data['token']['max_uses'], 'arch' => $inst_arch, 'install_mesh_agent' => $inst_mesh];
     if ($inst_os === 'windows') {
         // The PowerShell deployment snippet, and for format=msi the msiexec / properties / uninstall commands of the stamped package (RivetCore InstallerService::deploymentCommands).
