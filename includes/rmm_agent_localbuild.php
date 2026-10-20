@@ -343,7 +343,8 @@ final class LocalBuild
             $r['idle_s'] = max(0, time() - (int) strtotime($r['updated_at'] . ' UTC'));
             $r['active'] = in_array($r['state'], ['queued', 'claimed', 'building', 'uploading', 'verifying'], true);
             $r['progress'] = $this->progress((int) $r['job_id'], (string) $r['state'], $r);
-            $end = $r['finished_at'] !== null ? (int) strtotime($r['finished_at'] . ' UTC') : time();
+            // A built job has no finish time until it is published: its clock stops at the last report, it must not run on.
+            $end = $r['finished_at'] !== null ? (int) strtotime($r['finished_at'] . ' UTC') : ($r['state'] === 'built' ? (int) strtotime($r['updated_at'] . ' UTC') : time());
             $r['elapsed_s'] = max(0, $end - (int) strtotime($r['created_at'] . ' UTC'));
             $out[] = $r;
         }

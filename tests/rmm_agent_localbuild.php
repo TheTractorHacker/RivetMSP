@@ -262,6 +262,10 @@ $q("UPDATE endpoint_agent_build_jobs SET progress_stage = 'upload' WHERE job_id 
 $cl = $lb->jobs(); $row1 = array_values(array_filter($cl, fn($j) => (int) $j['job_id'] === $J1))[0];
 $ok($row1['progress']['real'] === true && $row1['progress']['pct'] === 90 && $row1['progress']['text'] === LocalBuild::STAGES['upload'], 'jobs(): the percent is the host\'s, the text the stage in plain words');
 $ok(count($row1['progress']['steps']) === 7 && $row1['elapsed_s'] >= 0, 'seven steps when the MSI is wanted, plus an elapsed time');
+$q("UPDATE endpoint_agent_build_jobs SET state = 'built', finished_at = NULL, created_at = '" . gmdate('Y-m-d H:i:s', time() - 14 * 3600) . "', updated_at = '" . gmdate('Y-m-d H:i:s', time() - 14 * 3600 + 540) . "' WHERE job_id = $J1");
+$rowB = array_values(array_filter($lb->jobs(), fn($j) => (int) $j['job_id'] === $J1))[0];
+$ok($rowB['elapsed_s'] >= 530 && $rowB['elapsed_s'] <= 550, 'a built job that nobody has published keeps its real build time (9 minutes), it does not keep counting for hours');
+$q("UPDATE endpoint_agent_build_jobs SET state = '" . $row1['state'] . "', created_at = '" . $row1['created_at'] . "', updated_at = '" . $row1['updated_at'] . "' WHERE job_id = $J1");
 $pj1 = web($wb, 'POST', '/admin/post/agent_localbuild_poll.php', $sidAdmin, ['csrf_token' => 'csrftok1']);
 $pd = json_decode($pj1[1], true); $pjob = array_values(array_filter($pd['jobs'] ?? [], fn($j) => $j['id'] === $J1))[0] ?? [];
 $ok(($pd['ok'] ?? false) === true && ($pjob['pct'] ?? -1) === 90 && ($pjob['stage'] ?? '') === 'upload' && count($pjob['steps'] ?? []) === 7 && ($pjob['steps'][0]['status'] ?? '') === 'done' && isset($pjob['elapsed']), 'the live poll returns pct, stage, steps and elapsed');
