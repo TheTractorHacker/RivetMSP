@@ -42,6 +42,14 @@ function createTicketFromRmmAlert($mysqli, array $alert, int $created_by, string
     // Severity -> priority mapping
     $priority = ['critical' => 'High', 'error' => 'High', 'warning' => 'Medium', 'info' => 'Low'][$alert['severity']] ?? 'Medium';
 
+    // Category (and optional priority) chosen in Administration > Integrations > Alert tickets; no category when nothing is configured (DB 2.6.101)
+    require_once __DIR__ . '/rmm_alert_routes.php';
+    $placement = rmmAlertTicketPlacement($mysqli, $alert);
+    if ($placement['priority'] !== null) {
+        $priority = $placement['priority'];
+    }
+    $category_sql = $placement['category_id'] > 0 ? "ticket_category=" . (int) $placement['category_id'] . "," : '';
+
     // Enrich details with asset/RMM context
     $asset_name   = '';
     $rmm          = null;
@@ -101,6 +109,7 @@ function createTicketFromRmmAlert($mysqli, array $alert, int $created_by, string
          ticket_details='$details_esc',
          ticket_status=$ticket_status,
          ticket_priority='$priority_esc',
+         $category_sql
          ticket_source='$source_esc',
          ticket_client_id=$client_id,
          ticket_asset_id=$asset_id,
