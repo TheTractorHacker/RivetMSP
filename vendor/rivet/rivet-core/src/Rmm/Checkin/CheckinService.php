@@ -6,7 +6,10 @@ namespace RivetCore\Rmm\Checkin;
 
 use RivetCore\Rmm\Alerting\AlertingEngine;
 use RivetCore\Rmm\Capacity\LoadShedder;
+use RivetCore\Rmm\Checks\CheckCatalog;
 use RivetCore\Rmm\Checks\CheckEvaluator;
+use RivetCore\Rmm\Checks\CheckReconciler;
+use RivetCore\Rmm\Checks\RmmChecks;
 use RivetCore\Rmm\Contracts\RmmAssetsInterface;
 use RivetCore\Rmm\Contracts\RmmMetricSinkInterface;
 use RivetCore\Rmm\Device\DeviceRepository;
@@ -40,6 +43,7 @@ final class CheckinService
     public const MAX_CHECKS = RmmProtocol::CHECKIN_MAX_CHECKS;
     public const MAX_BUFFERED = RmmProtocol::CHECKIN_MAX_BUFFERED;
     public const MAX_DISKS = RmmProtocol::CHECKIN_MAX_DISKS;
+    public const MAX_CORES = RmmProtocol::CHECKIN_MAX_CORES;
     public const MAX_INVENTORY_BYTES = RmmProtocol::CHECKIN_MAX_INVENTORY_BYTES;
     private const TIME_RE = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/';
     /** At load-shedding level 1 buffered samples older than this are acknowledged but not ingested. */
@@ -65,6 +69,7 @@ final class CheckinService
         private readonly ?EffectivePolicy $policies = null,
         private readonly ?RemoteSettings $remote = null,
         private readonly ?\RivetCore\Rmm\Mesh\MeshAgentService $meshAgents = null,
+        private readonly ?\RivetCore\Rmm\Change\ChangeSettings $change = null,
     ) {
     }
 
@@ -83,7 +88,12 @@ final class CheckinService
         if (!is_int($seq) || $seq < 0 || $seq > 9007199254740991) {
             throw new ApiError(422, 'invalid', 'seq must be a non-negative integer');
         }
-        $collected = $this->parseTime($body['collected_at'] ?? null, 'collected_at', $cfg);
+        try {
+            $collected = $this->parseTime($body['collected_at'] ?? null, 'collected_at', $cfg);
+        } catch (ApiError $e) {
+            $this->noteRejected($dev, $e);   // why this device is not checking in, for the technician (best effort, never changes the answer)
+            throw $e;
+        }
         $ver = $body['agent_version'] ?? null;
         if (!is_string($ver) || preg_match(RmmProtocol::AGENT_VERSION_RE, $ver) !== 1) {
             throw new ApiError(422, 'invalid', 'agent_version is invalid');
@@ -109,7 +119,7 @@ final class CheckinService
         $primaryChecks = $this->cleanChecks($checks, true);
         $this->shedIfOverloaded($dev, $cfg);
         // Phase 1, all optional and never an error: what the agent announced and the software report it may carry.
-        $announce = ['caps' => DeviceState::cleanCapabilities($body['capabilities'] ?? null), 'platform' => is_string($body['platform'] ?? null) ? $body['platform'] : null, 'software' => null];
+        $announce = ['clock_offset' => self::clockOffset($body['clock_offset_s'] ?? null), 'caps' => DeviceState::cleanCapabilities($body['capabilities'] ?? null), 'platform' => is_string($body['platform'] ?? null) ? $body['platform'] : null, 'software' => null];
         // The optional MeshCentral agent report: read here, applied in process() (tiny, so it is never queued). Never an error.
         $announce['mesh_agent'] = $this->meshAgents !== null && array_key_exists(RmmProtocol::CHECKIN_MESH_AGENT, $body) ? $body[RmmProtocol::CHECKIN_MESH_AGENT] : null;
         $wantsSoftware = $features['inventory_software'] && $this->software !== null && $announce['caps'] !== null && in_array(DeviceState::CAP_SOFTWARE_INVENTORY, $announce['caps'], true);
@@ -168,9 +178,10 @@ final class CheckinService
             'next_check_in_s' => $interval,
             'jobs_pending' => $features['jobs'] ? $this->jobs->pendingCount((int) $dev['device_id']) : 0,
             'config' => $policy === null
-                ? ['checks' => $this->settings->signedChecks($this->settings->hasExtendedChecks() ? $this->capsOf($dev, $announce['caps']) : null), 'collect_interval_s' => (int) $cfg['collect_interval_s']]
-                : ['checks' => $this->settings->signCheckList($policy['checks'], $this->capsOf($dev, $announce['caps']) ?? []), 'collect_interval_s' => $policy['collect_interval_s']],
+                ? ['checks' => $this->settings->signedChecks($this->settings->hasExtendedChecks() ? $this->capsOf($dev, $announce['caps']) : null, RmmChecks::deviceOs($dev)), 'collect_interval_s' => (int) $cfg['collect_interval_s']]
+                : ['checks' => $this->settings->signCheckList($policy['checks'], $this->capsOf($dev, $announce['caps']) ?? [], RmmChecks::deviceOs($dev)), 'collect_interval_s' => $policy['collect_interval_s']],
         ];
+        $this->reconcileDelivered($dev, $out['config']['checks'], $policy === null ? ($this->settings->hasExtendedChecks() ? $this->capsOf($dev, $announce['caps']) : null) : ($this->capsOf($dev, $announce['caps']) ?? []));
         if ($knowsPolicies) {
             // Additive, offered only to an agent that announced `policies`: every other response is byte-identical to before.
             $out['config']['policy'] = ['version' => $policy['version'], 'applied' => $policy['applied'], 'features' => $policy['features']];
@@ -190,10 +201,19 @@ final class CheckinService
         // Phase 8, additive: only an agent that announced `logs:collect`, while the `logs` sub-switch is on, no load is being shed (log ingest goes first) and at
         // least one source is configured for its platform. Every other response is byte-identical to before.
         if ($features['logs'] && $this->remote !== null && (int) ($cfg['shed_level'] ?? 0) === 0 && in_array(RemoteProtocol::CAP_LOGS, $this->capsOf($dev, $announce['caps']) ?? [], true)) {
-            $logConfig = $this->remote->agentLogConfig((string) ($dev['os'] ?? 'windows'));
+            $logConfig = $this->remote->agentLogConfig((string) ($dev['os'] ?? 'windows'), $this->capsOf($dev, $announce['caps']));
             if ($logConfig !== null) {
                 $offered[] = RemoteProtocol::CAP_LOGS;
                 $out['config']['logs'] = $logConfig;
+            }
+        }
+        // Change monitoring, additive: only an agent that announced `change:monitor`, while the `change_monitor` sub-switch is on, below load shedding level 2 and with at
+        // least one watch for its platform. The configuration is signed; an unsigned one is never offered. Every other response is byte-identical to before.
+        if (($features['change_monitor'] ?? false) && $this->change !== null && (int) ($cfg['shed_level'] ?? 0) < 2 && in_array(\RivetCore\Rmm\Change\ChangeProtocol::CAP, $this->capsOf($dev, $announce['caps']) ?? [], true)) {
+            $changeConfig = $this->change->agentConfig((string) ($dev['os'] ?? 'windows'));
+            if ($changeConfig !== null) {
+                $offered[] = \RivetCore\Rmm\Change\ChangeProtocol::CAP;
+                $out['config']['change'] = $changeConfig;
             }
         }
         if ($offered !== []) {
@@ -254,7 +274,7 @@ final class CheckinService
      * @param array<mixed> $buffered
      * @param array<string,mixed> $cfg
      * @param array<string,bool> $features
-     * @param array{caps?:?list<string>,platform?:?string,software?:?array<string,mixed>,alert_defs?:array<string,array<string,mixed>>,mesh_agent?:mixed} $announce what the agent announced (capabilities, platform) and its validated software report
+     * @param array{clock_offset?:?int,caps?:?list<string>,platform?:?string,software?:?array<string,mixed>,alert_defs?:array<string,array<string,mixed>>,mesh_agent?:mixed} $announce what the agent announced (capabilities, platform) and its validated software report
      * @param array{last_checkin_at:string,last_ip:string} $live the liveness columns, written with the rest of the device row in ONE statement
      * @return array<string,mixed> the device row as the check-in leaves it
      */
@@ -265,13 +285,18 @@ final class CheckinService
         $newer = $dev['last_collected_at'] === null || $collectedSql >= $dev['last_collected_at'];
         $this->updates->recordResult($dev, $updateResult);
         $row = array_merge($dev, $live, ['last_seq' => max((int) $dev['last_seq'], $seq)]);
+        // Clock skew rides on the same UPDATE (no extra statement): device collected_at minus server now, the agent's own estimate, and a cleared refusal.
+        $skew = $collected->getTimestamp() - $this->sql->time();
+        $offset = $announce['clock_offset'] ?? null;
         if ($newer) {
             $metricsJson = $metrics === null ? null : json_encode(self::cleanMetrics($metrics));
             $this->sql->run('UPDATE endpoint_agent_devices SET last_checkin_at = ?, last_ip = ?, agent_version = ?, last_collected_at = ?, last_seq = GREATEST(last_seq, ?),
-                last_metrics_json = ? WHERE device_id = ?', [$live['last_checkin_at'], $live['last_ip'], $ver, $collectedSql, $seq, $metricsJson, $deviceId]);
-            $row = array_merge($row, ['agent_version' => $ver, 'last_collected_at' => $collectedSql, 'last_metrics_json' => $metricsJson]);
+                last_metrics_json = ?, clock_skew_s = ?, clock_skew_at = ?, clock_offset_s = ?, last_reject_reason = NULL, last_reject_at = NULL WHERE device_id = ?',
+                [$live['last_checkin_at'], $live['last_ip'], $ver, $collectedSql, $seq, $metricsJson, $skew, $live['last_checkin_at'], $offset, $deviceId]);
+            $row = array_merge($row, ['agent_version' => $ver, 'last_collected_at' => $collectedSql, 'last_metrics_json' => $metricsJson, 'clock_skew_s' => $skew, 'clock_skew_at' => $live['last_checkin_at']]);
+            $this->announceSkew($row, $skew);
         } else {
-            $this->sql->run('UPDATE endpoint_agent_devices SET last_checkin_at = ?, last_ip = ?, last_seq = GREATEST(last_seq, ?) WHERE device_id = ?', [$live['last_checkin_at'], $live['last_ip'], $seq, $deviceId]);
+            $this->sql->run('UPDATE endpoint_agent_devices SET last_checkin_at = ?, last_ip = ?, last_seq = GREATEST(last_seq, ?), last_reject_reason = NULL, last_reject_at = NULL WHERE device_id = ?', [$live['last_checkin_at'], $live['last_ip'], $seq, $deviceId]);
         }
         if ($this->deviceState !== null) {
             $state = ($announce['caps'] ?? null) !== null ? $this->deviceState->note($deviceId, $announce['platform'] ?? null, $announce['caps']) : null;
@@ -395,11 +420,12 @@ final class CheckinService
         if ($assetId > 0 && $features['metrics']) {
             $staleBefore = (int) ($w['received'] ?? $this->sql->time()) - self::SHED_STALE_SAMPLE_S;
             $shed = !empty($w['shed']);
+            $extended = (int) ($this->settings->limits()['metrics_extended'] ?? 1) === 1;
             foreach ($batches as $i => [$at, $m, $inv]) {
                 if ($shed && $i > 0 && $at->getTimestamp() < $staleBefore) {
                     continue;   // acknowledged, not ingested
                 }
-                foreach ($this->samplesFor($assetId, $at, $m, $inv) as $s) {
+                foreach ($this->samplesFor($assetId, $at, $m, $inv, $extended) as $s) {
                     $samples[] = $s;
                 }
             }
@@ -506,7 +532,7 @@ final class CheckinService
      * @param array<string,mixed>|null $inv
      * @return list<array{asset_id:int,key:string,instance:?string,value:int|float,at:\DateTimeImmutable,label:?string}>
      */
-    private function samplesFor(int $assetId, \DateTimeImmutable $at, ?array $m, ?array $inv): array
+    private function samplesFor(int $assetId, \DateTimeImmutable $at, ?array $m, ?array $inv, bool $extended = true): array
     {
         $out = [];
         $add = static function (string $key, ?string $inst, int|float|null $val, ?string $label = null) use (&$out, $assetId, $at): void {
@@ -524,8 +550,16 @@ final class CheckinService
             $disks = is_array($m['disk'] ?? null) ? array_slice($m['disk'], 0, self::MAX_DISKS) : [];
             foreach ($disks as $d) {
                 if (is_array($d) && is_string($d['mount'] ?? null) && $d['mount'] !== '') {
-                    $add('disk.utilization', mb_substr($d['mount'], 0, 64), self::num($d['used_pct'] ?? null), mb_substr($d['mount'], 0, 64));
+                    $mt = mb_substr($d['mount'], 0, 64);
+                    $add('disk.utilization', $mt, self::num($d['used_pct'] ?? null), $mt);
+                    if ($extended) {
+                        $add('disk.free_bytes', $mt, self::intOrNull($d['free_bytes'] ?? null), $mt);
+                        $add('disk.total_bytes', $mt, self::intOrNull($d['total_bytes'] ?? null), $mt);
+                    }
                 }
+            }
+            if ($extended) {
+                $this->extendedSamples($m, $add);
             }
             // The agent reports BITS per second; the metric registry stores bytes per second.
             $rx = self::num($m['net_rx_bps'] ?? null);
@@ -552,6 +586,90 @@ final class CheckinService
         return $out;
     }
 
+    /**
+     * The optional per-check-in fields added in rc.25 (protocol 1 stays frozen: an agent that does not send them simply produces no sample for them). Every
+     * value is validated on its own, so one bad field never costs the others; the `metrics_extended` limit (default on) turns the whole group off.
+     *
+     * @param array<string,mixed> $m
+     * @param \Closure(string,?string,int|float|null,?string=):void $add
+     */
+    private function extendedSamples(array $m, \Closure $add): void
+    {
+        $add('memory.used_bytes', null, self::intOrNull($m['mem_used_bytes'] ?? null));
+        $add('memory.available_bytes', null, self::intOrNull($m['mem_available_bytes'] ?? null));
+        $add('memory.total_bytes', null, self::intOrNull($m['mem_total_bytes'] ?? null));
+        $add('system.uptime_seconds', null, self::intOrNull($m['uptime_s'] ?? null));
+        $pr = $m['pending_reboot'] ?? null;
+        if ($pr === 0 || $pr === 1) {
+            $add('system.pending_reboot', null, $pr);
+        }
+        $cores = $m['cpu_core_pct'] ?? null;
+        if (is_array($cores) && array_is_list($cores)) {
+            foreach (array_slice($cores, 0, self::MAX_CORES) as $i => $v) {
+                $add('cpu.core.utilization', (string) $i, self::num($v), 'Core ' . $i);
+            }
+        }
+        $add('disk.read_iops', 'total', self::num($m['disk_read_iops'] ?? null), 'All disks');
+        $add('disk.write_iops', 'total', self::num($m['disk_write_iops'] ?? null), 'All disks');
+        $add('disk.queue_length', 'total', self::num($m['disk_queue'] ?? null), 'All disks');
+        $add('network.errors', 'total', self::intOrNull($m['net_errors'] ?? null), 'All adapters');
+        $bat = self::num($m['battery_pct'] ?? null);
+        $add('battery.charge_percent', null, $bat !== null && $bat <= 100 ? $bat : null);   // a percentage: out of range is dropped, never clamped
+    }
+
+    // ------------------------------------------------------------------ clock skew
+
+    /** The agent's own server-minus-local estimate: an integer within one day, else ignored (it is a hint for the technician, never an error). */
+    private static function clockOffset(mixed $v): ?int
+    {
+        return is_int($v) && abs($v) <= RmmProtocol::CLOCK_OFFSET_MAX_S ? $v : null;
+    }
+
+    /**
+     * Raise `rmm.device.clock_skew` when the device's clock differs from the server's by more than the `clock_skew_alert_s` limit (0 = off), at most once a day per
+     * device, so a device that stays wrong never flaps. The day guard is a column, so it survives restarts and works across workers.
+     *
+     * @param array<string,mixed> $dev the device row (device_id, asset_id, client_id, hostname, clock_skew_event_at)
+     */
+    private function announceSkew(array $dev, int $skew): void
+    {
+        $limit = (int) ($this->settings->limits()['clock_skew_alert_s'] ?? 0);
+        if ($limit <= 0 || abs($skew) <= $limit || $this->events === null || !$this->events->enabled()) {
+            return;
+        }
+        $deviceId = (int) $dev['device_id'];
+        $before = $this->sql->utcAt(-86400);
+        // Claim the day atomically: only the statement that moves the stamp past the guard publishes.
+        if ($this->sql->run('UPDATE endpoint_agent_devices SET clock_skew_event_at = ? WHERE device_id = ? AND (clock_skew_event_at IS NULL OR clock_skew_event_at < ?)', [$this->sql->utcNow(), $deviceId, $before]) === 1) {
+            $this->events->emit(RmmEvent::DEVICE_CLOCK_SKEW, $dev, ['skew_s' => $skew, 'direction' => $skew > 0 ? 'ahead' : 'behind', 'server_time' => $this->sql->isoNow()]);
+        }
+    }
+
+    /**
+     * Remember why a check-in was refused for its time (first one, then at most hourly), and announce a large skew. Best effort: a failure here never changes the 422.
+     *
+     * @param array<string,mixed> $dev the authenticated device row
+     */
+    private function noteRejected(array $dev, ApiError $e): void
+    {
+        $skew = $e->extra['skew_s'] ?? null;
+        if (!is_int($skew)) {
+            return;
+        }
+        try {
+            $reason = mb_substr($e->getMessage(), 0, 200);
+            $lastAt = $dev['last_reject_at'] ?? null;
+            if (($dev['last_reject_reason'] ?? null) === $reason && is_string($lastAt) && $lastAt >= $this->sql->utcAt(-3600)) {
+                return;
+            }
+            $now = $this->sql->utcNow();
+            $this->sql->run('UPDATE endpoint_agent_devices SET last_reject_reason = ?, last_reject_at = ?, clock_skew_s = ?, clock_skew_at = ? WHERE device_id = ?', [$reason, $now, $skew, $now, $dev['device_id']]);
+            $this->announceSkew($dev, $skew);
+        } catch (\Throwable $x) {
+            error_log('rmm clock skew note: ' . $x->getMessage());
+        }
+    }
+
     // ------------------------------------------------------------------ small validators
 
     /**
@@ -571,13 +689,39 @@ final class CheckinService
         $ts = $dt->getTimestamp();
         $now = $this->sql->time();
         if ($ts > $now + RmmProtocol::CHECKIN_FUTURE_SKEW_S) {
-            throw new ApiError(422, 'invalid', "$field is in the future");
+            throw ApiError::badTime("$field is in the future", $ts, $now);
         }
         if ($ts < $now - (int) $cfg['retention_days'] * 86400) {
-            throw new ApiError(422, 'invalid', "$field is older than the retention window");
+            throw ApiError::badTime("$field is older than the retention window", $ts, $now);
         }
 
         return $dt->setTime((int) $dt->format('H'), (int) $dt->format('i'), (int) $dt->format('s'));
+    }
+
+    /**
+     * Checks that stopped applying to the device (other OS, off the schedule, removed by a policy) lose their row and their open alert. One primary
+     * key read per check-in; the work happens only when the delivered set changed. Never fails the check-in. A check the schedule still has for
+     * this OS but that was left out only because the device did not announce `check:<type>` is kept: it stopped reporting, it did not stop applying.
+     *
+     * @param array<string,mixed> $dev
+     * @param list<array<string,mixed>> $delivered
+     * @param list<string>|null $caps the capabilities the delivery was filtered by
+     */
+    private function reconcileDelivered(array $dev, array $delivered, ?array $caps): void
+    {
+        try {
+            $schedule = $this->settings->checks();
+            $keys = array_map(static fn (array $c): string => (string) $c['key'], $delivered);
+            $os = RmmChecks::deviceOs($dev);
+            foreach ($os === null ? $schedule : RmmChecks::forOs($schedule, $os) as $c) {
+                if (!CheckCatalog::offeredTo((string) $c['type'], $caps)) {
+                    $keys[] = (string) $c['key'];
+                }
+            }
+            (new CheckReconciler($this->sql, $this->checks))->reconcile($dev, $keys, array_map(static fn (array $c): string => (string) $c['key'], $schedule));
+        } catch (\Throwable $e) {
+            error_log('rmm check-in (stale check cleanup): ' . get_class($e) . ': ' . $e->getMessage());   // e.g. migration 0031 not applied yet
+        }
     }
 
     /**
