@@ -100,6 +100,15 @@ $ok($c === 200 && str_contains($b, 'db01') && str_contains($b, 'pve1'), 'the VM 
 $ok(str_contains($b, 'State history') && str_contains($b, 'Running') && str_contains($b, 'Stopped'), 'the state history row is shown');
 $ok(str_contains($b, 'Ignore this VM'), 'an admin (manage) sees the ignore control');
 
+echo "\n--- the Facts table escapes replication and the backup result, not just names and tags ---\n";
+// Both columns are short (varchar(10)/varchar(8)) and HypervisorService::ingest() only ever writes a fixed enum into them, so this does not go
+// through that path - it stands in for ANY future write that skips ingest()'s validation (a direct SQL fixup, a Core bug, a different ingest
+// route), which is exactly the scenario output-side escaping is supposed to cover regardless of what the one known writer currently guarantees.
+$q("UPDATE rmm_hypervisor_vms SET replication = '<b>x</b>', last_backup_result = '<i>y</i' WHERE vm_id = $vmDb");   // 10 and 8 chars: the column limit, not a truncated payload
+[$c, $b] = web($wb, 'GET', '/agent/rmm_hypervisor_vm.php?vm_id=' . $vmDb, $sidAdmin);
+$ok($c === 200 && !str_contains($b, '<b>x</b>') && !str_contains($b, '<i>y</i') && str_contains($b, '&lt;b&gt;x&lt;/b&gt;') && str_contains($b, '&lt;i&gt;y&lt;/i'), 'replication and last_backup.result are HTML-escaped in the Facts table, not printed raw');
+$q("UPDATE rmm_hypervisor_vms SET replication = '', last_backup_result = 'failed' WHERE vm_id = $vmDb");
+
 echo "\n--- a viewer (view only, no manage) sees no ignore control and is refused the action ---\n";
 [$c, $b] = web($wb, 'GET', '/agent/rmm_hypervisor_vm.php?vm_id=' . $vmDb, $sidViewer);
 $ok($c === 200 && str_contains($b, 'db01') && !str_contains($b, 'Ignore this VM'), 'a viewer can read the VM but has no ignore button');

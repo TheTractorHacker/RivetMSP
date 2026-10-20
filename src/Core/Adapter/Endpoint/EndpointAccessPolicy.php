@@ -103,8 +103,10 @@ final class EndpointAccessPolicy implements AccessPolicyInterface
             // RMM change monitoring (rc.22): a change record can hold configuration text, so view is like run_saved; presets, custom watches and rules are like alert.manage
             RmmAbility::CHANGE_VIEW => $this->level($roleId, 'module_rmm_scripts') >= 2,
             RmmAbility::CHANGE_MANAGE => $this->level($roleId, 'module_rmm') >= 2,
-            // rc.29 hypervisor visibility: view is like device/software view, manage (ignore a VM/host, thresholds) is like alert/change manage
-            RmmAbility::HYPERVISOR_VIEW => true,
+            // rc.29 hypervisor visibility: view is like device/software view (module_rmm >= 1, already guaranteed by the gate above - spelled out
+            // here anyway rather than left as a bare `true`, so this arm does not silently become fail-open if that outer gate is ever refactored
+            // away), manage (ignore a VM/host, thresholds) is like alert/change manage.
+            RmmAbility::HYPERVISOR_VIEW => $this->level($roleId, 'module_rmm') >= 1,
             RmmAbility::HYPERVISOR_MANAGE => $this->level($roleId, 'module_rmm') >= 2,
             RmmAbility::REMOTE_MANAGE => $this->level($roleId, 'module_rmm_scripts') >= 3 && $this->level($roleId, 'module_rmm_remote_connect') >= 1 && $this->level3MayManageRemote(),
             RmmAbility::JOB_APPROVE => $this->level($roleId, 'module_rmm_scripts') >= 3 && $this->level3MayApprove(),

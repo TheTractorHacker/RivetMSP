@@ -386,14 +386,18 @@ function rivetRmmHypervisorVmPage(array $vm, string $csrf, bool $manage): string
         ['Memory', $v['mem_bytes'] === null ? 'no data' : rivetRmmUiBytes((float) $v['mem_bytes']) . ($v['mem_max_bytes'] !== null ? ' of ' . rivetRmmUiBytes((float) $v['mem_max_bytes']) : '')],
         ['Disk', $v['disk_bytes'] === null ? 'no data' : rivetRmmUiBytes((float) $v['disk_bytes']) . ($v['disk_used_bytes'] !== null ? ' (' . rivetRmmUiBytes((float) $v['disk_used_bytes']) . ' used)' : '')],
         ['Uptime', rivetRmmUiDuration($v['uptime_s'])], ['Guest agent', $v['guest_agent'] === null ? 'not collected' : ($v['guest_agent'] ? 'Running' : 'Not detected')],
-        ['Replication', $v['replication'] ?? 'none'], ['Backup coverage', $v['backup_covered'] === null ? 'unknown' : ($v['backup_covered'] ? 'Expected' : 'Not covered by a backup job')],
-        ['Last backup', $v['last_backup'] === null ? 'none recorded' : ucfirst($v['last_backup']['result']) . ', ' . rivetRmmUiTime($v['last_backup']['at'])],
+        // Replication and a backup job's result are the host/guest's own words (HYPERVISORS.md section 3 only promises control characters are
+        // stripped and length is capped, not that the text is HTML-safe), so they are escaped here, at the point they enter the array - the loop
+        // below then prints every value as-is, because by then it is either a hardcoded safe string, a number, or already-escaped/trusted HTML
+        // (rivetRmmUiTime() etc. build real <time> markup and must NOT be re-escaped).
+        ['Replication', rmmH((string) ($v['replication'] ?? 'none'))], ['Backup coverage', $v['backup_covered'] === null ? 'unknown' : ($v['backup_covered'] ? 'Expected' : 'Not covered by a backup job')],
+        ['Last backup', $v['last_backup'] === null ? 'none recorded' : rmmH(ucfirst((string) $v['last_backup']['result'])) . ', ' . rivetRmmUiTime($v['last_backup']['at'])],
         ['Snapshots', $v['snapshots'] === null ? 'none' : (int) $v['snapshots']['count'] . ', oldest ' . rivetRmmUiTime($v['snapshots']['oldest_at'])],
         ['First seen', rivetRmmUiTime($v['first_seen_at'])], ['Last seen', rivetRmmUiTime($v['last_seen_at'])],
         ['Missing since', $v['missing_since'] === null ? 'not missing' : rivetRmmUiTime($v['missing_since'])]];
     $frows = '';
     foreach ($facts as [$k, $val]) {
-        $frows .= '<tr><th class="ps-3 text-muted fw-normal" style="width:12rem">' . rmmH($k) . '</th><td>' . (is_string($val) ? $val : rmmH((string) $val)) . '</td></tr>';
+        $frows .= '<tr><th class="ps-3 text-muted fw-normal" style="width:12rem">' . rmmH($k) . '</th><td>' . $val . '</td></tr>';
     }
     $o .= rivetRmmUiCard('Facts', 'info-circle', '<div class="table-responsive"><table class="table table-sm mb-0"><caption class="visually-hidden">VM facts</caption><tbody>' . $frows . '</tbody></table></div>', '', '', true);
 
