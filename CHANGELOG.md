@@ -4,6 +4,17 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.36] RivetMSP — Every time in the company's time zone (no DB change)
+
+**Deploy notes:** pull this tag; no database update, no RivetCore change, no new web setting. Reload the pages (new `js/rmm_panel.js`, `js/rmm_alr.js`).
+
+- **No more "UTC" on the RMM, Endpoint agent and admin screens.** Agent binaries, MSI templates and releases ("Uploaded"), build jobs and hosts ("last seen"), enrollment tokens, devices, jobs, checks, alerts, maintenance windows, logs, scripts, schedules, approvals, patch, software, scale cards, audit trail and the recovery panel now show the company time zone with its short label (`2026-07-04 10:42 CDT`), DST-correct. Headings no longer say "(UTC)".
+- **No double conversion.** Core and `endpoint_agent_*` columns (UTC) are converted; the edition's `NOW()` columns (`rmm_alerts`, `rmm_remote_sessions`, `rmm_script_runs`, `rmm_sync_log`, `audit_events`) are already company time and are only labelled. Durations stay durations.
+- **Logs and charts.** The Logs custom range (From/To) is typed in company time; the performance chart hour axis and tooltip use the company zone. A one-time maintenance window shows the company-time equivalent when its own zone differs.
+- **Still UTC on purpose:** cron expressions of a schedule (Core evaluates them in UTC) and `UTC` as a name in zone pickers; see `tests/rmm_time_utc_allow.txt`.
+- New shared helper `includes/rivet_time.php` (identical in RivetIT) and RMM wrappers `includes/rmm_time.php`. Audit table: `docs/RMM_MODULE.md` section 6o.
+- Tests: `tests/rmm_time.php` (47 checks incl. America/Chicago DST transitions and a lint against new hard-coded UTC labels), `tests/rmm_time_pages.php` (30 checks on the real pages with a non-UTC company zone); updated assertions in `tests/rmm_ui_p23_c_alerting.php`, `tests/rmm_ui_p68_admin.php`, `tests/rmm_ui_p68_logs.php`, `tests/browser/rmm_p23_c_smoke.mjs`.
+
 ## [26.10.34] RivetMSP — Build progress and the RMM Agent Builder installer (DB 2.6.100)
 
 **Deploy notes:** back up the database, pull this tag, run **Administration > Updates** (DB 2.6.99 to 2.6.100: four columns added to `endpoint_agent_build_jobs`, no row touched). No RivetCore change in the web app. Build hosts keep working before and after; to get progress they need the build-host script from RivetCore 9d20031 or later (the new installer fetches exactly that). Optional: `sudo deploy/setup-build-host.sh` on this server (see below).
