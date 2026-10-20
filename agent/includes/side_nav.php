@@ -345,13 +345,9 @@ foreach ($section_pages as $key => $pages) {
                             <span class="text-truncate">Agent Fleet</span>
                         </a>
                         <?php if (!empty($session_is_admin)) { ?>
-                        <a href="/agent/rmm_fleet.php?add=1" class="dropdown-item" data-nav-add-device>
-                            <span class="dropdown-item-icon"><i class="fas fa-download"></i></span>
+                        <a href="/agent/rmm_add_device.php" class="dropdown-item<?php if ($current_page == 'rmm_add_device.php') { echo ' active'; } ?>" data-nav-add-device>
+                            <span class="dropdown-item-icon"><i class="fas fa-plus"></i></span>
                             <span class="text-truncate">Add device</span>
-                        </a>
-                        <a href="/agent/rmm_add_device.php" class="dropdown-item<?php if ($current_page == 'rmm_add_device.php') { echo ' active'; } ?>" data-nav-build-installer>
-                            <span class="dropdown-item-icon"><i class="fas fa-box-open"></i></span>
-                            <span class="text-truncate">Build installer</span>
                         </a>
                         <?php } ?>
                         <?php foreach (rivetRmmAutoNav((int) $session_user_id) as $nav_auto) { // policies / scripts / alerting sub-switches (state file; no query) ?>

@@ -1108,15 +1108,15 @@ function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null, ?
     $swCard = $f['outdated_sw'] !== null ? rivetRmmUiOutdatedSoftware($f['outdated_sw'], $cn, $f) : '';
 
     return '<div class="d-flex align-items-center flex-wrap mb-3" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-satellite me-2" aria-hidden="true"></i>Agent fleet</h4>'
-        . ($entry !== null ? $entry['button'] : ($installer !== null ? '<a href="/agent/rmm_add_device.php" class="btn btn-primary" data-rmm-build-installer><i class="fas fa-hammer me-1" aria-hidden="true"></i>Create installer</a>' : ''))
-        . ($installer !== null ? rivetRmmUiInstallerButton($installer, 'Add device', 'btn btn-outline-primary', null, 'fa-plus') : '')
+        . ($entry !== null ? $entry['button'] : ($installer !== null ? '<a href="/agent/rmm_add_device.php" class="btn btn-primary" data-rmm-build-installer><i class="fas fa-plus me-1" aria-hidden="true"></i>Add device</a>' : ''))
+        . ($installer !== null ? rivetRmmUiInstallerButton($installer, 'Quick download', 'btn btn-outline-primary', null, 'fa-download') : '')
         . '<a href="/agent/rmm_assets.php" class="btn btn-info btn-sm"><i class="fas fa-desktop me-1" aria-hidden="true"></i>All RMM assets</a>'
         . '<a href="/agent/rmm_alerts.php" class="btn btn-warning btn-sm"><i class="fas fa-bell me-1" aria-hidden="true"></i>Alerts</a>'
         . ($f['perm']['admin'] ? '<a href="/admin/settings_endpoint_agent.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-cog me-1" aria-hidden="true"></i>Administration</a>' : '') . '</div>'
         . ($entry !== null ? $entry['notice'] : '')
         . ($c['total'] === 0 && $f['filters'] === [] ? '<section class="card card-dark mb-3"><div class="card-body">' . rivetRmmUiEmpty('fas fa-satellite-dish', 'No agent is enrolled yet',
-            $installer !== null ? 'Use Add device to download an installer, then run it on a PC.' : ($f['perm']['admin'] ? 'Create an enrollment token under Administration, Endpoint agent, then install the agent on a device.' : 'An administrator creates an enrollment token and installs the agent.'),
-            $installer !== null ? rivetRmmUiInstallerButton($installer, 'Download installer', 'btn btn-primary', null, 'fa-download') : '') . '</div></section>' : '')
+            $installer !== null ? 'Use Add device to get an installer, then run it on a PC.' : ($f['perm']['admin'] ? 'Create an enrollment token under Administration, Endpoint agent, then install the agent on a device.' : 'An administrator creates an enrollment token and installs the agent.'),
+            $installer !== null ? rivetRmmUiInstallerButton($installer, 'Quick download', 'btn btn-primary', null, 'fa-download') : '') . '</div></section>' : '')
         . '<div class="row mb-3">' . $kpi . '</div>'
         . '<div class="row"><div class="col-lg-7">' . $healthCard . '</div><div class="col-lg-5">' . $apCard . '</div></div>'
         . '<div class="row"><div class="col-lg-6">' . $offCard . '</div><div class="col-lg-6">' . $fCard . '</div></div>'

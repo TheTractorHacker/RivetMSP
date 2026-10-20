@@ -146,9 +146,10 @@ function rivetAgentAddDevicePage(array $ins, string $csrf, ?array $rec, bool $is
     $noWin = $ins['windows']['amd64'] === null && $ins['windows']['arm64'] === null;
     $admin = static fn (string $anchor, string $text): string => $isAdmin ? ' <a href="/admin/settings_endpoint_agent.php#' . $anchor . '">' . $text . '</a>' : ' An administrator can do this under Administration &gt; Endpoint agent.';
 
-    $o = '<div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2"><h3 class="mb-0"><i class="fas fa-download me-2" aria-hidden="true"></i>Add device / Build installer</h3>'
-        . '<a class="btn btn-sm btn-outline-secondary" href="/agent/rmm_fleet.php"><i class="fas fa-arrow-left me-1" aria-hidden="true"></i>Agent Fleet</a></div>'
-        . '<p class="text-muted">Choose the client, then take the format you need. Every button creates its own audited enrollment token for that client, so nothing is typed and nothing is run on this server.</p>'
+    $o = '<div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2"><h3 class="mb-0"><i class="fas fa-plus me-2" aria-hidden="true"></i>Add device</h3>'
+        . '<div class="d-flex flex-wrap gap-2">' . rivetRmmUiInstallerButton($ins, 'Quick download', 'btn btn-sm btn-outline-primary', null, 'fa-download')
+        . '<a class="btn btn-sm btn-outline-secondary" href="/agent/rmm_fleet.php"><i class="fas fa-arrow-left me-1" aria-hidden="true"></i>Agent Fleet</a></div></div>'
+        . '<p class="text-muted">Choose the client, then take the format you need. For one Windows PC the <strong>Quick download</strong> button is the short way. Every button creates its own audited enrollment token for that client, so nothing is typed and nothing is run on this server.</p>'
         . ($blocked ? '<div class="alert alert-warning py-2" role="status" data-add-notice="service"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' . $h($ins['service_problem']) . $admin('settings', 'Fix it in Administration &gt; Endpoint agent.') . '</div>' : '')
         . ($noWin && !$blocked ? '<div class="alert alert-warning py-2" role="status" data-add-notice="binary"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>No Windows agent is hosted yet, so a Windows installer cannot be built.' . $admin('agent-updates', 'Publish a release under Agent updates.') . '</div>' : '');
 

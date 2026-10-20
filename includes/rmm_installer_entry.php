@@ -24,22 +24,22 @@ function rivetRmmInstallerEntry(\mysqli $mysqli, int $userId, bool $isAdmin, boo
     $e = static fn ($v): string => rmmH((string) $v);
     $adminLink = static fn (string $text, string $href): string => $isAdmin ? ' <a href="' . $e($href) . '">' . $text . '</a>.' : ' An administrator can do this.';
     $btn = static fn (bool $on, string $reason) => $on
-        ? '<a href="' . RIVET_INSTALLER_URL . '" class="' . $e($btnClass) . '" data-rmm-build-installer><i class="fas fa-hammer me-1" aria-hidden="true"></i>Create installer</a>'
-        : '<button type="button" class="' . $e(str_replace('btn-primary', 'btn-outline-secondary', $btnClass)) . '" disabled aria-disabled="true" title="' . $e($reason) . '" data-rmm-build-installer-off><i class="fas fa-hammer me-1" aria-hidden="true"></i>Create installer</button>';
+        ? '<a href="' . RIVET_INSTALLER_URL . '" class="' . $e($btnClass) . '" data-rmm-build-installer><i class="fas fa-plus me-1" aria-hidden="true"></i>Add device</a>'
+        : '<button type="button" class="' . $e(str_replace('btn-primary', 'btn-outline-secondary', $btnClass)) . '" disabled aria-disabled="true" title="' . $e($reason) . '" data-rmm-build-installer-off><i class="fas fa-plus me-1" aria-hidden="true"></i>Add device</button>';
     $note = static fn (string $kind, string $inner, string $level = 'warning'): string => '<div class="alert alert-' . $level . ' py-2 mb-3" role="status" data-rmm-installer-entry="' . $kind . '"><div><i class="fas fa-info-circle me-1" aria-hidden="true"></i>' . $inner . '</div></div>';
 
     if (!$coreFlag || !rivetRmmEnabled($mysqli)) {
         $why = 'The RMM module is switched off.';
 
         return ['state' => 'module_off', 'button' => $btn(false, $why), 'missing' => 'RMM module switched on',
-            'notice' => $note('module_off', '<strong>Create installer is unavailable:</strong> the RMM module is switched off. Switch it on under Administration &gt; Endpoint agent (the RMM module card).' . ($isAdmin ? ' <a href="/admin/settings_endpoint_agent.php">Open it</a>.' : ' An administrator can do this.'))];
+            'notice' => $note('module_off', '<strong>Add device is unavailable:</strong> the RMM module is switched off. Switch it on under Administration &gt; Endpoint agent (the RMM module card).' . ($isAdmin ? ' <a href="/admin/settings_endpoint_agent.php">Open it</a>.' : ' An administrator can do this.'))];
     }
     $ins = rivetRmmUiInstaller($mysqli, $userId, null, null);
     if ($ins === null) {
         $why = 'Your role lacks the permission "Create enrollment tokens" (rmm.token.manage).';
 
         return ['state' => 'no_permission', 'button' => $btn(false, $why), 'missing' => 'rmm.token.manage',
-            'notice' => $note('no_permission', '<strong>Create installer is unavailable to you:</strong> your role lacks the permission <strong>Create enrollment tokens</strong> (<code>rmm.token.manage</code>). Ask an administrator to grant it under Administration &gt; Roles.')];
+            'notice' => $note('no_permission', '<strong>Add device is unavailable to you:</strong> your role lacks the permission <strong>Create enrollment tokens</strong> (<code>rmm.token.manage</code>). Ask an administrator to grant it under Administration &gt; Roles.')];
     }
     $n = '';
     $state = 'ok';

@@ -5,7 +5,7 @@
  *
  * Nothing is decided here. The buttons post to agent/post/rmm_installer.php (CSRF, RivetCore RmmAdmin::downloadInstaller / deploymentCommands: rmm.token.manage for the client,
  * an audited token each); the Linux files come from the release an administrator published under Administration > Endpoint agent > Agent updates. The dialog on the Agent Fleet
- * page (Add device) is unchanged and stays the quick way for one Windows PC.
+ * page (Quick download) stays the quick way for one Windows PC; it is also a button here.
  */
 
 require_once "includes/inc_all.php";
@@ -33,6 +33,8 @@ if ($rmm_installer === null) {
 $rmm_feed = new \RivetMsp\AgentFeed\Feed($mysqli);
 $rmm_linux = $rmm_feed->ready() ? $rmm_feed->linuxRecord() : null;
 $rmm_add_device_scripts = true;   // includes/footer.php links js/rmm_add_device.js only when this is set
+$rmm_installer_scripts = true;    // and js/rmm_installer.js for the Quick download dialog
 echo rivetAgentAddDevicePage($rmm_installer, (string) ($_SESSION['csrf_token'] ?? ''), $rmm_linux, !empty($session_is_admin));
+echo rivetRmmUiInstallerModal($rmm_installer, (string) ($_SESSION['csrf_token'] ?? ''));
 
 require_once "../includes/footer.php";
