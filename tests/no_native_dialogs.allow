@@ -1,0 +1,7 @@
+# Explicit allowlist for tests/no_native_dialogs.php. One entry per line:  <path>|<token>|<reason>
+# token is the call or event that is allowed in that file: alert, confirm, prompt or beforeunload. Keep this list tiny.
+#
+# onbeforeunload / beforeunload: the browser's own "Leave site?" prompt. A page cannot replace it with its own modal (browsers ignore
+# any custom text and block every other dialog while the page unloads), so the only alternative is to drop the unsaved-changes guard.
+js/app.js|beforeunload|TinyMCE unsaved-changes guard; the browser's leave-page prompt cannot be replaced by a modal
+js/webhook_form.js|beforeunload|webhook form unsaved-changes guard; the browser's leave-page prompt cannot be replaced by a modal
