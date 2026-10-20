@@ -429,10 +429,10 @@ $ok($lim['check_history_days'] === 365 && $lim['software_history_days'] === 1, '
 $ok($c === 200 && str_contains($body, 'id="inventory"') && str_contains($body, 'name="inventory_software"') && preg_match('/name="inventory_software"[^>]*checked/', $body) === 1 && str_contains($body, 'name="check_history_days"') && str_contains($body, 'name="software_history_days"'), 'the administration page shows the switch (on) and both limits');
 $ok($rmm->featureOn('inventory_software'), 'the inventory_software switch is on');
 // ---- 26.10.32: Administration > Endpoint agent is tabs; every card is still there exactly once, in the tab named for it, and nothing is printed inline
-$tabsOk = $c === 200 && substr_count($body, 'role="tab"') === 8 && substr_count($body, 'role="tabpanel"') === 8 && str_contains($body, 'id="ea-tablist"') && str_contains($body, '/js/rmm_ea_tabs.js');
-$ok($tabsOk, 'the Endpoint agent page has 8 tabs and 8 panels, and loads the tab script');
+$tabsOk = $c === 200 && substr_count($body, 'role="tab"') === 9 && substr_count($body, 'role="tabpanel"') === 9 && str_contains($body, 'id="ea-tablist"') && str_contains($body, '/js/rmm_ea_tabs.js');
+$ok($tabsOk, 'the Endpoint agent page has 9 tabs and 9 panels (rc.29 added the Hypervisors tab), and loads the tab script');
 $cardTabs = ['overview' => ['module', 'settings', 'pending', 'devices'], 'updates' => ['agent-updates', 'binaries', 'msi-templates', 'deployment', 'releases'], 'checks' => ['checks', 'ea_checks_simple'], 'remote' => ['remote-tools', 'file-transfer', 'mesh'],
-    'inventory' => ['inventory', 'log-collection', 'scale', 'partitioning', 'ext-store'], 'patching' => ['patching'], 'software' => ['software-deployment'], 'security' => ['trust', 'automation', 'signing', 'tokens']];
+    'inventory' => ['inventory', 'log-collection', 'scale', 'partitioning', 'ext-store'], 'patching' => ['patching'], 'software' => ['software-deployment'], 'hypervisor' => ['hypervisor'], 'security' => ['trust', 'automation', 'signing', 'tokens']];
 $panes = [];
 preg_match_all('/<div class="tab-pane ea-pane[^"]*" id="tab-([a-z]+)"(.*?)(?=<div class="tab-pane ea-pane|<script src="\/js\/rmm_ea_tabs\.js)/s', $body, $pm, PREG_SET_ORDER);
 foreach ($pm as $m) { $panes[$m[1]] = $m[2]; }

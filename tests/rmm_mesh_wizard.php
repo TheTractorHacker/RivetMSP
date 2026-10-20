@@ -175,7 +175,10 @@ $q("UPDATE endpoint_agent_settings SET mesh_enabled = 0, mesh_url = ''");
 [$c, $b] = $get("/agent/asset_details.php?client_id=1&asset_id=$assetId");
 $ok($c === 200 && str_contains($b, 'id="rmm-act-remote-setup"') && str_contains($b, '/admin/rmm_mesh_wizard.php'), 'device page, Mesh not set up, administrator: the Remote button leads to the wizard');
 [$c, $b] = $get("/agent/asset_details.php?client_id=1&asset_id=$assetId", 'tech');
-$ok($c !== 200 || (!str_contains($b, 'id="rmm-act-remote-setup"') && (!str_contains($b, 'id="rmm-act-remote"') || str_contains($b, 'not set up yet'))), 'device page, technician: no wizard link, a disabled Remote with the reason');
+// rc.28 device header view-model (RemoteHeader::decide(), section 4d): the disabled button's reason text changed from this edition's old wording
+// ("Remote access is not set up yet...") to Core's own "...is switched off. An administrator can turn it on in the RMM settings." - still a clear,
+// accurate reason on a properly disabled button, just worded by Core now rather than this file.
+$ok($c !== 200 || (!str_contains($b, 'id="rmm-act-remote-setup"') && (!str_contains($b, 'id="rmm-act-remote"') || str_contains($b, 'switched off'))), 'device page, technician: no wizard link, a disabled Remote with the reason');
 [$c, $b] = $get('/admin/settings_endpoint_agent.php');
 $ok(str_contains($b, 'data-mesh-wizard-link') && str_contains($b, 'Step-by-step setup with live status'), 'Endpoint agent admin page header and Mesh card link to the wizard');
 [$c, $b] = $get('/admin/settings.php');
