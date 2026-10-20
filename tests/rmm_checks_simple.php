@@ -204,3 +204,35 @@ foreach ([['diskspace', ['disk' => 'C:\\evil']], ['diskspace', ['bogus' => '1']]
 [$l] = RivetChecksSimple::compose(['svc_extra' => "eventlog\nMyApp\nmyapp"] + $base, []);
 $names = array_column(array_column(array_filter($l, fn ($c) => $c['type'] === 'service'), 'params'), 'name');
 $ok($names === ['EventLog', 'WinDefend', 'MyApp'], 'a service typed twice, or in another case, is one check (' . implode(',', $names) . ')');
+
+// ---------------------------------------------------------------- RivetMSP-specific: Debian/Red Hat service alias pairs (ssh/sshd, cron/crond, chronyd/systemd-timesyncd)
+// Ticking one catalog entry for an alias pair schedules checks for BOTH names, each with params.missing = 'ignore' (the agent's own already-shipped
+// semantic: a service that does not exist on this host reports OK instead of Fail; one that exists and is stopped still fails normally) - so a Debian
+// host (which has `ssh`, not `sshd`) and a Red Hat host (which has `sshd`, not `ssh`) each monitor the one they actually have, and neither fails over the
+// other's name.
+[$lAlias, $eAlias] = RivetChecksSimple::compose(['svc' => ['sshd', 'cron', 'chronyd']] + $base, []);
+$ok($eAlias === [], 'alias pairs: ticking sshd/cron/chronyd is accepted (' . implode(' | ', $eAlias) . ')');
+$svcChecks = array_filter($lAlias, fn ($c) => $c['type'] === 'service');
+$byName = array_column(array_map(fn ($c) => $c['params'] + ['key' => $c['key']], $svcChecks), null, 'name');
+$ok(count($svcChecks) === 6, 'alias pairs: one tick each for sshd/cron/chronyd schedules six checks (3 pairs x 2), got ' . count($svcChecks));
+foreach (['sshd' => 'ssh', 'cron' => 'crond', 'chronyd' => 'systemd-timesyncd'] as $primary => $alias) {
+    $ok(isset($byName[$primary], $byName[$alias]), "alias pairs: both $primary and $alias are scheduled");
+    $ok(($byName[$primary]['missing'] ?? null) === 'ignore' && ($byName[$alias]['missing'] ?? null) === 'ignore', "alias pairs: $primary and $alias both tolerate missing (not installed)");
+    $ok(($byName[$primary]['expected'] ?? null) === 'running' && ($byName[$alias]['expected'] ?? null) === 'running', "alias pairs: $primary and $alias both still expect running (a stopped service still fails)");
+    $ok($byName[$primary]['key'] !== $byName[$alias]['key'], "alias pairs: $primary and $alias get distinct keys");
+}
+// decompose() round-trips an alias-pair stored list back to ONE tick under the primary name, not two, and still recognises it with missing=ignore present
+$back = RivetChecksSimple::decompose($lAlias);
+$backNames = array_column($back['services'], 'name');
+sort($backNames);
+$ok($backNames === ['chronyd', 'cron', 'sshd'] && $back['others'] === [], 'alias pairs: decompose() shows one tick per pair under its catalog name, nothing falls into "other checks"');
+// a validated round trip through Core's own ChecksValidator (the agent-facing signed form) keeps params.missing intact
+[$validated] = ChecksValidator::normalize($lAlias);
+$vByName = array_column(array_map(fn ($c) => ChecksValidator::paramsOf($c), $validated), null, null);
+$sawMissing = 0;
+foreach ($validated as $c) {
+    if ($c['type'] === 'service' && (ChecksValidator::paramsOf($c)['missing'] ?? null) === 'ignore') {
+        $sawMissing++;
+    }
+}
+$ok($validated !== null && $sawMissing === 6, 'alias pairs: ChecksValidator::normalize() (the agent-facing signed form) keeps params.missing on all six checks');
