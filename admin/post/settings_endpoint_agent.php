@@ -107,6 +107,29 @@ if (isset($_POST['save_agent_settings'])) {
     ea_flash_result($ea_admin->saveSettings($ea_who, $in));
 }
 
+// 26.10.38 (RivetCore rc.24): "Clean up checks that no longer apply". Removes the check rows of checks a device is no longer given (the other OS's checks, checks taken off the schedule)
+// and resolves their open alerts ("This check no longer applies to the device", by the system, no ticket). Administrators only, CSRF, audited, idempotent: a second press finds nothing to do.
+if (isset($_POST['reconcile_checks'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $denied = $rmm->authorizer()->check((int) $session_user_id, \RivetCore\Rmm\Authz\RmmAbility::ADMIN, 0, false);
+    if ($denied !== null) {
+        flash_alert(nullable_htmlentities($denied), 'error');
+        redirect();
+    }
+    try {
+        $r = $rmm->reconcileChecks();
+    } catch (\Throwable $e) {
+        error_log('RMM reconcileChecks failed: ' . get_class($e));
+        logAction('RMM', 'Settings Changed', "$session_name tried to clean up checks that no longer apply: failed");
+        flash_alert('The clean-up could not run. See the server log.', 'error');
+        redirect();
+    }
+    logAction('RMM', 'Settings Changed', "$session_name cleaned up checks that no longer apply (" . (int) $r['removed'] . ' removed on ' . (int) $r['devices'] . ' devices)');
+    flash_alert((int) $r['removed'] === 0 ? 'Nothing to clean up: every device already has only the checks that apply to it.'
+        : (int) $r['removed'] . ' ' . ((int) $r['removed'] === 1 ? 'check that no longer applies was' : 'checks that no longer apply were') . ' removed and their alerts resolved.', 'success');
+    redirect();
+}
+
 // Software inventory switch and the two history limits (RivetCore 1.0.0-rc.9). RmmAdmin validates and audits; only values that changed are written, so an install on
 // the legacy feature defaults (features_json NULL) or the default limits stays that way until an administrator actually changes something here.
 if (isset($_POST['save_inventory_settings'])) {

@@ -501,6 +501,15 @@ function rivetRmmAlrAlertsPage(array $vm): string
         . rivetRmmAutoConfirmModal();
 }
 
+/** A resolve reason in words. not_applicable is RivetCore rc.24's "the check was taken off this device" (the other OS, or off the schedule): resolved by the system, no ticket. */
+function rivetRmmAlrReasonText(string $reason): string
+{
+    return match ($reason) {
+        'not_applicable' => 'This check no longer applies to the device',
+        default => str_replace('_', ' ', $reason),
+    };
+}
+
 /** @param array<string,mixed> $vm */
 function rivetRmmAlrDetailPage(array $vm): string
 {
@@ -526,7 +535,7 @@ function rivetRmmAlrDetailPage(array $vm): string
     }
     if ($a['resolved_at'] !== null) {
         $by = $a['resolved_by'] !== null ? ' by ' . rmmH($names[(int) $a['resolved_by']] ?? 'someone') : ' automatically';
-        $rows[] = ['Resolved', rivetRmmAlrWhen($a['resolved_at']) . $by . ($a['resolve_reason'] ? ' <span class="text-muted small">(' . rmmH(str_replace('_', ' ', (string) $a['resolve_reason'])) . ')</span>' : '')];
+        $rows[] = ['Resolved', rivetRmmAlrWhen($a['resolved_at']) . $by . ($a['resolve_reason'] ? ' <span class="text-muted small">(' . rmmH(rivetRmmAlrReasonText((string) $a['resolve_reason'])) . ')</span>' : '')];
     }
     $rows[] = ['Ticket', $e['ticket_id'] !== null ? '<a href="/agent/ticket.php?ticket_id=' . (int) $e['ticket_id'] . '">Ticket #' . (int) $e['ticket_id'] . '</a>' : '<span class="text-muted">none yet</span>'];
     $buttons = rivetRmmAlrAlertButtons($a, $vm, $returnTo, null);

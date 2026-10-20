@@ -234,6 +234,13 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
 <?= rivetEaFormAttr(rivetChecksSimpleCard($csState, $csDefault, $checksText, $csErrors), 'ea_settings_form') ?>
     </div>
         <button form="ea_settings_form" type="submit" name="save_agent_settings" class="btn btn-primary mt-3"><i class="fas fa-save me-1"></i>Save settings</button>
+        <hr>
+        <form action="post.php" method="post" autocomplete="off" data-ea-reconcile>
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <input type="hidden" name="ea_tab" value="checks">
+            <p class="small text-muted mb-2">A check ticked for one OS is only sent to devices of that OS. A device keeps the result and any open alert of a check it no longer gets until it is cleaned up: this happens at the device's next check-in, and here at once for every device (including those that are offline). The alerts are resolved with the reason "This check no longer applies to the device" and no ticket is created. Safe to press again.</p>
+            <button type="submit" name="reconcile_checks" value="1" class="btn btn-outline-secondary"><i class="fas fa-broom me-1" aria-hidden="true"></i>Clean up checks that no longer apply</button>
+        </form>
     </div>
 </div>
 <?php $eaTab('security'); ?>
