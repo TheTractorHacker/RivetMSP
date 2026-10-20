@@ -144,6 +144,18 @@ function rivetRmmUiTrendCell(string $key, ?array $t, bool $offline): string
         . '<caption class="visually-hidden">Recorded results of ' . rmmH($key) . ', newest first</caption>' . rivetRmmUiThead(['When', 'Status', 'Detail']) . '<tbody>' . $rows . '</tbody></table></div></details></div>';
 }
 
+/** The small "Clock off" badge of the fleet list (title carries the sentence); empty when the clock is fine. @param array<string,mixed>|null $clock rivetRmmUiClockNotice() */
+function rivetRmmUiClockBadge(?array $clock): string
+{
+    if ($clock === null) {
+        return '';
+    }
+    $label = $clock['text'] !== '' ? $clock['text'] : 'The last check-in was refused: ' . (string) $clock['reject'];
+
+    return ' <span class="badge text-bg-warning" data-rmm-clock-badge title="' . rmmH($label) . '"><i class="fas fa-clock me-1" aria-hidden="true"></i>Clock off'
+        . ($clock['minutes'] !== null && $clock['text'] !== '' ? ' ' . (int) $clock['minutes'] . ' min' : '') . '</span>';
+}
+
 // ------------------------------------------------------------------ strip
 
 /** @param array<string,mixed> $vm rivetRmmUiPanel() */
@@ -158,7 +170,9 @@ function rivetRmmUiStrip(array $vm): string
 
     // Facts line
     if ($never) {
-        $facts = '<span class="text-muted">OS and agent not reported yet</span>';
+        // 26.10.38: when Core recorded why the check-in was refused (RivetCore rc.23), say that instead of a bare "not reported yet"
+        $facts = !empty($vm['clock']['reject']) ? '<span class="text-warning-emphasis"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>No check-in accepted yet: ' . rmmH($vm['clock']['reject']) . '</span>'
+            : '<span class="text-muted">OS and agent not reported yet</span>';
     } else {
         $facts = '<i class="' . $osIcon . ' me-1" aria-hidden="true"></i>' . rmmH($vm['os_label']) . ' <span class="text-muted">' . rmmH($vm['arch']) . '</span>'
             . ' &bull; <i class="fas fa-clock mx-1" aria-hidden="true"></i>Last seen ' . rivetRmmUiTime($vm['last_checkin_at'])
@@ -1022,7 +1036,7 @@ function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null, ?
         foreach (array_slice((array) ($d['tags'] ?? []), 0, 6) as $t) {
             $chips .= rivetRmmUiTagChip($t, false) . ' ';
         }
-        $rows .= '<tr><td class="ps-3">' . rivetRmmUiStatusPill($d['status']) . ($d['link_state'] === 'pending_approval' ? ' ' . rivetRmmUiPill('warn', 'Approval') : '') . ($d['revoked'] ? ' ' . rivetRmmUiPill('crit', 'Revoked') : '') . '</td>'
+        $rows .= '<tr><td class="ps-3">' . rivetRmmUiStatusPill($d['status']) . ($d['link_state'] === 'pending_approval' ? ' ' . rivetRmmUiPill('warn', 'Approval') : '') . ($d['revoked'] ? ' ' . rivetRmmUiPill('crit', 'Revoked') : '') . rivetRmmUiClockBadge($d['clock'] ?? null) . '</td>'
             . '<td class="min-w-0">' . rivetRmmUiDeviceLink($d) . '<div class="text-muted small">' . rmmH($cn((int) $d['client_id'])) . ' &middot; ' . rmmH($d['os_version'] ?: 'OS not reported') . '</div>'
             . ($chips !== '' ? '<div class="mt-1 rmm-tags">' . $chips . (count((array) $d['tags']) > 6 ? '<span class="small text-muted">+' . (count((array) $d['tags']) - 6) . ' more</span>' : '') . '</div>' : '') . '</td>'
             . '<td class="ifm-mono">' . rmmH($d['agent_version'] ?: 'unknown') . '<div class="text-muted small">' . rmmH($d['ring']) . ' ring</div></td>'

@@ -488,7 +488,7 @@ function rivetRmmPolCheckRow(string $i, array $row, array $catalog): string
         . '<option value=""' . (($row['os'] ?? '') === '' ? ' selected' : '') . '>Windows and Linux</option><option value="windows"' . (($row['os'] ?? '') === 'windows' ? ' selected' : '') . '>Windows only</option><option value="linux"' . (($row['os'] ?? '') === 'linux' ? ' selected' : '') . '>Linux only</option></select></div>'
         . '<div class="col-sm-4 col-lg-2"><label class="form-label small mb-1" for="' . $id . '_iv">Run every (seconds)</label><input type="number" step="1" min="30" max="86400" class="form-control form-control-sm" id="' . $id . '_iv" name="' . $nm . '[interval_s]" value="' . rmmH($row['interval_s'] ?? '') . '" placeholder="60"></div>'
         . '<div class="col-sm-2 col-lg-2 text-end"><button type="button" class="btn btn-sm btn-outline-danger rmm-row-remove" data-rmm-remove="1" aria-label="Remove this check row" title="Remove this row"><i class="fas fa-times" aria-hidden="true"></i></button></div></div>'
-        . '<p class="form-text mb-1">Choosing "Remove this check" takes the key out of the device\'s check list (also one from the global list); the type and settings are then ignored.</p>';
+        . '<p class="form-text mb-1">A check set for one OS is only sent to devices of that OS. Choosing "Remove this check" takes the key out of the device\'s check list (also one from the global list); the type and settings are then ignored.</p>';
     foreach ($catalog as $t => $spec) {
         $legacyType = !empty($spec['legacy']);
         $fields = $legacyType ? RivetChecksSimple::legacyFields()[$t] ?? [] : (array) $spec['fields'];
