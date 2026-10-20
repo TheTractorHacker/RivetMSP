@@ -107,8 +107,10 @@
                     confirmModal.modal('hide');
                     doResetTimer();
                 });
-            } else if (confirm("Are you sure you want to reset the timer?")) {
-                doResetTimer();
+            } else {
+                RivetDialog.confirm("Are you sure you want to reset the timer?", { variant: 'danger', okText: 'Reset' }).then(function (yes) {
+                    if (yes) { doResetTimer(); }
+                });
             }
         }
 
@@ -203,7 +205,7 @@
 
         // Bound to the form's submit event (not the button's click) so this only
         // fires once the submission actually goes through. Other submit handlers
-        // (e.g. ticket.php's "no labor type selected" confirm()) run first and may
+        // (e.g. ticket.php's "no labor type selected" dialog) run first and may
         // call preventDefault() - if the tech clicks Cancel there, we must not wipe
         // out the time they already entered.
         const replyForm = document.getElementById("ticketReplyForm");

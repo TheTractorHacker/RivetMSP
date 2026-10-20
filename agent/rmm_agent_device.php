@@ -222,7 +222,11 @@ $ts = static fn($iso) => $iso ? htmlspecialchars(str_replace('T', ' ', rtrim($is
                 return;
             }
             tab.close();
-            if (d.code === 'device_offline' && !force && confirm(d.error + '\n\nLaunch anyway?')) { launch(true); }
+            if (d.code === 'device_offline' && !force) {
+                RivetDialog.confirm(d.error + '\n\nLaunch anyway?', { okText: 'Launch anyway' }).then(function (yes) {
+                    if (yes) { launch(true); } else { msg(d.error || 'Could not start the session.', false); }
+                });
+            }
             else { msg(d.error || 'Could not start the session.', false); }
         }).catch(function () { tab.close(); msg('Network error.', false); });
     };
