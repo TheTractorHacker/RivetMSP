@@ -238,8 +238,8 @@ $has_active_filter = $filter_severity || $filter_client || $filter_search || $fi
                     <?php endif; ?>
                 </td>
                 <td class="text-muted small" style="white-space:nowrap">
-                    <?= nullable_htmlentities(date('M j', strtotime($alert['created_at']))) ?>
-                    <br><?= nullable_htmlentities(date('g:ia', strtotime($alert['created_at']))) ?>
+                    <?= nullable_htmlentities(rivetRmmTime($alert['created_at'], false, false, 'M j')) ?>
+                    <br><?= nullable_htmlentities(rivetRmmTime($alert['created_at'], false, true, 'g:ia')) ?>
                 </td>
                 <td class="text-end pe-2" style="white-space:nowrap">
                     <?php if ($alert['status'] === 'new' && lookupUserPermission('module_rmm_alerts_ack') >= 1): ?>
