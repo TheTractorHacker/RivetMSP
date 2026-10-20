@@ -5,7 +5,8 @@
  *   RivetDialog.confirm(message, opts)  -> Promise<boolean>      (true = confirmed; Esc / backdrop / Cancel = false)
  *   RivetDialog.prompt(message, opts)   -> Promise<string|null>  (null = cancelled)
  *
- * opts: title, okText, cancelText, variant ('primary' | 'danger'), defaultValue, placeholder, inputType ('text' | 'password' ...), required.
+ * opts: title, okText, cancelText, variant ('primary' | 'danger' | 'warning'), defaultValue, placeholder, type ('text' | 'password'; inputType is an alias), required.
+ * gate(event, target, message, opts) wraps click / submit handlers that used to call confirm() synchronously (same API as RivetIT).
  * The message is plain text: it is only ever assigned with textContent (never innerHTML), so callers may pass server or user supplied
  * strings. Newlines are kept. Dialogs are queued and shown one at a time. The modal DOM is built on first use, so every layout that
  * loads this file has the dialog without carrying any markup. No inline handlers, no inline style attributes (CSP safe).
@@ -20,6 +21,8 @@
     var queue = [];
     var busy = false;
     var seq = 0;
+    var pending = new WeakSet();   // forms / links with a dialog open (no double submit)
+    var approved = new WeakSet();  // forms / links whose next submit/click is the confirmed one
 
     function el(tag, cls, text) {
         var e = document.createElement(tag);
@@ -87,7 +90,7 @@
             cancel.type = 'button';
             footer.appendChild(cancel);
         }
-        var ok = el('button', 'btn ' + (task.variant === 'danger' ? 'btn-danger' : 'btn-primary'), task.okText);
+        var ok = el('button', 'btn ' + (task.variant === 'danger' ? 'btn-danger' : task.variant === 'warning' ? 'btn-warning' : 'btn-primary'), task.okText);
         ok.type = 'button';
         footer.appendChild(ok);
 
@@ -188,10 +191,10 @@
                 title: opts.title || (kind === 'alert' ? 'Notice' : kind === 'confirm' ? 'Please confirm' : 'Input needed'),
                 okText: opts.okText || (kind === 'alert' ? 'OK' : kind === 'confirm' ? 'Yes' : 'OK'),
                 cancelText: opts.cancelText || 'Cancel',
-                variant: opts.variant === 'danger' ? 'danger' : 'primary',
+                variant: opts.variant === 'danger' || opts.variant === 'warning' ? opts.variant : 'primary',
                 defaultValue: opts.defaultValue === undefined || opts.defaultValue === null ? '' : String(opts.defaultValue),
                 placeholder: opts.placeholder || '',
-                inputType: opts.inputType || 'text',
+                inputType: (opts.type || opts.inputType) === 'password' ? 'password' : 'text',
                 required: !!opts.required,
                 resolve: resolve
             });
@@ -202,16 +205,37 @@
     var RivetDialog = {
         alert: function (message, opts) { return enqueue('alert', message, opts); },
         confirm: function (message, opts) { return enqueue('confirm', message, opts); },
-        prompt: function (message, opts) { return enqueue('prompt', message, opts); }
+        prompt: function (message, opts) { return enqueue('prompt', message, opts); },
+        // gate(event, target, message, opts): for click / submit handlers that used to call confirm() synchronously.
+        // Returns true when the caller may let the event run natively now (this target was just approved); false when it cancelled the
+        // event and opened the confirm (a yes re-runs the click / form submit exactly once; a second attempt while the dialog is open is ignored).
+        gate: function (e, target, message, o) {
+            if (approved.has(target)) { approved.delete(target); return true; }
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            if (pending.has(target)) { return false; }
+            pending.add(target);
+            var submitter = e.type === 'submit' ? e.submitter : null;
+            enqueue('confirm', message, o).then(function (yes) {
+                pending.delete(target);
+                if (!yes) { return; }
+                approved.add(target);
+                if (e.type === 'submit') {
+                    if (typeof target.requestSubmit === 'function') { target.requestSubmit(submitter && submitter.form === target ? submitter : undefined); }
+                    else { target.submit(); }
+                } else if (typeof target.click === 'function') {
+                    target.click();
+                }
+                approved.delete(target);   // a vetoed (invalid) submit must not leave the target pre-approved
+            });
+            return false;
+        }
     };
     global.RivetDialog = RivetDialog;
 
     // ---- delegated, CSP-safe opt-in markup --------------------------------------------------------------------------------------
     if (global.__rivetDialogDelegates) { return; }
     global.__rivetDialogDelegates = true;
-    var pending = new WeakSet();   // forms / links with a dialog open (no double submit)
-    var approved = new WeakSet();  // forms / links whose next submit/click is the confirmed one
-
     function opts(node) {
         return { variant: node.getAttribute('data-confirm-variant') === 'danger' ? 'danger' : 'primary',
                  title: node.getAttribute('data-confirm-title') || undefined,
@@ -222,40 +246,13 @@
     document.addEventListener('submit', function (e) {
         var form = e.target;
         var m = form && form.getAttribute ? form.getAttribute('data-confirm-submit') : null;
-        if (!m) { return; }
-        if (approved.has(form)) { approved.delete(form); return; }
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        if (pending.has(form)) { return; }
-        pending.add(form);
-        var submitter = e.submitter || null;
-        RivetDialog.confirm(m, opts(form)).then(function (yes) {
-            pending.delete(form);
-            if (!yes) { return; }
-            approved.add(form);
-            if (typeof form.requestSubmit === 'function') { form.requestSubmit(submitter && submitter.form === form ? submitter : undefined); }
-            else { form.submit(); }
-            // requestSubmit fires the submit event synchronously; if a validator vetoed it the flag must not linger.
-            approved.delete(form);
-        });
+        if (m) { RivetDialog.gate(e, form, m, opts(form)); }
     }, true);
 
-    // [data-rivet-confirm="Message"] on a link, button or .js-confirm-native (data-confirm-message): ask, then continue the click.
+    // [data-rivet-confirm="Message"] on a link or button (and .js-confirm-native with data-confirm-message): ask, then continue the click.
     document.addEventListener('click', function (e) {
         var n = e.target && e.target.closest ? e.target.closest('[data-rivet-confirm], .js-confirm-native') : null;
         if (!n) { return; }
-        if (approved.has(n)) { approved.delete(n); return; }
-        var m = n.getAttribute('data-rivet-confirm') || n.getAttribute('data-confirm-message') || 'Are you sure?';
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        if (pending.has(n)) { return; }
-        pending.add(n);
-        RivetDialog.confirm(m, opts(n)).then(function (yes) {
-            pending.delete(n);
-            if (!yes) { return; }
-            approved.add(n);
-            n.click();
-            approved.delete(n);
-        });
+        RivetDialog.gate(e, n, n.getAttribute('data-rivet-confirm') || n.getAttribute('data-confirm-message') || 'Are you sure?', opts(n));
     }, true);
 })(window);

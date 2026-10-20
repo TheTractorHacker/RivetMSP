@@ -2606,20 +2606,8 @@ require_once "../includes/footer.php";
                       || (parseInt($('#seconds').val()) || 0) > 0;
         var laborType  = parseInt($('#reply_labor_type_id').val()) || 0;
         if (chargeNow && hasTime && laborType === 0) {
-            // RivetDialog is asynchronous: hold the submit, ask, then resubmit as the same button (once). Cancel leaves the form untouched.
-            var form = this;
-            if (form.__laborApproved) { form.__laborApproved = false; return; }
-            e.preventDefault();
-            if (form.__laborAsking) { return; }
-            form.__laborAsking = true;
-            var submitter = e.originalEvent && e.originalEvent.submitter ? e.originalEvent.submitter : undefined;
-            RivetDialog.confirm('No labor type selected — time will be logged but no charge will be created.\n\nContinue anyway?', { okText: 'Continue' }).then(function (yes) {
-                form.__laborAsking = false;
-                if (!yes) { return; }
-                form.__laborApproved = true;
-                form.requestSubmit(submitter);
-                form.__laborApproved = false;
-            });
+            // RivetDialog is asynchronous: gate() holds this submit, asks, and on Yes resubmits as the same button (once). Cancel leaves the form untouched.
+            RivetDialog.gate(e.originalEvent || e, this, 'No labor type selected — time will be logged but no charge will be created.\n\nContinue anyway?', { okText: 'Continue' });
         }
     });
     </script>

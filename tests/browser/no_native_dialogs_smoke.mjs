@@ -113,7 +113,7 @@ await T('prompt: value on OK / Enter, null on Esc, password type, required block
   await p.press('Escape');
   assert((await result()) === null, 'Esc should resolve null');
   await gone();
-  await start(`RivetDialog.prompt('Secret?', { inputType: 'password', required: true })`);
+  await start(`RivetDialog.prompt('Secret?', { type: 'password', required: true })`);
   await p.waitSel('.rivet-dialog input');
   assert(await p.eval(`document.querySelector('.rivet-dialog input').type === 'password'`), 'not a password field');
   await p.click('.rivet-dialog .btn-primary');
