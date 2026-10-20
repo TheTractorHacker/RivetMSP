@@ -123,7 +123,7 @@ function rivetRmmMeshPinProposalHtml(?array $probe): string
     $note = (string) ($probe['note'] ?? '');
     $trusted = !empty($probe['publicly_trusted']);
     $meta = (!empty($probe['subject']) ? '<p class="mb-1 small">Subject: ' . nullable_htmlentities((string) $probe['subject']) . '</p>' : '')
-        . (!empty($probe['not_after']) ? '<p class="mb-1 small">Valid until: ' . nullable_htmlentities(str_replace('T', ' ', rtrim((string) $probe['not_after'], 'Z'))) . ' UTC</p>' : '');
+        . (!empty($probe['not_after']) ? '<p class="mb-1 small">Valid until: ' . nullable_htmlentities(rivetRmmTime((string) $probe['not_after']) ?: (string) $probe['not_after']) . '</p>' : '');
     if ($trusted) {
         // A certificate from a public authority renews every 60 to 90 days (Let's Encrypt): a pin of it would break at each renewal. Show Core's note and offer NO way to save the pin.
         return '<div class="alert alert-success py-2 mb-3" role="status" tabindex="-1" data-rmm-mesh-pin-result="trusted"><div>'

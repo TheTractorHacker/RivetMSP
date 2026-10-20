@@ -965,7 +965,7 @@ function rivetRmmPolVersions(array $vm): string
         $prev = $byNo[$no - 1] ?? null;
         $changed = $prev === null ? null : rivetRmmPolChangedKeys($prev, $byNo[$no]);
         $cap = $n >= 20;
-        $o .= '<tr><th scope="row">' . $no . ((int) $vm['policy']['version'] === $no ? ' ' . rivetRmmUiPill('ok', 'Current') : '') . '</th><td>' . rmmH($vm['users'][(int) $v['changed_by']] ?? ('User #' . (int) $v['changed_by'])) . '</td><td>' . rivetRmmAutoUtc((string) $v['changed_at']) . '</td><td>'
+        $o .= '<tr><th scope="row">' . $no . ((int) $vm['policy']['version'] === $no ? ' ' . rivetRmmUiPill('ok', 'Current') : '') . '</th><td>' . rmmH($vm['users'][(int) $v['changed_by']] ?? ('User #' . (int) $v['changed_by'])) . '</td><td>' . rivetRmmAutoTime((string) $v['changed_at']) . '</td><td>'
             . ($prev === null ? 'First version' : ($changed === [] ? 'Nothing' : rmmH(implode(', ', array_map('rivetRmmPolKeyLabel', $changed))))) . '</td><td>'
             . ($cap ? '<span class="text-muted small">Not shown (only the 20 newest are expanded)</span>' : '<details><summary class="small">View settings of version ' . $no . '</summary><div class="pt-2">' . rivetRmmPolSettingsTable($byNo[$no], 'Settings of version ' . $no) . '</div></details>') . '</td></tr>';
     }
@@ -999,7 +999,7 @@ function rivetRmmPolPoliciesPage(array $vm, array $ctx): string
             $t .= '<tr><td class="ps-3"><a href="/agent/rmm_policies.php?policy_id=' . $pid . '"><strong>' . rmmH($p['name']) . '</strong></a>' . ($polStarter ? ' <span class="badge text-bg-primary rmm-starter-badge"><i class="fas fa-box-open me-1" aria-hidden="true"></i>Starter</span>' : '')
                 . ($polDesc !== '' ? '<div class="small text-muted">' . rmmH($polDesc) . '</div>' : '') . '</td>'
                 . '<td>' . (int) $p['version'] . '</td><td>' . ($p['enabled'] ? rivetRmmUiPill('ok', 'On') : rivetRmmUiPill('off', 'Off')) . '</td><td>' . count($as) . '</td><td>' . $reach . '</td>'
-                . '<td>' . rivetRmmAutoUtc((string) $p['updated_at']) . '<div class="small text-muted">' . rmmH($vm['users'][(int) $p['updated_by']] ?? '') . '</div></td>';
+                . '<td>' . rivetRmmAutoTime((string) $p['updated_at']) . '<div class="small text-muted">' . rmmH($vm['users'][(int) $p['updated_by']] ?? '') . '</div></td>';
             if ($admin) {
                 $t .= '<td class="rmm-table-actions"><a class="btn btn-sm btn-outline-secondary" href="/agent/rmm_policies.php?policy_id=' . $pid . '"><i class="fas fa-edit me-1" aria-hidden="true"></i>Edit</a> '
                     . rivetRmmAutoActionForm('rmm_automation_pol', 'toggle_policy', ['policy_id' => $pid, 'enabled' => $p['enabled'] ? 0 : 1], $csrf, '/agent/rmm_policies.php',
@@ -1153,7 +1153,7 @@ function rivetRmmPolFieldsPage(array $vm, array $ctx): string
             } else {
                 $body .= '<div class="table-responsive"><table class="table table-sm"><caption class="visually-hidden">Values of ' . rmmH($f['name']) . '</caption>' . rivetRmmUiThead([$f['scope'] === 'client' ? 'Client' : 'Site', 'Value', 'Changed']) . '<tbody>';
                 foreach ($rows as $rw) {
-                    $body .= '<tr><td>' . rmmH($rw['label']) . '</td><td>' . ($secret ? rivetRmmUiPill('ok', 'Set') : rmmH($rw['value'])) . '</td><td>' . rivetRmmAutoUtc($rw['updated_at']) . '</td></tr>';
+                    $body .= '<tr><td>' . rmmH($rw['label']) . '</td><td>' . ($secret ? rivetRmmUiPill('ok', 'Set') : rmmH($rw['value'])) . '</td><td>' . rivetRmmAutoTime($rw['updated_at']) . '</td></tr>';
                 }
                 $body .= '</tbody></table></div>' . ($vm['capped'] ? '<p class="small text-muted">Only the first ' . RIVET_RMM_POL_FIELD_ROWS . ' ' . ($f['scope'] === 'client' ? 'clients' : 'sites') . ' were checked; use the form below for any other.</p>' : '');
             }

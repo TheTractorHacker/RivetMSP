@@ -209,15 +209,14 @@ function rivetRmmAutoStarterMarker(string $description): string
     return preg_match('/ \[starter\|[a-z0-9-]+\|[a-z0-9-]+\|\d+\.\d+\.\d+\|[0-9a-f]{64}\]$/', $description, $m) === 1 ? $m[0] : '';
 }
 
-/** UTC time as text for tables ("2026-10-10 14:03 UTC"), or "never". Accepts RFC 3339 or SQL UTC. */
-function rivetRmmAutoUtc(?string $iso): string
+/** A UTC-stored time as company-time text for tables ("2026-10-10 09:03 CDT"), or "never". Accepts RFC 3339 or SQL UTC. */
+function rivetRmmAutoTime(?string $iso): string
 {
     if ($iso === null || $iso === '') {
         return '<span class="text-muted">never</span>';
     }
-    $t = strtotime(str_contains($iso, 'T') || str_ends_with($iso, 'Z') ? $iso : $iso . ' UTC');
 
-    return $t === false ? rmmH($iso) : '<time datetime="' . rmmH(gmdate('Y-m-d\TH:i:s\Z', $t)) . '">' . rmmH(gmdate('Y-m-d H:i', $t) . ' UTC') . '</time>';
+    return rivetRmmTimeTag($iso, true, rmmH($iso));
 }
 
 /** Plain-language state pill for an approval, schedule, alert or window state. */

@@ -295,7 +295,7 @@ function rivetRmmUiNetworkTile(array $vm): string
         }
         $peakBps = $peakBytes * 8;
         $pct = $bps === null ? null : min(100.0, $bps / $peakBps * 100);
-        $at = is_array($side) && !empty($side['peak_at']) ? ' at ' . gmdate('H:i', strtotime((string) $side['peak_at']) ?: 0) . ' UTC' : '';
+        $at = is_array($side) && !empty($side['peak_at']) ? ' at ' . rivetRmmTime((string) $side['peak_at'], true, true, 'H:i') : '';
 
         return '<div class="px-3 pb-2"><div class="d-flex justify-content-between small"><span>' . rmmH($label) . '</span><b>' . $now . '</b></div>'
             . rivetRmmUiBar($pct, 'info', 6, $label . ' against the 24 hour peak') . '<div class="small text-muted" id="' . $id . '-peak">'
@@ -323,7 +323,7 @@ function rivetRmmUiLiveHealth(array $vm): string
     $boot = '';
     if (!$vm['offline'] && $vm['uptime_s'] !== null && $vm['last_checkin_at'] !== null) {
         $bootTs = strtotime($vm['last_checkin_at']) - (int) $vm['uptime_s'];
-        $boot = '<span>last boot <b title="' . rmmH(gmdate('Y-m-d H:i', $bootTs)) . ' UTC">' . rmmH(rivetRmmUiAgo(max(0, time() - $bootTs))) . '</b></span>';
+        $boot = '<span>last boot <b title="' . rmmH(rivetRmmTime($bootTs)) . '">' . rmmH(rivetRmmUiAgo(max(0, time() - $bootTs))) . '</b></span>';
     }
     $tiles .= rivetRmmUiStatCard('clock', $vm['pending_reboot'] ? 'warning' : 'success', $vm['offline'] || $vm['uptime_s'] === null ? '<span class="text-muted">unknown</span>' : rmmH(rivetRmmUiDuration((int) $vm['uptime_s'])),
         'Uptime', $boot . ($vm['pending_reboot'] ? rivetRmmUiPill('warn', 'Reboot pending') : '<span>' . ($vm['pending_reboot'] === null ? 'reboot state not reported' : 'no reboot pending') . '</span>'));
@@ -498,7 +498,7 @@ function rivetRmmUiPerformanceCharts(array $perf, bool $offline): string
         $peak = null;
         foreach ($c['series'] as $s) {
             foreach ($s['points'] as $p) {
-                $rows .= '<tr><td>' . rmmH(gmdate('Y-m-d H:i', $p['t'])) . ' UTC</td><td>' . rmmH($s['label']) . '</td><td>' . rmmH($fmt((float) $p['avg'])) . '</td><td>' . rmmH($fmt((float) $p['max'])) . '</td></tr>';
+                $rows .= '<tr><td>' . rmmH(rivetRmmTime((int) $p['t'])) . '</td><td>' . rmmH($s['label']) . '</td><td>' . rmmH($fmt((float) $p['avg'])) . '</td><td>' . rmmH($fmt((float) $p['max'])) . '</td></tr>';
                 $peak = $peak === null ? (float) $p['max'] : max($peak, (float) $p['max']);
             }
         }
@@ -1250,7 +1250,7 @@ function rivetRmmUiCapacity(array $cap): string
         $ws = $herd['warm_start'] ?? null;
         $warmLen = (int) ($limits['warm_start_s'] ?? 0);
         if (is_array($ws) && !empty($ws['active'])) {
-            $cacheRows[] = ['Warm start', rivetRmmUiPill('warn', 'In progress') . ' admitting about ' . rmmH($ws['admitted_percent']) . ' % of check-ins until ' . rmmH(gmdate('H:i:s', (int) $ws['until'])) . ' UTC'];
+            $cacheRows[] = ['Warm start', rivetRmmUiPill('warn', 'In progress') . ' admitting about ' . rmmH($ws['admitted_percent']) . ' % of check-ins until ' . rmmH(rivetRmmTime((int) $ws['until'], true, true, 'H:i:s'))];
         } else {
             $cacheRows[] = ['Warm start', $warmLen > 0 ? rivetRmmUiPill('ok', 'Armed') . ' not active now; starts after the module is switched back on or after a ' . (int) ($limits['warm_quiet_s'] ?? 120) . ' s quiet gap' : rivetRmmUiPill('off', 'Off')];
         }
@@ -1275,7 +1275,7 @@ function rivetRmmUiCapacity(array $cap): string
         $wm = $st['rollup_watermark'] ?? null;
         $behind = $st['rollup_behind_days'] ?? null;
         $storRows[] = ['Daily rollup', $wm === null ? rivetRmmUiPill('off', 'Not run yet') . ' built by the housekeeping cron once a full day of hourly rows exists'
-            : ($behind !== null && (int) $behind > 2 ? rivetRmmUiPill('warn', 'Behind') : rivetRmmUiPill('ok', 'Current')) . ' complete through ' . rmmH(gmdate('Y-m-d', max(0, (int) strtotime((string) $wm . ' UTC') - 86400))) . ' UTC' . ($behind !== null && (int) $behind > 2 ? ' &middot; ' . (int) $behind . ' days behind' : '')];
+            : ($behind !== null && (int) $behind > 2 ? rivetRmmUiPill('warn', 'Behind') : rivetRmmUiPill('ok', 'Current')) . ' complete up to ' . rmmH(rivetRmmTime((string) $wm)) . ($behind !== null && (int) $behind > 2 ? ' &middot; ' . (int) $behind . ' days behind' : '')];
     }
     $ext = $cap['external_store'] ?? null;
     if (is_array($ext)) {

@@ -82,7 +82,7 @@ function rivetRmmScrTimeBoth(?string $iso, ?int $now = null): string
         return '<span class="text-muted">none</span>';
     }
 
-    return rivetRmmAutoUtc($iso) . '<div class="small text-muted">' . rmmH(rivetRmmScrWhen($iso, $now)) . '</div>';
+    return rivetRmmAutoTime($iso) . '<div class="small text-muted">' . rmmH(rivetRmmScrWhen($iso, $now)) . '</div>';
 }
 
 /** Seconds in the largest whole unit: 21600 -> "6 hours", 90 -> "90 seconds". */
@@ -726,7 +726,7 @@ function rivetRmmScrLibraryPage(array $vm, array $ctx): string
             . ($s['description'] !== '' ? '<div class="small text-muted">' . rmmH(mb_substr((string) $s['description'], 0, 120)) . '</div>' : '') . '</td>'
             . '<td>' . rmmH(rivetRmmScrLanguage((string) $s['language'])) . '</td><td>' . rmmH(rivetRmmScrPlatformWords((string) $s['language'])) . '</td>'
             . '<td>v' . (int) $s['current_version'] . '</td><td>' . rivetRmmScrTagChips($shownTags) . '</td><td>' . (rivetRmmScrFlags($s) ?: '<span class="text-muted small">none</span>') . '</td>'
-            . '<td>' . rivetRmmAutoUtc((string) $s['updated_at']) . '</td><td class="text-end pe-3 rmm-table-actions">' . $acts . '</td></tr>';
+            . '<td>' . rivetRmmAutoTime((string) $s['updated_at']) . '</td><td class="text-end pe-3 rmm-table-actions">' . $acts . '</td></tr>';
     }
     $table = '<div class="table-responsive"><table class="table table-hover table-sm mb-0"><caption class="visually-hidden">Library scripts</caption>'
         . rivetRmmUiThead(['Script', 'Language', 'Runs on', 'Version', 'Tags', 'Flags', 'Last updated', 'Actions']) . '<tbody>' . $rows . '</tbody></table></div>';
@@ -901,7 +901,7 @@ function rivetRmmScrVersionsCard(array $vm, array $ctx): string
     $rows = '';
     foreach ($vm['versions'] as $v) {
         $n = (int) $v['version'];
-        $rows .= '<tr><td class="ps-3">v' . $n . ($n === $cur ? ' ' . rivetRmmUiPill('ok', 'Current') : '') . '</td><td>' . rmmH($vm['names'][(int) $v['created_by']] ?? ('user #' . (int) $v['created_by'])) . '</td><td>' . rivetRmmAutoUtc((string) $v['created_at']) . '</td>'
+        $rows .= '<tr><td class="ps-3">v' . $n . ($n === $cur ? ' ' . rivetRmmUiPill('ok', 'Current') : '') . '</td><td>' . rmmH($vm['names'][(int) $v['created_by']] ?? ('user #' . (int) $v['created_by'])) . '</td><td>' . rivetRmmAutoTime((string) $v['created_at']) . '</td>'
             . '<td>' . rivetRmmScrHash((string) $v['body_sha256']) . '</td><td>' . rivetRmmScrNoteHtml((string) $v['note'], $id, $cur, $n, (bool) $ctx['perm']['run_saved']) . '</td><td class="text-end pe-3 rmm-table-actions">'
             . ($ctx['perm']['run_saved'] ? '<a class="btn btn-sm btn-outline-secondary" href="' . $self . '&amp;view=' . $n . '#scr-version">View</a>' : '') . '</td></tr>';
     }
@@ -957,9 +957,9 @@ function rivetRmmScrScriptPage(array $vm, array $ctx): string
     $cur = (array) ($s['current'] ?? []);
     $o .= rivetRmmUiCard('About this script', 'info-circle', rivetRmmUiDl([
         ['Language', rmmH(rivetRmmScrLanguage((string) $s['language']))], ['Runs on', rmmH(rivetRmmScrPlatformWords((string) $s['language'])) . ' devices'],
-        ['Current version', 'v' . (int) $s['current_version'] . ' <span class="text-muted small">signed ' . rivetRmmAutoUtc((string) ($cur['created_at'] ?? '')) . '</span>'],
+        ['Current version', 'v' . (int) $s['current_version'] . ' <span class="text-muted small">signed ' . rivetRmmAutoTime((string) ($cur['created_at'] ?? '')) . '</span>'],
         ['SHA-256 (first 16)', rivetRmmScrHash((string) ($cur['body_sha256'] ?? ''))], ['Tags', rivetRmmScrTagChips(rivetRmmScrIsStarter(array_map('strval', (array) $s['tags'])) ? array_values(array_filter((array) $s['tags'], static fn ($t): bool => strtolower((string) $t) !== 'starter' && stripos((string) $t, 'risk:') !== 0)) : (array) $s['tags'])],
-        ['Flags', trim(rivetRmmScrStarterMarks($s, $vm['starter_waiting'] ?? null) . ' ' . rivetRmmScrFlags($s)) ?: '<span class="text-muted">none</span>'], ['Default timeout', rmmH(rivetRmmScrSecondsWords((int) $s['timeout_s']))], ['Last updated', rivetRmmAutoUtc((string) $s['updated_at'])],
+        ['Flags', trim(rivetRmmScrStarterMarks($s, $vm['starter_waiting'] ?? null) . ' ' . rivetRmmScrFlags($s)) ?: '<span class="text-muted">none</span>'], ['Default timeout', rmmH(rivetRmmScrSecondsWords((int) $s['timeout_s']))], ['Last updated', rivetRmmAutoTime((string) $s['updated_at'])],
     ]));
     if ($perm['run_saved'] && !$retired) {
         $scope = rivetRmmAutoScopeData($ctx['mysqli'], $ctx['uid']);
@@ -986,7 +986,7 @@ function rivetRmmScrScriptPage(array $vm, array $ctx): string
     $o .= rivetRmmScrVersionsCard($vm, $ctx);
     if ($vm['view'] !== null) {
         $v = $vm['view'];
-        $o .= rivetRmmUiCard('Version ' . (int) $v['version'], 'file-alt', '<p class="small text-muted mb-2">Written ' . rivetRmmAutoUtc((string) $v['created_at']) . ' by ' . rmmH($vm['names'][(int) $v['created_by']] ?? 'a user') . '. SHA-256 ' . rivetRmmScrHash((string) $v['body_sha256']) . '</p>'
+        $o .= rivetRmmUiCard('Version ' . (int) $v['version'], 'file-alt', '<p class="small text-muted mb-2">Written ' . rivetRmmAutoTime((string) $v['created_at']) . ' by ' . rmmH($vm['names'][(int) $v['created_by']] ?? 'a user') . '. SHA-256 ' . rivetRmmScrHash((string) $v['body_sha256']) . '</p>'
             . '<pre class="rmm-code rmm-pre mb-2" tabindex="0">' . rmmH((string) ($v['body'] ?? '')) . '</pre>' . rivetRmmScrParamTable((array) $v['params']), '', '', false, 'scr-version');
     } elseif ($vm['view_error'] !== '') {
         $o .= '<div class="alert alert-warning" role="alert">' . rmmH($vm['view_error']) . '</div>';
@@ -1047,7 +1047,7 @@ function rivetRmmScrRunsTable(?array $runs, string $error): string
     $rows = '';
     foreach ($runs as $r) {
         $rows .= '<tr><td class="ps-3">' . rmmH((string) ($r['hostname'] !== '' ? $r['hostname'] : 'device #' . $r['device_id'])) . '</td><td>' . ($r['script_version'] === null ? '' : 'v' . (int) $r['script_version']) . '</td><td>' . rivetRmmScrJobPill((string) $r['state']) . '</td>'
-            . '<td>' . ($r['exit_code'] === null ? '<span class="text-muted">none</span>' : (int) $r['exit_code']) . '</td><td>' . rivetRmmAutoUtc((string) $r['queued_at']) . '</td><td>' . rivetRmmAutoUtc($r['finished_at']) . '</td></tr>';
+            . '<td>' . ($r['exit_code'] === null ? '<span class="text-muted">none</span>' : (int) $r['exit_code']) . '</td><td>' . rivetRmmAutoTime((string) $r['queued_at']) . '</td><td>' . rivetRmmAutoTime($r['finished_at']) . '</td></tr>';
     }
 
     return '<div class="table-responsive"><table class="table table-sm table-hover mb-0"><caption class="visually-hidden">Recent runs of this script</caption>'
@@ -1391,7 +1391,7 @@ function rivetRmmScrScheduleDetailPage(array $vm, array $ctx): string
     // last 20 runs (one row per time the schedule came due)
     $rr = '';
     foreach ($vm['runs'] as $r) {
-        $rr .= '<tr><td class="ps-3">' . rivetRmmAutoUtc((string) $r['slot_at']) . '</td><td>' . rivetRmmScrJobPill((string) $r['state']) . '</td><td>' . (int) $r['jobs_created'] . '</td><td>' . (int) $r['skipped_overlap'] . '</td><td>' . (int) $r['skipped_gate'] . '</td><td>' . (int) $r['skipped_other'] . '</td><td>' . rivetRmmAutoUtc($r['finished_at']) . '</td></tr>';
+        $rr .= '<tr><td class="ps-3">' . rivetRmmAutoTime((string) $r['slot_at']) . '</td><td>' . rivetRmmScrJobPill((string) $r['state']) . '</td><td>' . (int) $r['jobs_created'] . '</td><td>' . (int) $r['skipped_overlap'] . '</td><td>' . (int) $r['skipped_gate'] . '</td><td>' . (int) $r['skipped_other'] . '</td><td>' . rivetRmmAutoTime($r['finished_at']) . '</td></tr>';
     }
     $o .= rivetRmmUiCard('Last runs', 'history', $vm['runs'] === [] ? '<div class="p-3 text-muted small">It has not run yet.</div>' : '<p class="small text-muted px-3 pt-2 mb-0">A run stays Running while some devices are held back (by a maintenance window, or by the spread time). They start when the hold ends, until the offline window closes.</p><div class="table-responsive"><table class="table table-sm mb-0"><caption class="visually-hidden">The last runs of this schedule</caption>'
         . rivetRmmUiThead(['Due at', 'State', 'Jobs queued', 'Skipped: still running', 'Skipped: maintenance window', 'Skipped: other', 'Finished']) . '<tbody>' . $rr . '</tbody></table></div>', '', '', true);
@@ -1404,8 +1404,8 @@ function rivetRmmScrScheduleDetailPage(array $vm, array $ctx): string
         . '<div class="col-md-2"><button class="btn btn-outline-primary" type="submit">Filter</button></div></div></form>';
     $hr = '';
     foreach ($vm['history'] as $h) {
-        $hr .= '<tr><td class="ps-3">' . rmmH($h['hostname'] !== '' ? $h['hostname'] : 'device #' . $h['device_id']) . '</td><td>' . rivetRmmAutoUtc((string) $h['queued_at']) . '</td><td>' . rivetRmmScrJobPill((string) $h['state']) . '</td>'
-            . '<td>' . ($h['exit_code'] === null ? '<span class="text-muted">none</span>' : (int) $h['exit_code']) . '</td><td>' . rivetRmmAutoUtc($h['finished_at']) . '</td></tr>';
+        $hr .= '<tr><td class="ps-3">' . rmmH($h['hostname'] !== '' ? $h['hostname'] : 'device #' . $h['device_id']) . '</td><td>' . rivetRmmAutoTime((string) $h['queued_at']) . '</td><td>' . rivetRmmScrJobPill((string) $h['state']) . '</td>'
+            . '<td>' . ($h['exit_code'] === null ? '<span class="text-muted">none</span>' : (int) $h['exit_code']) . '</td><td>' . rivetRmmAutoTime($h['finished_at']) . '</td></tr>';
     }
     $url = static fn (int $p): string => $self . '?' . http_build_query(array_filter(['schedule_id' => $id, 'device_id' => $vm['device'] ?: '', 'page' => $p > 1 ? $p : ''], static fn ($v): bool => $v !== ''));
     $pager = ($vm['page'] > 1 ? '<a class="btn btn-sm btn-outline-secondary me-1" href="' . rmmH($url($vm['page'] - 1)) . '">Previous</a>' : '')
@@ -1579,8 +1579,8 @@ function rivetRmmScrApprovalsPage(array $vm, array $ctx): string
         $mine = (int) $a['requested_by'] === $ctx['uid'];
         $decided = $a['decided_by'] ? ($vm['names'][(int) $a['decided_by']] ?? 'user #' . (int) $a['decided_by']) : '';
         $rows .= '<tr id="approval-' . $id . '"><td class="ps-3">' . rmmH($a['summary']) . '</td><td>' . (['schedule' => 'Schedule', 'patch' => 'Patches', 'software' => 'Software'][(string) $a['kind']] ?? 'Run') . '</td><td>' . rmmH($by) . '<div class="small text-muted">' . rivetRmmUiTime((string) $a['requested_at']) . '</div></td>'
-            . '<td>' . (int) $a['device_count'] . '</td><td>' . ($pending ? rivetRmmScrTimeBoth((string) $a['expires_at']) : '<span class="text-muted">' . rivetRmmAutoUtc((string) $a['expires_at']) . '</span>') . '</td><td>' . rivetRmmAutoStatePill((string) $a['state']) . '</td>'
-            . '<td>' . ($decided !== '' ? rmmH($decided) . '<div class="small text-muted">' . rivetRmmAutoUtc($a['decided_at']) . '</div>' : '<span class="text-muted">-</span>') . (!empty($a['decision_note']) ? '<div class="small">' . rmmH((string) $a['decision_note']) . '</div>' : '') . '</td></tr>';
+            . '<td>' . (int) $a['device_count'] . '</td><td>' . ($pending ? rivetRmmScrTimeBoth((string) $a['expires_at']) : '<span class="text-muted">' . rivetRmmAutoTime((string) $a['expires_at']) . '</span>') . '</td><td>' . rivetRmmAutoStatePill((string) $a['state']) . '</td>'
+            . '<td>' . ($decided !== '' ? rmmH($decided) . '<div class="small text-muted">' . rivetRmmAutoTime($a['decided_at']) . '</div>' : '<span class="text-muted">-</span>') . (!empty($a['decision_note']) ? '<div class="small">' . rmmH((string) $a['decision_note']) . '</div>' : '') . '</td></tr>';
         if ($pending) {
             $d = $vm['detail'][$id] ?? null;
             $rows .= '<tr class="rmm-approval-detail"><td colspan="7" class="ps-3 pe-3 py-2"><details><summary class="fw-semibold">Details and decision</summary><div class="pt-2">' . ($d === null ? '' : rivetRmmScrApprovalDetail($a, $d)) . rivetRmmScrApprovalActions($a, $mine, $perm, $csrf, $d, $by) . '</div></details></td></tr>';

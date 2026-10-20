@@ -198,7 +198,7 @@ function rivetRmmScaleProbeWords(array $probe): array
 /** A partition's upper boundary as text. */
 function rivetRmmScalePartitionBound(?int $ts): string
 {
-    return $ts === null ? 'everything later' : 'before ' . gmdate('Y-m-d', $ts) . ' UTC';
+    return $ts === null ? 'everything later' : 'before ' . rivetRmmTime($ts);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------- external metric store

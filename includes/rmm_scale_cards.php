@@ -255,15 +255,15 @@ function rivetRmmUiScaleCards(array $c): string
         . '<div class="table-responsive rmm-scale-scroll mb-3"><table class="table table-sm mb-0"><caption class="visually-hidden">The metric and check history tables and whether they are partitioned</caption>'
         . rivetRmmUiThead(['Table', 'Rows (estimate)', 'Storage', 'Kept for']) . '<tbody>' . $tableRows . '</tbody></table></div>'
         . '<h6>Daily rollup</h6><p class="small mb-3">' . ($roll['watermark'] === null
-            ? rivetRmmUiPill('off', 'Not run yet') . ' It is built by the housekeeping cron once a full day of hourly rows exists, two hours after midnight UTC at the earliest.'
-            : ($roll['behind_days'] > 2 ? rivetRmmUiPill('warn', 'Behind') : rivetRmmUiPill('ok', 'Current')) . ' Complete through ' . rmmH(gmdate('Y-m-d', max(0, (int) strtotime($roll['watermark'] . ' UTC') - 86400))) . ' UTC'
+            ? rivetRmmUiPill('off', 'Not run yet') . ' It is built by the housekeeping cron once a full day of hourly rows exists; a rollup day starts at ' . rmmH(rivetRmmTime(gmdate('Y-m-d') . ' 00:00:00', true, true, 'H:i')) . ' company time, two hours later at the earliest.'
+            : ($roll['behind_days'] > 2 ? rivetRmmUiPill('warn', 'Behind') : rivetRmmUiPill('ok', 'Current')) . ' Complete up to ' . rmmH(rivetRmmTime($roll['watermark'], true, true, 'Y-m-d H:i'))
               . ($roll['behind_days'] > 2 ? '; ' . (int) $roll['behind_days'] . ' days behind, check that the housekeeping cron (cron/cron.php) is running' : '') . '.') . '</p>'
         . '<h6 class="mt-4" id="partitioning-h">Time partitioning</h6>'
         . '<p class="small text-muted">Old rows are normally removed by deleting them in small batches. On a very large install it is faster to split these tables by time and remove an expired period by dropping its partition. It is optional, off by default, and only worth it for tens of thousands of devices.</p>'
         . '<div class="mb-3">' . ($words === null
             ? '<p class="small mb-2"><i class="fas fa-question-circle me-1" aria-hidden="true"></i>This server has not been checked yet.</p>'
             : '<p class="mb-1">' . ($words['can'] || $words['all'] ? rivetRmmUiPill('ok', 'Possible') : rivetRmmUiPill('warn', 'Not possible')) . ' <strong>Can this server do it?</strong></p><p class="small mb-1">' . rmmH($words['summary']) . '</p>'
-              . '<p class="small text-muted mb-2">Database: ' . rmmH($words['server']) . ($probeAt !== null ? ' &middot; checked ' . rmmH($probeAt) . ' UTC' : '') . '</p>')
+              . '<p class="small text-muted mb-2">Database: ' . rmmH($words['server']) . ($probeAt !== null ? ' &middot; checked ' . rmmH($probeAt) : '') . '</p>')
         . '<form action="post.php" method="post" class="d-inline">' . $csrf . '<button type="submit" name="partition_probe" class="btn btn-outline-secondary btn-sm"><i class="fas fa-vial me-1" aria-hidden="true"></i>' . ($words === null ? 'Check this server' : 'Check again') . '</button>'
         . '<span class="small text-muted ms-2">Creates and removes a tiny scratch table to prove the database account may partition. Nothing else is touched.</span></form></div>';
     if ($words !== null) {
@@ -310,7 +310,7 @@ function rivetRmmUiScaleCards(array $c): string
     if ($fl['enabled']) {
         $bufHtml = '<h6 class="mt-4">Buffer</h6>' . rivetRmmUiDl([
             ['Waiting to be sent', rmmH(number_format((int) $buf['batches'])) . ' batch' . ((int) $buf['batches'] === 1 ? '' : 'es') . ' (' . rmmH(number_format((int) $buf['points'])) . ' points)'],
-            ['Oldest waiting', $buf['oldest'] === null ? '<span class="text-muted">nothing waiting</span>' : rmmH($buf['oldest']) . ' UTC'],
+            ['Oldest waiting', $buf['oldest'] === null ? '<span class="text-muted">nothing waiting</span>' : rmmH(rivetRmmTime($buf['oldest'], true, true, 'Y-m-d H:i:s', (string) $buf['oldest']))],
             ['Most attempts on one batch', (int) $buf['max_attempts'] . ($buf['last_error'] !== null ? ' &middot; last error: ' . rmmH($buf['last_error']) : '')],
         ]) . '<p class="small text-muted mb-0">Check-ins never wait for the store: points are queued here and sent by the minute housekeeping. If the store is down, batches wait up to 24 hours or 20,000 batches, then the oldest are dropped; the database tables still have the data. The count of points dropped is shown per request in the Scale and capacity panel.</p>';
     }

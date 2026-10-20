@@ -93,15 +93,15 @@ function rivetRmmUiAgeOf(?string $utc, ?int $now = null, bool $local = false): ?
     return $t === false ? null : max(0, ($now ?? time()) - $t);
 }
 
-/** A <time> element: relative text, the absolute UTC time on hover and for assistive technology. */
-function rivetRmmUiTime(?string $iso, ?int $now = null): string
+/** A <time> element: relative text, the absolute company-local time on hover and for assistive technology. */
+function rivetRmmUiTime(?string $iso, ?int $now = null, bool $local = false): string
 {
     if ($iso === null || $iso === '') {
         return '<span class="text-muted">never</span>';
     }
-    $abs = str_replace('T', ' ', rtrim($iso, 'Z')) . ' UTC';
+    $abs = rivetRmmTime($iso, !$local, true, 'Y-m-d H:i:s', $iso);
 
-    return '<time datetime="' . nullable_htmlentities($iso) . '" title="' . nullable_htmlentities($abs) . '">' . nullable_htmlentities(rivetRmmUiAgo(rivetRmmUiAgeOf($iso, $now))) . '</time>';
+    return '<time datetime="' . nullable_htmlentities($iso) . '" title="' . nullable_htmlentities($abs) . '">' . nullable_htmlentities(rivetRmmUiAgo(rivetRmmUiAgeOf($iso, $now, $local))) . '</time>';
 }
 
 function rivetRmmUiBytes(?float $b): string

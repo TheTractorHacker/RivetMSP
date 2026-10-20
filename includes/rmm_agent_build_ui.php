@@ -79,7 +79,7 @@ function rivetAgentBuildBox(array $bv, string $csrf, ?array $local = null): stri
         . ($bv['has_token'] ? '<button class="btn btn-sm btn-outline-secondary" type="submit" name="agent_build_token_test" value="1" formnovalidate>Test token</button>'
             . '<button class="btn btn-sm btn-outline-danger" type="submit" name="agent_build_token_remove" value="1" formnovalidate data-ea-confirm="Remove the saved GitHub token? Builds can then only be started on GitHub.">Remove token</button>' : '') . '</div></form>'
         . '<div class="form-text">The token is stored encrypted, sent only to api.github.com, and never shown again.</div>'
-        . ($t !== null ? '<div class="mt-1" data-build-test><span class="badge bg-' . ($t['ok'] ? 'success' : 'danger') . '">' . ($t['ok'] ? 'Test passed' : 'Test failed') . '</span> ' . $h($t['message']) . ' <span class="text-muted">(' . $h(gmdate('Y-m-d H:i', (int) $t['at'])) . ' UTC)</span></div>' : '')
+        . ($t !== null ? '<div class="mt-1" data-build-test><span class="badge bg-' . ($t['ok'] ? 'success' : 'danger') . '">' . ($t['ok'] ? 'Test passed' : 'Test failed') . '</span> ' . $h($t['message']) . ' <span class="text-muted">(' . $h(rivetRmmTime((int) $t['at'])) . ')</span></div>' : '')
         . '</details>';
     if ($hasLocal) {
         $o .= '</div><div data-bp-panel="local">' . rivetLocalBuildBox($local, $csrf) . '</div>';

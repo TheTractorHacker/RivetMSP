@@ -14,7 +14,7 @@ use RivetCore\Rmm\Binaries\BinaryStore;
 mysqli_report(MYSQLI_REPORT_OFF);
 $csrf = $_SESSION['csrf_token'];
 $h = static fn($v) => nullable_htmlentities((string) $v);
-$dt = static fn($iso) => $iso ? str_replace('T', ' ', rtrim((string) $iso, 'Z')) : '';   // the read models return RFC 3339 UTC
+$dt = static fn($iso) => rivetRmmTime($iso);   // the read models return RFC 3339 / SQL UTC; shown in the company time zone with its label (26.10.36)
 $newToken = $_SESSION['ea_new_token'] ?? null;
 unset($_SESSION['ea_new_token']);
 
@@ -147,7 +147,7 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
 <div class="card mb-3" id="deploy-commands">
     <div class="card-header"><h4 class="card-title mb-0">Deployment commands for <?= $h($dep['department']) ?> (<?= $dep['arch'] === 'arm64' ? 'ARM64' : 'Windows x64' ?>)</h4></div>
     <div class="card-body">
-        <p class="small text-muted">This token allows <?= (int) $dep['max_uses'] ?> enrollments and expires <?= $h($dep['expires_at']) ?> UTC. The commands below contain it: keep them out of tickets, chat and shared script shares.</p>
+        <p class="small text-muted">This token allows <?= (int) $dep['max_uses'] ?> enrollments and expires <?= $h($dt($dep['expires_at'])) ?>. The commands below contain it: keep them out of tickets, chat and shared script shares.</p>
         <h6>1. Interactive (one PC)</h6>
         <p class="small mb-3">Use <strong>Download installer</strong> in the Deployment card for this client, copy <code><?= $h($depFile) ?></code> to the PC and double-click it (accept the administrator prompt), or run <code><?= $h($depFile) ?> setup</code> from an elevated prompt. The file already contains the server address, the token and the department.</p>
         <h6>2. Silent install for an RMM, Intune platform script or GPO startup script</h6>
@@ -508,7 +508,7 @@ try {
     $__d = $__ps && is_string($__ps['detail']) ? json_decode($__ps['detail'], true) : null;
     if (is_array($__d)) {
         $__probe = $__d;
-        $__probeAt = str_replace('T', ' ', rtrim((string) ($__d['at'] ?? $__ps['updated_at']), 'Z'));
+        $__probeAt = rivetRmmTime((string) ($__d['at'] ?? $__ps['updated_at']), true, true, 'Y-m-d H:i:s') ?: null;   // UTC in storage, shown in company time
     }
 } catch (\Throwable) {
     $__probe = null;
@@ -598,7 +598,7 @@ if ($feed->ready()) {
             </div>
         </form>
         <div class="table-responsive"><table class="table table-sm align-middle mb-0">
-            <thead><tr><th>Version</th><th>Arch</th><th>Size</th><th>SHA-256</th><th>Uploaded (UTC)</th><th>State</th><th></th></tr></thead><tbody>
+            <thead><tr><th>Version</th><th>Arch</th><th>Size</th><th>SHA-256</th><th>Uploaded</th><th>State</th><th></th></tr></thead><tbody>
             <?php foreach ($binaries as $b) { $fid = 'bn_' . (int) $b['binary_id']; ?>
                 <tr>
                     <td><?= $h($b['version']) ?></td><td><?= $h($b['arch']) ?></td><td><?= $h(BinaryStore::human((int) $b['size_bytes'])) ?></td>
@@ -640,7 +640,7 @@ if ($feed->ready()) {
         </form>
         <div class="table-responsive"><table class="table table-sm align-middle mb-0">
             <caption class="visually-hidden">MSI templates</caption>
-            <thead><tr><th scope="col">Version</th><th scope="col">Arch</th><th scope="col">Size</th><th scope="col">SHA-256</th><th scope="col">Platform read from</th><th scope="col">Uploaded (UTC)</th><th scope="col">State</th><th scope="col" class="position-relative"><span class="visually-hidden">Actions</span></th></tr></thead><tbody>
+            <thead><tr><th scope="col">Version</th><th scope="col">Arch</th><th scope="col">Size</th><th scope="col">SHA-256</th><th scope="col">Platform read from</th><th scope="col">Uploaded</th><th scope="col">State</th><th scope="col" class="position-relative"><span class="visually-hidden">Actions</span></th></tr></thead><tbody>
             <?php foreach ($msiTemplates as $t) { ?>
                 <tr>
                     <td><?= $h($t['version']) ?></td><td><?= $h($t['arch']) ?></td><td><?= $h(BinaryStore::human((int) $t['size_bytes'])) ?></td>
@@ -709,7 +709,7 @@ if ($feed->ready()) {
         <?php if ($cfg['signing_public_key'] === '') { ?>
             <p class="text-muted mb-0">Generated automatically the first time the service is switched on.</p>
         <?php } else { ?>
-            <p class="mb-1">Key id <code><?= $h($cfg['signing_key_id']) ?></code>, created <?= $h($dt($cfg['signing_key_created_at'])) ?> UTC. The private key is stored encrypted.</p>
+            <p class="mb-1">Key id <code><?= $h($cfg['signing_key_id']) ?></code>, created <?= $h($dt($cfg['signing_key_created_at'])) ?>. The private key is stored encrypted.</p>
             <p class="mb-2 small">Public key (agents receive this at enrollment): <code class="text-break"><?= $h($cfg['signing_public_key']) ?></code></p>
             <form action="post.php" method="post" data-ea-confirm="Generate a new signing key? Every enrolled agent must re-enroll before it accepts jobs or updates again.">
                 <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
@@ -737,7 +737,7 @@ if ($feed->ready()) {
             <div class="col-lg-1"><button type="submit" name="create_enroll_token" class="btn btn-primary w-100">Create</button></div>
         </form>
         <div class="table-responsive"><table class="table table-sm table-striped align-middle mb-0">
-            <thead><tr><th>Token</th><th>Label</th><th>Client</th><th>Ring</th><th>Uses</th><th>Expires (UTC)</th><th>State</th><th></th></tr></thead><tbody>
+            <thead><tr><th>Token</th><th>Label</th><th>Client</th><th>Ring</th><th>Uses</th><th>Expires</th><th>State</th><th></th></tr></thead><tbody>
             <?php foreach ($tokens as $t) {
                 $state = ['revoked' => ['Revoked', 'danger'], 'expired' => ['Expired', 'secondary'], 'used_up' => ['Used up', 'secondary'], 'active' => ['Active', 'success']][$t['state']]; ?>
                 <tr><td><code><?= $h(substr($t['selector'], 0, 8)) ?>...</code></td><td><?= $h($t['label']) ?></td><td><?= $h($clientName[(int) $t['client_id']] ?? ('#' . (int) $t['client_id'])) ?></td>
@@ -748,7 +748,7 @@ if ($feed->ready()) {
         </tbody></table></div>
         <?php if ($attempts) { ?>
         <h6 class="mt-3">Recent rejected enrollment attempts</h6>
-        <ul class="small mb-0"><?php foreach ($attempts as $a) { echo '<li>' . $h($dt($a['attempted_at'])) . ' UTC, ' . $h($a['ip']) . ': ' . $h($a['reason']) . ($a['token_selector'] !== '' ? ' (token ' . $h(substr($a['token_selector'], 0, 8)) . '...)' : '') . '</li>'; } ?></ul>
+        <ul class="small mb-0"><?php foreach ($attempts as $a) { echo '<li>' . $h($dt($a['attempted_at'])) . ', ' . $h($a['ip']) . ': ' . $h($a['reason']) . ($a['token_selector'] !== '' ? ' (token ' . $h(substr($a['token_selector'], 0, 8)) . '...)' : '') . '</li>'; } ?></ul>
         <?php } ?>
     </div>
 </div>
@@ -763,7 +763,7 @@ if ($feed->ready()) {
         <div class="border rounded p-3 mb-3">
             <div class="d-flex justify-content-between flex-wrap">
                 <div><strong><?= $h($d['hostname']) ?></strong> <span class="text-muted small">device #<?= (int) $d['device_id'] ?>, serial <?= $h($d['serial'] ?: 'none reported') ?>, <?= $h($d['manufacturer']) ?> <?= $h($d['model']) ?>, <?= $h($clientName[(int) $d['client_id']] ?? '') ?></span></div>
-                <span class="small text-muted">first seen <?= $h($dt($d['first_seen_at'])) ?> UTC</span>
+                <span class="small text-muted">first seen <?= $h($dt($d['first_seen_at'])) ?></span>
             </div>
             <p class="small mb-2 mt-1"><i class="fas fa-info-circle me-1"></i><?= $h($d['match_reason_text']) ?></p>
             <form action="post.php" method="post" class="row g-2 align-items-end">
@@ -787,7 +787,7 @@ if ($feed->ready()) {
 <div class="card mb-3" id="devices">
     <div class="card-header"><h4 class="card-title mb-0">Devices</h4></div>
     <div class="table-responsive"><table class="table table-sm table-striped align-middle mb-0">
-        <thead><tr><th>Device</th><th>Status</th><th>Last check-in (UTC)</th><th>Agent</th><th>Asset</th><th>Ring</th><th></th></tr></thead><tbody>
+        <thead><tr><th>Device</th><th>Status</th><th>Last check-in</th><th>Agent</th><th>Asset</th><th>Ring</th><th></th></tr></thead><tbody>
         <?php foreach ($devices as $d) {
             $gone = $d['revoked'] || $d['retired']; ?>
             <tr>
