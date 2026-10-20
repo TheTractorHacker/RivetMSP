@@ -12,8 +12,21 @@ use RivetCore\Rmm\Contracts\RmmAssetsInterface;
 /** The asset side of RMM identity matching and linking, over RivetMSP's `assets` and `asset_interfaces` tables. */
 final class EndpointAssets implements RmmAssetsInterface, RmmAssetNamesInterface
 {
+    /**
+     * The asset type names this edition actually offers (mirrors $asset_types_array in includes/load_global_settings.php, the
+     * keys an administrator sees in the Asset type dropdown), narrowed to the ones DeviceTypeClassifier::resolve() can produce.
+     * No "Hypervisor" type exists here, so a Hypervisor-labelled device resolves to Server via the fallback chain.
+     */
+    private const ASSET_TYPE_NAMES = ['Laptop', 'Desktop', 'Server', 'Tablet', 'Virtual Machine', 'Other'];
+
     public function __construct(private DatabaseInterface $database)
     {
+    }
+
+    /** @return list<string> */
+    public static function assetTypeNames(): array
+    {
+        return self::ASSET_TYPE_NAMES;
     }
 
     public function findBySerial(string $serial, int $limit = 10): array
@@ -70,14 +83,23 @@ final class EndpointAssets implements RmmAssetsInterface, RmmAssetNamesInterface
 
     public function createForDevice(array $device, int $clientId, int $locationId): int
     {
-        $isServer = stripos((string) $device['os_version'], 'server') !== false;
         // Core's contract for this method is Windows-only ("Windows <os_version>"), but os_version itself may already start with
         // "Windows" (agents report it that way, e.g. "Windows 11 23H2"): osLabel() avoids writing "Windows Windows 11 23H2".
         $osText = AssetInventorySync::osLabel('Windows', (string) $device['os_version']);
+        // Device type (RivetCore 1.0.0-rc.29): the installer's explicit choice (asset_type_hint) wins; else the agent's own
+        // classification (asset_type_detected); a label this edition has no asset type for is mapped down the fallback chain
+        // (Hypervisor and Virtual Machine -> Server, Tablet, Desktop and Other -> Laptop) - RivetMSP has no "Hypervisor" type,
+        // so a Hypervisor-labelled device becomes a Server asset. Neither key present (a pre-rc.29 caller): keep the old rule.
+        $assetType = isset($device['asset_type_hint']) || isset($device['asset_type_detected'])
+            ? \RivetCore\Rmm\Assets\DeviceTypeClassifier::resolve(
+                \RivetCore\Rmm\Assets\DeviceTypeClassifier::choose($device['asset_type_hint'] ?? null, (string) ($device['asset_type_detected'] ?? '')),
+                self::assetTypeNames()
+            )
+            : (stripos((string) $device['os_version'], 'server') !== false ? 'Server' : 'Laptop');
         $res = $this->database->execute(
             "INSERT INTO assets (asset_type, asset_name, asset_make, asset_model, asset_serial, asset_os, asset_status, asset_client_id, asset_location_id, asset_created_at)
              VALUES (?, ?, ?, ?, ?, ?, 'Active', ?, ?, NOW())",
-            [$isServer ? 'Server' : 'Laptop', $device['hostname'], (string) ($device['manufacturer'] ?? ''), $device['model'], $device['serial'], $osText, $clientId, $locationId]
+            [$assetType, $device['hostname'], (string) ($device['manufacturer'] ?? ''), $device['model'], $device['serial'], $osText, $clientId, $locationId]
         );
 
         $assetId = (int) $res->insertId;
@@ -107,6 +129,15 @@ final class EndpointAssets implements RmmAssetsInterface, RmmAssetNamesInterface
              asset_make = IF(asset_make = '', ?, asset_make), asset_os = IF(asset_os IS NULL OR asset_os = '', ?, asset_os) WHERE asset_id = ?",
             [$facts['serial'], $facts['model'], (string) $facts['manufacturer'], $facts['os'], $assetId]
         );
+        // Device type (rc.29): only when the asset's type is blank - a device matched to an EXISTING asset never has its type
+        // changed. RivetMSP's asset_type is NOT NULL (never actually blank in practice), but honour the contract literally
+        // in case some row was created with an empty string.
+        if (\RivetCore\Rmm\Assets\DeviceTypeClassifier::validLabel($facts['type'] ?? null)) {
+            $this->database->execute(
+                "UPDATE assets SET asset_type = ? WHERE asset_id = ? AND (asset_type IS NULL OR asset_type = '')",
+                [\RivetCore\Rmm\Assets\DeviceTypeClassifier::resolve((string) $facts['type'], self::ASSET_TYPE_NAMES), $assetId]
+            );
+        }
     }
 
     public function moveToClient(int $assetId, int $clientId, int $locationId): void

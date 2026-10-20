@@ -1569,6 +1569,8 @@ function rivetRmmUiInstallerModal(array $ins, string $csrf): string
         . '<div class="col-md-6"><label class="form-label" for="rmm-inst-arch">Architecture</label><select class="form-select" id="rmm-inst-arch" name="arch">'
         . $archOpt('amd64', 'x64 (Intel / AMD, most PCs)', $ins['windows']['amd64']) . $archOpt('arm64', 'ARM64', $ins['windows']['arm64']) . '</select></div>'
         . '<div class="col-md-6"><label class="form-label" for="rmm-inst-ring">Update ring</label><select class="form-select" id="rmm-inst-ring" name="ring"><option value="stable" selected>Stable (recommended)</option><option value="pilot">Pilot (early builds)</option></select></div>'
+        . '<div class="col-md-6"><label class="form-label" for="rmm-inst-devtype">Device type</label><select class="form-select" id="rmm-inst-devtype" name="device_type"><option value="auto" selected>Detect automatically</option><option value="Laptop">Laptop</option><option value="Desktop">Desktop</option><option value="Server">Server</option><option value="Virtual Machine">Virtual machine</option><option value="Hypervisor">Hypervisor</option></select>'
+        . '<div class="form-text">Only used if this device enrolls a brand-new asset; an existing asset\'s type is never changed.</div></div>'
         . rivetRmmUiInstallerFormatField($ins['msi'] ?? ['amd64' => null, 'arm64' => null], $defaultArch)
         . rivetRmmUiInstallerMeshBox($ins['mesh'] ?? ['show' => false, 'ready' => false, 'refusal' => null, 'admin' => false])
         . '</div>'
