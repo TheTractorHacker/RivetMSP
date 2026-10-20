@@ -93,7 +93,8 @@ $inst_app_ids = array_values(array_unique(array_filter(array_map('intval', (arra
 // enrollment token (never in the installer file), used only when a NEW asset is created for a device that enrolls with it; otherwise
 // the agent's own hardware-based classification decides, same as before this feature existed. An unknown value is passed through as
 // 'auto' rather than guessed at (Core itself also validates and would refuse a bad label).
-$inst_device_type = in_array((string) ($_POST['device_type'] ?? 'auto'), ['auto', ...\RivetCore\Rmm\Assets\DeviceTypeClassifier::LABELS], true) ? (string) $_POST['device_type'] : 'auto';
+$inst_device_type_raw = (string) ($_POST['device_type'] ?? 'auto');
+$inst_device_type = in_array($inst_device_type_raw, ['auto', ...\RivetCore\Rmm\Assets\DeviceTypeClassifier::LABELS], true) ? $inst_device_type_raw : 'auto';
 $inst_args = [intval($_POST['client_id'] ?? 0), intval($_POST['location_id'] ?? 0), $inst_ring, $inst_post_int('ttl_hours', 1, $inst_ttl_max, min(24, $inst_ttl_max)),
     !empty($_POST['multiple']) ? 25 : 1, trim((string) ($_POST['label'] ?? '')), $inst_arch, $inst_mesh, $inst_format, $inst_app_ids, $inst_device_type];
 

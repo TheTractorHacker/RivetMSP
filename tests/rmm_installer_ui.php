@@ -221,12 +221,21 @@ $ok($rmm->meshAgentSettings()->update(['mesh_group_id' => $mGroup, 'mesh_server_
 $rmm->syncState();
 [$c, $b] = web($wb, 'GET', '/agent/rmm_fleet.php', $sidAdmin);
 $box = $boxOf($b);
-$ok($box !== '' && !str_contains($box, 'disabled') && !str_contains($box, 'checked') && str_contains($b, 'downloads the MeshCentral agent from your own Mesh server'), 'configured: the box is enabled and still unticked (off by default)');
+// RivetCore 1.0.0-rc.27 (Mesh after approval): the tick-box no longer means "embed Mesh settings and install inline" - it means "push the Mesh
+// agent once an administrator approves the device" (InstallerService::issue() always records MeshAfterApproval::OPTION_AFTER_APPROVAL on the
+// token, never the retired immediate-push value); the help text says so.
+$ok($box !== '' && !str_contains($box, 'disabled') && !str_contains($box, 'checked') && str_contains($b, 'The Mesh agent installs after you approve the device') && str_contains($b, 'Also install the MeshCentral agent (after the device is approved)'), 'configured: the box is enabled and still unticked (off by default), with the after-approval wording');
 [$c, $b] = web($wb, 'GET', '/agent/client_overview.php?client_id=1', $sidAdmin);
 $ok(preg_match('/id="rmm-inst-mesh"/', $b) === 1 && !str_contains($boxOf($b), 'checked'), 'the dialog on the client page has the box too');
 $ok(str_contains((string) file_get_contents($root . '/js/rmm_installer.js'), "meshBox.checked = false") && !str_contains((string) file_get_contents($root . '/js/rmm_installer.js'), 'confirm('), 'the dialog script unticks the box every time the dialog opens, and uses no window.confirm');
 
-// without the tick: byte for byte what it was
+// Whether or not the box is ticked, the payload NEVER carries a Mesh block or a login key any more - the whole point of "after approval" is that
+// no Mesh address, group id or pin ever rides in an installer file or a Linux command; the server pushes the agent later, once approved.
+// (InstallerDownload::meshBlockFor() checks install_mesh_agent === 1, a value InstallerService::issue() has not written since rc.27 - it always
+// writes MeshAfterApproval::OPTION_AFTER_APPROVAL (2) instead; confirmed by reading both classes directly, not assumed. meshBlockFor() returning
+// null for every installer now is the INTENDED rc.27 behaviour - the alternative, "fixing" it to match 2 and embed the block again, would put the
+// Mesh server address, device-group id and certificate pin back inside the installer file/command, which is exactly what rc.27 removed them to
+// avoid. That would be a real security regression, not a bug fix, so it is deliberately NOT done here.)
 [$c, $plain] = $post($sidAdmin, ['os' => 'windows', 'client_id' => 1, 'arch' => 'amd64']);
 $d = $stampOf($plain);
 $ok($c === 200 && array_keys($d) === $oldMembers && $optRows() === 0, 'no tick: the payload has exactly the members of every earlier release and no option row is written');
@@ -235,46 +244,36 @@ foreach (['0', 'on', 'true', ''] as $v) {
     $ok($c === 200 && array_keys($stampOf($b)) === $oldMembers, "install_mesh_agent=\"$v\" is not a tick (only 1 is)");
 }
 
-// with the tick: Mesh member only then
+// with the tick: no Mesh member (after approval, never embedded), but the option row remembers it, correctly, for the device-page state line
 [$c, $withMesh, $heads] = $post($sidAdmin, ['os' => 'windows', 'client_id' => 1, 'arch' => 'amd64', 'install_mesh_agent' => '1', 'multiple' => '1']);
 $d = $stampOf($withMesh);
-$ok($c === 200 && ($d['version'] ?? 0) === 1 && ($d['install_mesh_agent'] ?? null) === true && is_array($d['mesh'] ?? null), 'tick: 200, the payload version stays 1 and carries install_mesh_agent and mesh');
-$m = $d['mesh'] ?? [];
-$ok(($m['url'] ?? '') === 'https://mesh.example.test' && ($m['meshid'] ?? '') === $mGroupUrl && strlen((string) ($m['meshid'] ?? '')) === 64 && !preg_match('/^[0-9a-f]{64}$/', (string) ($m['meshid'] ?? '')) && ($m['pin'] ?? '') === $mPin, 'mesh: url, meshid (the group id in the URL form, 64 characters, derived from the stored hex) and the pin');
-$ok(($m['agent_ids']['windows/arm64'] ?? 0) === 40 && ($m['agent_ids']['windows/amd64'] ?? 0) === 4 && ($m['install_args']['windows'] ?? []) === ['-fullinstall'], 'mesh: the full agent-id table (the correction wins, the built-in ids fill the rest) and the install arguments');
-$ok(array_slice(array_keys($d), 0, 8) === $oldMembers && array_keys($d) === array_merge($oldMembers, ['install_mesh_agent', 'mesh']), 'the two new members follow expires_at and nothing else changed');
-$ok(!str_contains(json_encode($d), 'mesh_login_key') && !str_contains(json_encode($d), 'login_key'), 'the login token key is never in the installer');
-$ok(substr($withMesh, 0, 2) === 'MZ' && (int) $hdr($heads, 'Content-Length') === strlen($withMesh) && strlen($withMesh) > strlen($plain), 'it is still a Windows executable with an exact Content-Length (the Mesh block makes the stamp longer)');
-$ok($optRows() === 1 && (int) $one('SELECT install_mesh_agent FROM endpoint_agent_installer_options') === 1, 'the tick is remembered for the enrollment token (one option row)');
-$ok($audit('Installer Created') >= 4 && (int) $one("SELECT COUNT(*) FROM logs WHERE log_type = 'Endpoint Agent' AND log_description LIKE '%also installs the MeshCentral agent%'") >= 1, 'audit: "Installer Created" says it also installs the MeshCentral agent');
+$ok($c === 200 && array_keys($d) === $oldMembers, 'tick: 200, the payload still has exactly the old members - no mesh block, no install_mesh_agent flag, after approval');
+$ok(!str_contains(json_encode($d), 'mesh_login_key') && !str_contains(json_encode($d), 'login_key') && !str_contains(json_encode($d), 'meshid') && !str_contains(json_encode($d), $mGroupUrl), 'the login token key, the meshid and the group id are never in the installer, ticked or not');
+$ok(substr($withMesh, 0, 2) === 'MZ' && (int) $hdr($heads, 'Content-Length') === strlen($withMesh) && strlen($withMesh) === strlen($plain), 'it is still a Windows executable with an exact Content-Length, the SAME length as an unticked installer (nothing is appended for the tick any more)');
+$ok($optRows() === 1 && (int) $one('SELECT install_mesh_agent FROM endpoint_agent_installer_options') === \RivetCore\Rmm\Mesh\MeshAfterApproval::OPTION_AFTER_APPROVAL, 'the tick is remembered for the enrollment token as "after approval" (one option row)');
+$ok($audit('Installer Created') >= 4 && (int) $one("SELECT COUNT(*) FROM logs WHERE log_type = 'Endpoint Agent' AND log_description LIKE '%installs the MeshCentral agent after the device is approved%'") >= 1, 'audit: "Installer Created" says it installs the MeshCentral agent after the device is approved');
 
-// the token-gated scripted download gives the same installer, and a setting that stopped allowing it is skipped, audited
+// the token-gated scripted download gives the same installer (no Mesh block either way) regardless of the Mesh switch
 $tokPlain = (string) ($d['enrollment_token'] ?? '');
 $gated = function () use ($wb, $tokPlain): array { $ch = curl_init("$wb/api/v1/agent_installer"); curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode(['token' => $tokPlain, 'arch' => 'amd64']), CURLOPT_HTTPHEADER => ['Content-Type: application/json'], CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60]); $b = (string) curl_exec($ch); $c = curl_getinfo($ch, CURLINFO_RESPONSE_CODE); curl_close($ch); return [$c, $b]; };
 [$c, $gb] = $gated();
 $gd = $stampOf($gb);
-$ok($c === 200 && ($gd['install_mesh_agent'] ?? null) === true && ($gd['mesh']['meshid'] ?? '') === $mGroupUrl && ($gd['mesh']['pin'] ?? '') === $mPin, 'the scripted token-gated download serves the same Mesh block');
+$ok($c === 200 && array_keys($gd) === $oldMembers, 'the scripted token-gated download serves the same installer, still no Mesh block (after approval)');
 $rmm->settings()->set(['mesh_enabled' => 0]);
 [$c, $gb] = $gated();
-$ok($c === 200 && array_keys($stampOf($gb)) !== [] && !array_key_exists('mesh', $stampOf($gb)) && !array_key_exists('install_mesh_agent', $stampOf($gb)) && $audit('Installer Mesh Skipped') >= 1, 'Mesh switched off after issuing: the installer is served WITHOUT it and "Installer Mesh Skipped" is audited');
+$ok($c === 200 && array_keys($stampOf($gb)) === $oldMembers, 'Mesh switched off after issuing: the installer is served the same either way, since it never carried a Mesh block to begin with');
 $rmm->settings()->set(['mesh_enabled' => 1]);
-
-// RivetCore 1.0.0-rc.15: a pasted download address is saved as MeshCentral printed it and the installer carries that URL form VERBATIM (a fresh random id with both '@' and '$' in it, never committed)
-do { $rawId = random_bytes(48); $randUrl = strtr(base64_encode($rawId), ['+' => '@', '/' => '$']); } while (!str_contains($randUrl, '@') || !str_contains($randUrl, '$'));
-$ok($rmm->meshAgentSettings()->update(['mesh_group_id' => 'https://mesh.example.test/meshagents?id=4&meshid=' . $randUrl . '&installflags=0'], 1) === [] && $rmm->meshAgentSettings()->get()['group_id'] === bin2hex($rawId) && $rmm->meshAgentSettings()->get()['group_id_url'] === $randUrl, 'a pasted download address is saved: hex stored, the URL form kept verbatim');
-[$c, $b] = $post($sidAdmin, ['os' => 'windows', 'client_id' => 1, 'arch' => 'amd64', 'install_mesh_agent' => '1']);
-$ok($c === 200 && ($stampOf($b)['mesh']['meshid'] ?? '') === $randUrl, 'the installer payload decodes to the URL-form meshid exactly as pasted (with @ and $ literal)');
-[$c, $b] = $post($sidAdmin, ['os' => 'linux', 'client_id' => 1, 'arch' => 'amd64', 'install_mesh_agent' => '1']);
-$ok($c === 200 && str_contains((string) (json_decode($b, true)['linux'] ?? ''), $randUrl) && !str_contains((string) (json_decode($b, true)['linux'] ?? ''), bin2hex($rawId)), 'the Linux command carries the same URL form, not the hex');
 $ok($rmm->meshAgentSettings()->update(['mesh_group_id' => $mGroup], 1) === [], 'back to the hex group for the rest of the file');
 
-// Linux
+// Linux: the tick-box is remembered (and the Mesh-after-approval plan still applies once the device actually enrolls - see tests/rmm_rc25.php /
+// the device-page state line in includes/rmm_ui_render.php), but the Linux command itself never carries --install-mesh-agent or any Mesh address,
+// ticked or not (InstallerService::linuxSnippet()'s only caller passes no Mesh details at all any more).
 [$c, $b] = $post($sidAdmin, ['os' => 'linux', 'client_id' => 1, 'arch' => 'amd64', 'install_mesh_agent' => '1']);
 $j = json_decode($b, true);
-$ok($c === 200 && ($j['install_mesh_agent'] ?? null) === true && str_contains((string) $j['linux'], '--install-mesh-agent') && str_contains((string) $j['linux'], '--mesh-url') && str_contains((string) $j['linux'], 'https://mesh.example.test') && str_contains((string) $j['linux'], $mGroupUrl), 'Linux with the tick: JSON says so and the command carries the Mesh flags (the group id in the URL form)');
+$ok($c === 200 && !str_contains((string) $j['linux'], '--install-mesh-agent') && !str_contains((string) $j['linux'], '--mesh-url') && !str_contains((string) $j['linux'], 'mesh.example.test') && !str_contains((string) $j['linux'], $mGroupUrl), 'Linux with the tick: no Mesh flags and no group id in the command (after approval, pushed later)');
 [$c, $b] = $post($sidAdmin, ['os' => 'linux', 'client_id' => 1, 'arch' => 'amd64']);
 $j = json_decode($b, true);
-$ok($c === 200 && ($j['install_mesh_agent'] ?? null) === false && !str_contains((string) $j['linux'], '--install-mesh-agent') && !str_contains((string) $j['linux'], $mGroupUrl) && !str_contains((string) $j['linux'], $mGroup), 'Linux without the tick: no Mesh flag and no group id in the command');
+$ok($c === 200 && !str_contains((string) $j['linux'], '--install-mesh-agent') && !str_contains((string) $j['linux'], $mGroupUrl) && !str_contains((string) $j['linux'], $mGroup), 'Linux without the tick: still no Mesh flag and no group id in the command');
 
 // not an administrator: still refused, tick or not; and Administration > Deployment has the box too
 [$c, $b] = $post($sidTech, ['os' => 'windows', 'client_id' => 1, 'arch' => 'amd64', 'install_mesh_agent' => '1']);
@@ -407,11 +406,15 @@ $mAdmin = ['save_mesh_settings' => 1, 'mesh_install_fields' => '1', 'mesh_enable
 $ad($mAdmin); $rmm->meshAgentSettings()->refresh();
 [$c, $bmm] = $post($sidAdmin, ['os' => 'windows', 'client_id' => 1, 'arch' => 'amd64', 'format' => 'msi', 'install_mesh_agent' => '1']);
 $rdm = InstallerStamp::read($bmm);
-$ok($c === 200 && $rdm !== null && ($rdm['data']['install_mesh_agent'] ?? null) === true && isset($rdm['data']['mesh']['meshid']) && substr($bmm, 0, $rdm['exe_length']) === $tplBytes, 'the "Also install the MeshCentral agent" option rides in the MSI payload as in the exe');
+// After approval: the ticked option rides on the enrollment token (for the later push and the device-page state line), never in the MSI payload either.
+$ok($c === 200 && $rdm !== null && array_keys($rdm['data']) === $oldMembers && substr($bmm, 0, $rdm['exe_length']) === $tplBytes, 'the "Also install the MeshCentral agent" option does not ride in the MSI payload either (after approval)');
 // Administration > Deployment: format msi commands (the token is shown once, on the next page load)
 [$c] = $ad(['show_deploy_commands' => '1', 'client_id' => 1, 'arch' => 'amd64', 'ring' => 'stable', 'ttl_hours' => 24, 'max_uses' => 3, 'format' => 'msi']);
 [$c, $b] = web($wb, 'GET', '/admin/settings_endpoint_agent.php', $sidAdmin);
-$ok($c === 200 && str_contains($b, 'MSI package (RivetIT-Agent-client-a-x64.msi)') && str_contains($b, 'msiexec /i &quot;RivetIT-Agent-client-a-x64.msi&quot; /qn /norestart') && str_contains($b, 'ENROLL_TOKEN=') && str_contains($b, 'format = &#039;msi&#039;') && str_contains($b, 'REMOVE_MESHAGENT=1') && str_contains($b, 'UpgradeCode') && str_contains($b, 'not been run on Windows'), 'Deployment commands with format msi: the msi block (msiexec, properties, silent downloader, uninstall, detection) and the unverified warning');
+// The MSI has been run and verified on a real Windows PC (see CHANGELOG 26.10.39): no more "not been run on Windows" claim, but the
+// unsigned/SmartScreen note and "upgrade, repair and uninstall not yet tested" still apply.
+$ok($c === 200 && str_contains($b, 'MSI package (RivetIT-Agent-client-a-x64.msi)') && str_contains($b, 'msiexec /i &quot;RivetIT-Agent-client-a-x64.msi&quot; /qn /norestart') && str_contains($b, 'ENROLL_TOKEN=') && str_contains($b, 'format = &#039;msi&#039;') && str_contains($b, 'REMOVE_MESHAGENT=1') && str_contains($b, 'UpgradeCode')
+    && !str_contains($b, 'not been run on Windows') && str_contains($b, 'SmartScreen') && str_contains($b, 'Upgrade, repair and uninstall are not yet tested'), 'Deployment commands with format msi: the msi block (msiexec, properties, silent downloader, uninstall, detection), no "unverified" claim but the SmartScreen/untested-upgrade note');
 [$c] = $ad(['show_deploy_commands' => '1', 'client_id' => 1, 'arch' => 'amd64', 'ring' => 'stable', 'ttl_hours' => 24, 'max_uses' => 3]);
 [$c, $b] = web($wb, 'GET', '/admin/settings_endpoint_agent.php', $sidAdmin);
 $ok($c === 200 && str_contains($b, 'id="deploy-commands"') && !str_contains($b, 'MSI package (') && !str_contains($b, 'REMOVE_MESHAGENT'), 'Deployment commands with the default format: no msi block (the exe answer is as before)');
