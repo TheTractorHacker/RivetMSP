@@ -15,6 +15,7 @@
  */
 
 require_once __DIR__ . '/event_bus.php';   // rivetCoreDb(), rivetWebhookUrlPolicy()
+require_once __DIR__ . '/rmm_time.php';   // 26.10.36: company-time output for stored timestamps
 
 use RivetMSP\Core\Adapter\Endpoint\EndpointAccessPolicy;
 use RivetMSP\Core\Adapter\Endpoint\EndpointAssets;
