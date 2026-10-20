@@ -27,7 +27,35 @@
     var tabs = [].slice.call(modal.querySelectorAll('[role=tab]'));
     var winReady = form.getAttribute('data-win-ready') === '1';
     var serviceReady = form.getAttribute('data-service-ready') === '1';
+    var appsWrap = document.getElementById('rmm-inst-apps-wrap');
+    var appsList = document.getElementById('rmm-inst-apps-list');
     var busy = false;
+
+    // rc.27 install-apps-with-the-agent: re-fetch the checkbox list from agent/post/rmm_auto_install.php whenever the client, location or OS changes.
+    // Nothing here decides anything - it only renders what RivetCore's AutoInstallActions::selectable() already computed, same as a page reload would.
+    var appsReq = 0;
+    function refreshApps() {
+        if (!appsWrap || !appsList || !window.fetch) { return; }
+        var cid = clientSel.value;
+        if (!cid) { appsWrap.hidden = true; appsList.textContent = ''; return; }
+        var mine = ++appsReq;
+        var body = new URLSearchParams();
+        body.set('csrf_token', form.querySelector('[name=csrf_token]').value);
+        body.set('ia_op', 'selectable');
+        body.set('client_id', cid);
+        body.set('location_id', locSel.value || '0');
+        body.set('os', osField.value);
+        fetch('/agent/post/rmm_auto_install.php', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'fetch', 'Accept': 'application/json' },
+            body: body.toString()
+        }).then(function (res) { return res.ok ? res.json() : null; }).then(function (d) {
+            if (mine !== appsReq) { return; }   // a newer request already landed; drop this stale one
+            var html = d && d.success ? (d.html || '') : '';
+            appsWrap.hidden = html === '';
+            appsList.innerHTML = html;   // server-rendered, escaped fragment from the same trusted endpoint that already builds the rest of this dialog
+        }).catch(function () { if (mine === appsReq) { appsWrap.hidden = true; appsList.textContent = ''; } });
+    }
 
     function say(text, kind) {
         msg.className = 'alert mt-3 mb-0 alert-' + kind;
@@ -78,6 +106,7 @@
         if (os !== 'linux') { cmdBox.hidden = true; cmdText.textContent = ''; }
         clearMsg();
         refresh();
+        refreshApps();
     }
     tabs.forEach(function (t, i) {
         t.addEventListener('click', function () { setOs(t.getAttribute('data-os'), false); });
@@ -102,7 +131,8 @@
         });
         if (!keep) { locSel.value = '0'; }
     }
-    clientSel.addEventListener('change', function () { filterLocations(); clearMsg(); });
+    clientSel.addEventListener('change', function () { filterLocations(); clearMsg(); refreshApps(); });
+    locSel.addEventListener('change', refreshApps);
     archSel.addEventListener('change', refresh);
     if (fmtSel) { fmtSel.addEventListener('change', function () { clearMsg(); refresh(); }); }
 

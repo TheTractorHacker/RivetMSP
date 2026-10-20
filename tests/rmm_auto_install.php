@@ -151,3 +151,32 @@ echo "\n--- CSRF ---\n";
 $hdr = fn (string $headers, string $name) => preg_match('/^' . preg_quote($name, '/') . ':\s*(.+?)\r?$/mi', $headers, $m) === 1 ? trim($m[1]) : '';
 [$c, , $hh] = $post(['ia_op' => 'set_auto', 'package_id' => $pid, 'scope' => 'off'], null, 'wrongtoken');
 $ok($c === 302 && stripos($hdr($hh, 'Location'), 'index.php') !== false, 'a wrong CSRF token is refused (validateCSRFToken\'s own redirect)');
+
+echo "\n--- the Add-device dialog's app checkboxes: ia_op=selectable (js/rmm_installer.js, js/rmm_add_device.js) ---\n";
+// Give the test app a parameter value and scope "all" so it is pre-ticked (auto) and NOT blocked, to prove the fragment actually reflects selectable()'s state.
+$post(['ia_op' => 'set_param', 'package_id' => $pid, 'name' => 'account_key', 'value' => 'k-123']);
+$post(['ia_op' => 'set_auto', 'package_id' => $pid, 'scope' => 'all', 'install_order' => '50', 'required' => '1']);
+$fetchHdr = ['X-Requested-With: fetch'];
+[$c, $b] = web($wb, 'POST', '/agent/post/rmm_auto_install.php', $sidA, ['csrf_token' => 'csrftok1', 'ia_op' => 'selectable', 'client_id' => '1', 'location_id' => '0', 'os' => 'windows'], $fetchHdr);
+$d = json_decode($b, true);
+$ok($c === 200 && $d['success'] === true && str_contains($d['html'], 'name="app_ids[]"') && str_contains($d['html'], 'Agent Test App') && str_contains($d['html'], ' checked'), 'the default field name is app_ids[], the app is pre-ticked, and its name is in the fragment');
+
+[$c, $b] = web($wb, 'POST', '/agent/post/rmm_auto_install.php', $sidA, ['csrf_token' => 'csrftok1', 'ia_op' => 'selectable', 'client_id' => '1', 'location_id' => '0', 'os' => 'windows', 'field' => 'app_ids_windows[]'], $fetchHdr);
+$d = json_decode($b, true);
+$ok($c === 200 && str_contains($d['html'], 'name="app_ids_windows[]"'), 'a requested field name of app_ids_windows[]/app_ids_linux[] (the full Add device page\'s two OS-scoped lists) is honored');
+
+[$c, $b] = web($wb, 'POST', '/agent/post/rmm_auto_install.php', $sidA, ['csrf_token' => 'csrftok1', 'ia_op' => 'selectable', 'client_id' => '1', 'location_id' => '0', 'os' => 'windows', 'field' => 'not_a_real_field[]'], $fetchHdr);
+$d = json_decode($b, true);
+$ok($c === 200 && str_contains($d['html'], 'name="app_ids[]"'), 'an unrecognized field name falls back to app_ids[], never reflected verbatim into the markup');
+
+[$c, $b] = web($wb, 'POST', '/agent/post/rmm_auto_install.php', $sidA, ['csrf_token' => 'csrftok1', 'ia_op' => 'selectable', 'client_id' => '0', 'location_id' => '0', 'os' => 'windows'], $fetchHdr);
+$d = json_decode($b, true);
+$ok($c === 200 && $d['success'] === true && $d['html'] === '', 'no client chosen yet: empty html, not an error');
+
+[$c, $b] = web($wb, 'POST', '/agent/post/rmm_auto_install.php', $sidA, ['csrf_token' => 'wrongtoken', 'ia_op' => 'selectable', 'client_id' => '1', 'location_id' => '0', 'os' => 'windows'], $fetchHdr);
+$d = json_decode($b, true);
+$ok($c === 403 && $d['success'] === false, 'a wrong CSRF token on the fetch endpoint answers JSON 403, never a redirect (the dialog stays open)');
+
+[$c, $b] = web($wb, 'POST', '/agent/post/rmm_auto_install.php', $sidV, ['csrf_token' => 'csrftok1', 'ia_op' => 'selectable', 'client_id' => '1', 'location_id' => '0', 'os' => 'windows'], $fetchHdr);
+$d = json_decode($b, true);
+$ok($c === 200 && $d['success'] === true, 'a view-only session still gets a 200 (software.view is enough to see the list; ticking is refused later at issue time, not here)');

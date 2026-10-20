@@ -1573,6 +1573,7 @@ function rivetRmmUiInstallerModal(array $ins, string $csrf): string
         . '<div class="form-text">Only used if this device enrolls a brand-new asset; an existing asset\'s type is never changed.</div></div>'
         . rivetRmmUiInstallerFormatField($ins['msi'] ?? ['amd64' => null, 'arm64' => null], $defaultArch)
         . rivetRmmUiInstallerMeshBox($ins['mesh'] ?? ['show' => false, 'ready' => false, 'refusal' => null, 'admin' => false])
+        . '<div class="col-12" id="rmm-inst-apps-wrap" hidden><label class="form-label mb-1">Apps to install with the agent</label><div id="rmm-inst-apps-list" data-rmm-apps-list aria-live="polite"></div></div>'
         . '</div>'
         . '<p class="mt-3 mb-2"><button type="button" class="btn btn-link p-0" data-bs-toggle="collapse" data-bs-target="#rmm-inst-adv" aria-expanded="false" aria-controls="rmm-inst-adv"><i class="fas fa-sliders-h me-1" aria-hidden="true"></i>Advanced</button></p>'
         . '<div class="collapse" id="rmm-inst-adv"><div class="row g-3 mb-2">'

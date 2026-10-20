@@ -59,8 +59,12 @@ function rivetRmmAutoInstallSelectableView(RmmModule $rmm, RmmPrincipal $who, in
     return rivetRmmAutoInstallResult($rmm->autoInstallActions()->selectable($who, $clientId, $locationId, $os));
 }
 
-/** The checkboxes' HTML for the installer dialog (client/location/os already chosen; re-rendered by JS when they change, see js/rmm_add_device.js). */
-function rivetRmmAutoInstallCheckboxes(array $apps): string
+/**
+ * The checkboxes' HTML for the installer dialog (client/location/os already chosen; re-rendered by JS when they change: js/rmm_installer.js for the
+ * Quick download dialog's single list, js/rmm_add_device.js for the full Add device page's two lists, one per OS - $name lets the two lists on that
+ * page post as separate fields (app_ids_windows[] / app_ids_linux[]) so ticking one OS's apps never sends the other OS's package ids.
+ */
+function rivetRmmAutoInstallCheckboxes(array $apps, string $name = 'app_ids[]'): string
 {
     $h = static fn ($v): string => nullable_htmlentities((string) $v);
     if ($apps === []) {
@@ -69,9 +73,9 @@ function rivetRmmAutoInstallCheckboxes(array $apps): string
     $o = '<div class="mb-2">';
     foreach ($apps as $a) {
         $blocked = (array) ($a['missing_params'] ?? []) !== [];
-        $id = 'ia-app-' . (int) $a['package_id'];
-        $o .= '<div class="form-check"><input class="form-check-input" type="checkbox" name="app_ids[]" value="' . (int) $a['package_id'] . '" id="' . $h($id) . '"' . (!empty($a['auto']) ? ' checked' : '') . ($blocked ? ' disabled' : '') . '>'
-            . '<label class="form-check-label" for="' . $h($id) . '">' . $h($a['name']) . ($a['publisher'] ? ' <span class="text-muted small">(' . $h($a['publisher']) . ')</span>' : '') . ($a['two_person'] ? ' <span class="badge bg-info text-dark">needs a second person</span>' : '')
+        $id = 'ia-app-' . preg_replace('/[^a-z0-9_]/i', '', $name) . '-' . (int) $a['package_id'];
+        $o .= '<div class="form-check"><input class="form-check-input" type="checkbox" name="' . $h($name) . '" value="' . (int) $a['package_id'] . '" id="' . $id . '"' . (!empty($a['auto']) ? ' checked' : '') . ($blocked ? ' disabled' : '') . '>'
+            . '<label class="form-check-label" for="' . $id . '">' . $h($a['name']) . ($a['publisher'] ? ' <span class="text-muted small">(' . $h($a['publisher']) . ')</span>' : '') . ($a['two_person'] ? ' <span class="badge bg-info text-dark">needs a second person</span>' : '')
             . ($blocked ? ' <span class="badge bg-warning text-dark">missing: ' . $h(implode(', ', $a['missing_params'])) . '</span>' : '') . '</label></div>';
     }
 

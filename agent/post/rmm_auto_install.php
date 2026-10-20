@@ -18,6 +18,38 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/rmm_auto_install_ui.php';
 
 mysqli_report(MYSQLI_REPORT_OFF);
 
+// JS-only: re-render the installer dialog's app checkboxes for a client/location/os as the technician changes them (js/rmm_installer.js, js/rmm_add_device.js).
+// Not a form submit, so it answers JSON and never redirects even when the token is wrong - the dialog is still open, and redirecting would just lose the
+// in-progress installer form. Nothing is decided or written here: agent/post/rmm_installer.php posts its own "app_ids[]" from whatever is checked when the
+// technician actually creates the installer.
+if (($_POST['ia_op'] ?? '') === 'selectable' && ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'fetch') {
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    if (!is_string($_POST['csrf_token'] ?? null) || !hash_equals((string) ($_SESSION['csrf_token'] ?? ''), (string) $_POST['csrf_token'])) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Your session token has expired. Reload the page and try again.']);
+        exit;
+    }
+    $ia_sel_rmm = rivetRmmModule();
+    $ia_sel_who = rivetRmmPrincipal((int) $session_user_id, (string) $session_name);
+    $ia_sel_cid = intval($_POST['client_id'] ?? 0);
+    $ia_sel_lid = intval($_POST['location_id'] ?? 0);
+    $ia_sel_os = (string) ($_POST['os'] ?? 'windows');
+    $ia_sel_name_raw = (string) ($_POST['field'] ?? 'app_ids[]');
+    $ia_sel_name = in_array($ia_sel_name_raw, ['app_ids[]', 'app_ids_windows[]', 'app_ids_linux[]'], true) ? $ia_sel_name_raw : 'app_ids[]';
+    if ($ia_sel_cid <= 0 || !in_array($ia_sel_os, ['windows', 'linux'], true)) {
+        echo json_encode(['success' => true, 'html' => '']);
+        exit;
+    }
+    $ia_sel_view = rivetRmmAutoInstallSelectableView($ia_sel_rmm, $ia_sel_who, $ia_sel_cid, $ia_sel_lid, $ia_sel_os);
+    if (!$ia_sel_view['ok'] || empty($ia_sel_view['data']['enabled'])) {
+        echo json_encode(['success' => true, 'html' => '']);   // not permitted, client not found, or the feature is off: show nothing, never an error banner
+        exit;
+    }
+    echo json_encode(['success' => true, 'html' => rivetRmmAutoInstallCheckboxes((array) ($ia_sel_view['data']['apps'] ?? []), $ia_sel_name)]);
+    exit;
+}
+
 if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
     // validateCSRFToken() itself redirects to index.php on failure and never returns false.
     exit;

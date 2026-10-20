@@ -20,9 +20,44 @@
     var msiBtn = form.querySelector('[data-add-format=msi]');
     var msiHelp = form.querySelector('[data-add-msi-help]');
     var busy = false;
+    var csrfField = form.querySelector('[name=csrf_token]');
+    var appsBoxes = {
+        windows: { wrap: document.getElementById('rmm-add-apps-windows-wrap'), list: document.getElementById('rmm-add-apps-windows'), field: 'app_ids_windows[]' },
+        linux: { wrap: document.getElementById('rmm-add-apps-linux-wrap'), list: document.getElementById('rmm-add-apps-linux'), field: 'app_ids_linux[]' }
+    };
+    var appsReq = { windows: 0, linux: 0 };
 
     function say(text, kind) { msg.className = 'alert alert-' + kind; msg.textContent = text; }
     function clearMsg() { msg.className = 'alert d-none'; msg.textContent = ''; }
+
+    // rc.27 install-apps-with-the-agent: one checkbox list per OS (this page builds a Windows installer and the Linux commands from the same client/location
+    // without switching tabs, unlike the Quick download dialog, so each OS keeps its own ticked set - app_ids_windows[] / app_ids_linux[], never mixed).
+    // Re-fetched from agent/post/rmm_auto_install.php whenever the client or location changes; nothing here decides anything.
+    function refreshApps(os) {
+        var box = appsBoxes[os];
+        if (!box.wrap || !box.list || !window.fetch) { return; }
+        var cid = clientSel.value;
+        if (!cid) { box.wrap.hidden = true; box.list.textContent = ''; return; }
+        var mine = ++appsReq[os];
+        var body = new URLSearchParams();
+        body.set('csrf_token', csrfField ? csrfField.value : '');
+        body.set('ia_op', 'selectable');
+        body.set('client_id', cid);
+        body.set('location_id', locSel.value || '0');
+        body.set('os', os);
+        body.set('field', box.field);
+        fetch('/agent/post/rmm_auto_install.php', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'fetch', 'Accept': 'application/json' },
+            body: body.toString()
+        }).then(function (res) { return res.ok ? res.json() : null; }).then(function (d) {
+            if (mine !== appsReq[os]) { return; }   // a newer request already landed; drop this stale one
+            var html = d && d.success ? (d.html || '') : '';
+            box.wrap.hidden = html === '';
+            box.list.innerHTML = html;   // server-rendered, escaped fragment from the same trusted endpoint that already builds the rest of this page
+        }).catch(function () { if (mine === appsReq[os]) { box.wrap.hidden = true; box.list.textContent = ''; } });
+    }
+    function refreshAllApps() { refreshApps('windows'); refreshApps('linux'); }
 
     function filterLocations() {
         var cid = clientSel.value, keep = false;
@@ -52,7 +87,8 @@
         [].forEach.call(form.querySelectorAll('[data-add=commands-windows]'), function (b) { b.disabled = busy || !serviceReady || !winReady || !hasWin; });
         [].forEach.call(form.querySelectorAll('[data-add=commands-linux]'), function (b) { b.disabled = busy || !serviceReady; });
     }
-    clientSel.addEventListener('change', function () { filterLocations(); clearMsg(); });
+    clientSel.addEventListener('change', function () { filterLocations(); clearMsg(); refreshAllApps(); });
+    locSel.addEventListener('change', refreshAllApps);
     archSel.addEventListener('change', function () { clearMsg(); refreshArch(); });
 
     function filenameOf(res, fallback) {
@@ -61,8 +97,14 @@
         return m ? decodeURIComponent(m[1]) : fallback;
     }
     function params(os, mode, format) {
-        var p = new URLSearchParams(new FormData(form));
+        var raw = new FormData(form);
+        var p = new URLSearchParams(raw);
         p.delete('format');
+        // Each OS ticks its own app list (app_ids_windows[] / app_ids_linux[]); send only the one that matches this request, renamed to what the
+        // server expects (app_ids[]), and never the other OS's ticked ids.
+        p.delete('app_ids_windows[]');
+        p.delete('app_ids_linux[]');
+        raw.getAll('app_ids_' + os + '[]').forEach(function (v) { p.append('app_ids[]', v); });
         p.set('os', os); p.set('mode', mode);
         if (os === 'windows') { p.set('format', format || 'exe'); }
         return p;
@@ -188,4 +230,5 @@
     });
     filterLocations();
     refreshArch();
+    refreshAllApps();
 }());

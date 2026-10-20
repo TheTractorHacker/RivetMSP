@@ -180,7 +180,9 @@ function rivetAgentAddDevicePage(array $ins, string $csrf, ?array $rec, bool $is
         . '<button type="submit" class="btn btn-outline-primary" name="format" value="msi" data-add="download" data-add-format="msi"' . ($msiReason !== '' || $blocked ? ' disabled' : '') . '><i class="fas fa-download me-1" aria-hidden="true"></i>Download .msi</button></div></div>'
         . '<div class="col-12"><div class="border rounded p-3"><div class="fw-bold">Deployment commands</div><p class="small text-muted mb-2">The PowerShell snippet for an RMM, Intune platform script or group policy startup script (it downloads the installer with the token), and for the MSI the <code>msiexec</code> commands.</p>'
         . '<button type="button" class="btn btn-outline-primary btn-sm" data-add="commands-windows"' . ($noWin || $blocked ? ' disabled' : '') . '><i class="fas fa-terminal me-1" aria-hidden="true"></i>Create PowerShell commands</button>'
-        . '<div id="add-win-out" class="mt-3" hidden></div></div></div></div></div></div>';
+        . '<div id="add-win-out" class="mt-3" hidden></div></div></div>'
+        . '<div class="col-12" id="rmm-add-apps-windows-wrap" hidden><div class="border rounded p-3"><div class="fw-bold mb-1">Apps to install with the agent</div><div id="rmm-add-apps-windows" data-rmm-apps-list aria-live="polite"></div></div></div>'
+        . '</div></div></div>';
 
     // Linux
     $o .= '<div class="card mb-3" id="add-linux"><div class="card-header"><h4 class="card-title mb-0"><i class="fab fa-linux me-2" aria-hidden="true"></i>3. Linux</h4></div><div class="card-body">';
@@ -201,7 +203,9 @@ function rivetAgentAddDevicePage(array $ins, string $csrf, ?array $rec, bool $is
         $files .= '</tbody></table></div>';
     }
     $o .= '<button type="button" class="btn btn-primary" data-add="commands-linux"' . ($blocked ? ' disabled' : '') . '><i class="fas fa-terminal me-1" aria-hidden="true"></i>Create install commands</button>'
-        . '<div id="add-linux-out" class="mt-3" hidden></div>' . $files . '</div></div>'
+        . '<div id="add-linux-out" class="mt-3" hidden></div>' . $files
+        . '<div class="border rounded p-3 mt-3" id="rmm-add-apps-linux-wrap" hidden><div class="fw-bold mb-1">Apps to install with the agent</div><div id="rmm-add-apps-linux" data-rmm-apps-list aria-live="polite"></div></div>'
+        . '</div></div>'
         . '<div id="rmm-add-msg" class="alert d-none" role="alert"></div></form>';
 
     return $o;
