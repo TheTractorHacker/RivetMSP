@@ -91,7 +91,7 @@ $q("INSERT INTO rmm_alert_ticket_routes SET match_type = 'severity', match_value
 $q("UPDATE settings SET config_current_database_version = '2.6.100'");
 shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1');
 $ok(version_compare((string) $one('SELECT config_current_database_version FROM settings LIMIT 1'), '2.6.101', '>=') && (int) $one('SELECT COUNT(*) FROM rmm_alert_ticket_routes') === 1, 're-running the step is harmless and keeps rows');
-$ok(str_contains((string) file_get_contents("$root/db.sql"), 'config_rmm_alert_ticket_category_id') && str_contains((string) file_get_contents("$root/db.sql"), 'CREATE TABLE `rmm_alert_ticket_routes`') && version_compare(LATEST_DATABASE_VERSION, '2.6.101', '>='), 'db.sql and LATEST_DATABASE_VERSION carry the change');
+$ok(str_contains((string) file_get_contents("$root/db.sql"), 'config_rmm_alert_ticket_category_id') && str_contains((string) file_get_contents("$root/db.sql"), 'CREATE TABLE `rmm_alert_ticket_routes`') && version_compare(trim((string) shell_exec('php -r ' . escapeshellarg('require "' . $root . '/includes/database_version.php"; echo LATEST_DATABASE_VERSION;'))), '2.6.101', '>='), 'db.sql and LATEST_DATABASE_VERSION carry the change');
 $q("DELETE FROM rmm_alert_ticket_routes");
 
 echo "\n--- createTicketFromRmmAlert ---\n";

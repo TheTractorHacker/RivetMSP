@@ -46,6 +46,10 @@ function rivetRmmAllowLinuxSetting(\mysqli $mysqli): bool
     if (isset($GLOBALS['config_rmm_allow_linux'])) {
         return (int) $GLOBALS['config_rmm_allow_linux'] === 1;
     }
+    $state = RmmStateFile::read(rivetRmmStateDir());
+    if ($state !== null && !$state['enabled']) {
+        return true;   // the module is off: nothing can enroll, and a module that is off asks the database nothing
+    }
     try {
         $res = mysqli_query($mysqli, 'SELECT config_rmm_allow_linux FROM settings WHERE company_id = 1');
         $row = $res ? mysqli_fetch_row($res) : null;
