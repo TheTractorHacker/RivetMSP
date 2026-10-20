@@ -46,7 +46,11 @@ function ea_reset(): void {
     global $q;
     foreach (['endpoint_agent_checkins', 'endpoint_agent_checks', 'endpoint_agent_jobs', 'endpoint_agent_mesh_nodes', 'endpoint_agent_releases', 'endpoint_agent_enroll_attempts',
               'endpoint_agent_enrollment_tokens', 'endpoint_agent_devices', 'asset_rmm_links', 'rmm_alerts', 'rmm_remote_sessions', 'ticket_replies', 'tickets', 'asset_interfaces',
-              'assets', 'api_tokens', 'logs', 'audit_events', 'user_client_permissions', 'user_role_permissions', 'modules', 'users', 'user_roles', 'rmm_scripts', 'clients'] as $t) { $q("DELETE FROM $t"); }
+              'assets', 'api_tokens', 'logs', 'audit_events', 'user_client_permissions', 'user_role_permissions', 'modules', 'users', 'user_roles', 'rmm_scripts', 'clients',
+              // Published Windows binaries and MSI templates outlive ea_reset() too (a test file that publishes one and relies on a "clean slate" had to DELETE these itself,
+              // e.g. tests/rmm_installer_ui.php before this fix): a test file that runs after one that published either sees stale rows a fresh scratch DB would never have
+              // (tests/rmm_mesh_wizard.php's "nothing published" checks failed this way when run right after tests/rmm_installer_ui.php in the same scratch database).
+              'endpoint_agent_binaries', 'endpoint_agent_msi_templates'] as $t) { $q("DELETE FROM $t"); }
     $q("DELETE FROM rmm_integrations");
     $q("DELETE FROM endpoint_agent_settings"); $q("INSERT INTO endpoint_agent_settings (id) VALUES (1)");
     $q("UPDATE settings SET config_ticket_prefix='T', config_ticket_next_number=1000, config_module_enable_rmm=1, config_core_rmm_enabled=0 WHERE company_id=1");

@@ -18,8 +18,7 @@ require_once "$root/includes/rmm_bootstrap.php";
 use RivetCore\Rmm\Authz\RmmPrincipal;
 
 register_shutdown_function(function () use ($sd) { foreach (glob("$sd/*") ?: [] as $f) { @unlink($f); } @rmdir($sd); });
-ea_reset();
-$q('DELETE FROM endpoint_agent_binaries');   // ea_reset() leaves published binaries; this test starts with none
+ea_reset();   // wipes endpoint_agent_binaries and endpoint_agent_msi_templates too: this test starts with none of either
 $tokens = ea_seed_users();
 $rmm = rivetRmmModule($db);
 $admin = new RmmPrincipal(1, 'admin');
