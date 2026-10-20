@@ -67,7 +67,7 @@ function rivetLocalBuildBox(array $lv, string $csrf): string
             $id = (int) $r['host_id'];
             $o .= '<tr data-lb-host="' . $id . '"><td>' . $h($r['host_name']) . ($r['last_version'] ? ' <span class="small text-muted">script ' . $h($r['last_version']) . '</span>' : '') . '</td>'
                 . '<td><span class="badge bg-' . $cls . '" data-lb-dot="' . $h($r['dot']) . '"><span class="visually-hidden">' . $h($label) . '</span><i class="fas fa-circle" aria-hidden="true"></i></span> <span class="small">' . $h($label) . '</span></td>'
-                . '<td class="small">' . ($r['seen_ago_s'] === null ? 'never' : $h(\RivetMsp\AgentFeed\Feed::ago((int) $r['seen_ago_s']))) . '</td><td class="small font-monospace">' . $h($r['last_ip'] ?? '') . '</td>'
+                . '<td class="small">' . ($r['seen_ago_s'] === null ? 'never' : $h(\RivetMsp\AgentFeed\Feed::ago((int) $r['seen_ago_s'])) . '<div class="text-muted" data-lb-seen-abs>' . $h(rivetRmmTime($r['last_seen_at'])) . '</div>') . '</td><td class="small font-monospace">' . $h($r['last_ip'] ?? '') . '</td>'
                 . '<td class="text-end text-nowrap"><form action="post.php" method="post" class="d-inline-flex gap-1"><input type="hidden" name="csrf_token" value="' . $h($csrf) . '"><input type="hidden" name="bh_id" value="' . $id . '">'
                 . ((int) $r['enabled'] === 1
                     ? '<button class="btn btn-xs btn-outline-secondary" name="agent_bh_disable" value="1" data-ea-confirm="Disable this build host? Its token is refused until you enable it again.">Disable</button>'
