@@ -132,6 +132,9 @@ This file documents all notable changes made to ITFlow.
 - **Fresh installs:** `db.sql` now carries the eight tables and the default rings (a fresh install never runs migration 0028).
 - **Not verified on a real machine:** the Windows install path of the agent (the Windows scan was run read only on one laptop); dnf, yum and zypper hosts. Start with a dry run on one pilot machine. See RivetCore's `docs/rmm/PATCHING.md`.
 - **Tests:** `tests/rmm_ui_p20_patching.php` (run by `tests/rmm_ui.php`: switched-off state, the access matrix for seven roles, IDOR against another client on every handler action, CSRF, open redirect, hostile titles, typed policy settings, rings, rules, two-person approval, the script-library fallback, a database without the migration), `tests/core/EndpointAccessPolicyConformanceTest.php` (the three abilities), `tests/wave1_integration.php` (the 2.6.96 step, `db.sql`, the rc.20 pin); `tests/rmm_ui.php` counts 29 `rmm.*` events.
+### Incoming (IMAP) and outgoing (SMTP) mail providers no longer change each other
+
+- The Settings > Mail "Connect Microsoft 365" flow belongs to the incoming (IMAP) card, but its callback set **both** `config_imap_provider` and `config_smtp_provider` to Microsoft 365. On a tenant with SMTP AUTH disabled that silently stopped all outgoing mail. The callback now sets the IMAP provider only. `tests/mail_provider_independence.php` fails if any settings update ever sets both providers together.
 
 ## [26.10.25] RivetMSP — RivetCore 1.0.0-rc.19: thresholds of policy checks, starter pack 1.0.1
 
