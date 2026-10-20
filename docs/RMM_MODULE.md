@@ -360,3 +360,37 @@ Tests: `tests/rmm_agent_localbuild.php` (progress and updater, 2.6.98 to 2.6.100
 * The "Service and defaults" form is `#ea_settings_form`; the check editor and the CA / coexistence fields are linked to it with `form=` and have their own Save (`save_agent_settings`).
 * Dots (`$eaDots` at the end of the page): service off / state mismatch / devices waiting; no agent published; Mesh not set up; no active token.
 * Tests: `node tests/browser/rmm_eatabs_smoke.mjs`; `tests/rmm_ui*.php` assert the cards by id.
+
+## 6o. Every time in the company's time zone (26.10.36, no DB change)
+
+No RMM, Endpoint agent or admin screen shows "UTC" for a timestamp any more. Every date and time is shown in the **company time zone** (Administration > Settings > Localization; the signed-in session's `session_timezone`; the server's PHP zone only as fallback), DST-correct, with the short zone label (`2026-07-04 10:42 CDT`, `... 09:42 CST` in winter). Column headings say just "Uploaded", "Expires", "Last check-in"; the label sits in each cell (or the tooltip of a relative time). Durations (elapsed, "5 min ago") are unchanged.
+
+**Code.** `includes/rivet_time.php` is the shared helper (the same file as in RivetIT: `rivetFormatTime($value, 'utc'|'local'|'epoch', $withZone, $format)`, `rivetTimeIso`, `rivetTimeEpoch`, `rivetTimeZoneLabel`). `includes/rmm_time.php` adds the RMM wrappers (`rivetRmmTime($v, $utc = true, ...)`, `rivetRmmTimeTag`, `rivetRmmTimeInput`, `rivetRmmTimeFromInput`). Output is plain text; the caller escapes. Null, empty, zero-date and invalid input give an empty marker.
+
+**The storage trap.** Two kinds of column reach these pages. RivetCore and every `endpoint_agent_*` table store **UTC** (`UTC_TIMESTAMP()`, `gmdate`, RFC 3339 `Z`, epoch): converted on output (`$utc = true`). The edition's own legacy tables are written with `NOW()` under the company zone (the web session and `cron/cron.php` both run `inc_set_timezone.php`): they are **already company time**, so they are only formatted and labelled (`$utc = false`), never converted a second time.
+
+| Page / fragment | Column | Storage | Output |
+|---|---|---|---|
+| Endpoint agent > Agent updates: agent binaries, MSI templates | `endpoint_agent_binaries.created_at`, `endpoint_agent_msi_templates.created_at` | UTC (Core `utcNow()`) | converted |
+| Agent updates: public releases list | `published_at` (GitHub, `Z`), `recorded_at` (`gmdate`) | UTC | converted |
+| Endpoint agent: enrollment tokens (expires, last used), new-token notice, failed attempts, signing key created | `endpoint_agent_enrollment_tokens.*`, `endpoint_agent_enroll_attempts.attempted_at`, settings | UTC | converted |
+| Endpoint agent: devices list (last check-in, first seen) | `endpoint_agent_devices.*` | UTC | converted |
+| Device page (`agent/rmm_agent_device.php`): check-in, collection, inventory, enrolled, checks reported, jobs created/finished | `endpoint_agent_*` | UTC | converted |
+| Build on my build host: job requested, host last seen | `endpoint_agent_build_jobs.created_at`, `endpoint_agent_build_hosts.last_seen_at` | UTC (`gmdate`) | converted; durations (elapsed, idle) unchanged |
+| Build a new version: token test time | session epoch | epoch | converted |
+| Scale cards: partition probe time, partition bounds, oldest waiting metric, rollup watermark, mesh certificate expiry, warm-start end | `rmm_storage_state`, `rmm_metric_outbox`, Core probe | UTC | converted (a rollup day starts at 00:00 UTC; the card states that moment in company time) |
+| RMM asset panel and fleet: last seen, checks, jobs, software, patches, remote tasks, "last boot" tooltip | Core read models | UTC | relative text; tooltip = company time |
+| Performance charts (hour axis and tooltip) | `rmm_metric_hourly` epoch | UTC | converted in the browser with `Intl` in the company zone passed by the server |
+| Logs (`rmm_logs.php`, asset Logs tab): entry times, filters From/To, range searched | `endpoint_agent_log_events.occurred_at` | UTC | converted; the custom range is typed in company time |
+| Alerting: alert opened/acknowledged/resolved/next notice, maintenance windows | Core alert tables | UTC | converted; the window form shows the company-time equivalent when the window's own zone differs |
+| Scripts, schedules, approvals, policies, software, patch | Core | UTC | converted (`rivetRmmAutoTime`, `rivetRmmUiTime`) |
+| Install-command validity (Create installer, Add device) | Core token `expires_at` | UTC | converted |
+| RMM dashboard, alerts list, asset RMM tab, script run, remote sessions, integrations sync log | `rmm_alerts`, `rmm_remote_sessions`, `rmm_script_runs`, `rmm_sync_log`, `asset_rmm_links.last_seen/last_sync` | company-local (`NOW()` / `date()`) | formatted + labelled, not converted |
+| Audit trail rows | `audit_events.created_at` | company-local (`DEFAULT current_timestamp()` under the web session zone) | formatted + labelled |
+| Audit trail "chain checked", Recovery panel "last sync" | `gmdate` / epoch | UTC | converted |
+
+**Deliberately still UTC.** (1) Cron expressions in a schedule (`*/15 * * * *`) are evaluated by Core in UTC; the form says so and the next-run column shows the company time. (2) Zone pickers list `UTC` as a zone name. These are allow-listed, with the reason, in `tests/rmm_time_utc_allow.txt`. CSV exports, the audit JSONL sink and API payloads keep their machine formats.
+
+**Known inconsistency (not changed here).** `src/Audit/AuditSink.php` labels `audit_events.created_at` as `Z`, but web-written rows are company-local when the company zone is not UTC. Fix separately if the SIEM export matters.
+
+**Tests.** `tests/rmm_time.php` (helper: zones, DST transitions in America/Chicago, UTC vs local, null/zero/invalid; lint that fails on a new hard-coded "(UTC)"/" UTC" label in these pages), `tests/rmm_time_pages.php` (the real pages with a non-UTC company zone, three zones, summer and winter).
