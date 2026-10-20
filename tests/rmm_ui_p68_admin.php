@@ -263,7 +263,7 @@ $ok(is_array($long) && count(array_filter($long, fn ($r) => $r['samples'] === 16
 $short = $reader->series($assetR, 'cpu.utilization', null, new \DateTimeImmutable('-5 days'), new \DateTimeImmutable('now'));
 $ok(count(array_filter($short, fn ($r) => $r['samples'] === 4)) >= 8 && !array_filter($short, fn ($r) => $r['samples'] === 16), 'a 5 day window is answered from the hourly rows');
 [, $body] = $pg();
-$ok(str_contains($body, 'Complete through') && !str_contains($body, 'Not run yet') && str_contains($body, 'Current'), 'the card shows the rollup watermark and "Current"');
+$ok(str_contains($body, 'Complete up to') && !str_contains($body, 'Not run yet') && str_contains($body, 'Current'), 'the card shows the rollup watermark and "Current"');
 $cr0 = $rmm->capacity()->build();
 $ok(($cr0['storage']['rollup_watermark'] ?? null) !== null && $cr0['storage']['rollup_behind_days'] <= 1, 'Core\'s capacity report agrees: watermark set, not behind');
 $html0 = rivetRmmUiFleetPage(rivetRmmUiFleet($db, 1, []), 'tok');

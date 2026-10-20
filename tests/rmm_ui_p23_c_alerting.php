@@ -92,7 +92,9 @@ $recId = (int) $one("SELECT window_id FROM rmm_maintenance_windows WHERE name='"
 $rec = $alrRows("SELECT * FROM rmm_maintenance_windows WHERE window_id=$recId")[0] ?? [];
 $ok($recId > 0 && $rec['recur_freq'] === 'weekly' && $rec['recur_days'] === '6' && $rec['local_start'] === '22:00' && (int) $rec['duration_min'] === 240 && $rec['scope_type'] === 'client', 'a repeating weekly window (Saturday 22:00, 4 h, Chicago) for a client written');
 $ok(rivetRmmAlrScheduleWords(['kind' => 'recurring', 'recur_freq' => 'weekly', 'recur_interval' => 1, 'recur_days' => '6', 'local_start' => '22:00', 'duration_min' => 240, 'timezone' => 'America/Chicago']) === 'Every Saturday 22:00, 4 h, America/Chicago', 'schedule in words (weekly)');
-$ok(rivetRmmAlrScheduleWords(['kind' => 'once', 'starts_at' => '2026-10-12T22:00:00Z', 'ends_at' => '2026-10-13T02:00:00Z']) === 'Once, 2026-10-12 22:00 to 2026-10-13 02:00 UTC', 'schedule in words (once)');
+$GLOBALS['config_timezone'] = 'America/Chicago';   // 26.10.36: times are shown in the company time zone
+$ok(rivetRmmAlrScheduleWords(['kind' => 'once', 'starts_at' => '2026-10-12T22:00:00Z', 'ends_at' => '2026-10-13T02:00:00Z']) === 'Once, 2026-10-12 17:00 CDT to 2026-10-12 21:00 CDT', 'schedule in words (once, company time)');
+unset($GLOBALS['config_timezone']);
 $ok(rivetRmmAlrScheduleWords(['kind' => 'recurring', 'recur_freq' => 'monthly', 'recur_interval' => 1, 'recur_days' => '1,15,last', 'local_start' => '03:30', 'duration_min' => 90, 'timezone' => 'UTC']) === 'On day 1, day 15, the last day of every month 03:30, 1 h 30 min, UTC', 'schedule in words (monthly)');
 
 // ---- value-reporting check opens an alert at the crit tier through the real check-in endpoint
