@@ -211,11 +211,8 @@ $sql_campaigns = mysqli_query($mysqli, "SELECT crm_campaigns.*, segment_name,
         // Strict-CSP-safe send confirmation (no inline onsubmit)
         var sendForm = document.getElementById('campaignSendForm');
         if (sendForm) {
-            sendForm.addEventListener('submit', function (e) {
-                if (!confirm('Send this campaign now? Recipients will be materialized and emails queued.')) {
-                    e.preventDefault();
-                }
-            });
+            // RivetDialog (js/rivet_dialog.js) asks before the form submits; Cancel stops it.
+            sendForm.setAttribute('data-confirm-submit', 'Send this campaign now? Recipients will be materialized and emails queued.');
         }
     });
 </script>

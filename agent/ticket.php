@@ -2379,7 +2379,7 @@ if (isset($_GET['ticket_id'])) {
                         if (d.success) {
                             window.location.reload();
                         } else {
-                            alert('Failed: ' + (d.error || 'Unknown error'));
+                            RivetDialog.alert('Failed: ' + (d.error || 'Unknown error'));
                         }
                     });
                 }
@@ -2606,9 +2606,8 @@ require_once "../includes/footer.php";
                       || (parseInt($('#seconds').val()) || 0) > 0;
         var laborType  = parseInt($('#reply_labor_type_id').val()) || 0;
         if (chargeNow && hasTime && laborType === 0) {
-            if (!confirm('No labor type selected — time will be logged but no charge will be created.\n\nContinue anyway?')) {
-                e.preventDefault();
-            }
+            // RivetDialog is asynchronous: gate() holds this submit, asks, and on Yes resubmits as the same button (once). Cancel leaves the form untouched.
+            RivetDialog.gate(e.originalEvent || e, this, 'No labor type selected — time will be logged but no charge will be created.\n\nContinue anyway?', { okText: 'Continue' });
         }
     });
     </script>

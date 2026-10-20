@@ -894,10 +894,10 @@ echo rivetEaRenderTabs($eaTabs, $eaDots, $h);
 <script src="/js/rmm_msi_admin.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/js/rmm_msi_admin.js') ?>" defer></script>
 <script nonce="<?= $h($csp_nonce ?? '') ?>">
 document.querySelectorAll('form[data-ea-confirm]').forEach(function (f) {
-    f.addEventListener('submit', function (e) { if (!confirm(f.getAttribute('data-ea-confirm'))) { e.preventDefault(); } });
+    f.setAttribute('data-confirm-submit', f.getAttribute('data-ea-confirm'));   // RivetDialog (js/rivet_dialog.js) asks before the form submits
 });
 document.querySelectorAll('button[data-ea-confirm]').forEach(function (b) {
-    b.addEventListener('click', function (e) { if (!confirm(b.getAttribute('data-ea-confirm'))) { e.preventDefault(); } });
+    b.setAttribute('data-rivet-confirm', b.getAttribute('data-ea-confirm'));   // RivetDialog asks before the click goes through
 });
 document.querySelectorAll('[data-ea-copy-value],[data-ea-copy-target]').forEach(function (b) {
     b.addEventListener('click', function () {

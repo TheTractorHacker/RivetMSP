@@ -263,6 +263,7 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
     <!-- Token seam: maps this app's --if-* / --color-* tokens onto Tabler's --tblr-*. -->
     <link rel="stylesheet" href="../css/itflow.bind-tabler.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow.bind-tabler.css') ?>">
 
+<script src="../js/rivet_dialog.js"></script>
 </head>
 
 <body class="d-flex flex-column">

@@ -263,7 +263,7 @@
       });
     });
 
-    list.addEventListener('click', function (e) {
+    list.addEventListener('click', async function (e) {
       var art = e.target.closest('[data-er-rule]');
       if (!art) return;
       var id = art.getAttribute('data-er-rule'), title = art.dataset.title;
@@ -280,7 +280,7 @@
           window.location = 'event_rules.php?done=copied&rule=' + r.id;
         });
       } else if ((btn = e.target.closest('[data-er-delete]'))) {
-        if (!window.confirm('Delete the rule "' + title + '"?\n\nIts past runs stay in the audit trail.')) return;
+        if (!(await RivetDialog.confirm('Delete the rule "' + title + '"?\n\nIts past runs stay in the audit trail.'))) return;
         btn.disabled = true;
         post('delete', { rule_id: id }).then(function (r) {
           btn.disabled = false;

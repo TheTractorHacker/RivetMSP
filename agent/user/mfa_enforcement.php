@@ -102,6 +102,7 @@ $data = "otpauth://totp/RivetMSP:$session_email?secret=$token";
     <script src="../../plugins/jquery/jquery.min.js"></script>
     <script src="../../plugins/toastr/toastr.min.js"></script>
 
+<script src="../../js/rivet_dialog.js"></script>
 </head>
 <body class="d-flex flex-column">
     <?php require_once "../../includes/inc_alert_feedback.php"; ?>

@@ -40,6 +40,8 @@ tests/browser/run.sh
 Exit status: `0` all checks passed, `1` a check failed, `2` usage or prerequisite problem. The run ends with a
 summary table (PASS / FAIL / SKIP counts).
 
+The RivetDialog smoke (`no_native_dialogs_smoke.mjs`, RivetMSP 26.10.35) is run on its own: `node tests/browser/no_native_dialogs_smoke.mjs` with the same variables. Native `alert/confirm/prompt` throw in it and any dialog event fails the check.
+
 ## What each check does
 
 Every check also fails on any **uncaught JavaScript error, `console.error`, failed or 4xx/5xx first-party request**

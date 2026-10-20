@@ -134,14 +134,8 @@ document.addEventListener('click', function (e) {
     pane.querySelectorAll('.' + el.dataset.targetClass).forEach(function (cb) { cb.checked = el.checked; });
 });
 
-// Plain native confirm() gate for delete links nested inside another modal,
-// where .confirm-link's own modal-on-modal stacking doesn't work.
-document.addEventListener('click', function (e) {
-    var el = e.target.closest ? e.target.closest('.js-confirm-native') : null;
-    if (el && !confirm(el.dataset.confirmMessage || 'Are you sure?')) {
-        e.preventDefault();
-    }
-});
+// .js-confirm-native (delete links nested inside another modal, where .confirm-link's own modal-on-modal stacking doesn't work)
+// is handled by the RivetDialog click delegate in js/rivet_dialog.js: a stacked confirm dialog, then the link continues.
 
 // Force-uppercase as-you-type (client abbreviation field, etc).
 document.addEventListener('input', function (e) {
@@ -510,7 +504,7 @@ function initTinyMCEEditors() {
                         var newContent = '<span style="font-weight: bold; color: red;">[REDACTED]</span>';
                         editor.selection.setContent(newContent);
                     } else {
-                        alert('Please select a word to redact');
+                        RivetDialog.alert('Please select a word to redact');
                     }
                 }
             });
@@ -687,7 +681,7 @@ function initTinyMCEEditors() {
                         var newContent = '<span style="font-weight: bold; color: red;">[REDACTED]</span>';
                         editor.selection.setContent(newContent);
                     } else {
-                        alert('Please select a word to redact');
+                        RivetDialog.alert('Please select a word to redact');
                     }
                 }
             });
@@ -832,7 +826,7 @@ function initTinyMCEEditors() {
                         var newContent = '<span style="font-weight: bold; color: red;">[REDACTED]</span>';
                         editor.selection.setContent(newContent);
                     } else {
-                        alert('Please select a word to redact');
+                        RivetDialog.alert('Please select a word to redact');
                     }
                 }
             });
@@ -1071,7 +1065,7 @@ function initPasswordToggles() {
 // Delegated replacements for inline on* handlers (the Content-Security-Policy has no 'unsafe-inline' for scripts, so
 // onclick="..." / onsubmit="..." attributes are blocked). Markup opts in with data attributes:
 //   data-focusout-call="fnName"       call window.fnName() when the field loses focus (duplicate-name / e-mail / domain checks)
-//   data-confirm-submit="Message"     ask before a form submits
+//   data-confirm-submit="Message"     ask before a form submits (RivetDialog; data-confirm-variant="danger" for a red button)
 //   data-share-modal='{"client_id":1,"item_type":"File","item_id":2}'   fill #shareModal (populateShareModal)
 //   data-history-back                 go back one page (replaces href="javascript:history.back()")
 //   data-file-delete='{"id":2,"name":"x.pdf"}'                           fill #deleteFileModal (populateFileDeleteModal)
@@ -1086,11 +1080,7 @@ if (!window.__cspDelegates) {
         if (typeof fn === 'function') { fn.call(el, e); }
     });
 
-    document.addEventListener('submit', function (e) {
-        var form = e.target;
-        var msg = form && form.getAttribute ? form.getAttribute('data-confirm-submit') : null;
-        if (msg && !window.confirm(msg)) { e.preventDefault(); }
-    }, true);
+    // data-confirm-submit forms are handled by the RivetDialog submit delegate (js/rivet_dialog.js).
 
     document.addEventListener('click', function (e) {
         if (!e.target || !e.target.closest) { return; }

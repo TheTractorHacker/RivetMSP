@@ -1,4 +1,5 @@
 <script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">window.csrfToken = <?= json_encode($_SESSION['csrf_token'] ?? '') ?>;</script>
+<script src="/js/rivet_dialog.js"></script>
 <script src="/js/app.js"></script>
 <script src="/plugins/Show-Hide-Passwords-Bootstrap-4/bootstrap-show-password.min.js"></script>
 

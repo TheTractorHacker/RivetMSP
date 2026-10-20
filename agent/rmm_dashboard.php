@@ -833,12 +833,12 @@ function dashAlertAck(id, btn) {
             const row = document.getElementById('dash-alert-' + id);
             if (row) row.style.opacity = '0.35';
             btn.innerHTML = '<i class="fas fa-check"></i>';
-        } else { alert(d.error || 'Failed'); btn.disabled = false; }
+        } else { RivetDialog.alert(d.error || 'Failed'); btn.disabled = false; }
     });
 }
 
-function dashAlertTicket(id, btn) {
-    if (!confirm('Create a support ticket from this alert?')) return;
+async function dashAlertTicket(id, btn) {
+    if (!(await RivetDialog.confirm('Create a support ticket from this alert?'))) return;
     btn.disabled = true;
     fetch('/agent/post/rmm_alert.php', {
         method: 'POST',
@@ -846,12 +846,12 @@ function dashAlertTicket(id, btn) {
         body: 'csrf_token=' + CSRF + '&action=create_ticket&alert_id=' + id
     }).then(r => r.json()).then(d => {
         if (d.success && d.redirect) { window.location.href = d.redirect; }
-        else { alert(d.error || 'Failed'); btn.disabled = false; }
+        else { RivetDialog.alert(d.error || 'Failed'); btn.disabled = false; }
     });
 }
 
-function ackAllNew(btn) {
-    if (!confirm('Acknowledge all new alerts?')) return;
+async function ackAllNew(btn) {
+    if (!(await RivetDialog.confirm('Acknowledge all new alerts?'))) return;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Acking...';
     document.querySelectorAll('[id^="dash-alert-"]').forEach(row => {

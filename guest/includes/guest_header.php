@@ -127,6 +127,7 @@
 
     <!-- Scripts: jQuery kept as a coexistence shim; toastr for alert feedback -->
     <script src="/plugins/jquery/jquery.min.js"></script>
+    <script src="/js/rivet_dialog.js"></script>
     <script src="/plugins/toastr/toastr.min.js"></script>
     <!-- Toast options - see includes/header.php for the full rationale (motion-layer
          entrance fights toastr's default fadeIn unless show is handed to CSS). -->
