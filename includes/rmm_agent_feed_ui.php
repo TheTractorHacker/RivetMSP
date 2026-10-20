@@ -35,8 +35,8 @@ function rivetAgentFeedCard(array $vm, ?array $msg, array $steps, string $csrf, 
         . '<form action="post.php" method="post" class="d-inline"><input type="hidden" name="csrf_token" value="' . $h($csrf) . '">'
         . '<button type="submit" class="btn btn-sm btn-outline-primary" name="agent_feed_refresh" value="1"><i class="fas fa-sync me-1" aria-hidden="true"></i>Check for updates</button></form></div></div><div class="card-body">';
     $o .= '<p class="small text-muted">Releases of the public repository <a href="https://github.com/' . $h($vm['repo']) . '/releases" rel="noopener noreferrer" target="_blank">' . $h($vm['repo']) . '</a> whose tag starts with <code>agent-v</code>. '
-        . '<strong>Publish</strong> downloads the Windows agent (x64 and ARM64) and the MSI template, checks each file against the release\'s own <code>SHA256SUMS</code> BEFORE storing it, and stores it exactly as an upload would '
-        . '(same checks, same audit). The Linux files (install script, tarballs, .deb, .rpm) are not copied here: they are recorded as links with their SHA-256, and the <a href="/agent/rmm_add_device.php">Build installer</a> page uses them. '
+        . '<strong>Publish</strong> downloads the Windows agent (x64 and ARM64), the MSI template, <code>install-linux.sh</code> and the Linux agent (x64 and ARM64), checking each file against the release\'s own <code>SHA256SUMS</code> BEFORE storing it, and stores it exactly as an upload would '
+        . '(same checks, same audit): the Linux files are hosted on this server too, so the Add device page can hand out a one-command Linux install with nothing to unpack. A <code>.deb</code> or <code>.rpm</code> in the release is not hosted; every Linux file, hosted or not, is also recorded as a link with its SHA-256 for the <a href="/agent/rmm_add_device.php">Build installer</a> page\'s fallback commands. '
         . 'Only <code>github.com</code> and GitHub\'s release download hosts are ever contacted.</p>';
     if (isset($ctx['build'])) {
         $o .= rivetAgentBuildBox($ctx['build'], $csrf, $ctx['local'] ?? null);

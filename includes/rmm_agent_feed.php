@@ -9,8 +9,10 @@
  *     SHA256SUMS / SHA256SUMS.msi, and only then hands the verified file to the code that already exists for the upload form and scripts/endpoint_agent_publish.php:
  *     RmmAdmin::uploadBinary() (BinaryStore::publish: PE/architecture check, size cap, immutability, optional release row) and RmmAdmin::uploadMsiTemplate()
  *     (BinaryStore::publishMsi). Those do the authorization and the audit rows; nothing here writes the binary tables.
- *   - Linux assets (install-linux.sh, the tarballs, .deb, .rpm) are NOT hosted here (BinaryStore refuses an ELF on purpose). They are RECORDED as links to the release,
- *     with the SHA-256 the release publishes, so the "Build installer" page can hand out a self-verifying Linux script and package links.
+ *   - Linux files this server can host (install-linux.sh, the agent binaries, the tarballs) go through LinuxStore::store() (rmm_linux_store.php) the same way:
+ *     downloaded and SHA-256-checked against the release's own checksum list before anything is stored, then validated again (ELF/script/gzip, right CPU) and
+ *     stored outside the web root. .deb/.rpm are never hosted (BinaryStore/LinuxStore refuse what they do not recognise on purpose); every Linux kind, hosted
+ *     or not, is ALSO still RECORDED as a link to the release with the SHA-256 it publishes, so the "Build installer" page always has a fallback command.
  *
  * SSRF: the only hosts ever contacted are GitHub's (api.github.com, github.com and the release-asset CDN hosts), over https on port 443, with no credentials in the URL
  * and no redirect to anywhere else. A host must resolve to public addresses only (the connection is pinned to the checked address). Every download has a size cap
@@ -20,6 +22,8 @@
  */
 
 namespace RivetMsp\AgentFeed;
+
+require_once __DIR__ . '/rmm_linux_store.php';
 
 /** A small, SSRF-safe https client for the GitHub release feed. */
 final class FeedHttp
@@ -789,7 +793,59 @@ final class Feed
         }
         $cleanup();
 
-        // (4) the Linux links (only when every Windows step above went through: a release that failed half way does not become "the newest recorded release")
+        // (3b) the Linux files this server CAN host (install-linux.sh, the agent binaries, the tarballs): downloaded and SHA-256-checked against the release's own
+        // checksum list before anything is stored, through LinuxStore::store() (which validates the file itself too: ELF/script/gzip, right CPU). .deb/.rpm are
+        // never hosted. Unlike the Windows files above, a problem HOSTING a Linux file is never fatal to the release and never counts against $problems (the
+        // "every Windows step went through" gate that decides whether this becomes "the newest recorded release"): it only means that one file falls back to
+        // being a link only (step 4 below still records every Linux kind, hosted or not, as a link, exactly as before this feature existed). Only attempted
+        // while every Windows step above went through — a release that failed half way does not get Linux files hosted either.
+        $lxStored = 0;
+        $lxSkipped = 0;
+        if ($problems === 0) {
+            foreach ($item['assets'] as $a) {
+                if (!in_array($a['kind'], ['script', 'binary', 'tarball'], true) || LinuxStore::parseName($a['name']) === null) {
+                    continue;
+                }
+                $lxName = $a['name'];
+                $lxSha = $sums[$lxName] ?? '';
+                if ($lxSha === '') {
+                    $steps[] = ['label' => $lxName, 'state' => 'skipped', 'detail' => 'not listed in the release checksums; recorded as a link only'];
+                    $lxSkipped++;
+                    continue;
+                }
+                if ($a['digest'] !== '' && $a['digest'] !== $lxSha) {
+                    $steps[] = ['label' => $lxName, 'state' => 'skipped', 'detail' => 'GitHub\'s own digest disagrees with the checksum list; recorded as a link only'];
+                    $lxSkipped++;
+                    continue;
+                }
+                $file = tempnam(sys_get_temp_dir(), 'rvfeed');
+                if ($file === false) {
+                    $steps[] = ['label' => $lxName, 'state' => 'skipped', 'detail' => 'could not create a temporary file; recorded as a link only'];
+                    $lxSkipped++;
+                    continue;
+                }
+                @chmod($file, 0600);
+                $r = $this->http->get($this->downloadUrl($tag, $lxName), max((int) $opts['max_bytes'], LinuxStore::SCRIPT_MAX), 180, [], $file);
+                if (!$r['ok']) {
+                    @unlink($file);
+                    $steps[] = ['label' => $lxName, 'state' => 'skipped', 'detail' => $r['error'] . '; recorded as a link only'];
+                    $lxSkipped++;
+                    continue;
+                }
+                $lr = LinuxStore::store($this->db, $file, $lxName, $version, (int) $who->userId, [
+                    'activate' => !empty($opts['activate']), 'ring' => $ring === '' ? null : $ring, 'pct' => max(0, min(100, (int) $opts['pct'])),
+                    'source' => 'github', 'expected_sha256' => $lxSha, 'notes' => 'Published from ' . $tag,
+                ]);
+                @unlink($file);
+                $steps[] = ['label' => "host $lxName", 'state' => $lr['ok'] ? 'ok' : 'skipped', 'detail' => $lr['ok'] ? ('hosted' . ($lr['current'] ? ', now current' : '')) : ((string) $lr['error'] . '; recorded as a link only')];
+                $lr['ok'] ? $lxStored++ : $lxSkipped++;
+            }
+        }
+        $stored += $lxStored;   // counts toward "Nothing was stored" below; a release with only Linux files hosted (an unusual release with no Windows assets) still counts as published
+
+        // (4) the Linux links (only when every Windows step above went through: a release that failed half way does not become "the newest recorded release".
+        // A Linux file that could not be HOSTED — invalid bytes, no checksum, a digest mismatch — is not a "problem" here: it just falls back to being a link,
+        // exactly as it always did before hosting existed, so it is still recorded below.)
         $linux = [];
         foreach ($problems > 0 ? [] : $item['assets'] as $a) {
             if (!in_array($a['kind'], ['script', 'tarball', 'binary', 'deb', 'rpm'], true)) {

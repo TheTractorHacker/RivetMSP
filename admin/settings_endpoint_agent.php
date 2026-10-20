@@ -722,6 +722,12 @@ if ($feed->ready()) {
     </div>
 </div>
 
+<?php
+$eaTab('updates');
+require_once dirname(__DIR__) . '/includes/rmm_linux_store_ui.php';
+echo rivetAgentLinuxFilesCard($mysqli, (string) $csrf);
+?>
+
 <?php $eaTab('updates'); ?>
 <div class="card mb-3" id="deployment">
     <div class="card-header"><h4 class="card-title mb-0">Deployment: per-client installer</h4></div>

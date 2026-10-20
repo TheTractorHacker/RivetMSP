@@ -24,6 +24,8 @@ declare(strict_types=1);
 
 namespace RivetMsp\AgentFeed;
 
+require_once __DIR__ . '/rmm_agent_feed.php';
+
 final class LinuxStore
 {
     public const VERSION_RE = '/^\d{1,5}\.\d{1,5}\.\d{1,5}(?:-[0-9A-Za-z][0-9A-Za-z.-]{0,19})?\z/';

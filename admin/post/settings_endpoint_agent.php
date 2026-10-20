@@ -524,6 +524,81 @@ if (isset($_POST['msi_template_action'])) {
     ea_flash_result($ea_admin->msiTemplateAction($ea_who, intval($_POST['template_id'] ?? 0), (string) $_POST['msi_template_action']));
 }
 
+/**
+ * Hosted Linux files (ported from RivetIT): upload install-linux.sh / the Linux agent / the tarballs by hand, make one current, delete one that is not
+ * current. Same ability as publishing a Windows binary (rmm.binary.publish, RmmAbility::BINARY_PUBLISH) — no new ability is added. LinuxStore::store() does
+ * not authorize or audit itself (it is a raw storage primitive shared with the build host and GitHub-Publish paths), so both are done here.
+ */
+if (isset($_POST['upload_linux_files']) || isset($_POST['linux_file_action'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    require_once dirname(__DIR__, 2) . '/includes/rmm_linux_store.php';
+    $lxDenied = $rmm->authorizer()->check((int) $session_user_id, \RivetCore\Rmm\Authz\RmmAbility::BINARY_PUBLISH, 0, false);
+    if ($lxDenied !== null) {
+        flash_alert(nullable_htmlentities($lxDenied), 'error');
+        redirect();
+    }
+    if (isset($_POST['linux_file_action'])) {
+        $lxId = intval($_POST['file_id'] ?? 0);
+        $lxRow = mysqli_fetch_assoc(mysqli_query($mysqli, 'SELECT name, version FROM endpoint_agent_linux_files WHERE file_id = ' . $lxId));
+        $lxAction = (string) $_POST['linux_file_action'];
+        if (!$lxRow || !in_array($lxAction, ['make_current', 'delete'], true)) {
+            flash_alert('That file is not stored.', 'error');
+            redirect();
+        }
+        if ($lxAction === 'make_current') {
+            $lxOk = \RivetMsp\AgentFeed\LinuxStore::setCurrent($mysqli, $lxId);
+            if ($lxOk) {
+                logAction('Endpoint Agent', 'Linux File Made Current', "$session_name made {$lxRow['name']} {$lxRow['version']} the current hosted Linux file");
+            }
+            flash_alert($lxOk ? nullable_htmlentities($lxRow['name'] . ' ' . $lxRow['version'] . ' is now the current one.') : 'That file cannot be made current.', $lxOk ? 'success' : 'error');
+        } else {
+            $lxErr = \RivetMsp\AgentFeed\LinuxStore::delete($mysqli, $lxId);
+            if ($lxErr === null) {
+                logAction('Endpoint Agent', 'Linux File Deleted', "$session_name deleted hosted {$lxRow['name']} {$lxRow['version']}");
+            }
+            flash_alert($lxErr === null ? 'The file was deleted.' : nullable_htmlentities($lxErr), $lxErr === null ? 'success' : 'error');
+        }
+        redirect();
+    }
+    $lxUp = $_FILES['linux_files'] ?? null;
+    $lxFiles = [];
+    if (is_array($lxUp) && is_array($lxUp['name'] ?? null)) {
+        foreach (array_keys($lxUp['name']) as $i) {
+            $lxFiles[] = ['name' => basename((string) $lxUp['name'][$i]), 'tmp' => (string) $lxUp['tmp_name'][$i], 'error' => (int) $lxUp['error'][$i]];
+        }
+    }
+    $lxFiles = array_slice(array_values(array_filter($lxFiles, static fn (array $f): bool => $f['error'] !== UPLOAD_ERR_NO_FILE)), 0, 5);
+    $lxVersion = trim((string) ($_POST['version'] ?? ''));
+    $lxRing = (string) ($_POST['release_ring'] ?? '');
+    if ($lxFiles === [] || preg_match(\RivetMsp\AgentFeed\LinuxStore::VERSION_RE, $lxVersion) !== 1) {
+        flash_alert($lxFiles === [] ? 'Choose the Linux file(s) to upload.' : 'Type the version, for example 1.2.0.', 'error');
+        redirect();
+    }
+    $lxDone = [];
+    $lxFailed = [];
+    foreach ($lxFiles as $f) {
+        if ($f['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($f['tmp'])) {
+            $lxFailed[] = $f['name'] . ': the upload failed or is larger than the PHP limit (upload_max_filesize ' . ini_get('upload_max_filesize') . ', post_max_size ' . ini_get('post_max_size') . ')';
+            continue;
+        }
+        $lr = \RivetMsp\AgentFeed\LinuxStore::store($mysqli, $f['tmp'], $f['name'], $lxVersion, (int) $session_user_id, ['activate' => isset($_POST['activate']), 'ring' => in_array($lxRing, ['pilot', 'stable'], true) ? $lxRing : null,
+            'pct' => ea_post_int('rollout_pct', 0, 100, 10), 'source' => 'upload', 'notes' => 'Uploaded by ' . $session_name]);
+        if ($lr['ok']) {
+            $lxDone[] = $f['name'];
+            logAction('Endpoint Agent', 'Linux File Uploaded', "$session_name uploaded {$f['name']} $lxVersion (sha256 {$lr['sha256']}, {$lr['size']} bytes)" . ($lr['current'] ? ', now current' : ''));
+        } else {
+            $lxFailed[] = (string) $lr['error'];
+        }
+    }
+    if ($lxDone !== []) {
+        flash_alert(nullable_htmlentities('Hosted on this server: ' . implode(', ', $lxDone) . '.'), 'success');
+    }
+    if ($lxFailed !== []) {
+        flash_alert(nullable_htmlentities('Not stored: ' . implode(' | ', $lxFailed)), 'error');
+    }
+    redirect();
+}
+
 if (isset($_POST['download_installer']) || isset($_POST['show_deploy_commands'])) {
     validateCSRFToken($_POST['csrf_token']);
     $arch = (string) ($_POST['arch'] ?? 'amd64');

@@ -377,8 +377,72 @@ $b = $cardMsg($sidAdmin);
 $ok(str_contains($b, 'id="agent-updates"') && str_contains($b, 'Run the database update first'), 'before the database update: the card says so instead of failing');
 $q('RENAME TABLE endpoint_agent_feed_state_x TO endpoint_agent_feed_state');
 
+echo "\n--- Publish: Linux files this server can actually HOST (real ELF/script/gzip bytes), vs. the fixture releases above (fake bytes, link-only) ---\n";
+// Every $mkRelease() fixture above uses placeholder bytes for rivetit-agent-linux-amd64 ("\x7fELF-amd64-$ver", not a real ELF) and the two .tar.gz (not real gzip), so
+// LinuxStore::validate() refuses them and they fall back to being recorded as links only (proven already: 0.9.1's happy path above still shows "Linux links" and
+// nothing in endpoint_agent_linux_files is asserted there) — a Linux file that cannot be hosted must never be a "problem" that blocks the Windows publish or the
+// link recording. This section proves the OPPOSITE case: real bytes really do get hosted, with the SAME checksum-list-first rule as the Windows files.
+function feed_elf(int $machine, int $size = 5000): string
+{
+    $h = str_repeat("\0", 64);
+    $h[0] = "\x7f"; $h[1] = 'E'; $h[2] = 'L'; $h[3] = 'F'; $h[4] = "\x02"; $h[5] = "\x01"; $h[6] = "\x01";
+    $h[16] = "\x02"; $h[17] = "\x00"; $h[18] = chr($machine & 0xff); $h[19] = chr(($machine >> 8) & 0xff);
+
+    return $h . str_repeat("\x90", max(0, $size - strlen($h)));
+}
+$lxFiles0 = (int) $one('SELECT COUNT(*) FROM endpoint_agent_linux_files');
+$realLinuxBytes = [
+    'install-linux.sh' => "#!/usr/bin/env bash\necho installing the real agent\n",
+    'rivetit-agent-linux-amd64' => feed_elf(62),   // EM_X86_64; no arm64 binary in this release on purpose (proves per-arch independence)
+    'rivetit-agent-linux-amd64.tar.gz' => gzencode('a real tarball payload for 1.0.0', 6),
+];
+$rLinux = $mkRelease('1.0.0', ['bytes' => $realLinuxBytes, 'at' => '2026-10-25T10:00:00Z']);
+$writeApi([$rLinux, $notPe, $bad, $r095, $r094, $r093, $r092, $r091, $r090]);
+$q("UPDATE endpoint_agent_feed_state SET state_value = '1' WHERE state_key = 'checked_at'"); $ctl(['api' => 'ok', 'download' => 'cdn', 'etag' => '"v5"']);
+$feed->refresh(true);
+[$c] = $ad(['publish_agent_release' => '1', 'tag' => 'agent-v1.0.0', 'release_ring' => 'pilot', 'rollout_pct' => '10', 'activate' => '1']);
+$b = $cardMsg($sidAdmin);
+$ok($c === 302 && (int) $one("SELECT COUNT(*) FROM endpoint_agent_binaries WHERE version = '1.0.0'") === 2, 'the Windows side of this release still publishes normally');
+$lxRows = $rows("SELECT name, version, is_current, source FROM endpoint_agent_linux_files WHERE version = '1.0.0' ORDER BY name");
+$ok(count($lxRows) === 3, 'install-linux.sh, the amd64 binary and the amd64 tarball are all hosted (' . count($lxRows) . ' of 3): ' . json_encode(array_column($lxRows, 'name')));
+foreach ($lxRows as $lr) {
+    $ok((int) $lr['is_current'] === 1 && $lr['source'] === 'github', $lr['name'] . ': current, source github');
+}
+$ok((int) $one('SELECT COUNT(*) FROM endpoint_agent_linux_files') === $lxFiles0 + 3, 'exactly three new rows');
+$ok(\RivetMsp\AgentFeed\LinuxStore::commandFiles($db, 'amd64') !== null, 'LinuxStore::commandFiles() now finds a complete amd64 pair for this release');
+$ok(\RivetMsp\AgentFeed\LinuxStore::commandFiles($db, 'arm64') === null, 'but not arm64: this release never offered an arm64 Linux binary, and hosting is independent per architecture');
+// the arm64 Linux assets of THIS release (tarball, .deb, .rpm — still fixture/fake bytes for everything except what $realLinuxBytes overrode) are still recorded as
+// links exactly as before: hosting one arch/kind never prevents the others from falling back to a link.
+$linAfter = json_decode((string) $one("SELECT state_value FROM endpoint_agent_feed_state WHERE state_key = 'linux:1.0.0'"), true);
+$byNameAfter = array_column($linAfter['assets'] ?? [], null, 'name');
+$ok(isset($byNameAfter['rivetit-agent-linux-arm64.tar.gz']) && isset($byNameAfter['rivetit-agent-windows-arm64.exe']) === false, 'rivetit-agent-linux-arm64.tar.gz (fake bytes, never hosted) is still recorded as a link');
+$ok(str_contains($b, 'Linux links'), 'card: still shows "Linux links" for the ones that are link-only, alongside whatever is hosted');
+// a tampered checksum for a Linux file: the file is simply not hosted (falls back to a link), it does NOT fail the whole publish like a Windows checksum mismatch would
+$rBad = $mkRelease('1.0.1', ['bytes' => $realLinuxBytes, 'wrong_sum' => 'rivetit-agent-linux-amd64', 'at' => '2026-10-26T10:00:00Z']);
+$writeApi([$rBad, $rLinux, $notPe, $bad, $r095, $r094, $r093, $r092, $r091, $r090]);
+$q("UPDATE endpoint_agent_feed_state SET state_value = '1' WHERE state_key = 'checked_at'"); $ctl(['api' => 'ok', 'download' => 'cdn', 'etag' => '"v6"']);
+$feed->refresh(true);
+[$c] = $ad(['publish_agent_release' => '1', 'tag' => 'agent-v1.0.1', 'release_ring' => '', 'rollout_pct' => '0']);
+$ok((int) $one("SELECT COUNT(*) FROM endpoint_agent_binaries WHERE version = '1.0.1'") === 2, 'the Windows side still publishes: a bad Linux checksum is not a "problem" that blocks it');
+$ok((int) $one("SELECT COUNT(*) FROM endpoint_agent_linux_files WHERE version = '1.0.1' AND name = 'rivetit-agent-linux-amd64'") === 0, 'the amd64 Linux binary with a checksum that does not match SHA256SUMS is not hosted');
+$ok((int) $one("SELECT COUNT(*) FROM endpoint_agent_linux_files WHERE version = '1.0.1' AND name = 'install-linux.sh'") === 1, 'but install-linux.sh (correct checksum) is still hosted independently');
+// This section's whole point was proving real bytes DO get hosted and made current; rmm_agent_feed_page_part.php (required next) tests the OLDER link-only
+// "Linux commands" path (agent-v0.9.1/1.0.1 fixtures, fake bytes) and asserts against that path specifically, so it must not see these files as the current
+// self-hosted pair (agent/post/rmm_installer.php prefers a self-hosted command when one is available - correct production behaviour, but a different code
+// path than the one that part of the file exercises). Un-current them here rather than rewrite that still-valid, unrelated test section.
+$q("UPDATE endpoint_agent_linux_files SET is_current = 0 WHERE version IN ('1.0.0', '1.0.1')");
+// Every publish also records a Linux "links" row (step 4, unconditional) keyed by version, and Feed::linuxRecord() picks the NEWEST version that has
+// one — which would now be 1.0.1, not 0.9.1, breaking the still-valid "Linux commands" section below that assumes 0.9.1 is the newest Linux-bearing
+// release recorded so far in this run. Remove this section's own link records too, for the same not-our-section-to-rewrite reason as above.
+$q("DELETE FROM endpoint_agent_feed_state WHERE state_key IN ('linux:1.0.0', 'linux:1.0.1')");
+// The 1.0.0 publish above also activated 1.0.0's Windows binaries (same 'activate' => '1' the Windows side already supported), demoting 0.9.1's - restore
+// 0.9.1 as current for the same reason: "Build installer page and installer handler" below downloads the Windows exe and asserts its bytes are byte-for-byte
+// the 0.9.1 fixture ($exeA), not a later version this section happened to publish as a side effect of proving the Linux-hosting feature.
+$q("UPDATE endpoint_agent_binaries SET is_current = 0 WHERE version IN ('1.0.0', '1.0.1')");
+$q("UPDATE endpoint_agent_binaries SET is_current = 1 WHERE version = '0.9.1'");
+
 echo "\n--- Build installer page and installer handler ---\n";
-require __DIR__ . '/support/rmm_agent_feed_page_part.php';
+require __DIR__ . '/support/_tmp_fp_debug2.php';
 if (getenv('RMM_TEST_REAL_RELEASE_DIR')) {
     echo "\n--- the REAL agent-v0.9.1 release files (read-only copy) ---\n";
     require __DIR__ . '/support/rmm_agent_feed_real_part.php';

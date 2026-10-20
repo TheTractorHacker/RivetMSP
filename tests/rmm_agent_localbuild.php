@@ -320,7 +320,8 @@ $up = fn(array $x, string $tok = null) => bh('upload', $x + ['job_id' => $J1], $
 $c0 = base64_encode('hello'); $h0 = hash('sha256', 'hello');
 $base = ['name' => 'SHA256SUMS', 'index' => 0, 'total' => 1, 'sha256_chunk' => $h0, 'data_b64' => $c0];
 $ok($up($base + [])[0] === 200, 'a valid small chunk is stored');
-foreach (['evil.exe', '../SHA256SUMS', 'SHA256SUMS ', 'sha256sums', 'rivetit-agent-windows-amd64.dll', '/etc/passwd', "SHA256SUMS\0", 'rivetit-agent-linux-amd64', ''] as $bad) {
+// rivetit-agent-linux-amd64 is now an ACCEPTED name (LocalBuild::LINUX_FILES, additive): the hosted Linux agent files a newer build host also sends. These are not.
+foreach (['evil.exe', '../SHA256SUMS', 'SHA256SUMS ', 'sha256sums', 'rivetit-agent-windows-amd64.dll', '/etc/passwd', "SHA256SUMS\0", 'rivetit-agent-linux-mips64', ''] as $bad) {
     $x = $up(['name' => $bad] + $base); $ok($x[0] === 422 && $x[1]['code'] === 'bad_name', 'name outside the list refused: ' . json_encode($bad));
 }
 $ok($up(['name' => ['SHA256SUMS']] + $base)[0] === 422, 'an array name is refused');
@@ -465,6 +466,70 @@ $ad(['agent_bh_publish' => '1', 'bh_job' => (string) $JM2]);
 $ok($state($JM2) === 'published' && (int) $one("SELECT COUNT(*) FROM endpoint_agent_binaries WHERE version='9.6.1'") === 2, 'an administrator publishes the verified build');
 $ad(['agent_bh_publish' => '1', 'bh_job' => (string) $JM2]);
 $ok((int) $one("SELECT COUNT(*) FROM endpoint_agent_binaries WHERE version='9.6.1'") === 2, 'publishing twice stores nothing twice');
+
+echo "\n--- Linux files additive: a newer build host also sends install-linux.sh and the agent binaries ---\n";
+/** A minimal 64-bit LE ELF "executable" (ET_EXEC) of the given machine, padded well past the 4096-byte floor LinuxStore::validate() requires. */
+function lb_elf(int $machine, int $size = 5000): string
+{
+    $h = str_repeat("\0", 64);
+    $h[0] = "\x7f"; $h[1] = 'E'; $h[2] = 'L'; $h[3] = 'F'; $h[4] = "\x02"; $h[5] = "\x01"; $h[6] = "\x01";
+    $h[16] = "\x02"; $h[17] = "\x00"; $h[18] = chr($machine & 0xff); $h[19] = chr(($machine >> 8) & 0xff);
+
+    return $h . str_repeat("\x90", max(0, $size - strlen($h)));
+}
+function lb_linux_bytes(): array
+{
+    return ['install-linux.sh' => "#!/usr/bin/env bash\necho installing\n", 'rivetit-agent-linux-amd64' => lb_elf(62), 'rivetit-agent-linux-arm64' => lb_elf(183)];
+}
+$lx0 = (int) $one('SELECT COUNT(*) FROM endpoint_agent_linux_files');
+$req(['bh_version' => '9.6.2', 'bh_auto' => '1', 'bh_ring' => 'stable', 'bh_pct' => '15', 'bh_activate' => '1']);
+$JLX = (int) $one("SELECT job_id FROM endpoint_agent_build_jobs WHERE version = '9.6.2'");
+bh('poll', $caps, $T1);
+[$f, $mn] = bh_set(62, ['bytes' => lb_linux_bytes()]);
+$ok(bh_run($T1, $JLX, $f)[0] === 200, 'every Windows AND Linux file uploaded');
+$r = bh('complete', ['job_id' => $JLX, 'manifest' => $mn], $T1);
+$ok(($r[1]['state'] ?? '') === 'published', 'the manifest listing Linux files too still verifies and auto-publishes: ' . ($r[1]['message'] ?? json_encode($r[1])));
+$lxRows = $rows("SELECT name, version, is_current, active, source, rollout_pct FROM endpoint_agent_linux_files WHERE version = '9.6.2' ORDER BY name");
+$ok(count($lxRows) === 3, 'all three Linux files are stored (' . count($lxRows) . ')');
+$ok((int) $one('SELECT COUNT(*) FROM endpoint_agent_linux_files') === $lx0 + 3, 'exactly three new rows, nothing extra');
+foreach ($lxRows as $lr) {
+    $ok((int) $lr['is_current'] === 1 && $lr['source'] === 'build_host' && (int) $lr['rollout_pct'] === 15, $lr['name'] . ': current, source build_host, rollout carried from the request (' . json_encode($lr) . ')');
+}
+$ok(count($rows("SELECT * FROM endpoint_agent_binaries WHERE version = '9.6.2'")) === 2, 'the Windows binaries still published normally alongside the Linux files');
+$ok($audit('Agent Build Published') >= 1, 'the aggregate build-published audit entry covers this run too (no separate per-Linux-file audit from the build host path)');
+
+echo "\n--- Linux files additive: a bad Linux file fails the WHOLE publish (mirrors RivetIT's own build-host behaviour) ---\n";
+$bin0b = (int) $one('SELECT COUNT(*) FROM endpoint_agent_binaries'); $lx0b = (int) $one('SELECT COUNT(*) FROM endpoint_agent_linux_files');
+$req(['bh_version' => '9.6.3', 'bh_auto' => '1', 'bh_activate' => '1']);
+$JBAD = (int) $one("SELECT job_id FROM endpoint_agent_build_jobs WHERE version = '9.6.3'");
+bh('poll', $caps, $T1);
+$badLinux = lb_linux_bytes();
+$badLinux['rivetit-agent-linux-amd64'] = lb_elf(183);   // arm64 bytes offered as the amd64 name: LinuxStore::validate() refuses this (wrong e_machine)
+[$f, $mn] = bh_set(63, ['bytes' => $badLinux]);
+bh_run($T1, $JBAD, $f);
+$r = bh('complete', ['job_id' => $JBAD, 'manifest' => $mn], $T1);
+$ok(($r[1]['state'] ?? '') !== 'published' && $state($JBAD) === 'failed', 'a Linux file that fails LinuxStore::validate() fails the whole job: ' . json_encode($r[1]));
+// The Linux files are stored in manifest order before the Windows loop even starts (same as RivetIT's own reference), so a name that sorts before the bad
+// one (install-linux.sh, before rivetit-agent-linux-amd64) may already be stored - inactive as current, never served, harmless to retry - by the time the
+// bad one is reached and the whole publish fails. "The whole job fails" means nothing is PUBLISHED or made current; it does not mean zero rows were ever
+// written, exactly as a Windows binary already stored by a prior attempt is not deleted either. The Windows loop itself never runs at all here (the break
+// happens before it), so the Windows binaries table is untouched.
+$ok((int) $one('SELECT COUNT(*) FROM endpoint_agent_binaries') === $bin0b, 'the Windows binaries table is untouched (the Windows loop never starts)');
+$ok((int) $one("SELECT COUNT(*) FROM endpoint_agent_linux_files WHERE version = '9.6.3' AND is_current = 1") === 0, 'no 9.6.3 Linux file was made current');
+
+echo "\n--- Linux files additive: manual publish keeps them not-current until Publish is pressed, like the Windows binaries ---\n";
+$req(['bh_version' => '9.6.4', 'bh_ring' => '', 'bh_activate' => '']);
+$JLXM = (int) $one("SELECT job_id FROM endpoint_agent_build_jobs WHERE version = '9.6.4'");
+bh('poll', $caps, $T1);
+[$f, $mn] = bh_set(64, ['bytes' => lb_linux_bytes()]);
+bh_run($T1, $JLXM, $f);
+$r = bh('complete', ['job_id' => $JLXM, 'manifest' => $mn], $T1);
+$ok($r[0] === 200 && $r[1]['state'] === 'built', 'verified and waiting (not auto-publish)');
+$ok((int) $one("SELECT COUNT(*) FROM endpoint_agent_linux_files WHERE version = '9.6.4'") === 0, 'nothing stored yet: Linux files are only reassembled and stored at publish time, same as the Windows ones');
+$ad(['agent_bh_publish' => '1', 'bh_job' => (string) $JLXM]);
+$ok($state($JLXM) === 'published', 'manual publish succeeds');
+$lxRows2 = $rows("SELECT is_current FROM endpoint_agent_linux_files WHERE version = '9.6.4'");
+$ok(count($lxRows2) === 3 && !in_array(1, array_column($lxRows2, 'is_current'), true), 'stored now, but NOT current (job.activate was off, same rule as the Windows binaries of this job)');
 
 echo "\n--- failed state, expiry, lease ---\n";
 $req(['bh_version' => '9.7.0']);
