@@ -8,7 +8,7 @@ $root = dirname(__DIR__);
 require_once "$root/includes/rmm_time.php";
 $pass = 0; $fail = 0;
 $ok = function (bool $c, string $m) use (&$pass, &$fail) { if ($c) { $pass++; } else { $fail++; echo "FAIL: $m\n"; } };
-$tz = function (string $z) { $GLOBALS['config_timezone'] = $z; };
+$tz = function (string $z) { $GLOBALS['rivet_company_tz_override'] = $z; };
 
 $tz('America/Chicago');
 $ok(rivetRmmTime('2026-07-04 15:42:10') === '2026-07-04 10:42 CDT', 'UTC SQL value in July is CDT (UTC-5)');
@@ -36,20 +36,21 @@ $ok(rivetRmmTime('2026-07-04 15:42:10') === '2026-07-04 16:42 BST' && rivetRmmTi
 $tz('Asia/Kolkata');
 $ok(rivetRmmTime('2026-07-04 15:42:10') === '2026-07-04 21:12 IST', 'half-hour zone');
 $tz('Australia/Lord_Howe');
-$ok(rivetRmmTime('2026-07-15 00:00:00') === '2026-07-15 10:30 GMT+10:30', 'odd-offset zone without an abbreviation gets a GMT+ label: ' . rivetRmmTime('2026-07-15 00:00:00'));
+$ok(rivetRmmTime('2026-07-15 00:00:00') === '2026-07-15 10:30 UTC+10:30', 'odd-offset zone without an abbreviation gets a UTC+ label: ' . rivetRmmTime('2026-07-15 00:00:00'));
 $tz('UTC');
 $ok(rivetRmmTime('2026-07-04 15:42:10') === '2026-07-04 15:42 UTC', 'a company set to UTC still shows UTC (honestly)');
 $tz('Pacific/Auckland');
 $ok(rivetRmmTime('2026-07-04 15:42:10') === '2026-07-05 03:42 NZST', 'date rolls over across zones');
-// fallbacks
-unset($GLOBALS['config_timezone']);
+// fallbacks: session zone, then the server's
+unset($GLOBALS['rivet_company_tz_override']);
 $_SESSION['session_timezone'] = 'America/Denver';
-$ok(rivetRmmTime('2026-07-04 15:42:10') === '2026-07-04 09:42 MDT', 'session zone is the second source');
+$ok(rivetRmmTime('2026-07-04 15:42:10') === '2026-07-04 09:42 MDT', 'session zone is the first source');
 unset($_SESSION['session_timezone']);
 date_default_timezone_set('America/Los_Angeles');
-$ok(rivetRmmTime('2026-07-04 15:42:10') === '2026-07-04 08:42 PDT', 'server zone is the last fallback');
-$tz('Not/AZone');
-$ok(rivetRmmTime('2026-07-04 15:42:10') === '2026-07-04 08:42 PDT', 'an invalid configured zone falls through');
+$ok(rivetRmmTime('2026-07-04 15:42:10') === '2026-07-04 08:42 PDT', 'server zone is the fallback');
+$_SESSION['session_timezone'] = 'Not/AZone';
+$ok(rivetRmmTime('2026-07-04 15:42:10') === '2026-07-04 15:42 UTC', 'an invalid session zone falls back to UTC rather than failing');
+unset($_SESSION['session_timezone']);
 $tz('America/Chicago');
 // null / zero / junk
 foreach ([null, '', '   ', '0000-00-00 00:00:00', '0000-00-00', 0, '0', 'never', 'garbage', [], false, '2026-13-45 99:99:99'] as $i => $bad) {
