@@ -43,11 +43,11 @@ $q("INSERT INTO endpoint_agent_devices SET install_id = 'dev-mw-1', hostname = '
 $devId = (int) $one('SELECT MAX(device_id) FROM endpoint_agent_devices');
 $q("INSERT INTO assets SET asset_name = 'MWPC1', asset_type = 'Desktop', asset_client_id = 1"); $assetId = (int) $one('SELECT MAX(asset_id) FROM assets'); $q("UPDATE endpoint_agent_devices SET asset_id = $assetId WHERE device_id = $devId"); $q("INSERT INTO asset_rmm_links SET asset_id = $assetId, tactical_agent_id = 'rivetit:$devId', hostname = 'MWPC1'");
 [$c, $b] = $get('/agent/rmm_fleet.php');
-$ok($c === 200 && str_contains($b, 'data-rmm-build-installer') && str_contains($b, 'Create installer') && str_contains($b, 'href="/agent/rmm_add_device.php" class="btn btn-primary"'), 'fleet header: a primary Create installer button');
-$ok(str_contains($b, 'data-rmm-installer-page-link') && str_contains($b, 'Open the Create installer page'), 'the Add device dialog links to the Create installer page');
+$ok($c === 200 && str_contains($b, 'data-rmm-build-installer') && str_contains($b, '>Add device</a>') && str_contains($b, 'href="/agent/rmm_add_device.php" class="btn btn-primary"'), 'fleet header: a primary Add device button (the full page)');
+$ok(str_contains($b, 'data-rmm-installer-page-link') && str_contains($b, 'Open the full Add device page'), 'the Quick download dialog links to the full Add device page');
 $ok(str_contains($b, 'data-rmm-installer-entry="no_agent"') && str_contains($b, '/admin/settings_endpoint_agent.php#agent-updates') && str_contains($b, 'No Windows agent is published yet'), 'nothing published: the page says so and links to Agent updates');
 [$c, $b] = $get('/agent/rmm_dashboard.php');
-$ok($c === 200 && str_contains($b, 'data-rmm-build-installer') && str_contains($b, 'Create installer') && str_contains($b, 'btn btn-primary btn-sm'), 'RMM dashboard header: a primary Create installer button');
+$ok($c === 200 && str_contains($b, 'data-rmm-build-installer') && str_contains($b, '>Add device</a>') && str_contains($b, 'btn btn-primary btn-sm'), 'RMM dashboard header: a primary Add device button');
 $ok(str_contains($b, 'data-rmm-installer-entry="no_agent"'), 'RMM dashboard: the nothing-published message too');
 // role matrix: the tech role has no token.manage? read the truth from Core, then assert the page agrees
 $can = fn (int $uid) => rivetRmmUiInstaller($db, $uid, null, null) !== null;

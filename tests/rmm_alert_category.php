@@ -82,7 +82,7 @@ $q("UPDATE settings SET config_rmm_alert_ticket_category_id = $net");
 $q("ALTER TABLE settings DROP COLUMN config_rmm_alert_ticket_category_id"); $q("DROP TABLE rmm_alert_ticket_routes");
 $q("UPDATE settings SET config_current_database_version = '2.6.100'");
 shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1');
-$ok((string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === '2.6.101', 'the updater reaches 2.6.101');
+$ok(version_compare((string) $one('SELECT config_current_database_version FROM settings LIMIT 1'), '2.6.101', '>='), 'the updater reaches 2.6.101 (or later)');
 $cols = array_column($rows('SHOW COLUMNS FROM settings'), 'Null', 'Field');
 $ok(($cols['config_rmm_alert_ticket_category_id'] ?? '') === 'YES' && $one('SELECT config_rmm_alert_ticket_category_id FROM settings LIMIT 1') === null, 'settings column exists, NULL by default (unchanged behaviour)');
 $rc = array_column($rows('SHOW COLUMNS FROM rmm_alert_ticket_routes'), 'Type', 'Field');
@@ -90,8 +90,8 @@ $ok(array_keys($rc) === ['id', 'match_type', 'match_value', 'category_id', 'boar
 $q("INSERT INTO rmm_alert_ticket_routes SET match_type = 'severity', match_value = 'info', category_id = $net");
 $q("UPDATE settings SET config_current_database_version = '2.6.100'");
 shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1');
-$ok((string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === '2.6.101' && (int) $one('SELECT COUNT(*) FROM rmm_alert_ticket_routes') === 1, 're-running the step is harmless and keeps rows');
-$ok(str_contains((string) file_get_contents("$root/db.sql"), 'config_rmm_alert_ticket_category_id') && str_contains((string) file_get_contents("$root/db.sql"), 'CREATE TABLE `rmm_alert_ticket_routes`') && str_contains((string) file_get_contents("$root/includes/database_version.php"), '2.6.101'), 'db.sql and LATEST_DATABASE_VERSION carry the change');
+$ok(version_compare((string) $one('SELECT config_current_database_version FROM settings LIMIT 1'), '2.6.101', '>=') && (int) $one('SELECT COUNT(*) FROM rmm_alert_ticket_routes') === 1, 're-running the step is harmless and keeps rows');
+$ok(str_contains((string) file_get_contents("$root/db.sql"), 'config_rmm_alert_ticket_category_id') && str_contains((string) file_get_contents("$root/db.sql"), 'CREATE TABLE `rmm_alert_ticket_routes`') && version_compare(LATEST_DATABASE_VERSION, '2.6.101', '>='), 'db.sql and LATEST_DATABASE_VERSION carry the change');
 $q("DELETE FROM rmm_alert_ticket_routes");
 
 echo "\n--- createTicketFromRmmAlert ---\n";
