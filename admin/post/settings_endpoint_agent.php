@@ -130,6 +130,21 @@ if (isset($_POST['reconcile_checks'])) {
     redirect();
 }
 
+// 26.10.38: "Allow Linux devices to enroll" (settings.config_rmm_allow_linux, default ON). Administrators only, CSRF, audited. Core's enrollment check reads it through the bootstrap.
+if (isset($_POST['save_allow_linux'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $denied = $rmm->authorizer()->check((int) $session_user_id, \RivetCore\Rmm\Authz\RmmAbility::ADMIN, 0, false);
+    if ($denied !== null) {
+        flash_alert(nullable_htmlentities($denied), 'error');
+        redirect();
+    }
+    $want = !empty($_POST['allow_linux_enroll']) ? 1 : 0;
+    mysqli_query($mysqli, "UPDATE settings SET config_rmm_allow_linux = $want WHERE company_id = 1");
+    logAction('RMM', 'Settings Changed', "$session_name turned \"Allow Linux devices to enroll\" " . ($want ? 'on' : 'off'));
+    flash_alert('Linux devices ' . ($want ? 'may now enroll.' : 'can no longer enroll. Devices already enrolled are not affected.'), 'success');
+    redirect();
+}
+
 // 26.10.38 (RivetCore rc.22): the change_monitor switch. Core (ChangeActions::updateSettings) checks rmm.admin, refuses to turn it on without the storage acknowledgement and audits.
 if (isset($_POST['save_change_monitor'])) {
     validateCSRFToken($_POST['csrf_token']);

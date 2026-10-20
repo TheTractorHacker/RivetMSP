@@ -7363,6 +7363,8 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         // is idempotent, and a failure is logged and does NOT stop the step: Administration > Endpoint agent > Checks has a button that repeats it. Skipped (version NOT advanced,
         // so it retries) until a package that ships migration 0032 is installed.
         if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Rmm\Migration\Migration0032CheckSet::class)) {
+            // ONE additive column: Administration > Endpoint agent > "Allow Linux devices to enroll" (default ON; the config.php constant EA_ALLOW_NON_WINDOWS can still force it on). Re-running is harmless.
+            mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_rmm_allow_linux` TINYINT(1) NOT NULL DEFAULT 1");
             (new \RivetCore\Migration\MigrationRunner(
                 new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
                 \RivetCore\Migration\CoreMigrations::all(),

@@ -227,6 +227,28 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
         </form>
     </div>
 </div>
+<?php $eaTab('overview'); ?>
+<?php
+$ea_allow_linux = true;
+if (($ea_q = @mysqli_query($mysqli, 'SELECT config_rmm_allow_linux FROM settings WHERE company_id = 1')) instanceof mysqli_result) {
+    $ea_row = mysqli_fetch_row($ea_q);
+    $ea_allow_linux = $ea_row === null || $ea_row[0] === null || (int) $ea_row[0] === 1;
+}
+$ea_allow_linux_forced = defined('EA_ALLOW_NON_WINDOWS') && EA_ALLOW_NON_WINDOWS === true;
+?>
+<div class="card mb-3" id="allow-linux">
+    <div class="card-body">
+        <form action="post.php" method="post" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="form-check form-switch mb-1">
+                <input type="checkbox" class="form-check-input" id="ea_allow_linux" name="allow_linux_enroll" value="1" <?= $ea_allow_linux || $ea_allow_linux_forced ? 'checked' : '' ?> <?= $ea_allow_linux_forced ? 'disabled' : '' ?>>
+                <label class="form-check-label fw-semibold" for="ea_allow_linux">Allow Linux devices to enroll</label>
+            </div>
+            <div class="form-text mb-2">On by default. When off, a Linux computer that tries to enroll is refused ("device.os is invalid"); devices already enrolled are not affected.<?= $ea_allow_linux_forced ? ' Forced on by the EA_ALLOW_NON_WINDOWS setting in config.php.' : '' ?></div>
+            <button type="submit" name="save_allow_linux" class="btn btn-sm btn-primary"<?= $ea_allow_linux_forced ? ' disabled' : '' ?>><i class="fas fa-save me-1"></i>Save</button>
+        </form>
+    </div>
+</div>
 <?php $eaTab('checks'); ?>
 <div class="card mb-3" id="checks">
     <div class="card-header"><h4 class="card-title mb-0">Checks</h4></div>

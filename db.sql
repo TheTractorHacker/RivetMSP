@@ -4760,6 +4760,7 @@ CREATE TABLE `settings` (
   `config_rmm_default_integration_id` int(11) DEFAULT NULL,
   `config_rmm_auto_ticket_severities` varchar(100) NOT NULL DEFAULT '',
   `config_rmm_alert_ticket_category_id` int(11) DEFAULT NULL,
+  `config_rmm_allow_linux` tinyint(1) NOT NULL DEFAULT 1,
   `config_module_enable_kb` tinyint(1) NOT NULL DEFAULT 0,
   `config_module_enable_live_chat` tinyint(1) NOT NULL DEFAULT 0,
   `config_module_enable_unifi` tinyint(1) NOT NULL DEFAULT 0,

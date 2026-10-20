@@ -40,6 +40,22 @@ function rivetRmmStateDir(): ?string
     return EndpointModuleState::directory();
 }
 
+/** The "Allow Linux devices to enroll" setting: from the settings row the request already loaded, else one query; a schema without the column (code newer than the database) means ON. */
+function rivetRmmAllowLinuxSetting(\mysqli $mysqli): bool
+{
+    if (isset($GLOBALS['config_rmm_allow_linux'])) {
+        return (int) $GLOBALS['config_rmm_allow_linux'] === 1;
+    }
+    try {
+        $res = mysqli_query($mysqli, 'SELECT config_rmm_allow_linux FROM settings WHERE company_id = 1');
+        $row = $res ? mysqli_fetch_row($res) : null;
+
+        return $row === null || $row[0] === null || (int) $row[0] === 1;
+    } catch (\Throwable) {
+        return true;
+    }
+}
+
 /**
  * The module for this request's database connection (built once per connection).
  *
@@ -61,7 +77,8 @@ function rivetRmmModule($mysqli = null): RmmModule
     $options = [
         'binary_dir' => defined('EA_BINARY_DIR') ? (string) EA_BINARY_DIR : $root . '/backups/endpoint-agent',
         'allow_insecure_http' => defined('EA_ALLOW_INSECURE_HTTP') && EA_ALLOW_INSECURE_HTTP === true,
-        'allow_linux' => defined('EA_ALLOW_NON_WINDOWS') && EA_ALLOW_NON_WINDOWS === true,
+        // 26.10.38: Linux devices may enroll unless an administrator switched it off (settings.config_rmm_allow_linux, default ON); the config.php constant can still force it on.
+        'allow_linux' => (defined('EA_ALLOW_NON_WINDOWS') && EA_ALLOW_NON_WINDOWS === true) || rivetRmmAllowLinuxSetting($mysqli),
         'host_fallback' => (string) ($GLOBALS['config_base_url'] ?? ''),
         // RivetCore 1.0.0-rc.10 (RMM Phase 3): who delivers escalation notices (in-app and email to people, a ticket for a critical alert). Housekeeping, run by cron,
         // calls it; without it a due step would stay due and never be recorded as sent.
