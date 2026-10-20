@@ -951,6 +951,7 @@ $show_login_form = (!$show_role_choice && !$show_mfa_form);
             margin: 0;
         }
     </style>
+<script src="js/rivet_dialog.js"></script>
 </head>
 <body class="d-flex flex-column accent-<?= nullable_htmlentities($config_theme) ?>">
 

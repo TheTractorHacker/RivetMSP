@@ -306,6 +306,7 @@ function itflow_nav_icon_class($icon, $fallback = 'fa-link')
 
     <!-- Scripts: jQuery kept as a coexistence shim for un-ported inline $() calls -->
     <script src="/plugins/jquery/jquery.min.js"></script>
+    <script src="/js/rivet_dialog.js?v=<?= (int) @filemtime(__DIR__ . "/../js/rivet_dialog.js") ?>"></script>
     <script src="/plugins/toastr/toastr.min.js"></script>
     <!-- Toast options - the single source of truth, applied on every page.
 

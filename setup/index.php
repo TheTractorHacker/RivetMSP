@@ -756,6 +756,7 @@ if (isset($_POST['add_telemetry'])) {
     <link href="/plugins/select2/css/select2.min.css" rel="stylesheet" type="text/css">
     <link href="/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css" rel="stylesheet" type="text/css">
 
+<script src="/js/rivet_dialog.js"></script>
 </head>
 
 <body class="hold-transition sidebar-mini">

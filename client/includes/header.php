@@ -141,6 +141,7 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
          --tblr-*. MUST load after the design layer so the mappings win. -->
     <link rel="stylesheet" href="/css/itflow.bind-tabler.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow.bind-tabler.css') ?>">
 
+<script src="/js/rivet_dialog.js"></script>
 </head>
 <?php
 /* ---------------------------------------------------------------------------
