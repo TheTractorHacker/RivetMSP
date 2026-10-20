@@ -442,7 +442,7 @@ $q("UPDATE endpoint_agent_binaries SET is_current = 0 WHERE version IN ('1.0.0',
 $q("UPDATE endpoint_agent_binaries SET is_current = 1 WHERE version = '0.9.1'");
 
 echo "\n--- Build installer page and installer handler ---\n";
-require __DIR__ . '/support/_tmp_fp_debug2.php';
+require __DIR__ . '/support/rmm_agent_feed_page_part.php';
 if (getenv('RMM_TEST_REAL_RELEASE_DIR')) {
     echo "\n--- the REAL agent-v0.9.1 release files (read-only copy) ---\n";
     require __DIR__ . '/support/rmm_agent_feed_real_part.php';
