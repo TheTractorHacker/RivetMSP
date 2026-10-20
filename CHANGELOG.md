@@ -4,6 +4,20 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.38] RivetMSP — RivetCore 1.0.0-rc.25: per-OS checks, clock-skew notice, change monitor switch, one Add device entry (DB 2.6.102)
+
+**Deploy notes:** back up the database, pull this tag (tracked `vendor/rivet/rivet-core` is the v1.0.0-rc.25 git archive), run **Administration > Updates** (DB 2.6.101 to 2.6.102: Core migrations 0030, 0031, 0032 through the Core runner, one nullable-free settings column, the stored check schedule learns which OS each service check is for, then ONE `reconcileChecks()` that removes the check rows of checks a device no longer gets and resolves their alerts without a ticket). Nothing is switched on: `change_monitor` is off; `metrics_extended` is Core's default (on). Agents: ship the rc.25 agent for per-OS filtering, clock self-correction and the extra health details; old agents keep working. Nginx: nothing new on the MSP vhosts (the device endpoint `agent_changes` goes through `api/v1/index.php` like `agent_logs`).
+
+- **Linux service checks no longer go to Windows PCs.** The check schedule sets `os` on every service check from its Windows/Linux choice table (EventLog, Windows Update, Defender... are Windows; sshd, cron, chronyd, rsyslog are Linux). "Add another service" asks Windows or Linux (default Windows); a service already scheduled keeps its OS. A stored schedule is upgraded by the DB step and again whenever the form is read or saved; a custom service stays for both until an OS is picked. Policy check templates have "Applies to: Windows and Linux / Windows only / Linux only". Note on the page: "A check ticked for one OS is only sent to devices of that OS."
+- **Clean up checks that no longer apply** (Administration > Endpoint agent > Checks): administrators only, CSRF, audited, safe to press again. Resolved alerts show "This check no longer applies to the device" (system, no ticket).
+- **Clock.** Device pages show "This PC's clock is N min ahead of / behind the server: set the time zone and sync the time (Windows: tzutil /s ..., w32tm /resync)" when the skew is over 2 minutes or a check-in was refused; a device that never checked in shows the refusal reason instead of "OS and agent not reported yet"; the fleet list has a "Clock off" badge. The event `rmm.device.clock_skew` is in the event catalog (Core).
+- **Send extra health details** switch (limit `metrics_extended`, on by default). The Performance view keeps reading the same five metric keys; the new keys (memory bytes, per-core load, disk I/O, network errors, battery) are stored but not charted in this edition yet.
+- **Change monitoring (rc.22), minimal.** Admin switch `change_monitor` (off by default, with the storage acknowledgement), a read-only **Changes** tab on the device page (rmm.change.view = like running a saved script), abilities mapped, route `agent_changes`. Watch presets, custom watches, rules and the search page come in a later release.
+- **One "Add device" entry** in the Endpoints menu (opens the full page; "Build installer" and the second entry are gone). The quick dialog is the **Quick download** button on the Add device page and the fleet page. The old `rmm_fleet.php?add=1` address redirects to the full page.
+- **Allow Linux devices to enroll** (Administration > Endpoint agent > Overview): admin switch, **on by default**, audited, stored in `settings.config_rmm_allow_linux` (new column in the DB step). The config.php constant `EA_ALLOW_NON_WINDOWS` still forces it on. When off, a Linux enrollment is refused with the existing 422 "device.os".
+
+**Tests.** `tests/rmm_rc25.php` (73 checks), plus the updated installer, mesh wizard and alert-category tests.
+
 ## [26.10.37] RivetMSP — Choose the ticket category for tickets made from RMM alerts (DB 2.6.101)
 
 **Deploy notes:** back up the database, pull this tag, run **Administration > Updates** (DB 2.6.100 to 2.6.101: one nullable settings column and one new table, no row touched). No RivetCore change. Until an admin chooses something, behaviour is exactly as before (no category).
