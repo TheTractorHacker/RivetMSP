@@ -7333,3 +7333,23 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.100'");
     }
+
+    if ($rivetit_db_version() == '2.6.100') {
+        // DB 2.6.101: which ticket category RMM alert tickets go into. One settings column (NULL = unchanged behaviour, no category) and a
+        // route table (check family / source / severity -> category, optional priority). IF NOT EXISTS: re-running is harmless, no row is touched.
+        mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_rmm_alert_ticket_category_id` INT(11) NULL DEFAULT NULL");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `rmm_alert_ticket_routes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `match_type` enum('severity','source','check_prefix') NOT NULL,
+  `match_value` varchar(64) NOT NULL,
+  `category_id` int(11) NOT NULL,
+  `board_id` int(11) DEFAULT NULL,
+  `priority` varchar(10) DEFAULT NULL,
+  `sort` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_match` (`match_type`,`match_value`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.101'");
+    }
