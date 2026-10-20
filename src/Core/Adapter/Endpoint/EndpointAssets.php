@@ -71,17 +71,20 @@ final class EndpointAssets implements RmmAssetsInterface, RmmAssetNamesInterface
     public function createForDevice(array $device, int $clientId, int $locationId): int
     {
         $isServer = stripos((string) $device['os_version'], 'server') !== false;
+        // Core's contract for this method is Windows-only ("Windows <os_version>"), but os_version itself may already start with
+        // "Windows" (agents report it that way, e.g. "Windows 11 23H2"): osLabel() avoids writing "Windows Windows 11 23H2".
+        $osText = AssetInventorySync::osLabel('Windows', (string) $device['os_version']);
         $res = $this->database->execute(
             "INSERT INTO assets (asset_type, asset_name, asset_make, asset_model, asset_serial, asset_os, asset_status, asset_client_id, asset_location_id, asset_created_at)
              VALUES (?, ?, ?, ?, ?, ?, 'Active', ?, ?, NOW())",
-            [$isServer ? 'Server' : 'Laptop', $device['hostname'], (string) ($device['manufacturer'] ?? ''), $device['model'], $device['serial'], 'Windows ' . $device['os_version'], $clientId, $locationId]
+            [$isServer ? 'Server' : 'Laptop', $device['hostname'], (string) ($device['manufacturer'] ?? ''), $device['model'], $device['serial'], $osText, $clientId, $locationId]
         );
 
         $assetId = (int) $res->insertId;
         // The values just written are the agent's own: remember them so a later report may refresh them (a human edit is still never touched).
         if ($assetId > 0 && ($mysqli = $this->mysqli()) !== null) {
             try {
-                (new AssetInventorySync($mysqli))->recordWritten($assetId, ['make' => (string) ($device['manufacturer'] ?? ''), 'model' => (string) ($device['model'] ?? ''), 'os' => 'Windows ' . $device['os_version']]);
+                (new AssetInventorySync($mysqli))->recordWritten($assetId, ['make' => (string) ($device['manufacturer'] ?? ''), 'model' => (string) ($device['model'] ?? ''), 'os' => $osText]);
             } catch (\Throwable $e) {
                 error_log('Asset inventory state skipped: ' . $e->getMessage());
             }
