@@ -12,6 +12,7 @@
  */
 
 require_once __DIR__ . '/rmm_automation.php';
+require_once __DIR__ . '/rmm_policy_pack_ui.php';   // rc.27: the policy starter pack's "Starter" badge ([pp|...] marker)
 
 use RivetCore\Rmm\Authz\RmmAbility;
 
@@ -816,7 +817,9 @@ function rivetRmmAlrMaintenancePage(array $vm): string
         $edit = $canCreate ? '<a class="btn btn-sm btn-outline-secondary" href="/agent/rmm_maintenance.php?window_id=' . (int) $w['window_id'] . '#alr-window-form"><i class="fas fa-edit me-1" aria-hidden="true"></i>Edit<span class="visually-hidden"> ' . rmmH($w['name']) . '</span></a> '
             . rivetRmmAutoActionForm(RIVET_RMM_ALR_HANDLER, 'delete_window', ['window_id' => (int) $w['window_id']], $vm['csrf'], '/agent/rmm_maintenance.php',
                 '<i class="fas fa-trash me-1" aria-hidden="true"></i>Delete<span class="visually-hidden"> ' . rmmH($w['name']) . '</span>', 'btn btn-sm btn-outline-danger', 'Delete the maintenance window "' . $w['name'] . '"? Alerts it was holding back are no longer held.') : '';
-        $rows .= '<tr><td class="ps-3">' . rmmH($w['name']) . ($w['note'] !== '' ? '<div class="small text-muted">' . rmmH($w['note']) . '</div>' : '') . '</td><td>' . rmmH(rivetRmmAlrModeShort($w['mode'])) . '</td>'
+        $wppMarked = rivetRmmPolicyPackMarked((string) $w['note']);
+        $wppNote = $wppMarked ? rivetRmmPolicyPackStrip((string) $w['note']) : (string) $w['note'];
+        $rows .= '<tr><td class="ps-3">' . rmmH($w['name']) . ($wppMarked ? ' <span class="badge text-bg-primary rmm-starter-badge"><i class="fas fa-box-open me-1" aria-hidden="true"></i>Starter</span>' : '') . ($wppNote !== '' ? '<div class="small text-muted">' . rmmH($wppNote) . '</div>' : '') . '</td><td>' . rmmH(rivetRmmAlrModeShort($w['mode'])) . '</td>'
             . '<td>' . rmmH(rivetRmmAutoScopeLabel($w['scope_type'], $w['scope_id'], $names)) . '</td><td class="rmm-wrap">' . rmmH(rivetRmmAlrScheduleWords($w)) . '</td><td>' . $next . '</td>'
             . '<td>' . ($w['enabled'] ? rivetRmmUiPill('ok', 'On') : rivetRmmUiPill('off', 'Off')) . '</td><td class="rmm-table-actions">' . $edit . '</td></tr>';
     }

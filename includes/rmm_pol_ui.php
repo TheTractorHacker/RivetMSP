@@ -18,6 +18,7 @@
 
 require_once __DIR__ . '/rmm_automation.php';
 require_once __DIR__ . '/rmm_checks_simple.php';   // 26.10.29: the plain fields of the four original check types
+require_once __DIR__ . '/rmm_policy_pack_ui.php';   // rc.27: the policy starter pack's "Starter" badge ([pp|...] marker), separate from the older [starter|...] one above
 
 use RivetCore\Rmm\RmmProtocol;
 
@@ -1006,6 +1007,10 @@ function rivetRmmPolPoliciesPage(array $vm, array $ctx): string
             $names = array_map(static fn (array $a): string => rivetRmmAutoScopeLabel((string) $a['scope_type'], (int) $a['scope_id'], $vm['labels']), $as);
             $reach = $names === [] ? '<span class="text-muted">nothing</span>' : rmmH(implode(', ', array_slice($names, 0, 3))) . (count($names) > 3 ? ' <span class="text-muted">and ' . (count($names) - 3) . ' more</span>' : '');
             [$polDesc, $polStarter] = rivetRmmAutoStarterPolicy((string) $p['description']);
+            if (!$polStarter && rivetRmmPolicyPackMarked((string) $p['description'])) {
+                $polStarter = true;
+                $polDesc = rivetRmmPolicyPackStrip((string) $p['description']);
+            }
             $t .= '<tr><td class="ps-3"><a href="/agent/rmm_policies.php?policy_id=' . $pid . '"><strong>' . rmmH($p['name']) . '</strong></a>' . ($polStarter ? ' <span class="badge text-bg-primary rmm-starter-badge"><i class="fas fa-box-open me-1" aria-hidden="true"></i>Starter</span>' : '')
                 . ($polDesc !== '' ? '<div class="small text-muted">' . rmmH($polDesc) . '</div>' : '') . '</td>'
                 . '<td>' . (int) $p['version'] . '</td><td>' . ($p['enabled'] ? rivetRmmUiPill('ok', 'On') : rivetRmmUiPill('off', 'Off')) . '</td><td>' . count($as) . '</td><td>' . $reach . '</td>'
@@ -1039,6 +1044,10 @@ function rivetRmmPolPoliciesPage(array $vm, array $ctx): string
                 'Delete the policy "' . $p['name'] . '" with its versions and assignments? Devices fall back to their next policy or the global configuration at their next check-in.');
     }
     [$polDesc, $polStarter] = rivetRmmAutoStarterPolicy((string) $p['description']);
+    if (!$polStarter && rivetRmmPolicyPackMarked((string) $p['description'])) {
+        $polStarter = true;
+        $polDesc = rivetRmmPolicyPackStrip((string) $p['description']);
+    }
     $o .= rivetRmmAutoHeader((string) $p['name'] . ($polStarter ? ' (Starter pack draft)' : ''), 'sliders-h', $acts, ($polDesc !== '' ? rtrim($polDesc, '. ') . '. ' : '') . 'Version ' . (int) $p['version'] . '. ' . ($p['enabled'] ? 'On.' : 'Off: it reaches no device until it is turned on.'));
     $settingsBody = $admin ? rivetRmmPolEditor($vm, $csrf) : rivetRmmPolSettingsTable((array) $p['settings'], 'Settings of this policy');
     $o .= rivetRmmUiCard('Settings', 'sliders-h', $settingsBody, '', $admin ? '' : '<span class="small text-muted">Read only: only administrators change policies</span>', false, 'pol-settings')
