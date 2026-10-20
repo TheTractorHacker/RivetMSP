@@ -20,6 +20,7 @@ putenv("RMM_GATE_STATE_DIR=$sd");
 require __DIR__ . '/endpoint_agent_lib.php';
 require_once "$root/includes/rmm_bootstrap.php";
 require_once "$root/includes/rmm_agent_localbuild.php";
+require_once "$root/includes/database_version.php";
 use RivetCore\Rmm\Authz\RmmPrincipal;
 use RivetMsp\AgentFeed\LocalBuild;
 
@@ -565,17 +566,17 @@ foreach (['endpoint_agent_build_chunks', 'endpoint_agent_build_jobs', 'endpoint_
 $q("UPDATE settings SET config_current_database_version = '2.6.98'");
 $ok(!(new LocalBuild($db, '/nonexistent'))->ready(), 'with the tables missing the section says to run the database update');
 $out = shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1');
-$ok((string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === '2.6.100' && (new LocalBuild($db, '/nonexistent'))->ready(), 'the updater steps 2.6.98 -> 2.6.99 -> 2.6.100 create the tables (with the progress columns) and set the version');
+$ok((string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === LATEST_DATABASE_VERSION && (new LocalBuild($db, '/nonexistent'))->ready(), 'the updater steps 2.6.98 -> 2.6.99 -> 2.6.100 create the tables (with the progress columns) and set the version');
 $cols = array_column($rows("SHOW COLUMNS FROM endpoint_agent_build_jobs"), 'Type', 'Field');
 $ok(($cols['progress_stage'] ?? '') === 'varchar(24)' && str_starts_with($cols['progress_pct'] ?? '', 'tinyint') && ($cols['progress_detail'] ?? '') === 'varchar(120)' && ($cols['progress_at'] ?? '') === 'datetime', 'the four progress columns exist with the documented types');
 $out = shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1');
-$ok((string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === '2.6.100', 'running it again is harmless');
+$ok((string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === LATEST_DATABASE_VERSION, 'running it again is harmless');
 // DB 2.6.99 -> 2.6.100 on a job table that already holds rows: rows survive, columns appear with defaults
 $q("ALTER TABLE endpoint_agent_build_jobs DROP COLUMN progress_stage, DROP COLUMN progress_pct, DROP COLUMN progress_detail, DROP COLUMN progress_at");
 $q("INSERT INTO endpoint_agent_build_jobs (version, state, note) VALUES ('7.7.7', 'built', 'kept')");
 $q("UPDATE settings SET config_current_database_version = '2.6.99'");
 $ok(!(new LocalBuild($db, '/nonexistent'))->ready(), 'a 2.6.99 job table without the progress columns is not "ready" (the page asks for the update)');
 $out = shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1');
-$ok((string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === '2.6.100' && (string) $one("SELECT note FROM endpoint_agent_build_jobs WHERE version = '7.7.7'") === 'kept' && (string) $one("SELECT progress_stage FROM endpoint_agent_build_jobs WHERE version = '7.7.7'") === '' && (new LocalBuild($db, '/nonexistent'))->ready(), 'the 2.6.99 -> 2.6.100 step keeps existing rows and adds the columns with empty defaults');
+$ok((string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === LATEST_DATABASE_VERSION && (string) $one("SELECT note FROM endpoint_agent_build_jobs WHERE version = '7.7.7'") === 'kept' && (string) $one("SELECT progress_stage FROM endpoint_agent_build_jobs WHERE version = '7.7.7'") === '' && (new LocalBuild($db, '/nonexistent'))->ready(), 'the 2.6.99 -> 2.6.100 step keeps existing rows and adds the columns with empty defaults');
 echo "\n";
 exit($fails > 0 ? 1 : 0);
