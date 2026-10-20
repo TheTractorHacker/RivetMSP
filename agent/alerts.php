@@ -441,7 +441,7 @@ function alertAction(source, alertId, action, rowId) {
             const row = document.getElementById('alert-row-' + rowId);
             if (row) row.style.opacity = '0.3';
         } else {
-            alert('Failed: ' + (d.error || 'Unknown error'));
+            RivetDialog.alert('Failed: ' + (d.error || 'Unknown error'));
         }
     });
 }
@@ -452,7 +452,7 @@ function toggleSelectAll(cb) {
 
 function bulkAction(action) {
     const checked = [...document.querySelectorAll('.alert-chk:checked')];
-    if (!checked.length) { alert('No alerts selected.'); return; }
+    if (!checked.length) { RivetDialog.alert('No alerts selected.'); return; }
     if (!confirm(`${action === 'acknowledge' ? 'Acknowledge' : 'Resolve'} ${checked.length} alert(s)?`)) return;
 
     let done = 0;

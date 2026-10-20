@@ -278,7 +278,7 @@ document.addEventListener('DOMContentLoaded', function(){
     // Require main signature before submit
     document.getElementById('signForm') && document.getElementById('signForm').addEventListener('submit', function(e){
         var mainSig = document.getElementById('sig_data_main').value;
-        if (!mainSig) { e.preventDefault(); alert('Please draw your signature before submitting.'); }
+        if (!mainSig) { e.preventDefault(); RivetDialog.alert('Please draw your signature before submitting.'); }
     });
 });
 </script>

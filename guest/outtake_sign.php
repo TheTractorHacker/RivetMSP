@@ -248,7 +248,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('outtakeForm') && document.getElementById('outtakeForm').addEventListener('submit', function(e){
         if (!document.getElementById('sig_data').value) {
             e.preventDefault();
-            alert('Please draw your signature before submitting.');
+            RivetDialog.alert('Please draw your signature before submitting.');
         }
     });
 });

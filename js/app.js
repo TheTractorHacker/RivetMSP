@@ -510,7 +510,7 @@ function initTinyMCEEditors() {
                         var newContent = '<span style="font-weight: bold; color: red;">[REDACTED]</span>';
                         editor.selection.setContent(newContent);
                     } else {
-                        alert('Please select a word to redact');
+                        RivetDialog.alert('Please select a word to redact');
                     }
                 }
             });
@@ -687,7 +687,7 @@ function initTinyMCEEditors() {
                         var newContent = '<span style="font-weight: bold; color: red;">[REDACTED]</span>';
                         editor.selection.setContent(newContent);
                     } else {
-                        alert('Please select a word to redact');
+                        RivetDialog.alert('Please select a word to redact');
                     }
                 }
             });
@@ -832,7 +832,7 @@ function initTinyMCEEditors() {
                         var newContent = '<span style="font-weight: bold; color: red;">[REDACTED]</span>';
                         editor.selection.setContent(newContent);
                     } else {
-                        alert('Please select a word to redact');
+                        RivetDialog.alert('Please select a word to redact');
                     }
                 }
             });

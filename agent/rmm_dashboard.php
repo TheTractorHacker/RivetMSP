@@ -833,7 +833,7 @@ function dashAlertAck(id, btn) {
             const row = document.getElementById('dash-alert-' + id);
             if (row) row.style.opacity = '0.35';
             btn.innerHTML = '<i class="fas fa-check"></i>';
-        } else { alert(d.error || 'Failed'); btn.disabled = false; }
+        } else { RivetDialog.alert(d.error || 'Failed'); btn.disabled = false; }
     });
 }
 
@@ -846,7 +846,7 @@ function dashAlertTicket(id, btn) {
         body: 'csrf_token=' + CSRF + '&action=create_ticket&alert_id=' + id
     }).then(r => r.json()).then(d => {
         if (d.success && d.redirect) { window.location.href = d.redirect; }
-        else { alert(d.error || 'Failed'); btn.disabled = false; }
+        else { RivetDialog.alert(d.error || 'Failed'); btn.disabled = false; }
     });
 }
 
