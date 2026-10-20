@@ -64,7 +64,8 @@ $ok(count($st) === 5 && ($by['disk_free']['params']['warn_free_pct'] ?? 0) === 1
 $ok($one("SELECT COUNT(*) FROM endpoint_agent_checks WHERE device_id = $winId AND check_key = 'svc_chronyd'") == 0 && $one("SELECT COUNT(*) FROM endpoint_agent_checks WHERE device_id = $winId AND check_key = 'svc_eventlog'") == 1, 'reconcile removed the Linux check row of the Windows PC and kept its own');
 $ok($one("SELECT status FROM rmm_alerts WHERE id = $aid") === 'resolved', 'its open alert was resolved');
 $ok((int) $one('SELECT COUNT(*) FROM tickets') === $tickets0, 'no ticket was created');
-$ok((int) $one("SELECT COUNT(*) FROM rivet_core_migrations WHERE migration_id LIKE '003%'") === 3, 'replay: migrations recorded once each');
+// rc.27 added 0033/0034 after this test was written (also matched by LIKE '003%'); name the three this test owns explicitly so a later rc adoption adding more 003x migrations doesn't make this assertion stale again.
+foreach (['0030_rmm_change_monitor', '0031_rmm_clock_skew', '0032_rmm_check_set'] as $m) { $ok((int) $one("SELECT COUNT(*) FROM rivet_core_migrations WHERE migration_id = '$m'") === 1, "replay: migration $m recorded once"); }
 $ok($rmm->reconcileChecks()['removed'] === 0, 'reconcileChecks is idempotent');
 
 echo "\n--- schedule builder: os ---\n";
