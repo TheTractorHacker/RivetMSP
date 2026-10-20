@@ -7391,3 +7391,19 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.102'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.102') {
+        // DB 2.6.103: RivetCore 1.0.0-rc.27. Core migrations 0033 (install apps with the agent: EIGHT new tables, rmm_package_auto, rmm_package_auto_clients, rmm_package_params,
+        // rmm_installer_apps, rmm_device_apps, rmm_hosted_files, rmm_version_hosted, rmm_hosted_grants) and 0034 (Mesh agent after approval: ONE new table, rmm_mesh_after_approval),
+        // both idempotent (CREATE TABLE IF NOT EXISTS), no row inserted, nothing existing altered. Core owns the DDL, so this step runs the Core runner (it skips applied ids).
+        // Nothing is switched on: auto-install only plans work when software_deploy is on and a package is marked for auto-install; Mesh-after-approval only plans work when an
+        // installer's tick-box was used. Both stay empty and cost nothing otherwise.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Rmm\Migration\Migration0034MeshAfterApproval::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.103'");
+        }
+    }
