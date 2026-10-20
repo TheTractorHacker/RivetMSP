@@ -1501,7 +1501,7 @@ function rivetRmmUiInstallerFormatField(array $msi, string $defaultArch): string
 
     return '<div class="col-md-6" id="rmm-inst-format-wrap"><label class="form-label" for="rmm-inst-format">Format</label><select class="form-select" id="rmm-inst-format" name="format" aria-describedby="rmm-inst-format-help">'
         . '<option value="exe" selected>exe: self-installing program (recommended)</option><option value="msi"' . ($reason !== '' ? ' disabled' : '') . '>msi: Windows Installer package</option></select>'
-        . '<div class="form-text" id="rmm-inst-format-help">' . ($reason !== '' ? rmmH($reason) : 'The exe installs itself when double-clicked. The msi is for Intune, group policy and tools that deploy .msi files. The msi is unsigned and unverified on Windows; see MSI templates under Administration.') . '</div></div>';
+        . '<div class="form-text" id="rmm-inst-format-help">' . ($reason !== '' ? rmmH($reason) : 'The exe installs itself when double-clicked. The msi is for Intune, group policy and tools that deploy .msi files. The msi is unsigned: SmartScreen or an application-control policy may warn. Upgrade, repair and uninstall are not yet tested.') . '</div></div>';
 }
 
 /**

@@ -6,7 +6,7 @@
 //        [--release stable|pilot [--rollout 10] [--notes "text"]]
 //   php scripts/endpoint_agent_publish.php dist/rivetit-agent-windows-amd64.msi --msi --version 1.0.0 --arch amd64 [--activate]
 //   --msi       the file is an MSI TEMPLATE (RivetCore 1.0.0-rc.16, `make msi`): stored in the MSI template table, never an agent update (no --release). New MSI installers are a copy of the
-//               current template with the per-client payload appended. UNVERIFIED on Windows and unsigned: see docs/rmm/MSI_VERIFY.md in RivetCore.
+//               current template with the per-client payload appended. Unsigned: SmartScreen or an application-control policy may warn. Upgrade, repair and uninstall are not yet tested.
 //   --activate  make it the binary new per-client installers are stamped from for that architecture
 //   --release   also offer it to already enrolled agents of that architecture as a self-update (staged by --rollout percent)
 // Run it as the web server user (sudo -u www-data php ...) or as root (the stored file is then handed to the directory owner).

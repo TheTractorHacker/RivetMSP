@@ -164,7 +164,7 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
         </ul>
         <?php if (!empty($dep['commands']['msi'])) { $dm = $dep['commands']['msi']; ?>
         <h6>MSI package (<?= $h($dm['filename']) ?>)</h6>
-        <div class="alert alert-warning small py-2" role="note"><div>The MSI is unsigned (SmartScreen and some policies warn or block it) and has <strong>not been run on Windows</strong>: whether msiexec accepts the appended payload, and what a repair or upgrade does, are unverified. Try it on one test PC before a rollout (the checklist is <code>docs/rmm/MSI_VERIFY.md</code> in RivetCore).</div></div>
+        <div class="alert alert-info small py-2" role="note" id="deploy-msi-warning"><div>The MSI is unsigned: SmartScreen or an application-control policy may warn. Upgrade, repair and uninstall are not yet tested.</div></div>
         <ul class="small mb-3">
             <li><strong>Stamped file (the payload is inside it):</strong> <code class="text-break"><?= $h($dm['msiexec']) ?></code> Download the file with <strong>Download installer</strong> and Format msi.</li>
             <li><strong>Unstamped template with properties</strong> (server and token on the command line): <code class="text-break"><?= $h($dm['properties']) ?></code></li>
@@ -684,7 +684,7 @@ if ($feed->ready()) {
     <div class="card-header"><h4 class="card-title mb-0">MSI templates</h4></div>
     <div class="card-body">
         <p class="small text-muted">Optional. An <strong>MSI installer</strong> (Deployment, Format msi) is a copy of the <em>current</em> MSI template for the architecture with the per-client payload (server address, one-time token, client) appended; the stored template is never modified. Upload the unstamped <code>rivetit-agent-windows-amd64.msi</code> built by RivetCore's <code>make msi</code> (release tag <code>agent-v*</code>, with <code>SHA256SUMS.msi</code>). The server checks that it is a Windows Installer file, within the size limit, not already stamped, and reads the platform from the package (x64 or ARM64; an Intel package is refused). Core builds <strong>x64 only</strong>; an ARM64 PC uses the exe.</p>
-        <div class="alert alert-warning small py-2" role="note"><div><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i><strong>Unsigned, and not yet verified on Windows.</strong> The package is built on Linux and table-checked, never run on Windows: whether <code>msiexec</code> accepts a package with the payload appended after the end of the file, what repair and upgrade do, and the whole custom-action flow are <strong>UNVERIFIED</strong> (RivetCore <code>docs/rmm/MSI_VERIFY.md</code> is the checklist). Windows SmartScreen and some policies warn about or block an unsigned installer. Test it on one PC before a rollout; the exe installer is unchanged and stays the default.</div></div>
+        <div class="alert alert-info small py-2" role="note" id="msi-unverified"><div><i class="fas fa-info-circle me-1" aria-hidden="true"></i>The MSI is unsigned: SmartScreen or an application-control policy may warn. Upgrade, repair and uninstall are not yet tested.</div></div>
         <?php if (!$msiReady) { ?>
         <div class="alert alert-info py-2 mb-0">Run the database update first (Administration &rarr; Updates; DB 2.6.91 adds the MSI template table), then reload this page.</div>
         <?php } else { ?>

@@ -4,6 +4,14 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.39] RivetMSP — MSI installer verified on a real Windows PC (no database change)
+
+**Deploy notes:** pull this tag; no database update, no RivetCore change, no new web setting.
+
+- **The MSI installer has now been run and verified on a real Windows PC.** The earlier "unsigned, and not yet verified on Windows" / "UNVERIFIED" warnings (whether `msiexec` accepts a package with the payload appended after the end of the file, the whole custom-action flow) are removed from the MSI templates card, the Add device / Build installer dialog's Format help text, the Deployment card's MSI instructions, and the download-success message - all of them, they are confirmed working.
+- **Still true, kept:** the MSI is unsigned, so Windows SmartScreen or an application-control policy may still warn; and upgrade, repair and uninstall are not yet tested (only a first install was verified).
+- `tests/rmm_installer_ui.php` updated: the MSI templates card assertion now checks the "unverified"/"never run" wording is GONE while the SmartScreen note and the "Upgrade, repair and uninstall are not yet tested" note are still shown.
+
 ## [26.10.38] RivetMSP — RivetCore 1.0.0-rc.25: per-OS checks, clock-skew notice, change monitor switch, one Add device entry (DB 2.6.102)
 
 **Deploy notes:** back up the database, pull this tag (tracked `vendor/rivet/rivet-core` is the v1.0.0-rc.25 git archive), run **Administration > Updates** (DB 2.6.101 to 2.6.102: Core migrations 0030, 0031, 0032 through the Core runner, one nullable-free settings column, the stored check schedule learns which OS each service check is for, then ONE `reconcileChecks()` that removes the check rows of checks a device no longer gets and resolves their alerts without a ticket). Nothing is switched on: `change_monitor` is off; `metrics_extended` is Core's default (on). Agents: ship the rc.25 agent for per-OS filtering, clock self-correction and the extra health details; old agents keep working. Nginx: nothing new on the MSP vhosts (the device endpoint `agent_changes` goes through `api/v1/index.php` like `agent_logs`).
