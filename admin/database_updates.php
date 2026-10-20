@@ -7370,7 +7370,19 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             ))->run();
             try {
                 require_once dirname(__DIR__) . '/includes/rmm_bootstrap.php';
-                rivetRmmModule($mysqli)->reconcileChecks();
+                $rmm = rivetRmmModule($mysqli);
+                // The stored schedule learns which OS each service check is for (the choice table of Administration > Endpoint agent > Checks): a Linux service check on a Windows PC was the bug.
+                // Only a STORED list is rewritten (the built-in default list is not stored) and only service checks that have no os; a check that has one is never changed. Idempotent.
+                require_once dirname(__DIR__) . '/includes/rmm_checks_simple.php';
+                $rawChecks = trim((string) ($rmm->settings()->get()['checks_json'] ?? ''));
+                $storedChecks = $rawChecks === '' ? null : json_decode($rawChecks, true);
+                if (is_array($storedChecks) && array_is_list($storedChecks)) {
+                    [$upgraded, $nUp] = RivetChecksSimple::upgradeStored($storedChecks);
+                    if ($nUp > 0) {
+                        $rmm->settings()->set(['checks_json' => json_encode(\RivetCore\Rmm\Settings\ChecksValidator::toWire($upgraded))]);
+                    }
+                }
+                $rmm->reconcileChecks();
             } catch (\Throwable $e) {
                 error_log('DB 2.6.102: reconcileChecks failed (' . get_class($e) . '); use Administration > Endpoint agent > Checks > Clean up checks that no longer apply');
             }

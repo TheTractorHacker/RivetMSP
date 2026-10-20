@@ -134,6 +134,9 @@ function rivetRmmPolCheckText(array $c): string
 {
     $params = is_array($c['params'] ?? null) ? $c['params'] : [];
     $s = (string) ($c['type'] ?? '?') . ' every ' . (int) ($c['interval_s'] ?? 0) . ' s';
+    if (in_array($c['os'] ?? '', ['windows', 'linux'], true)) {
+        $s .= ', ' . ucfirst((string) $c['os']) . ' only';
+    }
     if (is_array($params['thresholds'] ?? null)) {
         $t = rivetRmmPolThresholdText($params['thresholds']);
         $s .= $t !== '' ? '; ' . $t : '';
@@ -265,6 +268,11 @@ function rivetRmmPolBuildSettings(array $in, array $catalog): array
             continue;
         }
         $iv = rivetRmmPolIntOf($row['interval_s'] ?? null);
+        $os = is_string($row['os'] ?? '') ? (string) ($row['os'] ?? '') : '?';   // 26.10.38 "Applies to": '' / 'any' = both
+        if (!in_array($os, ['', 'any', 'windows', 'linux'], true)) {
+            $errors[] = "Check $key: choose Windows, Linux or both for \"Applies to\".";
+            $os = '';
+        }
         $params = [];
         $spec = $catalog[$type] ?? ['fields' => [], 'legacy' => in_array($type, RIVET_RMM_POL_LEGACY_TYPES, true), 'reports_value' => false];
         if (!empty($spec['legacy'])) {
@@ -350,7 +358,7 @@ function rivetRmmPolBuildSettings(array $in, array $catalog): array
             $errors[] = "Check $key: the interval must be a whole number of seconds from 30 to 86400.";
             $iv = (string) ($row['interval_s'] ?? '');
         }
-        $settings['check.' . $key] = ['mode' => 'override', 'value' => ['type' => $type, 'params' => $params, 'interval_s' => $iv]];
+        $settings['check.' . $key] = ['mode' => 'override', 'value' => ['type' => $type, 'params' => $params, 'interval_s' => $iv] + ($os === 'windows' || $os === 'linux' ? ['os' => $os] : [])];
     }
 
     return [$settings, $errors];
@@ -395,7 +403,7 @@ function rivetRmmPolFormModel(array $settings): array
         $own = $params;
         unset($own['thresholds'], $own['flap'], $own['ignore_parent']);
         $m['checks'][] = ['key' => substr((string) $key, 6), 'mode' => ($e['mode'] ?? '') === 'disable' ? 'disable' : 'override', 'type' => (string) ($v['type'] ?? ''),
-            'interval_s' => (string) ($v['interval_s'] ?? ''), 'own' => $own, 'th' => $th, 'flap' => $flap, 'ignore_parent' => !empty($params['ignore_parent'])];
+            'interval_s' => (string) ($v['interval_s'] ?? ''), 'os' => in_array($v['os'] ?? '', ['windows', 'linux'], true) ? (string) $v['os'] : '', 'own' => $own, 'th' => $th, 'flap' => $flap, 'ignore_parent' => !empty($params['ignore_parent'])];
     }
 
     return $m;
@@ -476,6 +484,8 @@ function rivetRmmPolCheckRow(string $i, array $row, array $catalog): string
         $o .= '<option value="' . rmmH($t) . '"' . ($t === $type ? ' selected' : '') . '>' . rmmH($t . ($plat !== '' ? ' (' . $plat . ')' : '') . (!empty($spec['legacy']) ? ', own settings' : '')) . '</option>';
     }
     $o .= '</select></div>'
+        . '<div class="col-sm-4 col-lg-2"><label class="form-label small mb-1" for="' . $id . '_os">Applies to</label><select class="form-select form-select-sm" id="' . $id . '_os" name="' . $nm . '[os]">'
+        . '<option value=""' . (($row['os'] ?? '') === '' ? ' selected' : '') . '>Windows and Linux</option><option value="windows"' . (($row['os'] ?? '') === 'windows' ? ' selected' : '') . '>Windows only</option><option value="linux"' . (($row['os'] ?? '') === 'linux' ? ' selected' : '') . '>Linux only</option></select></div>'
         . '<div class="col-sm-4 col-lg-2"><label class="form-label small mb-1" for="' . $id . '_iv">Run every (seconds)</label><input type="number" step="1" min="30" max="86400" class="form-control form-control-sm" id="' . $id . '_iv" name="' . $nm . '[interval_s]" value="' . rmmH($row['interval_s'] ?? '') . '" placeholder="60"></div>'
         . '<div class="col-sm-2 col-lg-2 text-end"><button type="button" class="btn btn-sm btn-outline-danger rmm-row-remove" data-rmm-remove="1" aria-label="Remove this check row" title="Remove this row"><i class="fas fa-times" aria-hidden="true"></i></button></div></div>'
         . '<p class="form-text mb-1">Choosing "Remove this check" takes the key out of the device\'s check list (also one from the global list); the type and settings are then ignored.</p>';

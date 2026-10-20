@@ -26,7 +26,9 @@ final class RivetChecksSimple
     public const MAX_SERVICES = 30;
     public const MAX_SCRIPTS = 10;
     public const SERVICE_RE = '/^[A-Za-z0-9][A-Za-z0-9._@$ -]{0,127}$/';
-    public const POST_KEYS = ['present', 'reset', 'disk_on', 'disk_free', 'reboot_on', 'svc', 'svc_extra', 'every', 'keep', 'scripts'];
+    public const POST_KEYS = ['present', 'reset', 'disk_on', 'disk_free', 'reboot_on', 'svc', 'svc_extra', 'svc_extra_os', 'every', 'keep', 'scripts'];
+    /** 26.10.38 (RivetCore rc.24): the OS a check can be limited to. A check ticked for one OS is only sent to devices of that OS. */
+    public const OS_CHOICES = ['windows' => 'Windows', 'linux' => 'Linux'];
 
     /** Services most people want to watch: value (the real service name) => [label, platform]. */
     public const SERVICES = [
@@ -42,6 +44,40 @@ final class RivetChecksSimple
         'chronyd' => ['Time sync (chrony)', 'Linux'],
         'rsyslog' => ['System log (rsyslog)', 'Linux'],
     ];
+
+    /**
+     * The OS of a service in the choice table ('windows' or 'linux'), or null for a name the table does not know (a custom service: it keeps whatever is stored,
+     * none = both). The match is exact, like the table itself.
+     */
+    public static function serviceOs(string $name): ?string
+    {
+        return isset(self::SERVICES[$name]) ? strtolower(self::SERVICES[$name][1]) : null;
+    }
+
+    /**
+     * The stored schedule with `os` set on every service check that has none and whose service the choice table knows (svc_eventlog is windows, svc_chronyd, svc_cron,
+     * svc_sshd, ... are linux). A check that already has `os` is never changed; a custom service stays for both OSes until an administrator picks one. Pure and idempotent.
+     *
+     * @param list<array<string,mixed>> $list
+     * @return array{0:list<array<string,mixed>>,1:int} [the list, how many checks got an os]
+     */
+    public static function upgradeStored(array $list): array
+    {
+        $n = 0;
+        foreach ($list as $i => $c) {
+            if (!is_array($c) || ($c['type'] ?? '') !== 'service' || \RivetCore\Rmm\Checks\RmmChecks::osOf($c) !== null || (($c['os'] ?? null) !== null && $c['os'] !== '' && $c['os'] !== 'any')) {
+                continue;
+            }
+            $name = ChecksValidator::paramsOf($c)['name'] ?? null;
+            $os = is_string($name) ? self::serviceOs($name) : null;
+            if ($os !== null) {
+                $list[$i]['os'] = $os;
+                $n++;
+            }
+        }
+
+        return [$list, $n];
+    }
 
     /** The three presets at the top of the form (the browser fills the options from this; nothing is saved until Save). */
     public const PRESETS = [
@@ -170,7 +206,7 @@ final class RivetChecksSimple
                 $intervals[] = $iv;
             } elseif ($type === 'service' && isset($p['name']) && is_string($p['name']) && preg_match(self::SERVICE_RE, $p['name']) === 1
                 && array_diff($keys, ['name', 'expected']) === [] && (($p['expected'] ?? 'running') === 'running') && !self::hasService($st['services'], $p['name'])) {
-                $st['services'][] = ['name' => $p['name'], 'key' => $key];
+                $st['services'][] = ['name' => $p['name'], 'key' => $key, 'os' => \RivetCore\Rmm\Checks\RmmChecks::osOf($c) ?? self::serviceOs($p['name']) ?? ''];
                 $intervals[] = $iv;
             } elseif ($type === 'script' && isset($p['script']) && is_string($p['script']) && array_diff($keys, ['script', 'timeout_s']) === [] && count($st['scripts']) < self::MAX_SCRIPTS) {
                 $st['scripts'][] = ['name' => $key, 'body' => $p['script'], 'timeout' => (int) ($p['timeout_s'] ?? ChecksValidator::SCRIPT_TIMEOUT_DEFAULT_S), 'key' => $key];
@@ -216,7 +252,9 @@ final class RivetChecksSimple
             }
         }
 
-        return $label . $what . ', ' . self::everyWords((int) ($c['interval_s'] ?? 0));
+        $os = \RivetCore\Rmm\Checks\RmmChecks::osOf($c);
+
+        return $label . $what . ', ' . self::everyWords((int) ($c['interval_s'] ?? 0)) . ($os !== null ? ', ' . self::OS_CHOICES[$os] . ' only' : '');
     }
 
     public static function everyWords(int $s): string
@@ -284,8 +322,16 @@ final class RivetChecksSimple
         }
         // services: ticked ones from the checklist, then the extra box (one name per line)
         $keyOf = [];
+        $osOf = [];
         foreach ($base['services'] as $s) {
             $keyOf[strtolower($s['name'])] = $s['key'];
+            $osOf[strtolower($s['name'])] = (string) ($s['os'] ?? '');
+        }
+        // 26.10.38: which OS the NEW names typed in the box are for (default Windows). A name that is already in the schedule keeps the OS it has.
+        $newOs = $str($post['svc_extra_os'] ?? 'windows');
+        if (!isset(self::OS_CHOICES[$newOs])) {
+            $errors[] = 'Add another service: choose Windows or Linux.';
+            $newOs = 'windows';
         }
         $names = [];
         $ticked = is_array($post['svc'] ?? null) ? $post['svc'] : [];
@@ -294,7 +340,7 @@ final class RivetChecksSimple
                 $errors[] = 'Important services: one ticked service is not in the list. Use the "add another service" box for other names.';
                 continue;
             }
-            $names[$n] = true;
+            $names[$n] = self::serviceOs($n);
         }
         foreach (preg_split('/\R/', $str($post['svc_extra'] ?? '')) ?: [] as $line) {
             $line = trim($line);
@@ -305,16 +351,17 @@ final class RivetChecksSimple
                 $errors[] = 'Important services: "' . mb_substr($line, 0, 40) . '" is not a service name (letters, digits and . _ @ - only, up to 128 characters).';
                 continue;
             }
-            if (!isset(array_change_key_case($names)[strtolower($line)])) {
-                $names[$line] = true;   // the same service typed twice (or in another case) is one check
+            if (!array_key_exists(strtolower($line), array_change_key_case($names))) {
+                // the same service typed twice (or in another case) is one check; a name already scheduled keeps its OS (none = both), a new one gets the chosen OS
+                $names[$line] = self::serviceOs($line) ?? (array_key_exists(strtolower($line), $osOf) ? ($osOf[strtolower($line)] === '' ? null : $osOf[strtolower($line)]) : $newOs);
             }
         }
         if (count($names) > self::MAX_SERVICES) {
             $errors[] = 'Important services: watch at most ' . self::MAX_SERVICES . ' services.';
         }
-        foreach (array_keys($names) as $n) {
+        foreach ($names as $n => $nOs) {
             $n = (string) $n;
-            $st['services'][] = ['name' => $n, 'key' => $keyOf[strtolower($n)] ?? ''];
+            $st['services'][] = ['name' => $n, 'key' => $keyOf[strtolower($n)] ?? '', 'os' => $nOs ?? ''];
         }
         // scripts
         $rows = is_array($post['scripts'] ?? null) ? $post['scripts'] : [];
@@ -385,7 +432,8 @@ final class RivetChecksSimple
             $st['others'][] = $o;
         }
         $typed = $st;
-        $typed['extra_raw'] = mb_substr($str($post['svc_extra'] ?? ''), 0, 4000);   // what was typed, to put back when a save is refused
+        $typed['extra_raw'] = mb_substr($str($post['svc_extra'] ?? ''), 0, 4000);
+        $typed['extra_os'] = $newOs;   // what was typed, to put back when a save is refused
         if ($errors !== []) {
             return [null, array_values(array_unique($errors)), $typed, $reset];
         }
@@ -407,14 +455,15 @@ final class RivetChecksSimple
         }
         foreach ($st['services'] as $s) {
             $slug = 'svc_' . strtolower(trim((string) preg_replace('/[^A-Za-z0-9_.:-]+/', '_', $s['name']), '_'));
-            $out[] = ['key' => self::freeKey($s['key'], $slug, $usedKeys), 'type' => 'service', 'params' => ['name' => $s['name'], 'expected' => 'running'], 'interval_s' => $iv];
+            $out[] = ['key' => self::freeKey($s['key'], $slug, $usedKeys), 'type' => 'service', 'params' => ['name' => $s['name'], 'expected' => 'running'], 'interval_s' => $iv] + ($s['os'] !== '' ? ['os' => $s['os']] : []);
         }
         foreach ($st['scripts'] as $s) {
             $out[] = ['key' => self::freeKey($s['key'], 'script_' . $s['key'], $usedKeys), 'type' => 'script', 'params' => ['script' => $s['body'], 'timeout_s' => $s['timeout']], 'interval_s' => $iv];
         }
         foreach ($stored as $c) {
             if (is_array($c) && isset($keepSet[(string) ($c['key'] ?? '')]) && isset($storedOthers[(string) $c['key']])) {
-                $out[] = ['key' => (string) $c['key'], 'type' => (string) $c['type'], 'params' => ChecksValidator::paramsOf($c), 'interval_s' => (int) $c['interval_s']];
+                $out[] = ['key' => (string) $c['key'], 'type' => (string) $c['type'], 'params' => ChecksValidator::paramsOf($c), 'interval_s' => (int) $c['interval_s']]
+                    + (\RivetCore\Rmm\Checks\RmmChecks::osOf($c) !== null ? ['os' => \RivetCore\Rmm\Checks\RmmChecks::osOf($c)] : []);
             }
         }
         if ($out === [] && !$reset) {

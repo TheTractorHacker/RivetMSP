@@ -67,15 +67,17 @@ function rivetChecksSimpleCard(array $st, bool $isDefault, string $savedJson, ar
     // services
     $chosen = [];
     $extra = [];
+    $extraWords = [];
     foreach ($st['services'] as $s) {
         if (isset(RivetChecksSimple::SERVICES[$s['name']])) {
             $chosen[$s['name']] = true;
         } else {
             $extra[] = $s['name'];
+            $extraWords[] = $s['name'] . ' (' . (RivetChecksSimple::OS_CHOICES[$s['os'] ?? ''] ?? 'both Windows and Linux') . ')';
         }
     }
     $o .= '<div class="card mb-3"><div class="card-body"><div class="fw-semibold">Important services stopped</div>'
-        . '<div class="form-text mb-2">Tick the services that must always be running. You get an alert if one stops or is missing. A service that does not exist on a computer is reported for that computer only.</div>'
+        . '<div class="form-text mb-2">Tick the services that must always be running. You get an alert if one stops or is missing. A check ticked for one OS is only sent to devices of that OS.</div>'
         . '<div class="row">';
     foreach (RivetChecksSimple::SERVICES as $name => [$label, $plat]) {
         $id = 'cs_svc_' . preg_replace('/[^A-Za-z0-9]/', '', $name);
@@ -83,8 +85,15 @@ function rivetChecksSimpleCard(array $st, bool $isDefault, string $savedJson, ar
             . '<label class="form-check-label" for="' . $id . '">' . $e($label) . ' <span class="badge bg-secondary-lt text-muted">' . $e($plat) . '</span></label></div></div>';
     }
     $extraText = isset($st['extra_raw']) ? (string) $st['extra_raw'] : implode("\n", $extra);
+    $newOs = isset($st['extra_os']) && isset(RivetChecksSimple::OS_CHOICES[$st['extra_os']]) ? $st['extra_os'] : 'windows';
     $o .= '</div><label class="form-label small mt-2 mb-1" for="cs_svc_extra">Add another service (one name per line)</label>'
         . '<textarea class="form-control form-control-sm" rows="2" id="cs_svc_extra" name="cs[svc_extra]" maxlength="4000" placeholder="For example: MSSQLSERVER" data-cs-extra>' . $e($extraText) . '</textarea>'
+        . '<div class="row g-2 mt-1"><div class="col-sm-6 col-lg-4"><label class="form-label small mb-1" for="cs_svc_extra_os">A new name added here is a service on</label><select class="form-select form-select-sm" id="cs_svc_extra_os" name="cs[svc_extra_os]" data-cs-extra-os>';
+    foreach (RivetChecksSimple::OS_CHOICES as $v => $l) {
+        $o .= '<option value="' . $e($v) . '"' . ($v === $newOs ? ' selected' : '') . '>' . $e($l) . '</option>';
+    }
+    $o .= '</select></div></div>'
+        . ($extraWords !== [] ? '<div class="form-text" data-cs-extra-known>Already in your schedule: ' . $e(implode(', ', $extraWords)) . '. These keep the OS shown.</div>' : '')
         . '<div class="form-text">Use the service name (not the display name): on Windows, open Services and read the properties; on Linux, the unit name such as <code>nginx</code>.</div></div></div>';
 
     // other checks kept
