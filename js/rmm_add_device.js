@@ -160,7 +160,9 @@
                     var out = document.getElementById('add-linux-out');
                     out.textContent = ''; out.hidden = false;
                     if (!d || !d.success) { return say((d && d.error) || 'The commands could not be created.', 'danger'); }
-                    if (d.linux_script) {
+                    if (d.linux_self) {
+                        block(out, 'Linux (as root, one command)', d.linux_self, 'Downloads install-linux.sh and the agent (' + d.release + ') from this server, checks both against the SHA-256 values printed in the command, and installs. Nothing to upload or unpack; the machine only needs to reach this server (curl or wget).');
+                    } else if (d.linux_script) {
                         block(out, 'Any Linux with systemd (as root)', d.linux_script, 'Downloads release ' + d.release + ' from GitHub, checks its SHA-256, then installs and enrolls. Works on x64 and ARM64.');
                     } else {
                         block(out, 'Linux (as root, next to the unpacked tarball)', d.linux, 'No Linux release is recorded on this server, so this expects rivetit-agent-linux-*.tar.gz unpacked in the current directory.');

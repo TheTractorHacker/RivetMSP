@@ -102,6 +102,16 @@ if ($inst_mode === 'commands') {
         // The PowerShell deployment snippet, and for format=msi the msiexec / properties / uninstall commands of the stamped package (RivetCore InstallerService::deploymentCommands).
         $inst_out['windows'] = ['powershell' => $r->data['commands']['powershell'], 'filename' => $r->data['commands']['filename'], 'msi' => $r->data['commands']['msi'] ?? null];
     } else {
+        // Self-hosted first (RivetIT's Linux-hosting feature, ported here): when this server hosts install-linux.sh and the agent for this CPU
+        // (includes/rmm_linux_store.php), the command downloads both FROM THIS SERVER with a derived, per-file, non-enrolling credential and needs
+        // no tarball unpacked and no GitHub release recorded. Falls back to the 26.10.28 GitHub-release-link commands, then the oldest
+        // tarball-expected form, so an installation that has not published or hosted anything yet still gets a working (if less convenient) command.
+        require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/rmm_linux_store.php';
+        $inst_self = \RivetMsp\AgentFeed\LinuxStore::command($mysqli, (string) $r->data['commands']['linux'], $inst_arch);
+        if ($inst_self !== null) {
+            $inst_out['linux_self'] = $inst_self['command'];
+            $inst_out['release'] = $inst_self['version'];
+        }
         // 26.10.28: the Linux commands that need no files next to them: built from the Linux assets a published release recorded (Administration > Endpoint agent > Agent updates).
         require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/rmm_agent_feed.php';
         $inst_feed = new \RivetMsp\AgentFeed\Feed($mysqli);
@@ -109,7 +119,7 @@ if ($inst_mode === 'commands') {
         $inst_cfg = $inst_rmm->readModel()->settingsSummary();
         if ($inst_rec !== null) {
             $inst_srv = (string) ($r->data['commands']['server'] ?? '');
-            $inst_out['release'] = (string) ($inst_rec['version'] ?? '');
+            $inst_out['release'] ??= (string) ($inst_rec['version'] ?? '');
             $inst_out['linux_script'] = \RivetMsp\AgentFeed\LinuxInstall::script($inst_rec, (string) $r->data['commands']['linux'], (string) $r->data['department']);
             $inst_out['linux_deb'] = \RivetMsp\AgentFeed\LinuxInstall::package($inst_rec, 'deb', (string) $r->data['commands']['linux'], (string) $r->data['token_plain'], $inst_srv, $inst_cfg['ca_pem'] ?? null, (string) $r->data['department']);
             $inst_out['linux_rpm'] = \RivetMsp\AgentFeed\LinuxInstall::package($inst_rec, 'rpm', (string) $r->data['commands']['linux'], (string) $r->data['token_plain'], $inst_srv, $inst_cfg['ca_pem'] ?? null, (string) $r->data['department']);
