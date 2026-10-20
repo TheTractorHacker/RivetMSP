@@ -16,13 +16,13 @@ $exeA = $r091['_files']['rivetit-agent-windows-amd64.exe'];
 
 // ---------------------------------------------------------------- the page and who sees it
 [$c, $b] = web($wb, 'GET', '/agent/rmm_add_device.php', $sidAdmin);
-$ok($c === 200 && str_contains($b, 'Add device / Build installer') && str_contains($b, 'id="rmm-add-form"') && str_contains($b, '/js/rmm_add_device.js') && str_contains($b, 'data-add-format="exe"') && str_contains($b, 'data-add-format="msi"')
+$ok($c === 200 && str_contains($b, '>Add device</h3>') && str_contains($b, 'Quick download') && str_contains($b, 'id="rmm-add-form"') && str_contains($b, '/js/rmm_add_device.js') && str_contains($b, 'data-add-format="exe"') && str_contains($b, 'data-add-format="msi"')
     && str_contains($b, 'data-add="commands-windows"') && str_contains($b, 'data-add="commands-linux"'), 'page (administrator): the form, a button for each format and the script');
 $ok(preg_match('/data-add-format="exe"[^>]* disabled/', $b) === 0 && preg_match('/data-add-format="msi"[^>]* disabled/', $b) === 0, 'page: with a binary and an MSI template hosted, both Windows buttons are enabled');
 $ok(str_contains($b, 'Release <strong data-add-linux-ver>0.9.1</strong>') && str_contains($b, 'id="add-linux-files"') && str_contains($b, 'rivetit-agent_0.9.1_amd64.deb') && str_contains($b, 'rivetit-agent-linux-arm64.tar.gz') && str_contains($b, 'data-add-copy-text='), 'page: the recorded Linux release, its files, SHA-256 values and copy-link buttons');
 $ok(str_contains($b, hash('sha256', $r091['_files']['rivetit-agent-linux-amd64.tar.gz'])) && str_contains($b, 'checksum list') && str_contains($b, 'GitHub digest'), 'page: each file shows its SHA-256 and where that value came from');
 [$c, $b] = web($wb, 'GET', '/agent/rmm_fleet.php', $sidAdmin);
-$ok(str_contains($b, 'href="/agent/rmm_add_device.php"') && str_contains($b, 'data-nav-build-installer') && str_contains($b, 'rmm_fleet.php?add=1') && str_contains($b, 'id="rmmInstallerModal"'), 'menu: Build installer is there, the old Add device item and dialog are unchanged');
+$ok(str_contains($b, 'href="/agent/rmm_add_device.php"') && str_contains($b, 'data-nav-add-device') && !str_contains($b, 'data-nav-build-installer') && !str_contains($b, 'rmm_fleet.php?add=1') && str_contains($b, 'id="rmmInstallerModal"'), 'menu: ONE Add device entry (the full page); the Quick download dialog is on the page');
 foreach (['technician' => $sidTech, 'viewer' => $sidViewer] as $who => $sid) {
     [$c, $b] = web($wb, 'GET', '/agent/rmm_add_device.php', $sid);
     $ok(!str_contains($b, 'id="rmm-add-form"') && !str_contains($b, 'rvte1.') && (str_contains($b, 'No access') || $c !== 200), "page ($who): no form (" . $c . ')');

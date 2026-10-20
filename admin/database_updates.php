@@ -7353,3 +7353,41 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.101'");
     }
+
+    if ($rivetit_db_version() == '2.6.101') {
+        // DB 2.6.102: RivetCore 1.0.0-rc.25. Core migrations 0030 (change monitoring: FOUR tables), 0031 (device clock skew: SIX nullable columns on endpoint_agent_devices) and
+        // 0032 (per-OS check targeting: ONE table, rmm_device_checkset), all idempotent (CREATE TABLE IF NOT EXISTS / information_schema-guarded ADD COLUMN), no row inserted. Core owns
+        // the DDL, so this step runs the Core runner (it skips applied ids). Nothing is switched on: change_monitor is off until an administrator turns it on, metrics_extended
+        // defaults to on in Core but only affects an agent that sends the new members. Then ONE call of reconcileChecks(): it removes the check rows and resolves the open alerts of
+        // checks that are not delivered to a device (the Linux service checks on a Windows PC). Resolved by the system with the reason not_applicable; no ticket is created. It
+        // is idempotent, and a failure is logged and does NOT stop the step: Administration > Endpoint agent > Checks has a button that repeats it. Skipped (version NOT advanced,
+        // so it retries) until a package that ships migration 0032 is installed.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Rmm\Migration\Migration0032CheckSet::class)) {
+            // ONE additive column: Administration > Endpoint agent > "Allow Linux devices to enroll" (default ON; the config.php constant EA_ALLOW_NON_WINDOWS can still force it on). Re-running is harmless.
+            mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_rmm_allow_linux` TINYINT(1) NOT NULL DEFAULT 1");
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            try {
+                require_once dirname(__DIR__) . '/includes/rmm_bootstrap.php';
+                $rmm = rivetRmmModule($mysqli);
+                // The stored schedule learns which OS each service check is for (the choice table of Administration > Endpoint agent > Checks): a Linux service check on a Windows PC was the bug.
+                // Only a STORED list is rewritten (the built-in default list is not stored) and only service checks that have no os; a check that has one is never changed. Idempotent.
+                require_once dirname(__DIR__) . '/includes/rmm_checks_simple.php';
+                $rawChecks = trim((string) ($rmm->settings()->get()['checks_json'] ?? ''));
+                $storedChecks = $rawChecks === '' ? null : json_decode($rawChecks, true);
+                if (is_array($storedChecks) && array_is_list($storedChecks)) {
+                    [$upgraded, $nUp] = RivetChecksSimple::upgradeStored($storedChecks);
+                    if ($nUp > 0) {
+                        $rmm->settings()->set(['checks_json' => json_encode(\RivetCore\Rmm\Settings\ChecksValidator::toWire($upgraded))]);
+                    }
+                }
+                $rmm->reconcileChecks();
+            } catch (\Throwable $e) {
+                error_log('DB 2.6.102: reconcileChecks failed (' . get_class($e) . '); use Administration > Endpoint agent > Checks > Clean up checks that no longer apply');
+            }
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.102'");
+        }
+    }

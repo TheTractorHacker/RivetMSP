@@ -21,6 +21,66 @@
 
 require_once __DIR__ . '/rmm_bootstrap.php';
 
+// ------------------------------------------------------------------ device clock (RivetCore 1.0.0-rc.23)
+
+/** A clock more than this many seconds off is shown on the device page and the fleet list. */
+const RIVET_RMM_CLOCK_NOTICE_S = 120;
+
+/**
+ * What to tell about a device's clock, from Core's `clock` object (RmmReadModel::clockOf: skew_s, measured_at, agent_offset_s, last_reject {reason, at}), or null when there is
+ * nothing worth showing. Only integers are computed; the refusal reason is the server's own text and is escaped where it is printed.
+ *
+ * @param array<string,mixed>|null $clock
+ * @return array{skew_s:?int,minutes:?int,dir:string,reject:?string,reject_at:?string,text:string}|null
+ */
+function rivetRmmUiClockNotice(?array $clock, string $platform): ?array
+{
+    if (!is_array($clock)) {
+        return null;
+    }
+    $skew = isset($clock['skew_s']) && is_numeric($clock['skew_s']) ? (int) $clock['skew_s'] : null;
+    $rej = is_array($clock['last_reject'] ?? null) && is_string($clock['last_reject']['reason'] ?? null) && $clock['last_reject']['reason'] !== '' ? $clock['last_reject'] : null;
+    $off = $skew !== null && abs($skew) > RIVET_RMM_CLOCK_NOTICE_S;
+    if ($rej === null && !$off) {
+        return null;
+    }
+    $minutes = $skew === null ? null : max(1, (int) round(abs($skew) / 60));
+    $dir = $skew === null ? '' : ($skew > 0 ? 'ahead' : 'behind');
+    $fix = $platform === 'linux' ? '(Linux: timedatectl set-timezone <zone>, timedatectl set-ntp true)' : '(Windows: tzutil /s "<time zone name>", w32tm /resync)';
+    $text = $off ? "This PC's clock is $minutes min " . ($dir === 'ahead' ? 'ahead of' : 'behind') . ' the server: set the time zone and sync the time ' . $fix . '.' : '';
+
+    return ['skew_s' => $skew, 'minutes' => $minutes, 'dir' => $dir, 'reject' => $rej === null ? null : mb_substr((string) $rej['reason'], 0, 200),
+        'reject_at' => $rej !== null && is_string($rej['at'] ?? null) ? (string) $rej['at'] : null, 'text' => $text];
+}
+
+/**
+ * The clock objects of a page of devices (the fleet list), keyed by device id. One statement; a schema without the clock columns (migration 0031 not applied yet) gives no badges.
+ *
+ * @param list<int> $ids
+ * @return array<int,array<string,mixed>>
+ */
+function rivetRmmUiClockMap(\mysqli $mysqli, array $ids): array
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $i): bool => $i > 0)));
+    if ($ids === []) {
+        return [];
+    }
+    try {
+        $res = mysqli_query($mysqli, 'SELECT device_id, clock_skew_s, clock_skew_at, clock_offset_s, last_reject_reason, last_reject_at FROM endpoint_agent_devices WHERE device_id IN (' . implode(',', $ids) . ')');
+    } catch (\Throwable) {
+        return [];
+    }
+    $out = [];
+    while ($res && ($r = mysqli_fetch_assoc($res))) {
+        $c = \RivetCore\Rmm\Read\RmmReadModel::clockOf($r);
+        if ($c !== null) {
+            $out[(int) $r['device_id']] = $c;
+        }
+    }
+
+    return $out;
+}
+
 use RivetCore\Rmm\Authz\RmmAbility;
 
 // ------------------------------------------------------------------ constants and tiny formatters
@@ -519,7 +579,14 @@ function rivetRmmUiPanel(\mysqli $mysqli, int $assetId, int $userId, ?int $devic
     $label = $state === 'never' ? 'Waiting for first check-in' : ($state === 'online' ? ($openCrit ? 'Online with critical alerts' : 'Online')
         : ($state === 'offline' ? 'Offline' : 'Not seen for days'));
 
+    $clockNotice = rivetRmmUiClockNotice(is_array($view['clock'] ?? null) ? $view['clock'] : null, $platform);
     $banners = [];
+    if ($clockNotice !== null && $clockNotice['text'] !== '') {
+        $banners[] = ['kind' => 'warn', 'text' => $clockNotice['text']];
+    }
+    if ($clockNotice !== null && $clockNotice['reject'] !== null) {
+        $banners[] = ['kind' => 'warn', 'text' => 'The last check-in was refused: ' . $clockNotice['reject'] . ($state === 'never' ? ' No check-in has been accepted yet.' : '')];
+    }
     if ($dev['revoked_at'] !== null) {
         $banners[] = ['kind' => 'crit', 'text' => 'This device was revoked. It can no longer check in or receive jobs.' . ($dev['revoked_reason'] ? ' Reason: ' . $dev['revoked_reason'] : '')];
     } elseif ($dev['retired_at'] !== null) {
@@ -598,6 +665,7 @@ function rivetRmmUiPanel(\mysqli $mysqli, int $assetId, int $userId, ?int $devic
         'saved_scripts' => $saved,
         'run' => $run,
         'banners' => $banners,
+        'clock' => $clockNotice,
         'match_reason_text' => (string) ($view['match_reason_text'] ?? ''),
         'update_state' => $view['update_state'] ?? null,
         'offered_release' => $view['offered_release'] ?? null,
@@ -721,6 +789,11 @@ function rivetRmmUiFleet(\mysqli $mysqli, int $userId, array $filters = [], ?int
         $listFilters['software'] = mb_substr(trim($filters['software']), 0, 100);
     }
     $list = $read->listDevices($listFilters, $visible, $perPage, ($page - 1) * $perPage);
+    // 26.10.38: the fleet badge "clock off": one statement for the page of devices
+    $clockMap = rivetRmmUiClockMap($mysqli, array_map(static fn (array $d): int => (int) $d['device_id'], $list['items']));
+    foreach ($list['items'] as $ci => $cd) {
+        $list['items'][$ci]['clock'] = rivetRmmUiClockNotice($clockMap[(int) $cd['device_id']] ?? null, str_contains(strtolower((string) ($cd['os_version'] ?? '')), 'linux') ? 'linux' : 'windows');
+    }
     $counts = $read->fleetCounts($visible);
 
     // Offline devices, oldest silence first within the page of ten.

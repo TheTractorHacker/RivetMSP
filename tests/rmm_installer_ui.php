@@ -148,11 +148,13 @@ $ok($c === 200 && !str_contains($b, 'rmmInstallerModal') && !str_contains($b, 'd
 [$c, $b] = web($wb, 'GET', '/agent/rmm_fleet.php', $sidTech);
 $ok($c === 200 && str_contains($b, 'Agent fleet') && !str_contains($b, 'rmmInstallerModal') && !str_contains($b, 'data-rmm-installer-open') && !str_contains($b, 'rmm_installer.js'), 'Agent Fleet (technician): the page is there, the button and dialog are not');
 [$c, $b] = web($wb, 'GET', '/agent/rmm_fleet.php', $sidAdmin);
-$ok(str_contains($b, 'href="/agent/rmm_fleet.php?add=1"') && str_contains($b, 'Add device'), 'Endpoints menu (administrator): Add device');
+$ok(str_contains($b, 'href="/agent/rmm_add_device.php"') && str_contains($b, 'data-nav-add-device') && substr_count($b, 'data-nav-add-device') === 1 && !str_contains($b, 'data-nav-build-installer') && !str_contains($b, 'Build installer'), 'Endpoints menu (administrator): ONE Add device entry, opening the full page');
 [$c, $b] = web($wb, 'GET', '/agent/rmm_fleet.php', $sidTech);
-$ok(!str_contains($b, 'rmm_fleet.php?add=1'), 'Endpoints menu (technician): no Add device');
-[$c, $b] = web($wb, 'GET', '/agent/rmm_fleet.php?add=1', $sidAdmin);
-$ok(str_contains($b, 'data-autoopen="1"'), 'rmm_fleet.php?add=1 asks the dialog to open itself');
+$ok(!str_contains($b, 'data-nav-add-device'), 'Endpoints menu (technician): no Add device');
+[$c, $b, $h] = web($wb, 'GET', '/agent/rmm_fleet.php?add=1', $sidAdmin);
+$ok($c === 302 && str_contains($h ?? '', '/agent/rmm_add_device.php'), 'rmm_fleet.php?add=1 (the old address) redirects to the full Add device page');
+[$c, $b] = web($wb, 'GET', '/agent/rmm_fleet.php?quick=1', $sidAdmin);
+$ok(str_contains($b, 'data-autoopen="1"') && str_contains($b, 'Quick download'), 'rmm_fleet.php?quick=1 asks the Quick download dialog to open itself');
 
 // ---------------------------------------------------------------- Administration: both architectures in one upload
 $upload = function (array $files, array $extra = []) use ($wb, $sidAdmin) {

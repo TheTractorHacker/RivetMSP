@@ -421,7 +421,7 @@ foreach ($cardTabs as $tab => $ids) {
     }
 }
 $ok($bad === [], 'every card id is on the page once, inside its tab' . ($bad ? ': ' . implode(', ', $bad) : ''));
-$ok(str_contains($panes['checks'] ?? '', 'form="ea_settings_form"') && str_contains($panes['security'] ?? '', 'name="ca_pem"') && str_contains($body, 'id="ea_settings_form"') && !str_contains($panes['checks'] ?? '', 'name="csrf_token"'),
+$ok(str_contains($panes['checks'] ?? '', 'form="ea_settings_form"') && str_contains($panes['security'] ?? '', 'name="ca_pem"') && str_contains($body, 'id="ea_settings_form"') && substr_count($panes['checks'] ?? '', 'name="csrf_token"') === 1 && str_contains($panes['checks'] ?? '', 'data-ea-reconcile'),
     'the check editor and the CA / coexistence fields belong to the settings form by id (form=), the form is printed once');
 $ok(!preg_match('/\son[a-z]+\s*=\s*["\']/i', $body), 'no inline event handlers on the Endpoint agent page');
 [$c, , $hd] = $adm1(['save_inventory_settings' => 1, 'inventory_software' => '1', 'check_history_days' => 7, 'software_history_days' => 365, 'ea_tab' => 'inventory']);
@@ -645,8 +645,8 @@ $ok(str_contains($body, 'Trend (') && str_contains($body, 'id="rmm-net"'), 'asse
 
 // ---- events: catalog entries (RivetMSP's picker reads RivetCore's EventCatalog) and the adapter
 $all = RivetCore\Rmm\RmmEvent::all();
-$ok(count($all) === 32 && in_array('rmm.deploy.started', $all, true) && in_array('rmm.deploy.finished', $all, true) && in_array('rmm.deploy.failed', $all, true) && in_array('rmm.patch.scan_completed', $all, true) && in_array('rmm.patch.install_failed', $all, true) && in_array('rmm.file.transferred', $all, true) && in_array('rmm.log.rule_matched', $all, true) && in_array('rmm.mesh.agent_installed', $all, true) && in_array('rmm.mesh.node_conflict', $all, true) && in_array('rmm.starter.installed', $all, true),
-    'RivetCore defines thirty-two rmm.* events (nine of Phase 1, ten of Phase 2 and 3, rmm.file.transferred and rmm.log.rule_matched of Phase 6 and 8, rmm.mesh.agent_installed and rmm.mesh.node_conflict of the Mesh agent, rmm.starter.installed of the starter pack, five rmm.patch.* of Phase 4, three rmm.deploy.* of Phase 5)');
+$ok(count($all) === 35 && in_array("rmm.device.clock_skew", $all, true) && in_array("rmm.change.detected", $all, true) && in_array('rmm.deploy.started', $all, true) && in_array('rmm.deploy.finished', $all, true) && in_array('rmm.deploy.failed', $all, true) && in_array('rmm.patch.scan_completed', $all, true) && in_array('rmm.patch.install_failed', $all, true) && in_array('rmm.file.transferred', $all, true) && in_array('rmm.log.rule_matched', $all, true) && in_array('rmm.mesh.agent_installed', $all, true) && in_array('rmm.mesh.node_conflict', $all, true) && in_array('rmm.starter.installed', $all, true),
+    'RivetCore defines thirty-five rmm.* events (nine of Phase 1, ten of Phase 2 and 3, rmm.file.transferred and rmm.log.rule_matched of Phase 6 and 8, rmm.mesh.agent_installed and rmm.mesh.node_conflict of the Mesh agent, rmm.starter.installed of the starter pack, five rmm.patch.* of Phase 4, three rmm.deploy.* of Phase 5)');
 require_once "$root/includes/event_picker.php";
 $cat = json_decode(eventPickerCatalogJson(), true);
 $pickerIds = array_column($cat['events'], 'i');

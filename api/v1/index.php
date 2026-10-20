@@ -132,7 +132,7 @@ if ($resource === 'openapi' || $resource === 'docs') {
 // above the pre-auth JSON body read below, because a device credential is not an api_tokens row and that body read has no size
 // ceiling. Each handler authenticates its caller, bounds its own body read and rate-limits itself (agent_device_api.php). The RMM module is
 // off by default: with the gate in front (rmm_gate.php) and the module switch off they answer 503 module_disabled.
-if ($resource === 'agent_enroll' || $resource === 'agent_checkin' || $resource === 'agent_jobs' || $resource === 'agent_installer' || $resource === 'agent_update' || $resource === 'agent_transfer' || $resource === 'agent_logs' || $resource === 'agent_build_host') {
+if ($resource === 'agent_enroll' || $resource === 'agent_checkin' || $resource === 'agent_jobs' || $resource === 'agent_installer' || $resource === 'agent_update' || $resource === 'agent_transfer' || $resource === 'agent_logs' || $resource === 'agent_changes' || $resource === 'agent_build_host') {
     require __DIR__ . '/' . $resource . '.php';
     exit;
 }

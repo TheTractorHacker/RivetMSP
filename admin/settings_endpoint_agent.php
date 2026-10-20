@@ -227,6 +227,28 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
         </form>
     </div>
 </div>
+<?php $eaTab('overview'); ?>
+<?php
+$ea_allow_linux = true;
+if (($ea_q = @mysqli_query($mysqli, 'SELECT config_rmm_allow_linux FROM settings WHERE company_id = 1')) instanceof mysqli_result) {
+    $ea_row = mysqli_fetch_row($ea_q);
+    $ea_allow_linux = $ea_row === null || $ea_row[0] === null || (int) $ea_row[0] === 1;
+}
+$ea_allow_linux_forced = defined('EA_ALLOW_NON_WINDOWS') && EA_ALLOW_NON_WINDOWS === true;
+?>
+<div class="card mb-3" id="allow-linux">
+    <div class="card-body">
+        <form action="post.php" method="post" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="form-check form-switch mb-1">
+                <input type="checkbox" class="form-check-input" id="ea_allow_linux" name="allow_linux_enroll" value="1" <?= $ea_allow_linux || $ea_allow_linux_forced ? 'checked' : '' ?> <?= $ea_allow_linux_forced ? 'disabled' : '' ?>>
+                <label class="form-check-label fw-semibold" for="ea_allow_linux">Allow Linux devices to enroll</label>
+            </div>
+            <div class="form-text mb-2">On by default. When off, a Linux computer that tries to enroll is refused ("device.os is invalid"); devices already enrolled are not affected.<?= $ea_allow_linux_forced ? ' Forced on by the EA_ALLOW_NON_WINDOWS setting in config.php.' : '' ?></div>
+            <button type="submit" name="save_allow_linux" class="btn btn-sm btn-primary"<?= $ea_allow_linux_forced ? ' disabled' : '' ?>><i class="fas fa-save me-1"></i>Save</button>
+        </form>
+    </div>
+</div>
 <?php $eaTab('checks'); ?>
 <div class="card mb-3" id="checks">
     <div class="card-header"><h4 class="card-title mb-0">Checks</h4></div>
@@ -234,6 +256,12 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
 <?= rivetEaFormAttr(rivetChecksSimpleCard($csState, $csDefault, $checksText, $csErrors), 'ea_settings_form') ?>
     </div>
         <button form="ea_settings_form" type="submit" name="save_agent_settings" class="btn btn-primary mt-3"><i class="fas fa-save me-1"></i>Save settings</button>
+        <hr>
+        <form action="post.php" method="post" autocomplete="off" data-ea-reconcile>
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <p class="small text-muted mb-2">A check ticked for one OS is only sent to devices of that OS. A device keeps the result and any open alert of a check it no longer gets until it is cleaned up: this happens at the device's next check-in, and here at once for every device (including those that are offline). The alerts are resolved with the reason "This check no longer applies to the device" and no ticket is created. Safe to press again.</p>
+            <button type="submit" name="reconcile_checks" value="1" class="btn btn-outline-secondary"><i class="fas fa-broom me-1" aria-hidden="true"></i>Clean up checks that no longer apply</button>
+        </form>
     </div>
 </div>
 <?php $eaTab('security'); ?>
@@ -281,6 +309,12 @@ if (($ea_q = @mysqli_query($mysqli, 'SELECT COUNT(*) FROM endpoint_agent_devices
                     <input type="number" class="form-control" id="ea_shd" name="software_history_days" min="1" max="3650" value="<?= (int) ($cfg['limits']['software_history_days'] ?? 365) ?>" aria-describedby="ea_shd_h">
                     <div class="form-text" id="ea_shd_h">How long installs, upgrades and removals are kept. Default 365.</div></div>
             </div>
+            <div class="form-check form-switch mt-3">
+                <input type="hidden" name="metrics_extended_present" value="1">
+                <input type="checkbox" class="form-check-input" id="ea_mx" name="metrics_extended" value="1" <?= (int) ($cfg['limits']['metrics_extended'] ?? 1) === 1 ? 'checked' : '' ?> aria-describedby="ea_mx_h">
+                <label class="form-check-label" for="ea_mx">Send extra health details</label>
+                <div class="form-text" id="ea_mx_h">Memory and disk sizes, load per processor core, disk activity, network errors and battery. They fill the charts on the device page and add about 15 more readings per device per check-in. Turn it off to keep the smaller amount of history (<code>metrics_extended</code>). On by default.</div>
+            </div>
             <div class="alert alert-info mt-3 mb-0" role="note" id="metric-history-note">
                 <i class="fas fa-database me-1" aria-hidden="true"></i><strong>History is stored in the database.</strong>
                 RivetMSP keeps CPU, memory, disk and network history for the Performance charts and the network bar: one summary row per metric per hour, and the newest reading of each, in <code>rmm_metric_hourly</code> and <code>rmm_metric_latest</code>.
@@ -289,6 +323,30 @@ if (($ea_q = @mysqli_query($mysqli, 'SELECT COUNT(*) FROM endpoint_agent_devices
                 Check history (above) and the software change log are separate tables with their own retention. Capacity figures and the load-shedding thresholds are in the RivetCore document <code>docs/rmm/CAPACITY.md</code>, section 11.
             </div>
             <button type="submit" name="save_inventory_settings" class="btn btn-primary mt-3"><i class="fas fa-save me-1"></i>Save software settings</button>
+        </form>
+    </div>
+</div>
+<?php
+// 26.10.38 (RivetCore rc.22): change monitoring. OFF by default; turning it on needs the storage acknowledgement. Only the switch lives here: the read-only Changes tab on the device page shows
+// what is recorded; presets, custom watches and rules come in a later release (the agent-side defaults apply meanwhile).
+$ea_chg_on = !empty($cfg['features']['change_monitor']);
+?>
+<div class="card mb-3" id="change-monitoring">
+    <div class="card-header"><h4 class="card-title mb-0">Change monitoring</h4></div>
+    <div class="card-body">
+        <p class="small text-muted">Records what changed on a computer and when: watched configuration files and folders, registry values, local administrators and scheduled tasks (Windows). It is <strong>off by default</strong>, and an agent only reports after the server offers it. Recorded changes appear on the <em>Changes</em> tab of the device page. This release has the switch and the read-only list; choosing exactly what is watched comes in a later release.</p>
+        <div class="alert alert-warning py-2 small" role="note"><i class="fas fa-database me-1" aria-hidden="true"></i><?= $h(\RivetCore\Rmm\Change\ChangeSettings::STORAGE_WARNING) ?></div>
+        <form action="post.php" method="post" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="form-check form-switch mb-2">
+                <input type="checkbox" class="form-check-input" id="ea_chg_sw" name="change_monitor" value="1" <?= $ea_chg_on ? 'checked' : '' ?>>
+                <label class="form-check-label" for="ea_chg_sw">Record changes on enrolled computers (<code>change_monitor</code>)</label>
+            </div>
+            <div class="form-check mb-2">
+                <input type="checkbox" class="form-check-input" id="ea_chg_ack" name="accept_change_storage" value="1">
+                <label class="form-check-label" for="ea_chg_ack">I understand what is stored and where (needed to turn it on)</label>
+            </div>
+            <button type="submit" name="save_change_monitor" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save change monitoring</button>
         </form>
     </div>
 </div>

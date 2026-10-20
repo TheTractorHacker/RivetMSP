@@ -72,6 +72,9 @@ final class EndpointAccessPolicyConformanceTest extends AccessPolicyConformanceT
             [$u['admin'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['admin'], RmmAbility::SOFTWARE_MANAGE, 'client', 3], [$u['admin'], RmmAbility::SOFTWARE_DEPLOY, 'client', 3],
             [$u['viewer'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['reboot'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['reboot'], RmmAbility::SOFTWARE_MANAGE, 'client', 3],
             [$u['tech'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['tech'], RmmAbility::SOFTWARE_MANAGE, 'client', 3], [$u['tech'], RmmAbility::SOFTWARE_DEPLOY, 'client', 3],
+            // RMM change monitoring (rc.22): view like run_saved (scripts >= 2), manage like alert.manage (rmm >= 2)
+            [$u['admin'], RmmAbility::CHANGE_VIEW, 'client', 3], [$u['admin'], RmmAbility::CHANGE_MANAGE, 'client', 3],
+            [$u['reboot'], RmmAbility::CHANGE_VIEW, 'client', 3], [$u['tech'], RmmAbility::CHANGE_VIEW, 'client', 3], [$u['tech'], RmmAbility::CHANGE_MANAGE, 'client', 3],
         ];
     }
 
@@ -92,6 +95,8 @@ final class EndpointAccessPolicyConformanceTest extends AccessPolicyConformanceT
             [$u['viewer'], RmmAbility::SOFTWARE_MANAGE, 'client', 3], [$u['viewer'], RmmAbility::SOFTWARE_DEPLOY, 'client', 3], [$u['reboot'], RmmAbility::SOFTWARE_DEPLOY, 'client', 3],
             [$u['stock'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['stock'], RmmAbility::SOFTWARE_MANAGE, 'client', 3], [$u['stock'], RmmAbility::SOFTWARE_DEPLOY, 'client', 3],
             [$u['disabled'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['portal'], RmmAbility::SOFTWARE_VIEW, 'client', 3], [$u['archived'], RmmAbility::SOFTWARE_DEPLOY, 'client', 3],
+            // change monitoring: a viewer never sees recorded changes; reboot-only (rmm 1) cannot manage watches
+            [$u['viewer'], RmmAbility::CHANGE_VIEW, 'client', 3], [$u['viewer'], RmmAbility::CHANGE_MANAGE, 'client', 3], [$u['reboot'], RmmAbility::CHANGE_MANAGE, 'client', 3],
             // approval is a second person's grant: a level 3 script technician does NOT have it by default; alert management needs RMM write (module_rmm >= 2)
             [$u['tech'], RmmAbility::JOB_APPROVE, 'client', 3], [$u['viewer'], RmmAbility::ALERT_MANAGE, 'client', 3], [$u['reboot'], RmmAbility::ALERT_MANAGE, 'client', 3],
             [$u['disabled'], RmmAbility::ALERT_MANAGE, 'client', 3], [$u['portal'], RmmAbility::JOB_APPROVE, 'client', 3],

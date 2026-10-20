@@ -107,6 +107,60 @@ if (isset($_POST['save_agent_settings'])) {
     ea_flash_result($ea_admin->saveSettings($ea_who, $in));
 }
 
+// 26.10.38 (RivetCore rc.24): "Clean up checks that no longer apply". Removes the check rows of checks a device is no longer given (the other OS's checks, checks taken off the schedule)
+// and resolves their open alerts ("This check no longer applies to the device", by the system, no ticket). Administrators only, CSRF, audited, idempotent: a second press finds nothing to do.
+if (isset($_POST['reconcile_checks'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $denied = $rmm->authorizer()->check((int) $session_user_id, \RivetCore\Rmm\Authz\RmmAbility::ADMIN, 0, false);
+    if ($denied !== null) {
+        flash_alert(nullable_htmlentities($denied), 'error');
+        redirect();
+    }
+    try {
+        $r = $rmm->reconcileChecks();
+    } catch (\Throwable $e) {
+        error_log('RMM reconcileChecks failed: ' . get_class($e));
+        logAction('RMM', 'Settings Changed', "$session_name tried to clean up checks that no longer apply: failed");
+        flash_alert('The clean-up could not run. See the server log.', 'error');
+        redirect();
+    }
+    logAction('RMM', 'Settings Changed', "$session_name cleaned up checks that no longer apply (" . (int) $r['removed'] . ' removed on ' . (int) $r['devices'] . ' devices)');
+    flash_alert((int) $r['removed'] === 0 ? 'Nothing to clean up: every device already has only the checks that apply to it.'
+        : (int) $r['removed'] . ' ' . ((int) $r['removed'] === 1 ? 'check that no longer applies was' : 'checks that no longer apply were') . ' removed and their alerts resolved.', 'success');
+    redirect();
+}
+
+// 26.10.38: "Allow Linux devices to enroll" (settings.config_rmm_allow_linux, default ON). Administrators only, CSRF, audited. Core's enrollment check reads it through the bootstrap.
+if (isset($_POST['save_allow_linux'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $denied = $rmm->authorizer()->check((int) $session_user_id, \RivetCore\Rmm\Authz\RmmAbility::ADMIN, 0, false);
+    if ($denied !== null) {
+        flash_alert(nullable_htmlentities($denied), 'error');
+        redirect();
+    }
+    $want = !empty($_POST['allow_linux_enroll']) ? 1 : 0;
+    mysqli_query($mysqli, "UPDATE settings SET config_rmm_allow_linux = $want WHERE company_id = 1");
+    logAction('RMM', 'Settings Changed', "$session_name turned \"Allow Linux devices to enroll\" " . ($want ? 'on' : 'off'));
+    flash_alert('Linux devices ' . ($want ? 'may now enroll.' : 'can no longer enroll. Devices already enrolled are not affected.'), 'success');
+    redirect();
+}
+
+// 26.10.38 (RivetCore rc.22): the change_monitor switch. Core (ChangeActions::updateSettings) checks rmm.admin, refuses to turn it on without the storage acknowledgement and audits.
+if (isset($_POST['save_change_monitor'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $want = !empty($_POST['change_monitor']);
+    $cur = $rmm->readModel()->settingsSummary();
+    if ($want === !empty($cur['features']['change_monitor'])) {
+        flash_alert('No change to save.', 'info');
+        redirect();
+    }
+    $r = $rmm->changeActions()->updateSettings($ea_who, ['features' => ['change_monitor' => $want], 'accept_change_storage' => !empty($_POST['accept_change_storage'])]);
+    if ($r->ok) {
+        logAction('RMM', 'Settings Changed', "$session_name turned change monitoring " . ($want ? 'on' : 'off'));
+    }
+    ea_flash_result($r, 'Change monitoring is now ' . ($want ? 'on' : 'off') . '.');
+}
+
 // Software inventory switch and the two history limits (RivetCore 1.0.0-rc.9). RmmAdmin validates and audits; only values that changed are written, so an install on
 // the legacy feature defaults (features_json NULL) or the default limits stays that way until an administrator actually changes something here.
 if (isset($_POST['save_inventory_settings'])) {
@@ -129,6 +183,14 @@ if (isset($_POST['save_inventory_settings'])) {
         $v = max($lo, min($hi, (int) $_POST[$k]));
         if ($v !== (int) ($cur['limits'][$k] ?? -1)) {
             $stored[$k] = $v;
+            $changed = true;
+        }
+    }
+    // 26.10.38 (RivetCore rc.25): the "Send extra health details" switch (limit metrics_extended, 0 or 1, default 1)
+    if (isset($_POST['metrics_extended_present'])) {
+        $mx = !empty($_POST['metrics_extended']) ? 1 : 0;
+        if ($mx !== (int) ($cur['limits']['metrics_extended'] ?? 1)) {
+            $stored['metrics_extended'] = $mx;
             $changed = true;
         }
     }

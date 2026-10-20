@@ -8,6 +8,14 @@
  * built without asking the database anything.
  */
 
+// 26.10.38: the Endpoints menu has ONE "Add device" entry and it opens the full page. The old address (Endpoints > Add device used to be rmm_fleet.php?add=1, which opened the quick dialog)
+// still works: it goes to the full page, keeping a client. The quick dialog is the "Quick download" button on this page and on the full page.
+if (isset($_GET['add'])) {
+    $__cid = (int) ($_GET['client_id'] ?? 0);
+    header('Location: /agent/rmm_add_device.php' . ($__cid > 0 ? '?client_id=' . $__cid : ''), true, 302);
+    exit;
+}
+
 require_once "includes/inc_all.php";
 enforceUserPermission('module_rmm');
 require_once dirname(__DIR__) . '/includes/rmm_ui_render.php';
@@ -54,7 +62,7 @@ if ($rmm_fleet === null) {
 // "Add device": null (no button, no dialog) for a user who may neither administer the module nor manage enrollment tokens.
 $rmm_installer = rivetRmmUiInstaller($mysqli, (int) $session_user_id, null, (int) ($_GET['client_id'] ?? 0) ?: null);
 if ($rmm_installer !== null) {
-    $rmm_installer['autoopen'] = isset($_GET['add']);   // the Endpoints menu's "Add device" opens the dialog straight away
+    $rmm_installer['autoopen'] = isset($_GET['quick']);   // ?quick=1 opens the quick dialog straight away (the "Quick download" link of the full page)
 }
 $rmm_installer_scripts = $rmm_installer !== null;   // includes/footer.php links js/rmm_installer.js only when this is set
 $rmm_entry = rivetRmmInstallerEntry($mysqli, (int) $session_user_id, !empty($session_is_admin), (bool) $config_core_rmm_enabled);

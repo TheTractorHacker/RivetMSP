@@ -10,7 +10,7 @@
 
 require_once __DIR__ . '/rmm_ui.php';
 // RMM Phase 2 and 3 sections of the asset page (RivetCore 1.0.0-rc.10). Each file defines the section hooks used by rivetRmmUiTabs() below.
-foreach (['rmm_pol_ui.php', 'rmm_scr_ui.php', 'rmm_alr_ui.php', 'rmm_rem_ui.php', 'rmm_log_ui.php', 'rmm_patch_ui.php', 'rmm_software_ui.php'] as $__rmm_p23) {
+foreach (['rmm_pol_ui.php', 'rmm_scr_ui.php', 'rmm_alr_ui.php', 'rmm_rem_ui.php', 'rmm_log_ui.php', 'rmm_patch_ui.php', 'rmm_software_ui.php', 'rmm_change_ui.php'] as $__rmm_p23) {
     if (is_file(__DIR__ . '/' . $__rmm_p23)) {
         require_once __DIR__ . '/' . $__rmm_p23;
     }
@@ -144,6 +144,18 @@ function rivetRmmUiTrendCell(string $key, ?array $t, bool $offline): string
         . '<caption class="visually-hidden">Recorded results of ' . rmmH($key) . ', newest first</caption>' . rivetRmmUiThead(['When', 'Status', 'Detail']) . '<tbody>' . $rows . '</tbody></table></div></details></div>';
 }
 
+/** The small "Clock off" badge of the fleet list (title carries the sentence); empty when the clock is fine. @param array<string,mixed>|null $clock rivetRmmUiClockNotice() */
+function rivetRmmUiClockBadge(?array $clock): string
+{
+    if ($clock === null) {
+        return '';
+    }
+    $label = $clock['text'] !== '' ? $clock['text'] : 'The last check-in was refused: ' . (string) $clock['reject'];
+
+    return ' <span class="badge text-bg-warning" data-rmm-clock-badge title="' . rmmH($label) . '"><i class="fas fa-clock me-1" aria-hidden="true"></i>Clock off'
+        . ($clock['minutes'] !== null && $clock['text'] !== '' ? ' ' . (int) $clock['minutes'] . ' min' : '') . '</span>';
+}
+
 // ------------------------------------------------------------------ strip
 
 /** @param array<string,mixed> $vm rivetRmmUiPanel() */
@@ -158,7 +170,9 @@ function rivetRmmUiStrip(array $vm): string
 
     // Facts line
     if ($never) {
-        $facts = '<span class="text-muted">OS and agent not reported yet</span>';
+        // 26.10.38: when Core recorded why the check-in was refused (RivetCore rc.23), say that instead of a bare "not reported yet"
+        $facts = !empty($vm['clock']['reject']) ? '<span class="text-warning-emphasis"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>No check-in accepted yet: ' . rmmH($vm['clock']['reject']) . '</span>'
+            : '<span class="text-muted">OS and agent not reported yet</span>';
     } else {
         $facts = '<i class="' . $osIcon . ' me-1" aria-hidden="true"></i>' . rmmH($vm['os_label']) . ' <span class="text-muted">' . rmmH($vm['arch']) . '</span>'
             . ' &bull; <i class="fas fa-clock mx-1" aria-hidden="true"></i>Last seen ' . rivetRmmUiTime($vm['last_checkin_at'])
@@ -838,7 +852,7 @@ function rivetRmmUiTabs(array $vm, string $performanceHtml, string $performanceN
     }
     // RMM Phase 6 and 8 (RivetCore 1.0.0-rc.11): the Remote tab (services, processes, files, Mesh; includes/rmm_rem_ui.php) and the Logs tab (includes/rmm_log_ui.php). Each function
     // checks the module, its own sub-switch and the viewer's ability itself and returns '' when there is nothing to show, and then neither the tab nor the pane is drawn.
-    $remHtml = $logHtml = $patHtml = $swdHtml = '';
+    $remHtml = $logHtml = $patHtml = $swdHtml = $chgHtml = '';
     if ($mysqli instanceof \mysqli) {
         $remHtml = function_exists('rivetRmmRemPanelSection') ? rivetRmmRemPanelSection($vm, $mysqli, $csrf) : '';
         $logHtml = function_exists('rivetRmmLogPanelSection') ? rivetRmmLogPanelSection($vm, $mysqli, $csrf) : '';
@@ -846,13 +860,15 @@ function rivetRmmUiTabs(array $vm, string $performanceHtml, string $performanceN
         $patHtml = function_exists('rivetRmmPatchPanelSection') ? rivetRmmPatchPanelSection($vm, $mysqli, $csrf) : '';
         // RMM Phase 5 (RivetCore 1.0.0-rc.21): the Deployment tab (includes/rmm_software_ui.php); '' while the `software_deploy` switch is off or the viewer lacks rmm.software.view
         $swdHtml = function_exists('rivetRmmSoftwarePanelSection') ? rivetRmmSoftwarePanelSection($vm, $mysqli, $csrf) : '';
+        // RMM change monitoring (RivetCore 1.0.0-rc.22, 26.10.38): the read-only Changes tab (includes/rmm_change_ui.php); '' while the `change_monitor` switch is off or the viewer lacks rmm.change.view
+        $chgHtml = function_exists('rivetRmmChangePanelSection') ? rivetRmmChangePanelSection($vm, $mysqli, $csrf) : '';
     }
 
     return '<div class="card card-dark mb-3" id="rmm-panel" data-device-id="' . (int) $vm['device_id'] . '" data-csrf="' . rmmH($csrf) . '" data-post-url="/agent/post/rmm_agent.php" data-output-url="/agent/rmm_job_output.php" '
         . 'data-platform="' . rmmH($vm['platform']) . '" data-offline="' . ($vm['offline'] ? '1' : '0') . '">'
         . '<div class="card-header p-0 border-bottom-0"><ul class="nav nav-tabs px-3 pt-2 rmm-tabbar" role="tablist" aria-label="RMM device sections">'
         . $tab('overview', 'tachometer-alt', 'Overview', true) . $tab('inventory', 'microchip', 'Inventory', false) . ($vm['software'] !== null ? $tab('software', 'cube', 'Software', false) : '') . $tab('jobs', 'tasks', 'Jobs', false)
-        . ($polHtml !== '' ? $tab('policy', 'sliders-h', 'Policy and fields', false) : '') . ($alrHtml !== '' ? $tab('alerting', 'bell', 'Alerting', false) : '') . ($remHtml !== '' ? $tab('remote', 'terminal', 'Remote', false) : '') . ($logHtml !== '' ? $tab('logs', 'scroll', 'Logs', false) : '') . ($patHtml !== '' ? $tab('patches', 'shield-alt', 'Patches', false) : '') . ($swdHtml !== '' ? $tab('deploy', 'boxes', 'Deployment', false) : '') . '</ul></div>'
+        . ($polHtml !== '' ? $tab('policy', 'sliders-h', 'Policy and fields', false) : '') . ($alrHtml !== '' ? $tab('alerting', 'bell', 'Alerting', false) : '') . ($remHtml !== '' ? $tab('remote', 'terminal', 'Remote', false) : '') . ($logHtml !== '' ? $tab('logs', 'scroll', 'Logs', false) : '') . ($patHtml !== '' ? $tab('patches', 'shield-alt', 'Patches', false) : '') . ($swdHtml !== '' ? $tab('deploy', 'boxes', 'Deployment', false) : '') . ($chgHtml !== '' ? $tab('changes', 'history', 'Changes', false) : '') . '</ul></div>'
         . '<div class="px-3 pt-3"><div id="rmm-msg" class="alert d-none mb-0" role="status" aria-live="polite"></div></div>'
         . '<div class="tab-content"><div class="tab-pane active p-3" id="rmm-pane-overview" role="tabpanel" aria-labelledby="rmm-tab-overview" tabindex="0">' . rivetRmmUiOverview($vm, $performanceHtml, $performanceNote) . '</div>'
         . '<div class="tab-pane p-3" id="rmm-pane-inventory" role="tabpanel" aria-labelledby="rmm-tab-inventory" tabindex="0">' . rivetRmmUiInventory($vm) . '</div>'
@@ -863,7 +879,8 @@ function rivetRmmUiTabs(array $vm, string $performanceHtml, string $performanceN
         . ($remHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-remote" role="tabpanel" aria-labelledby="rmm-tab-remote" tabindex="0">' . $remHtml . '</div>' : '')
         . ($logHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-logs" role="tabpanel" aria-labelledby="rmm-tab-logs" tabindex="0">' . $logHtml . '</div>' : '')
         . ($patHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-patches" role="tabpanel" aria-labelledby="rmm-tab-patches" tabindex="0">' . $patHtml . '</div>' : '')
-        . ($swdHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-deploy" role="tabpanel" aria-labelledby="rmm-tab-deploy" tabindex="0">' . $swdHtml . '</div>' : '') . '</div></div>'
+        . ($swdHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-deploy" role="tabpanel" aria-labelledby="rmm-tab-deploy" tabindex="0">' . $swdHtml . '</div>' : '')
+        . ($chgHtml !== '' ? '<div class="tab-pane p-3" id="rmm-pane-changes" role="tabpanel" aria-labelledby="rmm-tab-changes" tabindex="0">' . $chgHtml . '</div>' : '') . '</div></div>'
         . rivetRmmUiDialogs($vm, $csrf)
         . ($polHtml . $scrHtml . $alrHtml . $patHtml . $swdHtml !== '' ? rivetRmmAutoConfirmModal() . rivetRmmAutoScriptsOn() : '');
 }
@@ -1022,7 +1039,7 @@ function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null, ?
         foreach (array_slice((array) ($d['tags'] ?? []), 0, 6) as $t) {
             $chips .= rivetRmmUiTagChip($t, false) . ' ';
         }
-        $rows .= '<tr><td class="ps-3">' . rivetRmmUiStatusPill($d['status']) . ($d['link_state'] === 'pending_approval' ? ' ' . rivetRmmUiPill('warn', 'Approval') : '') . ($d['revoked'] ? ' ' . rivetRmmUiPill('crit', 'Revoked') : '') . '</td>'
+        $rows .= '<tr><td class="ps-3">' . rivetRmmUiStatusPill($d['status']) . ($d['link_state'] === 'pending_approval' ? ' ' . rivetRmmUiPill('warn', 'Approval') : '') . ($d['revoked'] ? ' ' . rivetRmmUiPill('crit', 'Revoked') : '') . rivetRmmUiClockBadge($d['clock'] ?? null) . '</td>'
             . '<td class="min-w-0">' . rivetRmmUiDeviceLink($d) . '<div class="text-muted small">' . rmmH($cn((int) $d['client_id'])) . ' &middot; ' . rmmH($d['os_version'] ?: 'OS not reported') . '</div>'
             . ($chips !== '' ? '<div class="mt-1 rmm-tags">' . $chips . (count((array) $d['tags']) > 6 ? '<span class="small text-muted">+' . (count((array) $d['tags']) - 6) . ' more</span>' : '') . '</div>' : '') . '</td>'
             . '<td class="ifm-mono">' . rmmH($d['agent_version'] ?: 'unknown') . '<div class="text-muted small">' . rmmH($d['ring']) . ' ring</div></td>'
@@ -1091,15 +1108,15 @@ function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null, ?
     $swCard = $f['outdated_sw'] !== null ? rivetRmmUiOutdatedSoftware($f['outdated_sw'], $cn, $f) : '';
 
     return '<div class="d-flex align-items-center flex-wrap mb-3" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-satellite me-2" aria-hidden="true"></i>Agent fleet</h4>'
-        . ($entry !== null ? $entry['button'] : ($installer !== null ? '<a href="/agent/rmm_add_device.php" class="btn btn-primary" data-rmm-build-installer><i class="fas fa-hammer me-1" aria-hidden="true"></i>Create installer</a>' : ''))
-        . ($installer !== null ? rivetRmmUiInstallerButton($installer, 'Add device', 'btn btn-outline-primary', null, 'fa-plus') : '')
+        . ($entry !== null ? $entry['button'] : ($installer !== null ? '<a href="/agent/rmm_add_device.php" class="btn btn-primary" data-rmm-build-installer><i class="fas fa-plus me-1" aria-hidden="true"></i>Add device</a>' : ''))
+        . ($installer !== null ? rivetRmmUiInstallerButton($installer, 'Quick download', 'btn btn-outline-primary', null, 'fa-download') : '')
         . '<a href="/agent/rmm_assets.php" class="btn btn-info btn-sm"><i class="fas fa-desktop me-1" aria-hidden="true"></i>All RMM assets</a>'
         . '<a href="/agent/rmm_alerts.php" class="btn btn-warning btn-sm"><i class="fas fa-bell me-1" aria-hidden="true"></i>Alerts</a>'
         . ($f['perm']['admin'] ? '<a href="/admin/settings_endpoint_agent.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-cog me-1" aria-hidden="true"></i>Administration</a>' : '') . '</div>'
         . ($entry !== null ? $entry['notice'] : '')
         . ($c['total'] === 0 && $f['filters'] === [] ? '<section class="card card-dark mb-3"><div class="card-body">' . rivetRmmUiEmpty('fas fa-satellite-dish', 'No agent is enrolled yet',
-            $installer !== null ? 'Use Add device to download an installer, then run it on a PC.' : ($f['perm']['admin'] ? 'Create an enrollment token under Administration, Endpoint agent, then install the agent on a device.' : 'An administrator creates an enrollment token and installs the agent.'),
-            $installer !== null ? rivetRmmUiInstallerButton($installer, 'Download installer', 'btn btn-primary', null, 'fa-download') : '') . '</div></section>' : '')
+            $installer !== null ? 'Use Add device to get an installer, then run it on a PC.' : ($f['perm']['admin'] ? 'Create an enrollment token under Administration, Endpoint agent, then install the agent on a device.' : 'An administrator creates an enrollment token and installs the agent.'),
+            $installer !== null ? rivetRmmUiInstallerButton($installer, 'Quick download', 'btn btn-primary', null, 'fa-download') : '') . '</div></section>' : '')
         . '<div class="row mb-3">' . $kpi . '</div>'
         . '<div class="row"><div class="col-lg-7">' . $healthCard . '</div><div class="col-lg-5">' . $apCard . '</div></div>'
         . '<div class="row"><div class="col-lg-6">' . $offCard . '</div><div class="col-lg-6">' . $fCard . '</div></div>'
@@ -1420,9 +1437,9 @@ function rivetRmmUiInstallerModal(array $ins, string $csrf): string
     return '<div class="modal fade" id="' . $m . '" tabindex="-1" aria-labelledby="' . $m . 'Title" aria-hidden="true" data-rmm-installer="1"' . (!empty($ins['autoopen']) ? ' data-autoopen="1"' : '') . '><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">'
         . '<form id="rmm-inst-form" method="post" action="' . rmmH($ins['post_url']) . '" autocomplete="off" novalidate data-max-ttl="' . (int) $ins['max_ttl_h'] . '" data-win-ready="' . ($winBlocked ? '0' : '1') . '" data-service-ready="' . ($blocked ? '0' : '1') . '">'
         . '<input type="hidden" name="csrf_token" value="' . rmmH($csrf) . '"><input type="hidden" name="os" id="rmm-inst-os" value="windows">'
-        . '<div class="modal-header"><h5 class="modal-title" id="' . $m . 'Title"><i class="fas fa-download me-2" aria-hidden="true"></i>Add a device</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>'
+        . '<div class="modal-header"><h5 class="modal-title" id="' . $m . 'Title"><i class="fas fa-download me-2" aria-hidden="true"></i>Quick download</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>'
         . '<div class="modal-body">'
-        . '<p class="small text-muted mb-3" data-rmm-installer-page-link>Need an .msi, PowerShell deployment commands or the Linux packages? <a href="/agent/rmm_add_device.php" class="fw-semibold">Open the Create installer page</a>.</p>'
+        . '<p class="small text-muted mb-3" data-rmm-installer-page-link>Need an .msi, PowerShell deployment commands or the Linux packages? <a href="/agent/rmm_add_device.php" class="fw-semibold">Open the full Add device page</a>.</p>'
         . '<ul class="nav nav-tabs mb-3" role="tablist" aria-label="Operating system">'
         . '<li class="nav-item" role="presentation"><button type="button" class="nav-link active" id="rmm-inst-tab-windows" role="tab" aria-selected="true" aria-controls="rmm-inst-pane-windows" data-os="windows"><i class="fab fa-windows me-1" aria-hidden="true"></i>Windows</button></li>'
         . '<li class="nav-item" role="presentation"><button type="button" class="nav-link" id="rmm-inst-tab-linux" role="tab" aria-selected="false" aria-controls="rmm-inst-pane-linux" tabindex="-1" data-os="linux"><i class="fab fa-linux me-1" aria-hidden="true"></i>Linux</button></li></ul>'

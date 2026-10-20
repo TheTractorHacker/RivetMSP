@@ -8,6 +8,7 @@ use RivetCore\Rmm\Contracts\RmmBridgeInterface;
 use RivetCore\Rmm\Contracts\SecretBoxInterface;
 use RivetCore\Rmm\Crypto\Signer;
 use RivetCore\Rmm\Checks\CheckCatalog;
+use RivetCore\Rmm\Checks\RmmChecks;
 use RivetCore\Rmm\RmmProtocol;
 use RivetCore\Rmm\Support\Sql;
 
@@ -47,13 +48,18 @@ final class RmmSettings
     public const MESH_TOKEN_TTL_DEFAULT_S = 300;
 
     /** Every feature a sub-switch may name (the first five are live in Phase 0; the rest are reserved for later phases). */
-    public const FEATURES = ['monitoring', 'metrics', 'jobs', 'remote', 'updates', 'inventory_software', 'policies', 'scripts', 'patching', 'software', 'software_deploy', 'logs', 'reports', 'alerting', 'remote_tools', 'filetransfer'];
+    public const FEATURES = ['monitoring', 'metrics', 'jobs', 'remote', 'updates', 'inventory_software', 'policies', 'scripts', 'patching', 'software', 'software_deploy', 'logs', 'change_monitor', 'reports', 'alerting', 'remote_tools', 'filetransfer'];
     /** What a NULL features_json means: today's behaviour. `remote` follows mesh_enabled. */
     public const LEGACY_FEATURES = ['monitoring', 'metrics', 'jobs', 'updates'];
 
     public const INGEST_MODES = ['sync', 'queued'];
 
-    /** @var array<string,array{0:int,1:int}> limits_json keys => [min, max]; unknown keys are refused */
+    /**
+     * limits_json keys => [min, max]; unknown keys are refused. The table grows with the protocol (a new limit is additive), so it is not part of the frozen API.
+     *
+     * @internal
+     * @var array<string,array{0:int,1:int}>
+     */
     public const LIMIT_KEYS = [
         'max_checkins_per_min' => [0, 1000000],
         'retry_after_min_s' => [1, 3600],
@@ -123,7 +129,12 @@ final class RmmSettings
         'software_live_install' => [0, 1],
         'software_deploy_history_days' => [30, 3650],
         'software_batch' => [10, 5000],
+        // Clock skew: the |device clock - server clock| in seconds above which a device raises `rmm.device.clock_skew` (at most once a day per device); 0 turns the event off.
+        'clock_skew_alert_s' => [0, 86400],
+        // 1 (default): the optional rc.25 per-check-in metrics (memory bytes, disk bytes, per-core, IOPS, ...) become samples; 0 ignores them (fleets that care about volume).
+        'metrics_extended' => [0, 1],
     ];
+    /** The default of every limit in {@see self::LIMIT_KEYS}; grows with it. @internal */
     public const LIMIT_DEFAULTS = [
         'max_checkins_per_min' => 0,
         'retry_after_min_s' => 30,
@@ -172,6 +183,8 @@ final class RmmSettings
         'software_live_install' => 0,
         'software_deploy_history_days' => 365,
         'software_batch' => 100,
+        'clock_skew_alert_s' => 120,
+        'metrics_extended' => 1,
     ];
 
     /** @var array<string,mixed>|null */
@@ -634,12 +647,15 @@ final class RmmSettings
      * A Phase 3 check type is included only when $caps (the device's announced capabilities) lists `check:<type>`; the four original types
      * are always included. With no capabilities (enrollment, an old agent) the list is therefore exactly what it always was.
      *
+     * With $os ('windows' or 'linux', the device's OS) a check limited to the other OS is not delivered (rc.24); the signature covers each
+     * delivered entry, including its `os` member when it has one.
+     *
      * @param list<string>|null $caps
      * @return list<array<string,mixed>>
      */
-    public function signedChecks(?array $caps = null): array
+    public function signedChecks(?array $caps = null, ?string $os = null): array
     {
-        return $this->signCheckList($this->checks(), $caps);
+        return $this->signCheckList($this->checks(), $caps, $os);
     }
 
     /**
@@ -649,12 +665,15 @@ final class RmmSettings
      * @param list<string>|null $caps
      * @return list<array<string,mixed>>
      */
-    public function signCheckList(array $checks, ?array $caps = null): array
+    public function signCheckList(array $checks, ?array $caps = null, ?string $os = null): array
     {
         [$sec] = $this->signingKey();
         $out = [];
         foreach ($checks as $c) {
             if (!CheckCatalog::offeredTo((string) $c['type'], $caps)) {
+                continue;
+            }
+            if ($os !== null && !RmmChecks::appliesTo($c, $os)) {
                 continue;
             }
             $item = [
@@ -665,6 +684,10 @@ final class RmmSettings
             ];
             if (is_array($item['params']) && $item['params'] === []) {
                 $item['params'] = new \stdClass();
+            }
+            $target = RmmChecks::osOf($c);
+            if ($target !== null) {
+                $item['os'] = $target;
             }
             $item['signature'] = Signer::sign(Signer::checkMessage($item), $sec);
             $out[] = $item;
