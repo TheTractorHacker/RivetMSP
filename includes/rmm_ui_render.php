@@ -179,20 +179,36 @@ function rivetRmmUiStrip(array $vm): string
             . ' &bull; Agent ' . rmmH($vm['agent_version']) . ' <span class="text-muted">' . rmmH($vm['ring']) . ' ring</span>';
     }
 
-    // Live health badges (dimmed while offline)
+    // Live health badges (dimmed while offline). RivetCore 1.0.0-rc.28 "device header view-model": AT MOST FOUR chips (cpu, ram, disk, uptime, in that
+    // order - DeviceHeader::build() already decides which exist and in which order), replacing the old one-chip-per-volume layout. The main Disk chip's
+    // "+N more" opens a modal listing every volume (header_volumes), ZFS datasets and the like already grouped under their pool by Core.
     $live = '';
+    $volumesModalId = '';
     if (!$never) {
         $live = '<div class="mt-2 small d-flex flex-wrap align-items-center rmm-live' . ($vm['offline'] ? ' rmm-dim' : '') . '">';
-        foreach ($vm['gauges'] as $g) {
-            if ($g['id'] === 'cpu' || $g['id'] === 'mem' || str_starts_with($g['id'], 'disk:') || $g['id'] === 'battery') {
-                $bk = rivetRmmUiKind($g['band'])[0];
-                $short = $g['id'] === 'cpu' ? 'CPU' : ($g['id'] === 'mem' ? 'RAM' : $g['label']);
-                $live .= '<span class="me-3 text-nowrap"><span class="text-muted">' . rmmH($short) . '</span> <span class="badge text-bg-' . $bk . '">'
-                    . ($g['value'] === null ? 'no data' : (int) round($g['value']) . '%') . '</span></span>';
+        foreach ($vm['header_chips'] as $chip) {
+            if ($chip['key'] === 'cpu' || $chip['key'] === 'ram') {
+                $bk = rivetRmmUiKind((string) $chip['level'])[0];
+                $live .= '<span class="me-3 text-nowrap"><span class="text-muted">' . ($chip['key'] === 'cpu' ? 'CPU' : 'RAM') . '</span> <span class="badge text-bg-' . $bk . '">'
+                    . (int) round($chip['pct']) . '%</span></span>';
+            } elseif ($chip['key'] === 'disk') {
+                $bk = $chip['level'] !== null ? rivetRmmUiKind((string) $chip['level'])[0] : 'secondary';
+                $pctTxt = $chip['used_pct'] !== null ? (int) round($chip['used_pct']) . '%' : 'no data';
+                $live .= '<span class="me-3 text-nowrap"><span class="text-muted">Disk' . ($chip['pool'] ? ' (pool)' : '') . ' ' . rmmH($chip['label']) . '</span> <span class="badge text-bg-' . $bk . '">' . $pctTxt . '</span></span>';
+                if ((int) $chip['more'] > 0) {
+                    $volumesModalId = 'rmm-volumes-' . (int) $vm['device_id'];
+                    $live .= '<button type="button" class="btn btn-link btn-sm p-0 me-3 text-nowrap" data-bs-toggle="modal" data-bs-target="#' . $volumesModalId . '">+' . (int) $chip['more'] . ' more</button>';
+                }
+            } elseif ($chip['key'] === 'uptime') {
+                // A stored uptime_s survives a device going offline (Core's own chip keeps reporting it), but it stops meaning anything once stale - the
+                // strip has always said "uptime unknown" while offline rather than a number nobody can trust; that choice is this function's, not Core's.
+                $live .= '<span class="text-muted me-3 text-nowrap"><i class="fas fa-power-off me-1" aria-hidden="true"></i>'
+                    . ($vm['offline'] ? 'uptime unknown' : 'Up ' . rmmH(rivetRmmUiDuration((int) $chip['seconds']))) . '</span>';
             }
         }
-        $live .= '<span class="text-muted me-3 text-nowrap"><i class="fas fa-power-off me-1" aria-hidden="true"></i>'
-            . ($vm['offline'] || $vm['uptime_s'] === null ? 'uptime unknown' : 'Up ' . rmmH(rivetRmmUiDuration((int) $vm['uptime_s']))) . '</span>';
+        if (!in_array('uptime', array_column($vm['header_chips'], 'key'), true)) {
+            $live .= '<span class="text-muted me-3 text-nowrap"><i class="fas fa-power-off me-1" aria-hidden="true"></i>uptime unknown</span>';
+        }
         if ($vm['pending_reboot'] && !$vm['offline']) {
             $live .= rivetRmmUiPill('warn', 'Reboot pending');
         }
@@ -226,15 +242,42 @@ function rivetRmmUiStrip(array $vm): string
     $actions .= $btn('rmm-act-script', 'btn-primary', 'fas fa-play', 'Run script', $dev && !$never && $canScript, $scriptReason, ' data-bs-toggle="modal" data-bs-target="#rmmRunModal"');
     $actions .= $btn('rmm-act-reboot', 'btn-outline-warning', 'fas fa-power-off', 'Reboot', $dev && !$never && $perm['reboot'], !$dev ? 'The device is not approved or no longer active.'
         : ($never ? 'Available after the first check-in.' : 'Your role cannot reboot devices.'), ' data-bs-toggle="modal" data-bs-target="#rmmRebootModal"');
-    if ($vm['mesh']['configured']) {
-        $remoteReason = !$perm['remote'] ? 'Your role cannot open remote sessions.' : (!$vm['mesh']['mapped'] ? 'An administrator maps this device to a MeshCentral node first.'
-            : (!$dev ? 'The device is not approved or no longer active.' : 'Available after the first check-in.'));
-        $actions .= $btn('rmm-act-remote', 'btn-success', 'fas fa-desktop', 'Remote access', $perm['remote'] && $vm['mesh']['mapped'] && $dev && !$never, $remoteReason);
-    } elseif ($perm['admin']) {
-        // 26.10.30: Mesh is not set up: the button leads to the setup wizard instead of vanishing
-        $actions .= '<a href="/admin/rmm_mesh_wizard.php" class="btn btn-outline-success btn-sm" id="rmm-act-remote-setup" data-rmm-remote-setup><i class="fas fa-desktop me-1" aria-hidden="true"></i>Set up remote access</a>';
+    // RivetCore 1.0.0-rc.28 "device header view-model": RemoteActions::headerRemote() already decided state/views/primary/hint/can_map_manually
+    // (RemoteHeader::decide()) - rendered here, not re-decided. States disabled/not_configured keep the old "Set up remote access" link (admin) or a
+    // plain disabled button (everyone else); unmapped (with or without an agent already installed) is the hint + "Map Mesh node" modal; ready/offline is
+    // the Desktop/Terminal/Files split button, already ordered and filtered to what this viewer may open.
+    $rh = $vm['mesh']['header'];
+    $rIcons = ['desktop' => 'fas fa-desktop', 'terminal' => 'fas fa-terminal', 'files' => 'fas fa-folder-open'];
+    if (in_array($rh['state'], ['disabled', 'not_configured'], true)) {
+        if ($perm['admin']) {
+            $actions .= '<a href="/admin/rmm_mesh_wizard.php" class="btn btn-outline-success btn-sm" id="rmm-act-remote-setup" data-rmm-remote-setup><i class="fas fa-desktop me-1" aria-hidden="true"></i>Set up remote access</a>';
+        } else {
+            $actions .= '<button type="button" class="btn btn-outline-success btn-sm" id="rmm-act-remote" disabled aria-disabled="true" title="' . rmmH($rh['hint']) . '"><i class="fas fa-desktop me-1" aria-hidden="true"></i>Remote access</button>';
+        }
+    } elseif (in_array($rh['state'], ['unmapped', 'unmapped_agent_installed'], true)) {
+        $actions .= '<span class="text-muted small me-2" id="rmm-act-remote-unmapped"><i class="fas fa-desktop me-1" aria-hidden="true"></i>' . rmmH($rh['hint']) . '</span>';
+        if (!empty($rh['can_map_manually'])) {
+            $actions .= '<button type="button" class="btn btn-outline-secondary btn-sm" id="rmm-act-remote-map" data-bs-toggle="modal" data-bs-target="#rmmMeshMapModal"><i class="fas fa-link me-1" aria-hidden="true"></i>Map Mesh node</button>';
+        }
     } else {
-        $actions .= $btn('rmm-act-remote', 'btn-outline-success', 'fas fa-desktop', 'Remote access', false, 'Remote access is not set up yet. An administrator can set it up under Administration > Remote access (MeshCentral) setup.');
+        // ready or offline: at least one view's availability already reflects everything (ability, feature switch, state) - $why below gets each one's own reason.
+        $rViews = $rh['views'];
+        $rFirst = $rh['primary'] ?? ($rViews[0]['view'] ?? 'desktop');
+        $rRest = array_values(array_filter($rViews, static fn (array $v): bool => $v['view'] !== $rFirst));
+        $firstRow = $rViews[array_search($rFirst, array_column($rViews, 'view'), true)] ?? ['view' => $rFirst, 'label' => 'Remote desktop', 'available' => false, 'reason' => $rh['hint']];
+        $actions .= '<div class="btn-group" role="group" aria-label="Remote access">'
+            . $btn('rmm-act-remote', 'btn-success', $rIcons[$firstRow['view']] ?? 'fas fa-desktop', (string) $firstRow['label'], (bool) $firstRow['available'], (string) ($firstRow['reason'] ?? ''), ' data-rmm-remote-view="' . $firstRow['view'] . '"');
+        $anyRestAvailable = (bool) array_filter($rRest, static fn (array $v): bool => $v['available']);
+        if ($rRest !== []) {
+            $actions .= '<button type="button" class="btn btn-success btn-sm dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"'
+                . ($anyRestAvailable ? '' : ' disabled aria-disabled="true"') . '><span class="visually-hidden">More remote views</span></button><div class="dropdown-menu">';
+            foreach ($rRest as $rv) {
+                $actions .= '<button type="button" class="dropdown-item rmm-act-remote-view" data-rmm-remote-view="' . $rv['view'] . '"' . (!empty($rv['available']) ? '' : ' disabled aria-disabled="true" title="' . rmmH((string) ($rv['reason'] ?? '')) . '"')
+                    . '><i class="' . ($rIcons[$rv['view']] ?? 'fas fa-desktop') . ' me-2" aria-hidden="true"></i>' . rmmH((string) $rv['label']) . '</button>';
+            }
+            $actions .= '</div>';
+        }
+        $actions .= '</div>';
     }
     $more = '';
     if ($perm['run_saved'] && $dev && !$never) {
@@ -266,6 +309,9 @@ function rivetRmmUiStrip(array $vm): string
         $reasons .= '</ul>';
     }
 
+    $volumesModal = $volumesModalId !== '' ? rivetRmmUiVolumesModal($volumesModalId, $vm['header_volumes']) : '';
+    $meshMapModal = !empty($rh['can_map_manually']) ? rivetRmmUiMeshMapModal((string) $vm['mesh']['node_id']) : '';
+
     return '<section class="card card-dark mb-2 rmm-strip rmm-strip-' . $kind . '" aria-label="RMM device status" id="rmm-strip"><div class="card-body py-2 px-3">'
         . '<div class="d-flex align-items-center flex-wrap rmm-strip-row"><div class="me-auto min-w-0"><strong class="h5 mb-0">' . rmmH($vm['hostname']) . '</strong> '
         . '<span class="badge text-bg-' . $col . ' ms-2"><i class="fas ' . $icon . ' me-1" aria-hidden="true"></i>' . rmmH($vm['strip']['label']) . '</span> '
@@ -273,7 +319,47 @@ function rivetRmmUiStrip(array $vm): string
         . ($vm['pending_approval'] ? ' ' . rivetRmmUiPill('warn', 'Waiting for approval') : '') . ($vm['revoked'] ? ' ' . rivetRmmUiPill('crit', 'Revoked') : '')
         . ($vm['retired'] ? ' ' . rivetRmmUiPill('off', 'Retired') : '')
         . '<div class="text-muted small mt-1">' . $facts . '</div>' . $live . $tagsRow . '</div>'
-        . '<div class="d-flex align-items-center flex-wrap rmm-actions" role="group" aria-label="Device actions" style="gap:6px">' . $actions . '</div></div>' . $banners . $reasons . '</div></section>';
+        . '<div class="d-flex align-items-center flex-wrap rmm-actions" role="group" aria-label="Device actions" style="gap:6px">' . $actions . '</div></div>' . $banners . $reasons . '</div></section>' . $volumesModal . $meshMapModal;
+}
+
+/**
+ * The "+N more" modal: every volume DeviceVolumes::build() reported, pools (ZFS datasets, btrfs subvolumes, bind mounts) listed once with their children
+ * indented underneath rather than one row per dataset. A volume marked `pseudo` (tmpfs, /run, /sys, EFI...) is never shown - DeviceHeader never counts it
+ * in `more` either, so the two numbers agree.
+ *
+ * @param list<array<string,mixed>> $volumes DeviceHeader::build()['volumes']
+ */
+function rivetRmmUiVolumesModal(string $id, array $volumes): string
+{
+    $row = static function (array $v, bool $child) use (&$row): string {
+        if ($v['pseudo']) {
+            return '';
+        }
+        $pctTxt = $v['used_pct'] !== null ? (int) round($v['used_pct']) . '%' : 'no data';
+        $bk = $v['level'] !== null ? rivetRmmUiKind((string) $v['level'])[0] : 'secondary';
+        $sizeTxt = $v['free_bytes'] !== null && $v['total_bytes'] !== null ? rivetRmmUiBytes((float) $v['free_bytes']) . ' free of ' . rivetRmmUiBytes((float) $v['total_bytes']) : 'size not reported';
+        $o = '<tr' . ($child ? ' class="rmm-vol-child"' : '') . '><td' . ($child ? ' class="ps-4"' : '') . '>' . ($child ? '<i class="fas fa-level-up-alt fa-rotate-90 me-1 text-muted" aria-hidden="true"></i>' : '')
+            . rmmH($v['label']) . '</td><td>' . rmmH($v['fs_type'] ?? '') . '</td><td>' . rmmH($sizeTxt) . '</td><td><span class="badge text-bg-' . $bk . '">' . $pctTxt . '</span></td></tr>';
+        if (!$child && isset($v['pool']['children']) && is_array($v['pool']['children'])) {
+            foreach ($v['pool']['children'] as $c) {
+                $o .= $row($c, true);
+            }
+        }
+
+        return $o;
+    };
+    $rows = '';
+    foreach ($volumes as $v) {
+        $rows .= $row($v, false);
+    }
+    if ($rows === '') {
+        $rows = '<tr><td colspan="4" class="text-muted">No other volumes reported.</td></tr>';
+    }
+
+    return '<div class="modal fade" id="' . rmmH($id) . '" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content">'
+        . '<div class="modal-header"><h5 class="modal-title">Volumes</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>'
+        . '<div class="modal-body p-0"><table class="table table-sm mb-0"><thead><tr><th scope="col">Volume</th><th scope="col">Type</th><th scope="col">Free / total</th><th scope="col">Used</th></tr></thead><tbody>'
+        . $rows . '</tbody></table></div></div></div></div>';
 }
 
 // ------------------------------------------------------------------ overview
@@ -428,6 +514,31 @@ function rivetRmmUiMeshAgentHtml(?array $ma, bool $admin, bool $nested = false):
     return $o . '</div>';
 }
 
+/**
+ * The manual MeshCentral node-mapping form (administrators only - the caller checks $perm['admin']/can_map_manually): rendered twice (the Remote tab's
+ * inline copy, and the header's "Map Mesh node" modal, RivetCore 1.0.0-rc.28) sharing the same field names and the same 'set_mesh_node' POST action, so
+ * js/rmm_panel.js wires every .rmm-mesh-map-form on the page instead of a single #rmm-mesh-form id - the logic (the form, the handler) is reused, not
+ * duplicated; only the two places it is shown differ. $suffix keeps element ids unique when both copies are on the page at once.
+ */
+function rivetRmmUiMeshMapForm(string $nodeId, string $suffix = ''): string
+{
+    $nodeField = 'rmm-mesh-node' . $suffix;
+    $helpId = $nodeField . '-help';
+
+    return '<form class="row g-2 align-items-end rmm-mesh-map-form"><div class="col-12"><label class="form-label small mb-1" for="' . $nodeField . '">MeshCentral node id (administrators)</label>'
+        . '<input class="form-control form-control-sm font-monospace" id="' . $nodeField . '" name="mesh_node_id" maxlength="2048" value="' . rmmH($nodeId) . '" placeholder="node//... or the MeshCentral address of the device" aria-describedby="' . $helpId . '">'
+        . '<div class="form-text" id="' . $helpId . '">In MeshCentral open the device and copy the address bar, or paste the node id. Any form is accepted and shown as <code>node//</code> plus 64 characters.</div></div>'
+        . '<div class="col-12"><button class="btn btn-sm btn-outline-primary" type="submit">Save mapping</button> <span class="small text-muted">Leave empty to clear. A node set here is kept when the Mesh agent reports a different one, unless the MeshCentral setting that lets the agent\'s node replace it is on.</span></div></form>';
+}
+
+/** The header's "Map Mesh node" modal (RivetCore 1.0.0-rc.28 device header view-model) - same form as the Remote tab's, reused via rivetRmmUiMeshMapForm(). */
+function rivetRmmUiMeshMapModal(string $nodeId): string
+{
+    return '<div class="modal fade" id="rmmMeshMapModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><div class="modal-content">'
+        . '<div class="modal-header"><h5 class="modal-title">Map Mesh node</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>'
+        . '<div class="modal-body">' . rivetRmmUiMeshMapForm($nodeId, '-modal') . '</div></div></div></div>';
+}
+
 function rivetRmmUiRemoteCard(array $vm): string
 {
     $perm = $vm['perm'];
@@ -451,9 +562,7 @@ function rivetRmmUiRemoteCard(array $vm): string
     }
     $body .= '</div>' . rivetRmmUiMeshAgentHtml($vm['mesh_agent'] ?? null, (bool) $perm['admin']);
     if ($perm['admin']) {
-        $body .= '<div class="card-body border-top py-2"><form id="rmm-mesh-form" class="row g-2 align-items-end"><div class="col-12"><label class="form-label small mb-1" for="rmm-mesh-node">MeshCentral node id (administrators)</label>'
-            . '<input class="form-control form-control-sm font-monospace" id="rmm-mesh-node" name="mesh_node_id" maxlength="2048" value="' . rmmH($m['node_id']) . '" placeholder="node//... or the MeshCentral address of the device" aria-describedby="rmm-mesh-node-help">'
-            . '<div class="form-text" id="rmm-mesh-node-help">In MeshCentral open the device and copy the address bar, or paste the node id. Any form is accepted and shown as <code>node//</code> plus 64 characters.</div></div><div class="col-12"><button class="btn btn-sm btn-outline-primary" type="submit">Save mapping</button> <span class="small text-muted">Leave empty to clear. A node set here is kept when the Mesh agent reports a different one, unless the MeshCentral setting that lets the agent\'s node replace it is on.</span></div></form></div>';
+        $body .= '<div class="card-body border-top py-2">' . rivetRmmUiMeshMapForm((string) $m['node_id']) . '</div>';
     }
     if ($perm['remote'] && $m['configured']) {
         $body .= '<div class="card-header py-1 border-top"><span class="ifm-toolbar-label">Recent sessions</span></div><ul class="list-group list-group-flush">';

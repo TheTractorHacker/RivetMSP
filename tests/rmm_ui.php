@@ -132,16 +132,36 @@ $ok(!str_contains($viewerHtml, 'rmm-output-btn') && !str_contains($viewerHtml, '
 $techHtml = rivetRmmUiStrip($panel('WIN1', 'tech')) . rivetRmmUiJobs($panel('WIN1', 'tech'), []);
 $ok(str_contains($techHtml, 'rmm-output-btn') && str_contains($techHtml, 'rmm-cancel-btn') && str_contains($techHtml, 'rmm-act-collect') && !str_contains($techHtml, 'Open in RMM administration'), 'technician: output, cancel and collect; no administration link');
 $adminHtml = rivetRmmUiStrip($panel('WIN1', 'admin')) . rivetRmmUiRemoteCard($panel('WIN1', 'admin'));
-$ok(str_contains($adminHtml, 'Open in RMM administration') && str_contains($adminHtml, 'rmm-mesh-form'), 'administrator: administration link and the Mesh mapping form');
-$ok(!str_contains(rivetRmmUiRemoteCard($panel('WIN1', 'tech')), 'rmm-mesh-form'), 'technician: no Mesh mapping form');
+$ok(str_contains($adminHtml, 'Open in RMM administration') && str_contains($adminHtml, 'rmm-mesh-map-form'), 'administrator: administration link and the Mesh mapping form');
+$ok(!str_contains(rivetRmmUiRemoteCard($panel('WIN1', 'tech')), 'rmm-mesh-map-form'), 'technician: no Mesh mapping form');
 $ok($panel('WIN1', 'tech')['mesh']['node_id'] === '' , 'the Mesh node id is only carried for administrators');
 $rebootOnlyStrip = rivetRmmUiStrip($panel('WIN1', 'rebootonly'));
-$ok(preg_match('/id="rmm-act-remote"[^>]*disabled/', $rebootOnlyStrip) === 1 && preg_match('/id="rmm-act-reboot"[^>]*disabled/', $rebootOnlyStrip) === 0, 'reboot-only role: Remote disabled, Reboot enabled');
+// RivetCore 1.0.0-rc.27: WIN1 is configured-but-unmapped in this seed, so the strip now shows the plain hint text + (admin-only) "Map Mesh node" instead of
+// a disabled id="rmm-act-remote" button - the whole point of the redesign (no actionable remote control is rendered at all for an unmapped device, mapped
+// or not, role or not). Reboot is unaffected and must still be enabled for this role.
+$ok(!str_contains($rebootOnlyStrip, 'id="rmm-act-remote"') && str_contains($rebootOnlyStrip, 'id="rmm-act-remote-unmapped"') && !str_contains($rebootOnlyStrip, 'id="rmm-act-remote-map"')
+    && preg_match('/id="rmm-act-reboot"[^>]*disabled/', $rebootOnlyStrip) === 0, 'reboot-only role: no actionable Remote control (Mesh unmapped), Reboot enabled');
+
+// RivetCore 1.0.0-rc.27 (RMM Phase 6): once mapped, the strip offers a Desktop/Terminal/Files split button for an administrator (rmm.remote.manage,
+// remote_tools feature switch) and only a plain Desktop button for a technician without rmm.remote.manage.
+$q("INSERT INTO endpoint_agent_mesh_nodes SET device_id = {$D['WIN1']}, mesh_node_id = 'node//" . str_repeat('a', 64) . "', source = 'manual', updated_at = UTC_TIMESTAMP()");
+$rmm->settings()->set(['features_json' => json_encode(array_merge($rmm->settings()->features(), ['remote_tools' => true]))]);
+$mappedAdminStrip = rivetRmmUiStrip($panel('WIN1', 'admin'));
+$ok(str_contains($mappedAdminStrip, 'id="rmm-act-remote"') && str_contains($mappedAdminStrip, 'data-rmm-remote-view="desktop"') && str_contains($mappedAdminStrip, 'dropdown-toggle-split')
+    && str_contains($mappedAdminStrip, 'data-rmm-remote-view="terminal"') && str_contains($mappedAdminStrip, 'data-rmm-remote-view="files"'), 'mapped, admin: Desktop/Terminal/Files split button');
+$rmm->settings()->set(['features_json' => json_encode(array_merge($rmm->settings()->features(), ['remote_tools' => false]))]);
+$mappedViewerStrip = rivetRmmUiStrip($panel('WIN1', 'viewer'));
+// RivetCore 1.0.0-rc.28: RemoteHeader::decide() always returns all three views (each with its own available/reason), so the split chevron is still drawn -
+// disabled, like every other control in this codebase a role cannot use, with the reason on each item rather than hidden entirely.
+$ok(preg_match('/id="rmm-act-remote"[^>]*disabled/', $mappedViewerStrip) === 1 && preg_match('/dropdown-toggle-split"[^>]*disabled/', $mappedViewerStrip) === 1
+    && substr_count($mappedViewerStrip, 'rmm-act-remote-view') === 2, 'mapped, viewer (no remote ability): Desktop/Terminal/Files all disabled with reasons, nothing hidden');
+$q("DELETE FROM endpoint_agent_mesh_nodes WHERE device_id = {$D['WIN1']}");   // back to unmapped for the rest of this file
 
 // ============================================================ Mesh not configured
 $rmm->settings()->set(['mesh_enabled' => 0]);
 $nm = $panel('WIN1', 'tech');
-$ok($nm['mesh']['configured'] === false && (preg_match('/id="rmm-act-remote"[^>]*disabled[^>]*not set up yet/', rivetRmmUiStrip($nm)) === 1) && rivetRmmUiRemoteCard($nm) === '', 'Mesh not configured: a technician gets a DISABLED Remote button with the reason (26.10.30), no remote card');
+// RivetCore 1.0.0-rc.28: the hint text is now Core's own (RemoteHeader::decide()'s state 'disabled' sentence), not this function's wording.
+$ok($nm['mesh']['configured'] === false && (preg_match('/id="rmm-act-remote"[^>]*disabled[^>]*MeshCentral is switched off/', rivetRmmUiStrip($nm)) === 1) && rivetRmmUiRemoteCard($nm) === '', 'Mesh not configured: a technician gets a DISABLED Remote button with the reason, no remote card');
 $ok(str_contains(rivetRmmUiRemoteCard($panel('WIN1', 'admin')), 'MeshCentral is not configured'), 'Mesh not configured: the administrator is told where to set it up');
 $rmm->settings()->set(['mesh_enabled' => 1]);
 
@@ -158,7 +178,10 @@ $ok(!str_contains($jobsHtml, 'boom <script>') && !str_contains($jobsHtml, 'boom'
 // ============================================================ query budget
 $a = $questions(); $v = rivetRmmUiPanel($db, $A['WIN1'], 1, $D['WIN1']); $b = $questions();
 $added = $b - $a - $overhead;
-$ok($added <= 46, "view-model for an admin costs $added statements (informational ceiling 46: 40 of RivetCore rc.9, the one read of the library jobs of rc.10, and the Run script dialog's library list and synced-script link of 26.10.22)");
+// RivetCore 1.0.0-rc.28 "device header view-model": RemoteActions::headerRemote() is Core's own designed integration point for the split Remote button
+// (state/views/primary/hint/can_map_manually) and does its own small set of queries (device lookup, mesh node lookup, mesh agent state) - using it as
+// specified costs 5 more statements than reproducing its gating locally would. Ceiling raised to 51 to match, not to be generous.
+$ok($added <= 51, "view-model for an admin costs $added statements (informational ceiling 51: 40 of RivetCore rc.9, the one read of the library jobs of rc.10, the Run script dialog's library list and synced-script link of 26.10.22, and 5 of RemoteActions::headerRemote() (rc.28 device header view-model))");
 $a = $questions(); $v = rivetRmmUiPanel($db, $A['WIN1'], 12, $D['WIN1']); $b = $questions();
 echo "INFO  panel statements: admin=$added, viewer=" . ($b - $a - $overhead) . "\n";
 
@@ -645,8 +668,10 @@ $ok(str_contains($body, 'Trend (') && str_contains($body, 'id="rmm-net"'), 'asse
 
 // ---- events: catalog entries (RivetMSP's picker reads RivetCore's EventCatalog) and the adapter
 $all = RivetCore\Rmm\RmmEvent::all();
-$ok(count($all) === 35 && in_array("rmm.device.clock_skew", $all, true) && in_array("rmm.change.detected", $all, true) && in_array('rmm.deploy.started', $all, true) && in_array('rmm.deploy.finished', $all, true) && in_array('rmm.deploy.failed', $all, true) && in_array('rmm.patch.scan_completed', $all, true) && in_array('rmm.patch.install_failed', $all, true) && in_array('rmm.file.transferred', $all, true) && in_array('rmm.log.rule_matched', $all, true) && in_array('rmm.mesh.agent_installed', $all, true) && in_array('rmm.mesh.node_conflict', $all, true) && in_array('rmm.starter.installed', $all, true),
-    'RivetCore defines thirty-five rmm.* events (nine of Phase 1, ten of Phase 2 and 3, rmm.file.transferred and rmm.log.rule_matched of Phase 6 and 8, rmm.mesh.agent_installed and rmm.mesh.node_conflict of the Mesh agent, rmm.starter.installed of the starter pack, five rmm.patch.* of Phase 4, three rmm.deploy.* of Phase 5)');
+$ok(count($all) === 41 && in_array("rmm.device.clock_skew", $all, true) && in_array("rmm.change.detected", $all, true) && in_array('rmm.deploy.started', $all, true) && in_array('rmm.deploy.finished', $all, true) && in_array('rmm.deploy.failed', $all, true) && in_array('rmm.patch.scan_completed', $all, true) && in_array('rmm.patch.install_failed', $all, true) && in_array('rmm.file.transferred', $all, true) && in_array('rmm.log.rule_matched', $all, true) && in_array('rmm.mesh.agent_installed', $all, true) && in_array('rmm.mesh.node_conflict', $all, true) && in_array('rmm.starter.installed', $all, true)
+    && in_array('rmm.hypervisor.vm_down', $all, true) && in_array('rmm.hypervisor.backup_failed', $all, true) && in_array('rmm.hypervisor.snapshot_old', $all, true) && in_array('rmm.hypervisor.storage_low', $all, true) && in_array('rmm.hypervisor.pool_degraded', $all, true) && in_array('rmm.hypervisor.cluster_quorum_lost', $all, true),
+    // RivetCore 1.0.0-rc.29: six rmm.hypervisor.* events added (35 -> 41).
+    'RivetCore defines forty-one rmm.* events (the pre-rc.29 thirty-five plus six rmm.hypervisor.* of the Proxmox/Hyper-V feature)');
 require_once "$root/includes/event_picker.php";
 $cat = json_decode(eventPickerCatalogJson(), true);
 $pickerIds = array_column($cat['events'], 'i');

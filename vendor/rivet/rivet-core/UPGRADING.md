@@ -76,6 +76,26 @@ the public API freeze (docblock `@api`/`@internal` and array-shape annotations, 
 (`docs/security/`), and the adapter conformance kit under `RivetCore\Testing` ([ADR-009](docs/architecture/ADR-009-test-helpers-in-package.md)).
 If a release candidate breaks something that this guide did not warn about, that is a bug in the release candidate: report it.
 
+## Adopting the device header view-model (1.0.0-rc.27)
+
+No migration, nothing is required. To get the short header, render from the new arrays instead of walking `inventory.disks` and `metrics.disk` yourself:
+
+1. Call `$readModel->header($readModel->detail($device, false))` for the header and `$remoteActions->headerRemote($principal, $deviceId, ['server' => $isServerChassis])` for the remote part (404 for a device outside the principal's scope).
+2. Render `chips` (at most four; colour from `level`), a "N more" link from `chips[disk].more` that opens a modal listing `volumes` (pools once with their `children`; hide `pseudo` rows by default), and the Remote access control as a split button: `remote.primary` is the main action, the other `views` with `available: false` are greyed with their `reason`, show `remote.hint` for any state but `ready`, and a "map by hand" action when `can_map_manually`.
+3. Remove: one chip per volume, the single greyed "Launch remote session" button, and the "An administrator maps this device to a MeshCentral node first" text (use `remote.hint`).
+4. Agents older than this release have no `source`/`desktop_session`; the grouping heuristics and the OS rules apply until they update.
+
+## Adopting hypervisor visibility (1.0.0-rc.29)
+
+Optional and off by default; nothing changes for an edition that does nothing (the golden transcripts replay identically, an agent without the capability is answered as before).
+
+1. **Migration.** `CoreMigrations::all()` ends with `0036_rmm_hypervisors` (four new tables, nothing altered, idempotent). (0034 is the Mesh work and 0035 the device type; this one is 0036.)
+2. **Abilities.** Map `rmm.hypervisor.view` (like `rmm.device.view`: names and sizes only) and `rmm.hypervisor.manage` (ignore a VM or host, change thresholds) in your `AccessPolicyInterface`. A policy that enforces anything must deny an ability it does not know.
+3. **Agents.** Roll out an agent of this release (it announces `hypervisor`). Then, as `rmm.admin`, switch on `hypervisor` (`PUT endpoint_devices/hypervisor/settings {"features": {"hypervisor": true}}`). Only a Proxmox VE host (Linux) or a Hyper-V host (Windows) reports anything. Try one host first: nothing here has run against real hypervisors (HYPERVISORS.md section 9).
+4. **Events.** The six `rmm.hypervisor.*` events are in `EventCatalog`; nothing to add for an edition that forwards the catalog. The alerts are checks (`hv.*`) and go through your bridge like any check.
+5. **Pages to build (the edition's work).** A **hosts page** from `hypervisorReader()->hosts()` (platform, version, cluster and quorum, VM count, running, storage health, stale / error flags); a **host page** from `hypervisorReader()->host()` (storage with used %, the VM table, cluster nodes); a **VM table** from `vms()` (search, state / type / backup / snapshot filters) with a detail drawer from `vm()` (state history, open alerts) and an "Ignore this VM" action (`hypervisorActions()->setVmIgnored()`); a **settings card** from `hypervisorActions()->settingsView()` / `updateSettings()` (the switch, thresholds, per-class alert switches); optionally the **asset link** from `hypervisorLinker()->suggest()`, which only suggests, you decide. The REST routes are served by `technicianApi()` unchanged.
+6. **Cluster note.** If more than one node of a Proxmox cluster has an agent, each reports the whole cluster's guests; show a VM under the node that runs it (`node`).
+
 ## Adopting the RMM module (unreleased)
 
 For an edition that wants the endpoint agent (RivetIT, then RivetMSP). The module is off by default and adds no required constructor argument to any existing type, but its three migrations are part of `CoreMigrations::all()` (there is no opt-in `RmmMigrations` list; the design draft proposed one and the owner chose otherwise, ADR-010 decision 9). **So an edition gets the ten `endpoint_agent_*` tables, and the migration ledger rows, as soon as it runs `MigrationRunner::run()` with `CoreMigrations::all()`, whether or not it ever enables the module** (RivetMSP included). The tables are additive and empty until a device enrolls, and the master switch defaults to off.
@@ -203,6 +223,16 @@ Behaviour change for the "Also install the MeshCentral agent" installer option; 
 4. **Nothing to do for the flow itself.** `RmmModule::enrollment()` wires the enrollment and approval hooks and `checkin()` the check-in step. An edition that builds `EnrollmentService`/`CheckinService` itself must call `onApproved()` and pass `MeshAfterApproval` (last constructor argument of `CheckinService` and `RmmReadModel`).
 5. **Compatibility.** Installers/tokens issued before rc.27 keep installing Mesh at install time (and still carry the group id); re-issue them to get the new behaviour. Remote tools must be on for the push; otherwise the device page says "skipped: remote tools are off".
 6. **Agents.** The agent must announce `job:mesh_install` (rc.16 or later); older agents show "waiting for the agent to announce Mesh install support".
+
+## Adopting device types (migration 0035, 1.0.0-rc.28)
+
+1. **Migration.** `CoreMigrations::all()` gains `0035_rmm_device_type`: `endpoint_agent_installer_options.device_type varchar(20) NOT NULL DEFAULT 'auto'` and `endpoint_agent_devices.detected_type varchar(20) NULL`. Mirror both in your `db.sql`. Nothing is backfilled; without them Core behaves exactly as before.
+2. **Map the labels to your asset types** in `RmmAssetsInterface::createForDevice()`. `$device['asset_type_hint']` (present only when the technician chose) wins, else `$device['asset_type_detected']` (always present). Labels: Laptop, Desktop, Server, Virtual Machine, Hypervisor, Tablet, Other. Call `DeviceTypeClassifier::resolve($label, $yourTypeNames)` for a label you have no type for (Hypervisor and Virtual Machine become Server; Tablet, Desktop and Other become Laptop). Not changing the adapter is valid: it keeps the old Server/Laptop rule.
+3. **`fillBlanks()`** may receive `$facts['type']` (a label): set the asset type from it only when the asset's type is empty. Never overwrite.
+4. **Installer page.** Add a dropdown "Device type": Detect automatically (`auto`) / Laptop / Desktop / Server / Virtual machine / Hypervisor, passed as the new last argument of `downloadInstaller()` and `deploymentCommands()`. Tokens list: show `device_type` from `RmmReadModel::tokens()`.
+5. **Approval screen.** Add a type dropdown for "create asset", prefilled with `suggested_type` from `RmmReadModel::pendingApprovals()`; today `resolvePending('create_asset')` uses the hint, else the detected type.
+6. **Conformance kit.** Optionally override `supportedTypes()` and `createAssetWithType()` in your `RmmAssetsConformanceTestCase` subclass to run the new checks (the type-fill ones skip otherwise).
+7. **Agents.** The new facts come with the next agent release; older agents send none and get the old default.
 
 ## Adopting install-with-the-agent (migration 0033, 1.0.0-rc.26)
 
@@ -382,6 +412,7 @@ forward-only, additive and idempotent; running the whole list on a current datab
 | `0030_rmm_change_monitor` | `Rmm\Migration\Migration0030ChangeMonitor` | four new tables for change monitoring: `endpoint_agent_change_settings`, `endpoint_agent_change_records`, `endpoint_agent_change_state`, `endpoint_agent_change_rules` (all `IF NOT EXISTS`, nothing existing altered, no row inserted; DDL in `Rmm\Migration\ChangeSchema::tables()`) | 1.0.0-rc.22 |
 | `0031_rmm_clock_skew` | `Rmm\Migration\Migration0031ClockSkew` | six nullable columns on `endpoint_agent_devices` for device clock skew (guarded `ADD COLUMN`, nothing backfilled) | 1.0.0-rc.23 |
 | `0033_rmm_auto_install` | `Rmm\Migration\Migration0033AutoInstall` | eight new tables for install-with-the-agent: auto-install policy, vendor parameters (sealed), installer ticks, per-device app status, hosted installer files (nothing altered, no row inserted) | 1.0.0-rc.26 |
+| `0035_rmm_device_type` | `Rmm\Migration\Migration0035DeviceType` | two additive columns: installer `device_type` (default `auto`) and device `detected_type` (nothing inserted, nothing backfilled) | 1.0.0-rc.28 |
 | `0029_rmm_software_deploy` | `Rmm\Migration\Migration0029SoftwareDeploy` | eight new tables for software deployment: `rmm_software_hosts`, `rmm_packages`, `rmm_package_versions`, `rmm_package_assignments`, `rmm_package_installs`, `rmm_package_history`, `rmm_package_jobs`, `rmm_deploy_state` (all `IF NOT EXISTS`, nothing existing altered, no row inserted; DDL in `Rmm\Migration\DeploySchema::tables()`) | 1.0.0-rc.21 |
 
 The authoritative list is `RivetCore\Migration\CoreMigrations::all()`; the exact ids (`$m->id()`) are what `rivet_core_migrations`

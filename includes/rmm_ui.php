@@ -456,6 +456,13 @@ function rivetRmmUiPanel(\mysqli $mysqli, int $assetId, int $userId, ?int $devic
     // ---- remote sessions
     $sessions = [];
     $meshConfigured = (int) ($cfg['mesh_enabled'] ?? 0) === 1 && (string) ($cfg['mesh_url'] ?? '') !== '' && !empty($cfg['mesh_login_key_enc']);
+    // RivetCore 1.0.0-rc.28 "device header view-model": the Core-side decision table for the split Remote button (state/views/primary/hint/
+    // can_map_manually), @api, built exactly for this integration point - not reproduced locally. 'server' hints Windows Server Core (no desktop) vs a
+    // Linux/other "server" chassis for the terminal-first choice; DeviceTypes::isServer() already classifies the edition's own asset type for this device.
+    $headerRemote = $rmm->remoteActions()->headerRemote(rivetRmmPrincipal($userId, ''), $deviceId, ['server' => stripos((string) ($dev['os_version'] ?? ''), 'server') !== false]);
+    $remoteHeader = $headerRemote->ok ? $headerRemote->data : ['state' => 'disabled', 'views' => [], 'primary' => null, 'hint' => '', 'can_map_manually' => false];
+    // Pure (no query): built once here and read twice below (chips, volumes) without asking Core for it again.
+    $headerVm = $rmm->readModel()->header($view);
     if ($perm['remote']) {
         $s = mysqli_query($mysqli, 'SELECT s.created_at, s.source_ip, s.connection_type, u.user_name FROM rmm_remote_sessions s LEFT JOIN users u ON u.user_id = s.user_id WHERE s.asset_id = '
             . $assetId . ' ORDER BY s.created_at DESC LIMIT 5');
@@ -657,13 +664,17 @@ function rivetRmmUiPanel(\mysqli $mysqli, int $assetId, int $userId, ?int $devic
         'inventory' => $inv,
         'jobs' => (array) ($view['jobs'] ?? []),
         'mesh' => ['mapped' => !empty($view['mesh']['mapped']), 'source' => $view['mesh']['source'] ?? null, 'node_id' => $perm['admin'] ? ($view['mesh']['node_id'] ?? '') : '',
-            'configured' => $meshConfigured],
+            'configured' => $meshConfigured, 'header' => $remoteHeader],
         'mesh_agent' => rivetRmmUiMeshAgent(is_array($view['mesh_agent'] ?? null) ? $view['mesh_agent'] : null, (bool) $perm['admin']),
         // RivetCore 1.0.0-rc.16: present in Core's device detail only while the pushed Mesh install is available (Mesh enabled, https address, device group); null otherwise.
         'mesh_install' => rivetRmmUiMeshInstall(is_array($view['mesh_install'] ?? null) ? $view['mesh_install'] : null),
         // RivetCore 1.0.0-rc.27: present only for a device whose enrollment token asked "also install the MeshCentral agent (after the device is approved)"; null otherwise.
         // {state: waiting_approval|waiting|queued|installing|installed|failed|skipped, label: "Mesh agent: ..."} - label is already the exact device-page sentence.
         'mesh_after_approval' => is_array($view['mesh_after_approval'] ?? null) ? $view['mesh_after_approval'] : null,
+        // RivetCore 1.0.0-rc.28 "device header view-model": at most four chips (cpu, ram, disk, uptime) and the full volume list for the "+N more" modal,
+        // built from the SAME $view detail() already fetched above - no extra query (DeviceHeader::build() is pure). Replaces the old per-volume gauge chips.
+        'header_chips' => $headerVm['chips'],
+        'header_volumes' => $headerVm['volumes'],
         'remote_sessions' => $sessions,
         'saved_scripts' => $saved,
         'run' => $run,

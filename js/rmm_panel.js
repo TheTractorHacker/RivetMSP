@@ -260,10 +260,12 @@
 
     // ---- remote session (an offline device asks for an in-page "launch anyway", never window.confirm)
     // The tab is opened inside the click (a browser blocks one opened after the asynchronous launch call), then sent to the session when the launch answers.
-    function openRemote(force) {
+    function openRemote(force, view) {
         var L = window.RivetRmmLaunch;
         var tab = L.begin();
-        post('remote', force ? { force: '1' } : {}).then(function (d) {
+        var body = { view: view || 'desktop' };
+        if (force) { body.force = '1'; }
+        post('remote', body).then(function (d) {
             if (d.success && d.url) {
                 if (tab.go(d.url)) { say('Remote session opened.', true); return; }
                 say('Your browser blocked the new tab.', false, L.link(d.url, 'Open remote session'));
@@ -273,29 +275,35 @@
             if (d.code === 'device_offline' && !force) {
                 var b = document.createElement('button');
                 b.type = 'button'; b.className = 'btn btn-sm btn-outline-danger ms-2'; b.textContent = 'Launch anyway';
-                b.addEventListener('click', function () { openRemote(true); });
+                b.addEventListener('click', function () { openRemote(true, view); });
                 say(d.error || 'The device is offline.', false, b);
                 return;
             }
             say(d.error || 'Could not start the session.', false);
         }).catch(function () { tab.close(); say('Network error.', false); });
     }
+    // The split button's primary segment (#rmm-act-remote) and the Remote tab's own button (#rmm-remote-btn) each carry their own view (data-rmm-remote-view;
+    // #rmm-remote-btn has none and defaults to desktop); the dropdown's extra view segments share the .rmm-act-remote-view class instead of an id.
     ['rmm-act-remote', 'rmm-remote-btn'].forEach(function (id) {
         var b = document.getElementById(id);
-        if (b) { b.addEventListener('click', function () { openRemote(false); }); }
+        if (b) { b.addEventListener('click', function () { openRemote(false, b.getAttribute('data-rmm-remote-view')); }); }
+    });
+    Array.prototype.forEach.call(panel.querySelectorAll('.rmm-act-remote-view'), function (b) {
+        b.addEventListener('click', function () { openRemote(false, b.getAttribute('data-rmm-remote-view')); });
     });
 
-    // ---- MeshCentral node mapping (administrators)
-    var mf = document.getElementById('rmm-mesh-form');
-    if (mf) {
+    // ---- MeshCentral node mapping (administrators): the Remote tab's inline copy and the header's "Map Mesh node" modal copy (RivetCore 1.0.0-rc.28
+    // device header view-model) share the same .rmm-mesh-map-form class and 'set_mesh_node' POST action instead of a single #rmm-mesh-form id.
+    Array.prototype.forEach.call(panel.querySelectorAll('.rmm-mesh-map-form'), function (mf) {
         mf.addEventListener('submit', function (e) {
             e.preventDefault();
-            post('set_mesh_node', { mesh_node_id: document.getElementById('rmm-mesh-node').value }).then(function (d) {
+            var nodeField = mf.querySelector('input[name="mesh_node_id"]');
+            post('set_mesh_node', { mesh_node_id: nodeField ? nodeField.value : '' }).then(function (d) {
                 say(d.success ? 'Mapping saved.' : (d.error || 'Not saved.'), !!d.success);
                 if (d.success) { window.setTimeout(function () { window.location.reload(); }, 700); }
             }).catch(function () { say('Network error.', false); });
         });
-    }
+    });
 
     // ---- jobs: cancel, lazy output
     Array.prototype.forEach.call(panel.querySelectorAll('.rmm-cancel-btn'), function (b) {
