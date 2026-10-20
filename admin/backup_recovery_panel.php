@@ -113,7 +113,7 @@ $rec_ago = function (?int $sec): string {
                     <tr>
                         <td><?= nullable_htmlentities($sw['name']) ?> <small class="text-muted"><?= nullable_htmlentities($sw['label']) ?></small></td>
                         <td><span class="badge text-bg-<?= $sw_badge[$sw['state']] ?? 'secondary' ?>"><?= nullable_htmlentities($sw['state']) ?></span></td>
-                        <td class="text-nowrap"><?= $sw['last_ts'] === null ? 'never' : nullable_htmlentities(gmdate('Y-m-d H:i', $sw['last_ts'])) . ' UTC' ?></td>
+                        <td class="text-nowrap"><?= $sw['last_ts'] === null ? 'never' : nullable_htmlentities(rivetRmmTime((int) $sw['last_ts'])) ?></td>
                         <td class="text-nowrap"><?= $sw['interval_s'] === null ? '<span class="text-muted">not watched</span>' : 'every ' . nullable_htmlentities(SyncWatch::humanInterval((int) $sw['interval_s'])) . ($ov && $ov['interval_s'] ? ' <small class="text-muted">(declared)</small>' : '') ?></td>
                         <td class="small"><?= nullable_htmlentities($sw['detail']) ?><?= $ov && $ov['note'] !== '' ? '<br><span class="text-muted">' . nullable_htmlentities($ov['note']) . '</span>' : '' ?></td>
                         <td class="text-end text-nowrap">
