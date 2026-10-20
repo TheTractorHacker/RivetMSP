@@ -129,11 +129,12 @@ if ($resource === 'openapi' || $resource === 'docs') {
 }
 
 // Device-credential endpoints: the built-in endpoint agent (enroll / check-in / jobs / update download, file transfer chunks, log batches, plus the token-gated installer download,
-// and the Linux file download credential). Routed here, above the Bearer parsing and above the pre-auth JSON body read below, because a device credential is not an api_tokens row
-// and that body read has no size ceiling. Each handler authenticates its caller, bounds its own body read and rate-limits itself (agent_device_api.php for the Core-protocol ones;
-// agent_linux_file.php is edition-only, not part of Core's DeviceApi, and authenticates with X-Install-Key/Bearer rvdl1... instead). The RMM module is off by default: with the
-// gate in front (rmm_gate.php) and the module switch off they answer 503 module_disabled.
-if ($resource === 'agent_enroll' || $resource === 'agent_checkin' || $resource === 'agent_jobs' || $resource === 'agent_installer' || $resource === 'agent_update' || $resource === 'agent_transfer' || $resource === 'agent_logs' || $resource === 'agent_changes' || $resource === 'agent_build_host' || $resource === 'agent_linux_file') {
+// the Linux file download credential, and the hosted-installer download). Routed here, above the Bearer parsing and above the pre-auth JSON body read below, because a device
+// credential is not an api_tokens row and that body read has no size ceiling. Each handler authenticates its caller, bounds its own body read and rate-limits itself
+// (agent_device_api.php for the Core-protocol ones; agent_linux_file.php and agent_software.php are edition-mounted, not part of Core's frozen DeviceApi protocol -
+// agent_linux_file.php authenticates with X-Install-Key/Bearer rvdl1..., agent_software.php with the job-bound secret in its own path segments). The RMM module is off by
+// default: with the gate in front (rmm_gate.php) and the module switch off they answer 503 module_disabled (agent_software.php: 404, same as every other refusal there).
+if ($resource === 'agent_enroll' || $resource === 'agent_checkin' || $resource === 'agent_jobs' || $resource === 'agent_installer' || $resource === 'agent_update' || $resource === 'agent_transfer' || $resource === 'agent_logs' || $resource === 'agent_changes' || $resource === 'agent_build_host' || $resource === 'agent_linux_file' || $resource === 'agent_software') {
     require __DIR__ . '/' . $resource . '.php';
     exit;
 }

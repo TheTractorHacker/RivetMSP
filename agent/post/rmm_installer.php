@@ -86,8 +86,11 @@ if (!in_array($inst_format, ['exe', 'msi'], true)) {
 if ($inst_format === 'msi' && $inst_os !== 'windows') {
     $inst_fail(422, 'invalid', 'The MSI format is for Windows only.');
 }
+// rc.27: install-apps-with-the-agent (migration 0033) - the ticked catalog apps (needs rmm.software.deploy for this client; Core refuses it, creating
+// nothing, when software_deploy is off or a ticked app's vendor parameters have no value for this client).
+$inst_app_ids = array_values(array_unique(array_filter(array_map('intval', (array) ($_POST['app_ids'] ?? [])), static fn (int $id): bool => $id > 0)));
 $inst_args = [intval($_POST['client_id'] ?? 0), intval($_POST['location_id'] ?? 0), $inst_ring, $inst_post_int('ttl_hours', 1, $inst_ttl_max, min(24, $inst_ttl_max)),
-    !empty($_POST['multiple']) ? 25 : 1, trim((string) ($_POST['label'] ?? '')), $inst_arch, $inst_mesh, $inst_format];
+    !empty($_POST['multiple']) ? 25 : 1, trim((string) ($_POST['label'] ?? '')), $inst_arch, $inst_mesh, $inst_format, $inst_app_ids];
 
 if ($inst_mode === 'commands') {
     $r = $inst_admin->deploymentCommands($inst_who, ...$inst_args);
