@@ -502,7 +502,7 @@ function rivetRmmUiPerformanceCharts(array $perf, bool $offline): string
                 $peak = $peak === null ? (float) $p['max'] : max($peak, (float) $p['max']);
             }
         }
-        $json = json_encode(['unit' => $c['unit'], 'series' => $c['series']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?: '{}';
+        $json = json_encode(['unit' => $c['unit'], 'tz' => rivetRmmTimeZone()->getName(), 'series' => $c['series']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) ?: '{}';
         $cards .= '<div class="col-lg-6 mb-3"><div class="card card-dark h-100" id="rmm-perf-' . rmmH($c['id']) . '"><div class="card-header py-2 d-flex align-items-center"><h6 class="mb-0 me-auto">' . rmmH($c['title'])
             . '</h6><span class="small text-muted">24 h peak ' . rmmH($peak === null ? 'n/a' : $fmt($peak)) . '</span></div><div class="card-body pb-2">'
             . '<div class="rmm-perf-canvas"><canvas data-rmm-chart="' . rmmH($json) . '" role="img" aria-label="' . rmmH($c['title']) . ' over the last 24 hours, average per hour"></canvas></div>'

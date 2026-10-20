@@ -353,6 +353,12 @@
                 datasets.push({ label: s.label, data: s.points.map(function (p) { return { x: p.t * 1000, y: p.avg }; }), borderColor: c, backgroundColor: c, borderWidth: 2, pointRadius: 2, tension: 0.2 });
                 datasets.push({ label: s.label + ' (highest)', data: s.points.map(function (p) { return { x: p.t * 1000, y: p.max }; }), borderColor: c, backgroundColor: c, borderWidth: 1, borderDash: [4, 3], pointRadius: 0, tension: 0.2 });
             });
+            // hours are the company's, not UTC and not the browser's: the server passes the zone name with the spec
+            function clock(ms, full) {
+                try {
+                    return new Intl.DateTimeFormat('en-GB', full ? { timeZone: spec.tz, hourCycle: 'h23', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' } : { timeZone: spec.tz, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' }).format(new Date(ms));
+                } catch (e) { var d = new Date(ms); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+            }
             function fmt(v) { return pct ? (Math.round(v * 10) / 10) + '%' : (Math.round(v * 8 / 10000) / 100) + ' Mbit/s'; }
             new Chart(cv, {
                 type: 'line',
@@ -360,10 +366,10 @@
                 options: {
                     responsive: true, maintainAspectRatio: false, parsing: false, interaction: { mode: 'nearest', intersect: false },
                     scales: {
-                        x: { type: 'linear', ticks: { maxTicksLimit: 6, callback: function (v) { var d = new Date(v); return ('0' + d.getUTCHours()).slice(-2) + ':00'; } } },
+                        x: { type: 'linear', ticks: { maxTicksLimit: 6, callback: function (v) { return clock(v, false); } } },
                         y: { beginAtZero: true, suggestedMax: pct ? 100 : undefined, max: pct ? 100 : undefined, ticks: { callback: function (v) { return fmt(v); } } }
                     },
-                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } }, tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } } } }
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } }, tooltip: { callbacks: { title: function (items) { return items.length ? clock(items[0].parsed.x, true) : ''; }, label: function (ctx) { return ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } } } }
                 }
             });
         });
