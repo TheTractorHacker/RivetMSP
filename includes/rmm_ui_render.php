@@ -198,6 +198,14 @@ function rivetRmmUiStrip(array $vm): string
         }
         $live .= '</div>';
     }
+    // RivetCore 1.0.0-rc.27: only present for a device whose enrollment token asked "also install the MeshCentral agent (after the device is approved)".
+    // label is already the exact sentence ("Mesh agent: waiting for approval" / "queued" / "installing" / "installed" / "skipped: ..." / "failed: ...").
+    if (!empty($vm['mesh_after_approval']['label'])) {
+        $mafKind = ['installed' => 'ok', 'installing' => 'info', 'queued' => 'info', 'waiting' => 'off', 'waiting_approval' => 'off', 'skipped' => 'off', 'failed' => 'warn'][$vm['mesh_after_approval']['state'] ?? ''] ?? 'off';
+        $mafPill = rivetRmmUiPill($mafKind, (string) $vm['mesh_after_approval']['label']);
+        $live = $live === '' ? '<div class="mt-2 small d-flex flex-wrap align-items-center rmm-live">' . $mafPill . '</div>'
+            : substr($live, 0, -strlen('</div>')) . $mafPill . '</div>';
+    }
 
     // Actions. A button the role or device cannot use is disabled WITH its reason (title for the tooltip, the list below for narrow screens).
     $why = [];
@@ -1388,8 +1396,11 @@ function rivetRmmUiInstallerFormatField(array $msi, string $defaultArch): string
 }
 
 /**
- * The tick-box "Also install the MeshCentral agent" (RivetCore 1.0.0-rc.12). Off by default and never pre-ticked. Disabled, with Core's refusal sentence as its help text, while
- * Mesh is not switched on and configured (an https address and a device group id): a disabled box is not submitted, and the server asks Core again anyway.
+ * The tick-box "Also install the MeshCentral agent (after the device is approved)" (RivetCore 1.0.0-rc.12, wording updated for rc.27's Mesh-after-approval:
+ * Core no longer pushes the Mesh agent inline with the install - it always queues the push for once an administrator approves the device, so the Linux
+ * command never carries --install-mesh-agent for these installers; see InstallerService::linuxSnippet()'s caller, which passes no Mesh details). Off by
+ * default and never pre-ticked. Disabled, with Core's refusal sentence as its help text, while Mesh is not switched on and configured (an https address
+ * and a device group id): a disabled box is not submitted, and the server asks Core again anyway.
  *
  * @param array{show:bool,ready:bool,refusal:?string,admin:bool} $mesh
  */
@@ -1400,12 +1411,12 @@ function rivetRmmUiInstallerMeshBox(array $mesh): string
     }
     $ready = !empty($mesh['ready']);
     $help = $ready
-        ? 'After the RivetMSP agent is in place, the installer downloads the MeshCentral agent from your own Mesh server (https only) and installs it, so remote desktop works without mapping a node by hand. A failure never fails the RivetMSP install.'
+        ? 'The Mesh agent installs after you approve the device: once it is linked to an asset, the server pushes the Mesh agent from your own Mesh server (https only), so remote desktop works without mapping a node by hand. A failure never fails the RivetMSP install or the approval itself.'
         : (string) ($mesh['refusal'] ?? 'MeshCentral agent install is not available.');
     $link = !$ready ? ($mesh['admin'] ? ' <a href="/admin/settings_endpoint_agent.php#mesh">Open the MeshCentral settings</a>.' : ' An administrator can set it up under Administration &gt; Endpoint agent.') : '';
 
     return '<div class="col-12" data-rmm-inst-mesh="' . ($ready ? 'ready' : 'unavailable') . '"><div class="form-check"><input class="form-check-input" type="checkbox" id="rmm-inst-mesh" name="install_mesh_agent" value="1" aria-describedby="rmm-inst-mesh-help"'
-        . ($ready ? '' : ' disabled') . '><label class="form-check-label" for="rmm-inst-mesh">Also install the MeshCentral agent</label>'
+        . ($ready ? '' : ' disabled') . '><label class="form-check-label" for="rmm-inst-mesh">Also install the MeshCentral agent (after the device is approved)</label>'
         . '<div class="form-text" id="rmm-inst-mesh-help">' . rmmH($help) . $link . '</div></div></div>';
 }
 

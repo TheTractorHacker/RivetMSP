@@ -661,6 +661,9 @@ function rivetRmmUiPanel(\mysqli $mysqli, int $assetId, int $userId, ?int $devic
         'mesh_agent' => rivetRmmUiMeshAgent(is_array($view['mesh_agent'] ?? null) ? $view['mesh_agent'] : null, (bool) $perm['admin']),
         // RivetCore 1.0.0-rc.16: present in Core's device detail only while the pushed Mesh install is available (Mesh enabled, https address, device group); null otherwise.
         'mesh_install' => rivetRmmUiMeshInstall(is_array($view['mesh_install'] ?? null) ? $view['mesh_install'] : null),
+        // RivetCore 1.0.0-rc.27: present only for a device whose enrollment token asked "also install the MeshCentral agent (after the device is approved)"; null otherwise.
+        // {state: waiting_approval|waiting|queued|installing|installed|failed|skipped, label: "Mesh agent: ..."} - label is already the exact device-page sentence.
+        'mesh_after_approval' => is_array($view['mesh_after_approval'] ?? null) ? $view['mesh_after_approval'] : null,
         'remote_sessions' => $sessions,
         'saved_scripts' => $saved,
         'run' => $run,

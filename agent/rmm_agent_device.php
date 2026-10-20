@@ -92,6 +92,7 @@ $ts = static fn($iso) => $iso ? htmlspecialchars(rivetRmmTime($iso, true, true, 
             <tr><td class="text-muted">Enrolled</td><td><?= $h(rivetRmmTime($dev['first_seen_at'], true, true, 'Y-m-d H:i:s', (string) $dev['first_seen_at'])) ?> (<?= (int) $dev['enroll_count'] ?> enrollment<?= (int) $dev['enroll_count'] === 1 ? '' : 's' ?>)</td></tr>
             <?php $us = $dev['update_state_json'] ? json_decode((string) $dev['update_state_json'], true) : null; if (!empty($us['last'])) { echo '<tr><td class="text-muted">Last agent update</td><td>' . $h($us['last']['version']) . ': ' . $h($us['last']['state']) . ($us['last']['detail'] ? ' (' . $h($us['last']['detail']) . ')' : '') . '</td></tr>'; } ?>
             <tr><td class="text-muted">Remote access</td><td><?= $mesh ? 'Mapped to a MeshCentral node (' . $h($mesh['source']) . ')' : 'Not mapped to a MeshCentral node' ?></td></tr>
+            <?php if (!empty($view['mesh_after_approval']['label'])) { ?><tr><td class="text-muted">Mesh install</td><td><?= $h($view['mesh_after_approval']['label']) ?></td></tr><?php } ?>
         </table>
     </div></div>
 
