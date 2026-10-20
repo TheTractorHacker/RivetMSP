@@ -1213,7 +1213,7 @@ function rivetRmmScrSchedulesPage(array $vm, array $ctx): string
     $csrf = $ctx['csrf'];
     $self = '/agent/rmm_schedules.php';
     $o = rivetRmmAutoHeader('Script schedules', 'clock', $perm['admin'] ? '<a class="btn btn-primary btn-sm" href="' . $self . '?new=1"><i class="fas fa-plus me-1" aria-hidden="true"></i>New schedule</a>' : '',
-        'A schedule runs one version of a library script again and again on a target. All times are UTC. Administrators manage schedules; everyone with access can see them.');
+        'A schedule runs one version of a library script again and again on a target. Times are shown in the company time zone (' . rivetRmmTimeZone()->getName() . '); only a cron timetable is written in UTC. Administrators manage schedules; everyone with access can see them.');
     if ($vm['error'] !== '') {
         return $o . '<div class="alert alert-danger" role="alert">' . rmmH($vm['error']) . '</div>';
     }
@@ -1343,7 +1343,7 @@ function rivetRmmScrScheduleDetailPage(array $vm, array $ctx): string
         if ($vm['scripts'] === []) {
             return rivetRmmAutoHeader('New schedule', 'clock', $back) . '<div class="alert alert-warning" role="alert">There is no library script to schedule yet. <a href="/agent/rmm_scripts.php?tab=library">Publish one first.</a></div>';
         }
-        $o = rivetRmmAutoHeader($vm['new'] ? 'New schedule' : 'Edit schedule', 'clock', $back, 'All times are UTC.');
+        $o = rivetRmmAutoHeader($vm['new'] ? 'New schedule' : 'Edit schedule', 'clock', $back, 'Times are shown in the company time zone (' . rivetRmmTimeZone()->getName() . '); only a cron timetable is written in UTC.');
         $o .= rivetRmmUiCard('Schedule', 'edit', rivetRmmScrScheduleForm($vm['schedule'], $vm['scripts'], $vm['scope'], $csrf, $vm['draft']));
         if (count($vm['scripts']) >= 40) {
             $o .= '<p class="small text-muted">Only the first 40 scripts are offered here.</p>';
@@ -1381,7 +1381,7 @@ function rivetRmmScrScheduleDetailPage(array $vm, array $ctx): string
         ['State', rivetRmmScrSchedulePill($s) . (!$s['approved'] && $s['approval_id'] ? ' <a href="/agent/rmm_approvals.php?state=pending_approval#approval-' . (int) $s['approval_id'] . '">See the approval request</a>' : '')],
         ['Script', '<a href="/agent/rmm_scripts.php?tab=library&amp;script_id=' . (int) $s['script_id'] . '">' . rmmH($s['script_name']) . '</a>, pinned to version ' . (int) $s['script_version'] . ' (SHA-256 ' . rmmH(substr((string) $s['body_sha256'], 0, 16)) . ')'
             . ($cur > (int) $s['script_version'] ? '<div class="small text-warning-emphasis"><i class="fas fa-info-circle me-1" aria-hidden="true"></i>A newer version (' . $cur . ') exists. This schedule keeps running version ' . (int) $s['script_version'] . '.</div>' : '')],
-        ['Runs on', rmmH(rivetRmmAutoScopeLabel((string) $s['target']['type'], (int) $s['target']['id'], $vm['scope']))], ['Cadence', rmmH(rivetRmmScrCadence($s)) . ' <span class="text-muted small">(UTC)</span>'],
+        ['Runs on', rmmH(rivetRmmAutoScopeLabel((string) $s['target']['type'], (int) $s['target']['id'], $vm['scope']))], ['Cadence', rmmH(rivetRmmScrCadence($s)) . (($s['kind'] ?? '') === 'cron' ? ' <span class="text-muted small">(cron fields are UTC)</span>' : '')],
         ['Next run', rivetRmmScrNextRunCell($s)], ['Last run', rivetRmmUiTime($s['last_run_at'])],
         ['Spread over', rmmH(rivetRmmScrSecondsWords(max(0, (int) $s['jitter_s'])) . ((int) $s['jitter_s'] === 0 ? ' (all at once)' : ''))],
         ['If still running', $s['overlap'] === 'skip' ? 'Skip that device this time' : 'Queue behind the unfinished run'],

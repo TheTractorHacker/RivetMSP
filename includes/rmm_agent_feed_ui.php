@@ -63,7 +63,7 @@ function rivetAgentFeedCard(array $vm, ?array $msg, array $steps, string $csrf, 
     } else {
         $o .= '<p class="small text-muted mb-2">List fetched ' . $h(Feed::ago(time() - (int) $vm['fetched_at'])) . '. Newest hosted agent: ' . ($vm['highest'] !== null ? '<strong>' . $h($vm['highest']) . '</strong>' : 'none yet') . '.'
             . ($vm['devices'] !== [] ? ' Devices by agent version: ' . implode(', ', array_map(static fn ($v, $n): string => $h($v === '' ? 'unknown' : $v) . ' (' . (int) $n . ')', array_keys($vm['devices']), $vm['devices'])) . '.' : '') . '</p>';
-        $o .= '<div class="table-responsive"><table class="table table-sm align-middle mb-3"><caption class="visually-hidden">Agent releases</caption><thead><tr><th>Version</th><th>Released (UTC)</th><th>Files</th><th>Here</th><th class="text-end">Devices</th><th>Publish</th></tr></thead><tbody>';
+        $o .= '<div class="table-responsive"><table class="table table-sm align-middle mb-3"><caption class="visually-hidden">Agent releases</caption><thead><tr><th>Version</th><th>Released</th><th>Files</th><th>Here</th><th class="text-end">Devices</th><th>Publish</th></tr></thead><tbody>';
         foreach ($vm['rows'] as $i => $r) {
             $assets = [];
             foreach ($r['assets'] as $a) {
@@ -89,7 +89,7 @@ function rivetAgentFeedCard(array $vm, ?array $msg, array $steps, string $csrf, 
             }
             $o .= '<tr data-feed-row="' . $h($r['version']) . '"><td><strong>' . $h($r['version']) . '</strong>' . ($r['prerelease'] ? ' <span class="badge bg-secondary">Pre-release</span>' : '') . ($i === 0 ? ' <span class="badge bg-primary">Newest</span>' : '')
                 . (str_starts_with((string) $r['url'], 'https://github.com/') ? '<div class="small"><a href="' . $h($r['url']) . '" rel="noopener noreferrer" target="_blank">Release notes</a></div>' : '') . '</td>'
-                . '<td class="text-nowrap">' . $h($r['published_at'] !== '' ? str_replace('T', ' ', rtrim($r['published_at'], 'Z')) : '') . '</td>'
+                . '<td class="text-nowrap">' . $h(rivetRmmTime($r['published_at'])) . '</td>'
                 . '<td>' . implode('', $assets) . ($r['has_sums'] ? '' : '<div class="small text-warning-emphasis">No SHA256SUMS in this release: it cannot be verified, so it cannot be published.</div>') . '</td>'
                 . '<td>' . $here . '</td><td class="text-end">' . (int) $r['devices'] . '</td><td style="min-width:17rem">';
             if (!$r['publishable'] || !$r['has_sums']) {
@@ -187,7 +187,7 @@ function rivetAgentAddDevicePage(array $ins, string $csrf, ?array $rec, bool $is
     if ($rec === null) {
         $o .= '<div class="alert alert-info py-2" role="note" data-add-notice="linux">No Linux release is recorded on this server yet, so the commands below expect the agent tarball next to them (as before).' . $admin('agent-updates', 'Publish a release under Agent updates') . ' to get commands that download and verify the agent themselves, and package links.</div>';
     } else {
-        $o .= '<p class="small text-muted">Release <strong data-add-linux-ver>' . $h($rec['version'] ?? '') . '</strong>' . (!empty($rec['prerelease']) ? ' <span class="badge bg-secondary">Pre-release</span>' : '') . ' recorded ' . $h($rec['recorded_at'] ?? '') . ' UTC. The commands download from the release on GitHub and check the SHA-256 recorded when it was published.</p>';
+        $o .= '<p class="small text-muted">Release <strong data-add-linux-ver>' . $h($rec['version'] ?? '') . '</strong>' . (!empty($rec['prerelease']) ? ' <span class="badge bg-secondary">Pre-release</span>' : '') . ' recorded ' . $h(rivetRmmTime($rec['recorded_at'] ?? null, true, true, 'Y-m-d H:i', (string) ($rec['recorded_at'] ?? ''))) . '. The commands download from the release on GitHub and check the SHA-256 recorded when it was published.</p>';
         $files = '<div class="table-responsive mt-3"><table class="table table-sm align-middle mb-0" id="add-linux-files"><caption class="visually-hidden">Linux files of the release</caption><thead><tr><th>File</th><th>Size</th><th>SHA-256</th><th></th></tr></thead><tbody>';
         foreach ((array) ($rec['assets'] ?? []) as $a) {
             if (!is_array($a) || !isset($a['name'], $a['url'])) {

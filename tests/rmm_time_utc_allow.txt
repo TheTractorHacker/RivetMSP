@@ -1,0 +1,17 @@
+# Lines on the RMM / Endpoint agent / admin pages that may still say UTC. Each entry is a substring of "<file> | <trimmed line>".
+# Two kinds only: (1) UTC as a zone NAME (default value / option of a zone picker, not a displayed timestamp);
+# (2) cron fields, which Core evaluates in UTC: that is the meaning of the input, not a timestamp shown to the user.
+# Anything else must go through rivetRmmTime() (includes/rmm_time.php).
+includes/rmm_alr_ui.php | $out = $what
+includes/rmm_alr_ui.php | $common = ['UTC',
+includes/rmm_alr_ui.php | return $z !== '' && in_array($z, \DateTimeZone::listIdentifiers()
+includes/rmm_patch_ui.php | . '<div class="col-md-3"><label class="form-label" for="pp_tz">Time zone</label>
+includes/rmm_scr_ui.php | $at = static fn (string $hh, string $mm): string => sprintf('%02d:%02d UTC'
+includes/rmm_scr_ui.php | return 'Every minute (UTC)';
+includes/rmm_scr_ui.php | return $w === (string) ($s['cron'] ?? '') ? 'Cron ' . $w . ' (UTC)'
+includes/rmm_scr_ui.php | 'A schedule runs one version of a library script
+includes/rmm_scr_ui.php | . '<option value="cron"' . ($kind === 'cron'
+includes/rmm_scr_ui.php | . '<div class="col-md-6" data-rmm-when="#sch_kind=cron">
+includes/rmm_scr_ui.php | . '<code>*/15 * * * *</code>
+includes/rmm_scr_ui.php | $o = rivetRmmAutoHeader($vm['new'] ? 'New schedule'
+includes/rmm_scr_ui.php | ['Runs on', rmmH(rivetRmmAutoScopeLabel(
