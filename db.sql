@@ -1852,6 +1852,32 @@ CREATE TABLE `endpoint_agent_jobs` (
   KEY `idx_state_updated` (`state`,`updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `endpoint_agent_linux_files`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `endpoint_agent_linux_files` (
+  `file_id` int(11) NOT NULL AUTO_INCREMENT,
+  `version` varchar(40) NOT NULL,
+  `name` varchar(60) NOT NULL,
+  `kind` varchar(10) NOT NULL,
+  `arch` varchar(10) NOT NULL DEFAULT '',
+  `storage_name` char(32) NOT NULL,
+  `size_bytes` bigint(20) NOT NULL DEFAULT 0,
+  `sha256` char(64) NOT NULL,
+  `source` varchar(12) NOT NULL DEFAULT 'upload',
+  `uploaded_by` int(11) NOT NULL DEFAULT 0,
+  `release_ring` varchar(10) DEFAULT NULL,
+  `rollout_pct` tinyint(4) NOT NULL DEFAULT 100,
+  `notes` varchar(300) NOT NULL DEFAULT '',
+  `active` tinyint(1) NOT NULL DEFAULT 1,
+  `is_current` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`file_id`),
+  UNIQUE KEY `uniq_version_name` (`version`,`name`),
+  UNIQUE KEY `uniq_storage` (`storage_name`),
+  KEY `idx_current` (`name`,`is_current`,`active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `endpoint_agent_log_events`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;

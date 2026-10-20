@@ -7407,3 +7407,37 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.103'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.103') {
+        // DB 2.6.104: hosted Linux agent files (edition-level, ported from RivetIT's own Linux-hosting work). One new table (CREATE TABLE IF NOT EXISTS, nothing existing is
+        // touched): the Linux agent binaries (amd64/arm64), install-linux.sh and the optional tarballs this server hosts for the Add device Linux install command. The bytes
+        // live outside the web root (includes/rmm_linux_store.php); the table holds the random storage name, version, SHA-256, size, who stored it, the ring/rollout and which
+        // file is current. Empty and unused until a Linux build is published (local build, GitHub Publish, or a manual upload on the Agent binaries card).
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `endpoint_agent_linux_files` (
+          `file_id` int(11) NOT NULL AUTO_INCREMENT,
+          `version` varchar(40) NOT NULL,
+          `name` varchar(60) NOT NULL,
+          `kind` varchar(10) NOT NULL,
+          `arch` varchar(10) NOT NULL DEFAULT '',
+          `storage_name` char(32) NOT NULL,
+          `size_bytes` bigint(20) NOT NULL DEFAULT 0,
+          `sha256` char(64) NOT NULL,
+          `source` varchar(12) NOT NULL DEFAULT 'upload',
+          `uploaded_by` int(11) NOT NULL DEFAULT 0,
+          `release_ring` varchar(10) DEFAULT NULL,
+          `rollout_pct` tinyint(4) NOT NULL DEFAULT 100,
+          `notes` varchar(300) NOT NULL DEFAULT '',
+          `active` tinyint(1) NOT NULL DEFAULT 1,
+          `is_current` tinyint(1) NOT NULL DEFAULT 0,
+          `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          PRIMARY KEY (`file_id`),
+          UNIQUE KEY `uniq_version_name` (`version`,`name`),
+          UNIQUE KEY `uniq_storage` (`storage_name`),
+          KEY `idx_current` (`name`,`is_current`,`active`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        $lf_res = mysqli_query($mysqli, "SHOW TABLES LIKE 'endpoint_agent_linux_files'");
+        if ($lf_res && mysqli_num_rows($lf_res) > 0) {
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.104'");
+        }
+    }
