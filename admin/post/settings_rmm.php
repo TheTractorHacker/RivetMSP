@@ -34,6 +34,49 @@ if (isset($_POST['save_rmm_auto_ticket_settings'])) {
     redirect();
 }
 
+// Alert tickets: which ticket category (and priority) tickets made from RMM alerts get (DB 2.6.101)
+if (isset($_POST['create_alert_maintenance_category'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    require_once dirname(__DIR__, 2) . '/includes/rmm_alert_routes.php';
+    $existing = array_search('maintenance', array_map('strtolower', rmmAlertTicketCategories($mysqli)), true);
+    if ($existing === false) {
+        mysqli_query($mysqli, "INSERT INTO categories SET category_name = 'Maintenance', category_type = 'Ticket', category_color = 'blue'");
+        $existing = mysqli_insert_id($mysqli);
+        logAction('Category', 'Create', "$session_name created the Ticket category Maintenance from the Alert tickets settings", 0, $existing);
+    }
+    mysqli_query($mysqli, "UPDATE settings SET config_rmm_alert_ticket_category_id=" . intval($existing) . " WHERE company_id=1");
+    logAction('Settings', 'Edit', "$session_name set the default ticket category for RMM alerts to Maintenance (category $existing)");
+    flash_alert('Maintenance category is ready and chosen for alert tickets');
+    redirect();
+}
+
+if (isset($_POST['save_rmm_alert_ticket_settings'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    require_once dirname(__DIR__, 2) . '/includes/rmm_alert_routes.php';
+    $cats = rmmAlertTicketCategories($mysqli);
+    $v = rmmAlertValidateSettings($_POST, $cats);
+    if ($v['errors']) {
+        flash_alert('Alert ticket settings not saved: ' . implode(' ', $v['errors']), 'error');
+        redirect();
+    }
+    $default_sql = $v['default'] > 0 ? intval($v['default']) : 'NULL';
+    mysqli_query($mysqli, "UPDATE settings SET config_rmm_alert_ticket_category_id=$default_sql WHERE company_id=1");
+    mysqli_query($mysqli, "DELETE FROM rmm_alert_ticket_routes");
+    foreach ($v['routes'] as $i => $r) {
+        $t = mysqli_real_escape_string($mysqli, $r['match_type']);
+        $val = mysqli_real_escape_string($mysqli, $r['match_value']);
+        $prio = $r['priority'] === null ? 'NULL' : "'" . mysqli_real_escape_string($mysqli, $r['priority']) . "'";
+        mysqli_query($mysqli, "INSERT INTO rmm_alert_ticket_routes SET match_type='$t', match_value='$val', category_id=" . intval($r['category_id']) . ", priority=$prio, sort=" . (($i + 1) * 10));
+    }
+    $desc = "default " . ($v['default'] > 0 ? "'" . $cats[$v['default']] . "'" : 'none') . ', ' . count($v['routes']) . ' rule(s)';
+    foreach ($v['routes'] as $r) {
+        $desc .= '; ' . $r['match_type'] . '=' . $r['match_value'] . ' -> ' . ($cats[$r['category_id']] ?? $r['category_id']) . ($r['priority'] ? ' (' . $r['priority'] . ')' : '');
+    }
+    logAction('Settings', 'Edit', "$session_name updated RMM alert ticket categories: " . substr($desc, 0, 900));
+    flash_alert('Alert ticket settings saved');
+    redirect();
+}
+
 // Save/create integration
 if (isset($_POST['save_rmm_integration'])) {
     validateCSRFToken($_POST['csrf_token']);

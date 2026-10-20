@@ -169,6 +169,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
             </form>
         </div>
     </div>
+    <?php require_once __DIR__ . '/includes/rmm_alert_tickets_card.php'; ?>
     <?php endif; ?>
 
     <div class="card mb-3">
