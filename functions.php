@@ -8,6 +8,7 @@ require_once __DIR__ . '/includes/firebase.php';
 require_once __DIR__ . '/includes/notification_categories.php';
 require_once __DIR__ . '/includes/billing_guards.php';
 require_once __DIR__ . '/includes/net_guards.php';
+require_once __DIR__ . '/includes/rmm_time.php';   // company-time output for stored timestamps (26.10.36)
 
 // Role check failed wording
 DEFINE("WORDING_ROLECHECK_FAILED", "You are not permitted to do that!");
