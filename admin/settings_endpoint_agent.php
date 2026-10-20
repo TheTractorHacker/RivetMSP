@@ -534,6 +534,73 @@ $swLive = (int) ($swLimits['software_live_install'] ?? 0) === 1;
 </div>
 
 <?php
+// RivetCore 1.0.0-rc.29 (migration 0036): hypervisor visibility. Off by default; covers Proxmox VE and Hyper-V only. The numbers are the limits of the module
+// (Core validates them, including the two cross-field rules: the storage warning percent cannot be above the critical one, and the summary interval cannot
+// be above the full one). NEVER RUN AGAINST A REAL PROXMOX VE OR HYPER-V HOST before reading vendor/rivet/rivet-core/docs/rmm/HYPERVISORS.md section 9: start
+// with one pilot host.
+$hvLimits = (array) $cfg['limits'];
+?>
+<?php $eaTab('hypervisor'); ?>
+<div class="card mb-3" id="hypervisor">
+    <div class="card-header"><h4 class="card-title mb-0">Hypervisor visibility</h4></div>
+    <div class="card-body">
+        <p class="small text-muted">A hypervisor host used to be "just a server"; its guests were invisible. With this on, an agent running on a Proxmox VE or Hyper-V host also reports its guests, storage and cluster, read-only (no VM configuration, no console, no credential is ever read: vendor/rivet/rivet-core/docs/rmm/HYPERVISORS.md section 3). Needs an agent of RivetCore 1.0.0-rc.29 or later; older agents keep working and never report anything here. Switching it on adds "Hypervisors" to the Endpoints menu (shown to technicians who may view hypervisor hosts). <strong>Nothing here has been run against a real Proxmox VE or Hyper-V host:</strong> try one host first.</p>
+        <form action="post.php" method="post" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="form-check form-switch mb-2">
+                <input type="checkbox" class="form-check-input" id="ea_sw_hypervisor" name="feature_hypervisor" value="1" <?= !empty($cfg['features']['hypervisor']) ? 'checked' : '' ?> aria-describedby="ea_sw_hypervisor_h">
+                <label class="form-check-label fw-semibold" for="ea_sw_hypervisor">Hypervisor visibility (<code>hypervisor</code>)</label>
+            </div>
+            <p class="small text-muted" id="ea_sw_hypervisor_h"><strong>Cost:</strong> a host that announces the capability is offered a signed configuration and then reports a full list of its guests every "Full report" interval below, and a short summary of state changes in between; the data is kept in four tables and purged after "Keep history" days. A machine that is not a hypervisor is asked once every 10 minutes whether it is one (one cheap check) and otherwise sends nothing.</p>
+            <div class="row g-3">
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_full">Full report every (seconds)</label>
+                    <input type="number" class="form-control" id="ea_hv_full" name="hypervisor_full_interval_s" min="300" max="86400" value="<?= (int) ($hvLimits['hypervisor_full_interval_s'] ?? 600) ?>">
+                    <div class="form-text">Default 600 (10 minutes).</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_summary">Summary report every (seconds)</label>
+                    <input type="number" class="form-control" id="ea_hv_summary" name="hypervisor_summary_interval_s" min="60" max="600" value="<?= (int) ($hvLimits['hypervisor_summary_interval_s'] ?? 120) ?>">
+                    <div class="form-text">Default 120. Cannot be above the full interval.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_maxvms">VMs per host, at most</label>
+                    <input type="number" class="form-control" id="ea_hv_maxvms" name="hypervisor_max_vms" min="1" max="1000" value="<?= (int) ($hvLimits['hypervisor_max_vms'] ?? 1000) ?>">
+                    <div class="form-text">Default 1000.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_retention">Keep history (days)</label>
+                    <input type="number" class="form-control" id="ea_hv_retention" name="hypervisor_retention_days" min="1" max="3650" value="<?= (int) ($hvLimits['hypervisor_retention_days'] ?? 30) ?>">
+                    <div class="form-text">Default 30. A missing VM or storage is purged after this long.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_history">State changes kept per VM</label>
+                    <input type="number" class="form-control" id="ea_hv_history" name="hypervisor_history_per_vm" min="1" max="500" value="<?= (int) ($hvLimits['hypervisor_history_per_vm'] ?? 20) ?>">
+                    <div class="form-text">Default 20.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_snap">Snapshot old after (days)</label>
+                    <input type="number" class="form-control" id="ea_hv_snap" name="hypervisor_snapshot_days" min="1" max="365" value="<?= (int) ($hvLimits['hypervisor_snapshot_days'] ?? 7) ?>">
+                    <div class="form-text">Default 7.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_backup">Backup stale after (days)</label>
+                    <input type="number" class="form-control" id="ea_hv_backup" name="hypervisor_backup_days" min="1" max="365" value="<?= (int) ($hvLimits['hypervisor_backup_days'] ?? 2) ?>">
+                    <div class="form-text">Default 2.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_resolve">A stopped VM resolves after (hours)</label>
+                    <input type="number" class="form-control" id="ea_hv_resolve" name="hypervisor_vm_down_resolve_h" min="1" max="720" value="<?= (int) ($hvLimits['hypervisor_vm_down_resolve_h'] ?? 24) ?>">
+                    <div class="form-text">Default 24. Taken as switched off on purpose after this long.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_warn">Storage warning at (%)</label>
+                    <input type="number" class="form-control" id="ea_hv_warn" name="hypervisor_storage_warn_pct" min="1" max="100" value="<?= (int) ($hvLimits['hypervisor_storage_warn_pct'] ?? 85) ?>">
+                    <div class="form-text">Default 85. Cannot be above the critical percent.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_crit">Storage critical at (%)</label>
+                    <input type="number" class="form-control" id="ea_hv_crit" name="hypervisor_storage_crit_pct" min="1" max="100" value="<?= (int) ($hvLimits['hypervisor_storage_crit_pct'] ?? 95) ?>">
+                    <div class="form-text">Default 95.</div></div>
+            </div>
+            <h6 class="mt-4">Alert classes</h6>
+            <p class="small text-muted">Each class can be switched off on its own while the module stays on. The event still fires for audit purposes; only the check (and so the alert) is not raised.</p>
+            <div class="row g-2">
+                <?php foreach (['hypervisor_alert_vm_down' => 'A VM stops unexpectedly', 'hypervisor_alert_backup' => 'A VM\'s backup failed or is stale', 'hypervisor_alert_snapshot' => 'A snapshot is old',
+                    'hypervisor_alert_storage' => 'Storage is low on space', 'hypervisor_alert_pool' => 'A ZFS pool or Ceph is degraded', 'hypervisor_alert_quorum' => 'A cluster lost quorum'] as $flag => $label) { ?>
+                <div class="col-sm-6 col-lg-4 form-check form-switch">
+                    <input type="checkbox" class="form-check-input" id="ea_<?= $flag ?>" name="<?= $flag ?>" value="1" <?= (int) ($hvLimits[$flag] ?? 1) === 1 ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="ea_<?= $flag ?>"><?= $h($label) ?></label>
+                </div>
+                <?php } ?>
+            </div>
+            <button type="submit" name="save_hypervisor_settings" class="btn btn-primary mt-3"><i class="fas fa-save me-1"></i>Save hypervisor visibility settings</button>
+        </form>
+    </div>
+</div>
+
+<?php
 // RivetCore 1.0.0-rc.11 (RMM Phases 6 and 8 and the scale work): the data for the cards below is read here, the cards are printed by rivetRmmUiScaleCards() (includes/rmm_scale_cards.php).
 // Each part is off by default and is guarded so this page still loads on a database that has not been updated yet.
 $rmm_scale_scripts = true;

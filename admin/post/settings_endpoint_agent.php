@@ -15,7 +15,7 @@ use RivetCore\Rmm\Technician\ActionResult;
 mysqli_report(MYSQLI_REPORT_OFF);
 
 // 26.10.32: the page is tabs. A form posts the tab it sits in (ea_tab); a plain redirect() goes back to that tab (the hash is not sent in a Referer).
-if (isset($_POST['ea_tab']) && is_string($_POST['ea_tab']) && preg_match('/^(overview|updates|checks|remote|inventory|patching|software|security)$/', $_POST['ea_tab'])) {
+if (isset($_POST['ea_tab']) && is_string($_POST['ea_tab']) && preg_match('/^(overview|updates|checks|remote|inventory|patching|software|hypervisor|security)$/', $_POST['ea_tab'])) {
     $_SERVER['HTTP_REFERER'] = 'settings_endpoint_agent.php#tab-' . $_POST['ea_tab'];
 }
 
@@ -402,6 +402,51 @@ if (isset($_POST['save_software_settings'])) {
         logAction('RMM', 'Settings Changed', "$session_name changed the software deployment settings (" . implode(', ', array_keys($in)) . '; live installs ' . (($stored['software_live_install'] ?? 0) ? 'on' : 'off') . ')');
     }
     ea_flash_result($r, 'Software deployment settings saved.');
+}
+
+// Hypervisor visibility (RivetCore 1.0.0-rc.29, migration 0036): the `hypervisor` sub-switch (off by default), the collection intervals and retention,
+// the alert thresholds and the six per-class alert switches. RmmAdmin validates and audits both; only values that changed are written. There is no
+// live-install concept here: this feature only reads what a Proxmox VE or Hyper-V host already reports.
+if (isset($_POST['save_hypervisor_settings'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $cur = $rmm->readModel()->settingsSummary();
+    $in = [];
+    $features = $cur['features'];
+    $want = !empty($_POST['feature_hypervisor']);
+    if ($want !== !empty($features['hypervisor'])) {
+        $features['hypervisor'] = $want;
+        $in['features_json'] = $features;
+    }
+    $stored = is_string($cur['limits_json'] ?? null) && $cur['limits_json'] !== '' ? json_decode($cur['limits_json'], true) : [];
+    $stored = is_array($stored) ? $stored : [];
+    $changedLimit = false;
+    $num = static fn (string $k, int $lo, int $hi): ?int => isset($_POST[$k]) && is_string($_POST[$k]) && preg_match('/^\d{1,9}$/', trim($_POST[$k])) === 1 ? max($lo, min($hi, (int) trim($_POST[$k]))) : null;
+    $wanted = ['hypervisor_full_interval_s' => $num('hypervisor_full_interval_s', 300, 86400), 'hypervisor_summary_interval_s' => $num('hypervisor_summary_interval_s', 60, 600),
+        'hypervisor_max_vms' => $num('hypervisor_max_vms', 1, 1000), 'hypervisor_retention_days' => $num('hypervisor_retention_days', 1, 3650),
+        'hypervisor_history_per_vm' => $num('hypervisor_history_per_vm', 1, 500), 'hypervisor_snapshot_days' => $num('hypervisor_snapshot_days', 1, 365),
+        'hypervisor_backup_days' => $num('hypervisor_backup_days', 1, 365), 'hypervisor_storage_warn_pct' => $num('hypervisor_storage_warn_pct', 1, 100),
+        'hypervisor_storage_crit_pct' => $num('hypervisor_storage_crit_pct', 1, 100), 'hypervisor_vm_down_resolve_h' => $num('hypervisor_vm_down_resolve_h', 1, 720)];
+    foreach (['hypervisor_alert_vm_down', 'hypervisor_alert_backup', 'hypervisor_alert_snapshot', 'hypervisor_alert_storage', 'hypervisor_alert_pool', 'hypervisor_alert_quorum'] as $flag) {
+        $wanted[$flag] = !empty($_POST[$flag]) ? 1 : 0;
+    }
+    foreach ($wanted as $k => $v) {
+        if ($v !== null && $v !== (int) ($cur['limits'][$k] ?? -1)) {
+            $stored[$k] = $v;
+            $changedLimit = true;
+        }
+    }
+    if ($changedLimit) {
+        $in['limits_json'] = $stored;
+    }
+    if ($in === []) {
+        flash_alert('No change to save.', 'info');
+        redirect();
+    }
+    $r = $ea_admin->saveSettings($ea_who, $in);
+    if ($r->ok) {
+        logAction('RMM', 'Settings Changed', "$session_name changed the hypervisor visibility settings (" . implode(', ', array_keys($in)) . ')');
+    }
+    ea_flash_result($r, 'Hypervisor visibility settings saved.');
 }
 
 // ---------------------------------------------------------------- agent binaries and per-client installers

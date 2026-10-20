@@ -308,13 +308,17 @@ function rivetRmmAutoNav(?int $userId = null): array
         ['software_deploy', '/agent/rmm_software_catalog.php', 'Software catalog', 'fa-boxes', ['rmm_software_catalog.php'], 'software'],
         ['software_deploy', '/agent/rmm_software_assignments.php', 'Software assignments', 'fa-bullseye', ['rmm_software_assignments.php'], 'software'],
         ['software_deploy', '/agent/rmm_software_report.php', 'Software report', 'fa-chart-bar', ['rmm_software_report.php'], 'software'],
+        // Hypervisor visibility (RivetCore 1.0.0-rc.29), sub-switch `hypervisor` (off by default): Proxmox VE and Hyper-V hosts and their guests. Shown only to a user
+        // holding rmm.hypervisor.view.
+        ['hypervisor', '/agent/rmm_hypervisors.php', 'Hypervisors', 'fa-server', ['rmm_hypervisors.php', 'rmm_hypervisor_host.php', 'rmm_hypervisor_vm.php'], 'hypervisor'],
     ];
     $abilities = ['/agent/rmm_logs.php' => \RivetCore\Rmm\Authz\RmmAbility::JOB_RUN_SAVED, '/agent/rmm_log_rules.php' => \RivetCore\Rmm\Authz\RmmAbility::ALERT_MANAGE,
         '/agent/rmm_starter_pack.php' => \RivetCore\Rmm\Authz\RmmAbility::ADMIN,
         '/agent/rmm_patch_compliance.php' => \RivetCore\Rmm\Authz\RmmAbility::PATCH_VIEW, '/agent/rmm_patch_approvals.php' => \RivetCore\Rmm\Authz\RmmAbility::PATCH_VIEW,
         '/agent/rmm_patch_policies.php' => \RivetCore\Rmm\Authz\RmmAbility::PATCH_VIEW,
         '/agent/rmm_software_catalog.php' => \RivetCore\Rmm\Authz\RmmAbility::SOFTWARE_VIEW, '/agent/rmm_software_assignments.php' => \RivetCore\Rmm\Authz\RmmAbility::SOFTWARE_VIEW,
-        '/agent/rmm_software_report.php' => \RivetCore\Rmm\Authz\RmmAbility::SOFTWARE_VIEW];
+        '/agent/rmm_software_report.php' => \RivetCore\Rmm\Authz\RmmAbility::SOFTWARE_VIEW,
+        '/agent/rmm_hypervisors.php' => \RivetCore\Rmm\Authz\RmmAbility::HYPERVISOR_VIEW];
     $out = [];
     foreach ($all as [$feature, $href, $label, $icon, $pages, $group]) {
         if (rivetRmmFeatureOn($feature)) {
