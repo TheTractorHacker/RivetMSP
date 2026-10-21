@@ -21,7 +21,7 @@ if (isset($_POST['add_ticket'])) {
     if (!$category) {
         $category = getDefaultClientTicketCategoryId($mysqli);
     }
-    $asset = intval($_POST['asset']);
+    $asset = intval($_POST['asset'] ?? 0);
 
     // Get settings from load_global_settings.php
     $config_ticket_prefix = sanitizeInput($config_ticket_prefix);

@@ -33,7 +33,7 @@ if (isset($_POST['add_ticket'])) {
     $vendor_id = intval($_POST['vendor_id']);
     $asset_id = intval($_POST['asset_id']);
     $location_id = intval($_POST['location_id']);
-    $project_id = intval($_POST['project_id']);
+    $project_id = intval($_POST['project_id'] ?? 0);
     $use_primary_contact = intval($_POST['use_primary_contact'] ?? 0);
     $ticket_template_id = intval($_POST['ticket_template_id']);
     $billable = intval($_POST['billable'] ?? 0);
@@ -97,6 +97,7 @@ if (isset($_POST['add_ticket'])) {
     $delivery_method_sql = $delivery_method !== null ? "'" . mysqli_real_escape_string($mysqli, $delivery_method) . "'" : 'NULL';
 
     mysqli_query($mysqli, "INSERT INTO tickets SET ticket_prefix = '$config_ticket_prefix', ticket_number = $ticket_number, ticket_source = 'Agent', ticket_category = $category_id, ticket_subject = '$subject', ticket_details = '$details', ticket_priority = '$priority', ticket_billable = '$billable', ticket_status = '$ticket_status', ticket_vendor_ticket_number = '$vendor_ticket_number', ticket_vendor_id = $vendor_id, ticket_location_id = $location_id, ticket_asset_id = $asset_id, ticket_created_by = $session_user_id, ticket_assigned_to = $assigned_to, ticket_contact_id = $contact_id, ticket_url_key = '$url_key', ticket_due_at = $due, ticket_client_id = $client_id, ticket_invoice_id = 0, ticket_project_id = $project_id, ticket_contract_id = $contract_id_sql, ticket_sla_response_due = $sla_response_due, ticket_sla_resolution_due = $sla_resolution_due, ticket_delivery_method = $delivery_method_sql");
+    $ticket_subject = $subject;   // the e-mail block below reuses $subject; the audit entry at the end needs the ticket's own
 
     $ticket_id = mysqli_insert_id($mysqli);
 
