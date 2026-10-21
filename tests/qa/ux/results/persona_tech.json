@@ -1,0 +1,179 @@
+[
+ {
+  "persona": "technician",
+  "task": "Triage queue: find unassigned and overdue",
+  "clicks": 4,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "nav: Service Desk",
+   "nav: Tickets",
+   "click: Unassigned tile",
+   "click: Overdue tile"
+  ],
+  "notes": [
+   "Landing page after login: /agent/dashboard.php",
+   "after tile click url=/agent/tickets.php?assigned=unassigned",
+   "rows shown=11",
+   "after overdue url=/agent/tickets.php?status=Open&overdue=1"
+  ],
+  "end": "/agent/tickets.php?status=Open&overdue=1"
+ },
+ {
+  "persona": "technician",
+  "task": "Open ticket and add internal note",
+  "clicks": 4,
+  "typed": 1,
+  "outcome": "completed",
+  "steps": [
+   "nav: Tickets",
+   "click: open first ticket (subject link)",
+   "click: Submit note"
+  ],
+  "notes": [
+   "note visible after submit: True"
+  ],
+  "end": "/agent/ticket.php?ticket_id=24&client_id=6"
+ },
+ {
+  "persona": "technician",
+  "task": "Change status and assign a technician",
+  "clicks": 8,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "nav: Service Desk",
+   "nav: Tickets",
+   "click: open a ticket (subject link)",
+   "click: status pill (opens a modal)",
+   "click: open status dropdown",
+   "click: choose On Hold",
+   "click: Save",
+   "select: assignee (native select, saves on change)"
+  ],
+  "notes": [
+   "status pill -> dropdown",
+   "status options: New, Open, On Hold, Resolved, Closed",
+   "status now: On Hold",
+   "assign options: \u2014 Unassigned \u2014, Alex Morgan, Marcus Lee, Priya Nair"
+  ],
+  "end": "/agent/ticket.php?ticket_id=24&client_id=6"
+ },
+ {
+  "persona": "technician",
+  "task": "Log 15 minutes of time on a ticket",
+  "clicks": 3,
+  "typed": 2,
+  "outcome": "completed",
+  "steps": [
+   "click: open ticket",
+   "type: minutes",
+   "click: Submit with time"
+  ],
+  "notes": [
+   "time visible: True",
+   "Time can only be logged inside a reply/note; separate Time Entry panel is a timer."
+  ],
+  "end": "/agent/ticket.php?ticket_id=24&client_id=6"
+ },
+ {
+  "persona": "technician",
+  "task": "Filter my tickets by priority",
+  "clicks": 5,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "nav: Service Desk",
+   "nav: Tickets",
+   "click: My tickets view",
+   "click: Priority filter",
+   "click: High"
+  ],
+  "notes": [
+   "options: High, Medium, Low",
+   "url=/agent/tickets.php?status=Open&assigned%5B%5D=me"
+  ],
+  "end": "/agent/tickets.php?status=Open&assigned%5B%5D=me"
+ },
+ {
+  "persona": "technician",
+  "task": "Find an asset and see its history",
+  "clicks": 1,
+  "typed": 1,
+  "outcome": "completed",
+  "steps": [
+   "type: global search",
+   "click: first result"
+  ],
+  "notes": [
+   "suggestions: ['BBC-DES-01\\nBluebird Bakery & Cafe \u00b7 Desktop', 'Main Office\\nLocation \u00b7 hosts Asset BBC-DES-01', 'TCK-104 Phishing email reported by staff\\nTicket \u00b7",
+   "landed: /agent/asset_details.php?client_id=5&asset_id=17",
+   "asset page shows history/tickets: True"
+  ],
+  "end": "/agent/asset_details.php?client_id=5&asset_id=17"
+ },
+ {
+  "persona": "technician",
+  "task": "Find a contact and reach their phone/email",
+  "clicks": 1,
+  "typed": 1,
+  "outcome": "completed",
+  "steps": [
+   "type: global search",
+   "click: first result"
+  ],
+  "notes": [
+   "landed: /agent/contact_details.php?client_id=5&contact_id=5",
+   "tel/mailto links present: 5"
+  ],
+  "end": "/agent/contact_details.php?client_id=5&contact_id=5"
+ },
+ {
+  "persona": "technician",
+  "task": "Look up a KB answer and attach it to a reply",
+  "clicks": 0,
+  "typed": 0,
+  "outcome": "blocked-no-nav-path",
+  "steps": [],
+  "notes": [
+   "KB reachable from sidebar for technician: False",
+   "Sidebar has no Knowledge Base entry; Docs points to external docs.itflow.org"
+  ],
+  "end": "/agent/dashboard.php"
+ },
+ {
+  "persona": "technician",
+  "task": "Create a ticket on behalf of a user",
+  "clicks": 4,
+  "typed": 1,
+  "outcome": "completed",
+  "steps": [
+   "click: New Ticket",
+   "type: subject",
+   "click: Create"
+  ],
+  "notes": [
+   "modal title: New Ticket (v2)",
+   "required marks: 7",
+   "client+contact picked via 2 dropdown interactions (counted)",
+   "after create url=/agent/ticket.php?client_id=9&ticket_id=60"
+  ],
+  "end": "/agent/ticket.php?client_id=9&ticket_id=60"
+ },
+ {
+  "persona": "technician",
+  "task": "Handle three similar tickets at once (bulk)",
+  "clicks": 3,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "click: select row 1",
+   "click: select row 2",
+   "click: select row 3"
+  ],
+  "notes": [
+   "bulk toolbar buttons: "
+  ],
+  "end": "/agent/tickets.php"
+ }
+]
