@@ -83,6 +83,7 @@ if (isset($_POST['add_ticket'])) {
                 'recipient' => $config_ticket_new_ticket_notification_email,
                 'recipient_name' => $config_ticket_from_name,
                 'subject' => $email_subject,
+                'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => $email_body,
             ]
         ];
@@ -157,6 +158,7 @@ if (isset($_POST['add_ticket_comment'])) {
                     'recipient' => $tech_email,
                     'recipient_name' => $tech_name,
                     'subject' => $subject,
+                    'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                     'body' => $body
                 ]
             ];

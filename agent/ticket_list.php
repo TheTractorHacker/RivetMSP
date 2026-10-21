@@ -143,6 +143,8 @@ foreach ($_cat_subs as $_pid => $_subs) {
                             $ticket_status_name = nullable_htmlentities($row['ticket_status_name']);
                             $ticket_status_color = nullable_htmlentities($row['ticket_status_color']);
                             $ticket_billable = intval($row['ticket_billable']);
+                            // Read now: $row is reused for the last-reply and task queries further down.
+                            $ticket_email_off = isset($row['ticket_send_email']) && intval($row['ticket_send_email']) === 0;
                             $ticket_scheduled_for = nullable_htmlentities($row['ticket_schedule']);
                             $ticket_created_at = nullable_htmlentities($row['ticket_created_at']);
                             $ticket_created_at_time_ago = timeAgo($row['ticket_created_at']);
@@ -297,6 +299,9 @@ foreach ($_cat_subs as $_pid => $_subs) {
                                     <a href="ticket.php?ticket_id=<?= "$ticket_id$has_client" ?>"><?= $ticket_subject ?></a>
                                     <?php if (!empty($row['ticket_merged_into_id'])) { ?>
                                     <small class="text-muted ms-1"><i class="fas fa-code-branch fa-sm"></i> Merged</small>
+                                    <?php } ?>
+                                    <?php if ($ticket_email_off) { ?>
+                                    <small class="text-muted ms-1" title="Email notifications are off for this ticket"><i class="fas fa-envelope fa-sm"></i> No email</small>
                                     <?php } ?>
 
                                     <?php if ($task_count) { ?>

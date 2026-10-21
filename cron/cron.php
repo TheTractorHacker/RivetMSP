@@ -455,6 +455,7 @@ if (mysqli_num_rows($sql_recurring_tickets) > 0) {
                     'recipient' => $contact_email,
                     'recipient_name' => $contact_name,
                     'subject' => $email_subject,
+                    'ticket_id' => intval($id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                     'body' => $email_body
             ];
 
@@ -474,6 +475,7 @@ if (mysqli_num_rows($sql_recurring_tickets) > 0) {
                     'recipient' => $config_ticket_new_ticket_notification_email,
                     'recipient_name' => $ticket_from['name'],
                     'subject' => $email_subject,
+                    'ticket_id' => intval($id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                     'body' => $email_body
             ];
 
@@ -579,6 +581,7 @@ while ($row = mysqli_fetch_assoc($sql_resolved_tickets_to_close)) {
                 'recipient' => $contact_email,
                 'recipient_name' => $contact_name,
                 'subject' => $email_subject,
+                'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => $email_body
             ];
 
@@ -628,6 +631,7 @@ if ($config_ticket_csat_enable == 1 && (!empty($config_smtp_host) || !empty($con
                 'recipient' => $contact_email,
                 'recipient_name' => $contact_name,
                 'subject' => $email_subject,
+                'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => $email_body
             ];
 

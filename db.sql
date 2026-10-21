@@ -5075,6 +5075,8 @@ CREATE TABLE `settings` (
   `config_rmm_extstore_read_url` text DEFAULT NULL,
   `config_rmm_extstore_token` text DEFAULT NULL,
   `config_rmm_allow_linux` tinyint(1) NOT NULL DEFAULT 1,
+  `config_rmm_alert_ticket_sla` tinyint(1) NOT NULL DEFAULT 0,
+  `config_rmm_alert_ticket_email` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`company_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -5802,6 +5804,10 @@ CREATE TABLE `tickets` (
   `ticket_delivery_method` varchar(20) DEFAULT NULL,
   `ticket_problem_id` int(11) DEFAULT NULL,
   `ticket_mail_message_id` varchar(255) DEFAULT NULL,
+  `ticket_rmm_sourced` tinyint(1) NOT NULL DEFAULT 0,
+  `ticket_counts_sla` tinyint(1) NOT NULL DEFAULT 1,
+  `ticket_send_email` tinyint(1) NOT NULL DEFAULT 1,
+  `ticket_sla_started_at` datetime DEFAULT NULL,
   PRIMARY KEY (`ticket_id`),
   KEY `idx_tickets_client_archived_updated` (`ticket_client_id`,`ticket_archived_at`,`ticket_updated_at`),
   KEY `idx_tickets_problem` (`ticket_problem_id`),

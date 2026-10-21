@@ -563,6 +563,12 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
                                         </a>
                                         <div class="dropdown-divider"></div>
                                         <a class="dropdown-item ajax-modal" href="#"
+                                            data-modal-url="modals/ticket/ticket_bulk_email.php"
+                                            data-bulk="true">
+                                            <i class="fas fa-fw fa-envelope me-2"></i>Email Notifications
+                                        </a>
+                                        <div class="dropdown-divider"></div>
+                                        <a class="dropdown-item ajax-modal" href="#"
                                             data-modal-url="modals/ticket/ticket_bulk_reply.php"
                                             data-modal-size="lg"
                                             data-bulk="true">

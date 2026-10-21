@@ -4,6 +4,8 @@
  *   RivetDialog.alert(message, opts)    -> Promise<true>         (resolves when dismissed)
  *   RivetDialog.confirm(message, opts)  -> Promise<boolean>      (true = confirmed; Esc / backdrop / Cancel = false)
  *   RivetDialog.prompt(message, opts)   -> Promise<string|null>  (null = cancelled)
+ *   RivetDialog.choice(message, choices, opts) -> Promise<string|null>  (the chosen choice's value; null = cancelled)
+ *       choices: [{ value: 'now', label: 'Start from now', variant: 'primary' | 'danger' | 'warning' | 'secondary' (optional) }, ...] (1 to 4)
  *
  * opts: title, okText, cancelText, variant ('primary' | 'danger' | 'warning'), defaultValue, placeholder, type ('text' | 'password'; inputType is an alias), required.
  * gate(event, target, message, opts) wraps click / submit handlers that used to call confirm() synchronously (same API as RivetIT).
@@ -90,9 +92,22 @@
             cancel.type = 'button';
             footer.appendChild(cancel);
         }
-        var ok = el('button', 'btn ' + (task.variant === 'danger' ? 'btn-danger' : task.variant === 'warning' ? 'btn-warning' : 'btn-primary'), task.okText);
-        ok.type = 'button';
-        footer.appendChild(ok);
+        var ok = null;
+        var chosen = null;
+        if (task.kind === 'choice') {
+            // One button per choice (label via textContent, like the message); the value is only ever handed back to the caller.
+            task.choices.forEach(function (c) {
+                var b = el('button', 'btn btn-' + c.variant, c.label);
+                b.type = 'button';
+                b.setAttribute('data-choice', c.value);
+                b.addEventListener('click', function () { chosen = c.value; finish(true); });
+                footer.appendChild(b);
+            });
+        } else {
+            ok = el('button', 'btn ' + (task.variant === 'danger' ? 'btn-danger' : task.variant === 'warning' ? 'btn-warning' : 'btn-primary'), task.okText);
+            ok.type = 'button';
+            footer.appendChild(ok);
+        }
 
         content.appendChild(header);
         content.appendChild(body);
@@ -106,6 +121,7 @@
             var value;
             if (task.kind === 'alert') { value = true; }
             else if (task.kind === 'confirm') { value = !!accepted; }
+            else if (task.kind === 'choice') { value = accepted ? chosen : null; }
             else { value = accepted ? input.value : null; }
             document.removeEventListener('keydown', onKey, true);
             document.removeEventListener('focusin', onFocusIn, true);
@@ -145,7 +161,7 @@
         }
 
         x.addEventListener('click', function () { finish(false); });
-        ok.addEventListener('click', accept);
+        if (ok) { ok.addEventListener('click', accept); }
         if (cancel) { cancel.addEventListener('click', function () { finish(false); }); }
         // Backdrop click = cancel. Only a click that starts and ends on the dim area, not a text selection dragged out of the dialog.
         var downOnRoot = false;
@@ -164,7 +180,7 @@
         document.addEventListener('keydown', onKey, true);
         document.addEventListener('focusin', onFocusIn, true);
 
-        // Safe default: Cancel for a confirm, the input for a prompt, OK for an alert.
+        // Safe default: Cancel for a confirm or a choice, the input for a prompt, OK for an alert.
         var initial = input || cancel || ok;
         initial.focus();
         if (input) { input.select(); }
@@ -182,13 +198,23 @@
         run(task, function () { busy = false; pump(); });
     }
 
+    function normaliseChoices(list) {
+        var out = [];
+        (Array.isArray(list) ? list : []).slice(0, 4).forEach(function (c) {
+            if (!c || c.value === undefined || c.value === null || String(c.value) === '') { return; }
+            var v = ['primary', 'danger', 'warning', 'secondary', 'success'].indexOf(c.variant) >= 0 ? c.variant : 'primary';
+            out.push({ value: String(c.value), label: c.label === undefined || c.label === null ? String(c.value) : String(c.label), variant: v });
+        });
+        return out;
+    }
+
     function enqueue(kind, message, opts) {
         opts = opts || {};
         return new Promise(function (resolve) {
             queue.push({
                 kind: kind,
                 message: message === undefined || message === null ? '' : String(message),
-                title: opts.title || (kind === 'alert' ? 'Notice' : kind === 'confirm' ? 'Please confirm' : 'Input needed'),
+                title: opts.title || (kind === 'alert' ? 'Notice' : kind === 'confirm' || kind === 'choice' ? 'Please confirm' : 'Input needed'),
                 okText: opts.okText || (kind === 'alert' ? 'OK' : kind === 'confirm' ? 'Yes' : 'OK'),
                 cancelText: opts.cancelText || 'Cancel',
                 variant: opts.variant === 'danger' || opts.variant === 'warning' ? opts.variant : 'primary',
@@ -196,6 +222,7 @@
                 placeholder: opts.placeholder || '',
                 inputType: (opts.type || opts.inputType) === 'password' ? 'password' : 'text',
                 required: !!opts.required,
+                choices: kind === 'choice' ? normaliseChoices(opts.choices) : [],
                 resolve: resolve
             });
             pump();
@@ -206,6 +233,15 @@
         alert: function (message, opts) { return enqueue('alert', message, opts); },
         confirm: function (message, opts) { return enqueue('confirm', message, opts); },
         prompt: function (message, opts) { return enqueue('prompt', message, opts); },
+        // choice(message, choices, opts): pick one of a few named options (plus Cancel). Resolves to the chosen value, or null when cancelled.
+        // With no valid choice it resolves null at once without showing anything.
+        choice: function (message, choices, opts) {
+            var o = {};
+            Object.keys(opts || {}).forEach(function (k) { o[k] = opts[k]; });
+            o.choices = choices;
+            if (!normaliseChoices(choices).length) { return Promise.resolve(null); }
+            return enqueue('choice', message, o);
+        },
         // gate(event, target, message, opts): for click / submit handlers that used to call confirm() synchronously.
         // Returns true when the caller may let the event run natively now (this target was just approved); false when it cancelled the
         // event and opened the confirm (a yes re-runs the click / form submit exactly once; a second attempt while the dialog is open is ignored).

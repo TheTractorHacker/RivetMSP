@@ -77,6 +77,38 @@ if (isset($_POST['save_rmm_alert_ticket_settings'])) {
     redirect();
 }
 
+// New tickets from alerts: SLA and email defaults (DB 2.6.105). Applied when a ticket is created; the per-ticket switches decide afterwards.
+if (isset($_POST['save_rmm_alert_ticket_flags'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    require_once dirname(__DIR__, 2) . '/includes/ticket_flags.php';
+    if (!ticketFlagsReady($mysqli)) {
+        flash_alert('Run the database update first.', 'error');
+        redirect();
+    }
+    $old = rmmAlertTicketFlagDefaults($mysqli);
+    $sla = (($_POST['config_rmm_alert_ticket_sla'] ?? '') === '1') ? 1 : 0;
+    $email = (($_POST['config_rmm_alert_ticket_email'] ?? '') === '1') ? 1 : 0;
+    mysqli_query($mysqli, "UPDATE settings SET config_rmm_alert_ticket_sla = $sla, config_rmm_alert_ticket_email = $email WHERE company_id = 1");
+    logAction('Settings', 'Edit', "$session_name set RMM alert tickets: count toward SLA " . ($old['sla'] ? 'on' : 'off') . ' -> ' . ($sla ? 'on' : 'off')
+        . ', send email ' . ($old['email'] ? 'on' : 'off') . ' -> ' . ($email ? 'on' : 'off'));
+    flash_alert('Alert ticket SLA and email settings saved');
+    redirect();
+}
+
+// Existing tickets from alerts: label-only backfill (ticket_rmm_sourced = 1, ticket_send_email = 0; SLA untouched). 'dry' counts, 'run' writes.
+if (isset($_POST['rmm_ticket_defaults_backfill'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    require_once dirname(__DIR__, 2) . '/includes/ticket_flags.php';
+    $dry = ($_POST['rmm_ticket_defaults_backfill'] ?? '') !== 'run';
+    $r = rmmTicketDefaultsBackfill($mysqli, $dry);
+    $verb = $dry ? 'would change' : 'changed';
+    $msg = "RMM ticket backfill" . ($dry ? ' (dry run)' : '') . ": {$r['matched']} ticket(s) from alerts found; {$r['label']} label(s) $verb, {$r['email']} email switch(es) $verb"
+        . ($dry ? '' : ", {$r['cancelled']} queued email(s) cancelled") . "; SLA untouched";
+    logAction('Settings', 'Edit', "$session_name ran the $msg");
+    flash_alert($msg);
+    redirect();
+}
+
 // Save/create integration
 if (isset($_POST['save_rmm_integration'])) {
     validateCSRFToken($_POST['csrf_token']);

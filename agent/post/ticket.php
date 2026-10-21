@@ -196,6 +196,7 @@ if (isset($_POST['add_ticket'])) {
                 'recipient' => $contact_email,
                 'recipient_name' => $contact_name,
                 'subject' => $subject,
+                'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => $body
             ];
         }
@@ -213,6 +214,7 @@ if (isset($_POST['add_ticket'])) {
                 'recipient' => $watcher_email,
                 'recipient_name' => $watcher_email,
                 'subject' => $subject,
+                'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => $body
             ];
         }
@@ -345,6 +347,7 @@ if (isset($_POST['edit_ticket'])) {
                 'recipient' => $contact_email,
                 'recipient_name' => $contact_name,
                 'subject' => $subject,
+                'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => $body
             ];
         }
@@ -579,6 +582,7 @@ if (isset($_POST['edit_ticket_contact'])) {
             'recipient' => $contact_email,
             'recipient_name' => $contact_name,
             'subject' => $subject,
+            'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
             'body' => $body
         ];
 
@@ -729,6 +733,7 @@ if (isset($_POST['add_ticket_watcher'])) {
                     'recipient' => $watcher_email,
                     'recipient_name' => $watcher_email,
                     'subject' => $subject,
+                    'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                     'body' => $body
                 ];
 
@@ -1189,6 +1194,7 @@ if (isset($_POST['assign_ticket'])) {
                     'recipient' => $agent_email,
                     'recipient_name' => $agent_name,
                     'subject' => $subject,
+                    'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                     'body' => $body,
                 ]
             ];
@@ -1407,6 +1413,7 @@ if (isset($_POST['bulk_assign_ticket'])) {
                         'recipient' => $agent_email,
                         'recipient_name' => $agent_name,
                         'subject' => $subject,
+                        'ticket_ids' => array_map('intval', (array) $_POST['ticket_ids']),   // one summary for several tickets: dropped only when every one has email off
                         'body' => $body,
                     ]
                 ];
@@ -1725,6 +1732,7 @@ if (isset($_POST['bulk_resolve_tickets'])) {
                             'recipient' => $contact_email,
                             'recipient_name' => $contact_name,
                             'subject' => $subject,
+                            'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                             'body' => $body
                         ];
                     }
@@ -1742,6 +1750,7 @@ if (isset($_POST['bulk_resolve_tickets'])) {
                             'recipient' => $watcher_email,
                             'recipient_name' => $watcher_email,
                             'subject' => $subject,
+                            'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                             'body' => $body
                         ];
                     }
@@ -1890,6 +1899,7 @@ if (isset($_POST['bulk_ticket_reply'])) {
                         'recipient' => $contact_email,
                         'recipient_name' => $contact_name,
                         'subject' => $subject,
+                        'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                         'body' => $body
                     ];
 
@@ -1908,6 +1918,7 @@ if (isset($_POST['bulk_ticket_reply'])) {
                         'recipient' => $watcher_email,
                         'recipient_name' => $watcher_email,
                         'subject' => $subject,
+                        'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                         'body' => $body
                     ];
                 }
@@ -2153,6 +2164,12 @@ if (isset($_POST['add_ticket_reply'])) {
     } else {
         $ticket_reply_type = 'Internal';
     }
+    // "Email this reply anyway" (shown only when the ticket's email notifications are off): sends JUST this public reply by email; the
+    // ticket's switch is not changed. Only meaningful for a Public + Email reply.
+    require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/ticket_flags.php';
+    $email_override = ($send_email == 1 && !empty($_POST['email_override']));
+    // Recorded on the reply (ticket_reply_emailed) only; the email itself is still built below and dropped, or not, by addToMailQueue().
+    $reply_emailed = ($send_email == 1 && ($email_override || ticketSendsEmail($mysqli, intval($_POST['ticket_id'])))) ? 1 : 0;
     // Add Signature to the end of the ticket reply if not Internal and if there is reply.
     // Wrapped in an email-safe (inline-styled) block with a divider so it reads as a
     // distinct signature instead of being dumped raw onto the end of the reply text -
@@ -2210,7 +2227,7 @@ if (isset($_POST['add_ticket_reply'])) {
 
         // Add reply
         $lt_id_sql = $reply_labor_type_id > 0 ? $reply_labor_type_id : 'NULL';
-        mysqli_query($mysqli, "INSERT INTO ticket_replies SET ticket_reply = '$ticket_reply', ticket_reply_time_worked = '$ticket_reply_time_worked', ticket_reply_type = '$ticket_reply_type', ticket_reply_by = $session_user_id, ticket_reply_ticket_id = $ticket_id, ticket_reply_onsite = $reply_onsite, ticket_reply_labor_type_id = $lt_id_sql, ticket_reply_emailed = $send_email");
+        mysqli_query($mysqli, "INSERT INTO ticket_replies SET ticket_reply = '$ticket_reply', ticket_reply_time_worked = '$ticket_reply_time_worked', ticket_reply_type = '$ticket_reply_type', ticket_reply_by = $session_user_id, ticket_reply_ticket_id = $ticket_id, ticket_reply_onsite = $reply_onsite, ticket_reply_labor_type_id = $lt_id_sql, ticket_reply_emailed = $reply_emailed");
 
         $ticket_reply_id = mysqli_insert_id($mysqli);
 
@@ -2310,6 +2327,8 @@ if (isset($_POST['add_ticket_reply'])) {
                     'recipient' => $contact_email,
                     'recipient_name' => $contact_name,
                     'subject' => $subject,
+                    'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
+                    'email_override' => $email_override,
                     'body' => $body
                 ];
             }
@@ -2327,6 +2346,8 @@ if (isset($_POST['add_ticket_reply'])) {
                     'recipient' => $watcher_email,
                     'recipient_name' => $watcher_email,
                     'subject' => $subject,
+                    'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
+                    'email_override' => $email_override,
                     'body' => $body
                 ];
             }
@@ -2715,6 +2736,7 @@ if (isset($_GET['resolve_ticket'])) {
                 'recipient' => $contact_email,
                 'recipient_name' => $contact_name,
                 'subject' => $subject,
+                'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => $body
             ];
         }
@@ -2732,6 +2754,7 @@ if (isset($_GET['resolve_ticket'])) {
                 'recipient' => $watcher_email,
                 'recipient_name' => $watcher_email,
                 'subject' => $subject,
+                'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => $body
             ];
         }
@@ -2831,6 +2854,7 @@ if (isset($_GET['close_ticket'])) {
                 'recipient' => $contact_email,
                 'recipient_name' => $contact_name,
                 'subject' => $subject,
+                'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => $body
             ];
         }
@@ -2848,6 +2872,7 @@ if (isset($_GET['close_ticket'])) {
                 'recipient' => $watcher_email,
                 'recipient_name' => $watcher_email,
                 'subject' => $subject,
+                'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => $body
             ];
         }
@@ -3295,6 +3320,7 @@ if (isset($_POST['edit_ticket_schedule'])) {
             'recipient' => $user_email,
             'recipient_name' => $user_name,
             'subject' => "Ticket Scheduled - [$ticket_prefix$ticket_number] - $ticket_subject",
+            'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
             'body' => "Hello, " . $user_name . "<br><br>The ticket regarding $ticket_subject has been scheduled for $email_datetime.<br><br>--------------------------------<br><a href=\"https://$config_base_url/agent/ticket.php?ticket_id=$ticket_id$client_uri\">$ticket_link</a><br>--------------------------------<br><br>Please do not reply to this email. <br><br>Ticket: $ticket_prefix$ticket_number<br>Subject: $ticket_subject<br>Portal: https://$config_base_url/agent/ticket.php?ticket_id=$ticket_id$client_uri<br><br>~<br>$session_company_name<br>Support Department<br>$config_ticket_from_email",
             'cal_str' => $cal_str
         ];
@@ -3307,6 +3333,7 @@ if (isset($_POST['edit_ticket_schedule'])) {
             'recipient' => $contact_email,
             'recipient_name' => $contact_name,
             'subject' => "Ticket Scheduled - [$ticket_prefix$ticket_number] - $ticket_subject",
+            'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
             'body' => mysqli_escape_string($mysqli, "<div class='header'>
                                 Hello, $contact_name
                             </div>
@@ -3342,6 +3369,7 @@ if (isset($_POST['edit_ticket_schedule'])) {
                 'recipient' => $watcher_email,
                 'recipient_name' => $watcher_email,
                 'subject' => "Ticket Scheduled - [$ticket_prefix$ticket_number] - $ticket_subject",
+                'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => mysqli_escape_string($mysqli, nullable_htmlentities("<div class='header'>
             Hello,
         </div>
@@ -3465,6 +3493,7 @@ if (isset($_GET['cancel_ticket_schedule'])) {
             'recipient' => $user_email,
             'recipient_name' => $user_name,
             'subject' => "Ticket Schedule Cancelled - [$ticket_prefix$ticket_number] - $ticket_subject",
+            'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
             'body' => "Hello, " . $user_name . "<br><br>Scheduled work for the ticket regarding $ticket_subject has been cancelled.<br><br>--------------------------------<br><a href=\"https://$config_base_url/agent/ticket.php?ticket_id=$ticket_id$client_uri\">$ticket_link</a><br>--------------------------------<br><br>Please do not reply to this email. <br><br>Ticket: $ticket_prefix$ticket_number<br>Subject: $ticket_subject<br>Portal: https://$config_base_url/agent/ticket.php?id=$ticket_id&client_id=$client_id<br><br>~<br>$session_company_name<br>Support Department<br>$config_ticket_from_email",
             'cal_str' => $cal_str
         ];
@@ -3477,6 +3506,7 @@ if (isset($_GET['cancel_ticket_schedule'])) {
             'recipient' => $contact_email,
             'recipient_name' => $contact_name,
             'subject' => "Ticket Schedule Cancelled - [$ticket_prefix$ticket_number] - $ticket_subject",
+            'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
             'body' => mysqli_escape_string($mysqli, "<div class='header'>
                                 Hello, $contact_name
                             </div>
@@ -3511,6 +3541,7 @@ if (isset($_GET['cancel_ticket_schedule'])) {
                 'recipient' => $watcher_email,
                 'recipient_name' => $watcher_email,
                 'subject' => "Ticket Schedule Cancelled - [$ticket_prefix$ticket_number] - $ticket_subject",
+                'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => mysqli_escape_string($mysqli, nullable_htmlentities("<div class='header'>
             Hello,
         </div>

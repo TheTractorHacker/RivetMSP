@@ -74,6 +74,8 @@ Everything sent through the mail queue is machine generated unless a caller says
 - `X-Auto-Response-Suppress: All`
 - `X-RivetMSP-Auto: 1` (lets the poller recognise its own mail if it loops back)
 
+**Per-ticket switch (26.10.41).** A ticket whose "Email notifications" switch is off gets no outbound mail: `addToMailQueue()` drops any email that names it (by `ticket_id`, or the subject token) before it is queued, and switching it off cancels mail already queued for it. Tickets created from an inbound email always keep it on.
+
 Queue behaviour (`cron/mail_queue.php`, runs every minute):
 
 - **Reaper:** a row stuck in *sending* for more than 10 minutes (a killed or crashed run) goes back to *queued*.

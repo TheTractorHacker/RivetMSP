@@ -22,7 +22,9 @@ if ($report_to === '2099-12-31') {
     $report_to = date('Y-m-d');
 }
 
-$report = getServiceDeskReport($mysqli, $report_from, $report_to);
+// Maintenance (RMM alert) tickets: include (default), exclude, or only them. Filters every number; SLA numbers never count no-SLA tickets anyway.
+$report_maintenance = isset($_GET['maintenance']) && is_string($_GET['maintenance']) && in_array($_GET['maintenance'], ['include', 'exclude', 'only'], true) ? $_GET['maintenance'] : 'include';
+$report = getServiceDeskReport($mysqli, $report_from, $report_to, null, $report_maintenance);
 
 // CSV export: monthly ticket volume trend (same series that feeds the trend chart).
 if (!empty($report_export_csv)) {
@@ -100,10 +102,17 @@ $priority_colors = [
         <form class="p-3 d-print-none d-flex flex-wrap align-items-center gap-2">
             <label class="mb-0 me-1" for="reportDateRange">Date range</label>
             <?php dateRangePickerField($date_range, 'canned_date', ['hide_groups' => ['Upcoming'], 'id' => 'reportDateRange']); ?>
+            <label class="mb-0 ms-2 me-1" for="reportMaintenance">Maintenance (RMM) tickets</label>
+            <select class="form-select form-select-sm w-auto" name="maintenance" id="reportMaintenance">
+                <?php foreach (['include' => 'Include', 'exclude' => 'Exclude', 'only' => 'Only these'] as $mv => $ml) { ?>
+                <option value="<?= $mv ?>" <?= $report_maintenance === $mv ? 'selected' : '' ?>><?= $ml ?></option>
+                <?php } ?>
+            </select>
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Apply</button>
         </form>
 
         <div class="px-3 pb-2">
-            <small class="text-muted">Showing <strong><?php echo nullable_htmlentities($report['date_from']); ?></strong> to <strong><?php echo nullable_htmlentities($report['date_to']); ?></strong>. Aging &amp; current open workload are live snapshots.</small>
+            <small class="text-muted">Showing <strong><?php echo nullable_htmlentities($report['date_from']); ?></strong> to <strong><?php echo nullable_htmlentities($report['date_to']); ?></strong>. Aging &amp; current open workload are live snapshots. SLA figures only count tickets that count toward SLA.</small>
         </div>
 
         <!-- Headline stats -->

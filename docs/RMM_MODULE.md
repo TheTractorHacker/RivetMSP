@@ -419,6 +419,17 @@ Administration > Integrations > RMM > **Alert tickets**. The admin picks the tic
 
 **Check families** are prefixes of the endpoint agent's check key (`disk_c`, `disk.utilization`, `patch.compliance`, `log.rule_N`, `service.*`, `reboot.*`, `agent_update*`, `change.*`); Tactical/Level alerts carry no check key, so only source and severity rules apply to them. **Security:** admin only (the admin POST handler), CSRF token on both forms, every posted value checked against fixed lists and the existing active Ticket categories, parameterised by escaping and integer casts, audit log entries for every save and for creating Maintenance. Tests: `tests/rmm_alert_category.php`, `tests/browser/rmm_alert_category_smoke.mjs`.
 
+## 6p-2. RMM tickets: Maintenance, no SLA, no email by default (26.10.41, DB 2.6.105)
+
+Same card. `createTicketFromRmmAlert()` always sets `tickets.ticket_rmm_sourced = 1` and seeds `ticket_counts_sla` / `ticket_send_email` from **RMM tickets count toward SLA** (`settings.config_rmm_alert_ticket_sla`) and **Send email for RMM tickets** (`config_rmm_alert_ticket_email`), both off. They are read at creation only; afterwards the per-ticket switches on the ticket header decide (`includes/ticket_flags.php`, handlers in `agent/post/ticket_flags.php`, support edit level 2 + client access).
+
+- **Count toward SLA.** `recalculateTicketSla()` checks `ticket_counts_sla` first: 0 = due dates and policy cleared, nothing else runs, so the "pauses the SLA clock" statuses can never bring SLA back (pause bookkeeping still runs, so "start from ticket creation" later is accurate). Turning it on asks (`RivetDialog.choice`) *from now* (`ticket_sla_started_at = NOW()`, earlier pauses dropped) or *from ticket creation*; the pause is synced before the due dates are computed.
+- **Email notifications.** Enforced only in `addToMailQueue()`: an email whose `ticket_id` (or subject token) names a ticket with `ticket_send_email = 0` is not queued, unless `email_override` (the reply form's "Email this one reply anyway"); a multi-ticket email (`ticket_ids`) is dropped when every ticket is off. Every ticket mail call site passes `ticket_id`. Switching off cancels the ticket's queued and retry-pending mail. Inbound-email tickets (`ticket_source = 'Email'`) are always on and cannot be switched off. RMM escalation emails are about the alert and are not tied to this switch.
+- **Backfill** (card, dry run then apply): tickets linked from `rmm_alerts.ticket_id` or with source `RMM Alert` / `RMM Automation` / `RMM Escalation` (never `Email`) get `ticket_rmm_sourced = 1`, `ticket_send_email = 0`; no SLA field is touched.
+- **Reports.** The Service Desk report and `GET /api/v1/reports/service-desk` take `maintenance=include|exclude|only`; SLA numbers only count `ticket_counts_sla = 1`.
+
+Tests: `tests/rmm_alert_ticket_defaults.php`.
+
 ## 6q. RivetCore rc.25 adoption (26.10.38, DB 2.6.102)
 
 - **Migrations.** DB step 2.6.102 runs the Core runner (0030 change monitor: four tables; 0031 clock skew: six nullable columns on `endpoint_agent_devices`; 0032 check set: `rmm_device_checkset`), adds `settings.config_rmm_allow_linux`, upgrades the stored schedule (`RivetChecksSimple::upgradeStored()`: `os` on service checks the choice table knows, never overwriting one) and calls `reconcileChecks()` once. `db.sql` mirrors all of it and records the three migrations.

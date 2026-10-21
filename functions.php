@@ -1216,8 +1216,12 @@ function report_render_email_html(mysqli $mysqli, $report_key)
  * so both surfaces return identical numbers. $date_from/$date_to are 'Y-m-d' strings and are
  * validated here (defence in depth); metrics that are point-in-time snapshots (open-ticket
  * aging, current per-tech open workload) intentionally ignore the range.
+ *
+ * $maintenance (DB 2.6.105): 'include' (default, every ticket), 'exclude' (leave out tickets made from RMM alerts, ticket_rmm_sourced = 1) or
+ * 'only' (just those). It filters every number, volume included. Independently of it, the SLA compliance numbers only ever count tickets with
+ * ticket_counts_sla = 1: a ticket that does not count toward SLA has no due dates and is never in the SLA numbers, but is still in the volume.
  */
-function getServiceDeskReport(mysqli $mysqli, $date_from, $date_to, ?int $client_id = null)
+function getServiceDeskReport(mysqli $mysqli, $date_from, $date_to, ?int $client_id = null, string $maintenance = 'include')
 {
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $date_from)) {
         $date_from = date('Y-01-01');
@@ -1232,6 +1236,15 @@ function getServiceDeskReport(mysqli $mysqli, $date_from, $date_to, ?int $client
     // always calls this with $client_id = null (company-wide).
     $client_clause   = $client_id !== null ? " AND ticket_client_id = " . intval($client_id) : '';
     $client_clause_t = $client_id !== null ? " AND t.ticket_client_id = " . intval($client_id) : '';
+    // Maintenance (RMM alert ticket) filter, folded into the same clauses so every query below honours it.
+    require_once __DIR__ . '/includes/ticket_flags.php';
+    $flags_ready = ticketFlagsReady($mysqli);
+    $maintenance = in_array($maintenance, ['include', 'exclude', 'only'], true) && $flags_ready ? $maintenance : 'include';
+    if ($maintenance !== 'include') {
+        $client_clause   .= " AND ticket_rmm_sourced = " . ($maintenance === 'only' ? 1 : 0);
+        $client_clause_t .= " AND t.ticket_rmm_sourced = " . ($maintenance === 'only' ? 1 : 0);
+    }
+    $sla_counts_clause = $flags_ready ? ' AND ticket_counts_sla = 1' : '';
     $created_range = "ticket_created_at BETWEEN '$from_dt' AND '$to_dt'$client_clause";
 
     // --- Ticket volume trend (opened vs resolved, grouped by month, set-based) ---
@@ -1301,7 +1314,7 @@ function getServiceDeskReport(mysqli $mysqli, $date_from, $date_to, ?int $client
             SUM(CASE WHEN ticket_sla_resolution_due IS NOT NULL THEN 1 ELSE 0 END) AS reso_total,
             SUM(CASE WHEN ticket_sla_resolution_due IS NOT NULL AND ticket_resolved_at IS NOT NULL
                      AND ticket_resolved_at <= ticket_sla_resolution_due THEN 1 ELSE 0 END) AS reso_met
-         FROM tickets WHERE $created_range AND ticket_archived_at IS NULL"));
+         FROM tickets WHERE $created_range AND ticket_archived_at IS NULL$sla_counts_clause"));
     $resp_total = intval($sla_row['resp_total'] ?? 0);
     $resp_met   = intval($sla_row['resp_met'] ?? 0);
     $reso_total = intval($sla_row['reso_total'] ?? 0);
@@ -1407,6 +1420,7 @@ function getServiceDeskReport(mysqli $mysqli, $date_from, $date_to, ?int $client
     return [
         'date_from' => $date_from,
         'date_to'   => $date_to,
+        'maintenance' => $maintenance,
         'totals'    => [
             'opened'   => $total_opened,
             'resolved' => $total_resolved,
@@ -2861,9 +2875,22 @@ function generateReadablePassword($security_level)
     return $password;
 }
 
+/**
+ * Queue outbound email. THE single choke point for the per-ticket "Send email notifications" switch (DB 2.6.105): every ticket email - new
+ * ticket, reply, status change / resolve / close, assignment, watcher, schedule, task approval, recurring, auto-close, CSAT request and reminder -
+ * is queued through here and nothing else ever sends mail (cron/mail_queue.php only sends what is in email_queue). An email that belongs to a
+ * ticket whose switch is off is dropped HERE, before it is queued, unless the caller passes 'email_override' => true (the technician's one-off
+ * "email this reply anyway"; the switch itself stays off). Mail queued BEFORE a switch was turned off is cancelled by ticketSetSendEmail().
+ * Which ticket an email belongs to: 'ticket_id' from the caller, else the [PREFIX123] token in the subject. An email about several tickets
+ * (the bulk-assign summary) passes 'ticket_ids' => [...] and is dropped only when EVERY listed ticket has its email off.
+ * Returns true (callers ignore the value); the number of rows actually queued is in $GLOBALS['mail_queue_last_queued'].
+ */
 function addToMailQueue($data) {
 
     global $mysqli;
+
+    require_once __DIR__ . '/includes/ticket_flags.php';
+    $GLOBALS['mail_queue_last_queued'] = 0;
 
     foreach ($data as $email) {
         $from = strval($email['from']);
@@ -2888,6 +2915,25 @@ function addToMailQueue($data) {
         $ticket_id_param = $ticket_id > 0 ? $ticket_id : null;
         $auto = array_key_exists('auto', $email) ? ($email['auto'] ? 1 : 0) : 1;
 
+        // Per-ticket "Send email notifications" switch: the one place it is enforced (see the docblock above).
+        if (empty($email['email_override'])) {
+            if ($ticket_id > 0 && !ticketSendsEmail($mysqli, $ticket_id)) {
+                continue;
+            }
+            if (!empty($email['ticket_ids']) && is_array($email['ticket_ids'])) {
+                $any_on = false;
+                foreach ($email['ticket_ids'] as $multi_id) {
+                    if (ticketSendsEmail($mysqli, intval($multi_id))) {
+                        $any_on = true;
+                        break;
+                    }
+                }
+                if (!$any_on) {
+                    continue;
+                }
+            }
+        }
+
         // Bound parameters (not raw string interpolation) since email bodies
         // routinely contain unescaped HTML attribute quotes (e.g. <a href='...'>)
         // and names/subjects routinely contain apostrophes (e.g. "O'Brien") -
@@ -2910,7 +2956,9 @@ function addToMailQueue($data) {
                 VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(), ?, ?, ?, ?)");
             mysqli_stmt_bind_param($stmt, 'ssssssssii', $recipient, $recipient_name, $from, $from_name, $subject, $body, $cal_str, $message_id, $ticket_id_param, $auto);
         }
-        mysqli_stmt_execute($stmt);
+        if (mysqli_stmt_execute($stmt)) {
+            $GLOBALS['mail_queue_last_queued']++;
+        }
         mysqli_stmt_close($stmt);
     }
 
@@ -4101,7 +4149,10 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
     $mail_message_id_norm = \RivetMSP\Mail\MessageId::normalize($mail_message_id);
     $mail_message_id_sql = $mail_message_id_norm !== '' ? "'" . mysqli_real_escape_string($mysqli, $mail_message_id_norm) . "'" : 'NULL';
 
-    mysqli_query($mysqli, "INSERT INTO tickets SET ticket_mail_message_id = $mail_message_id_sql, ticket_prefix = '$ticket_prefix_esc', ticket_number = $ticket_number, ticket_source = 'Email', ticket_subject = '$subject_esc', ticket_details = '$message_esc', ticket_priority = 'Low', ticket_status = $ticket_status, ticket_category = $category_id, ticket_billable = $config_ticket_default_billable, ticket_created_by = 0, ticket_contact_id = $contact_id, ticket_url_key = '$url_key', ticket_client_id = $client_id, ticket_mailbox_id = $ticket_mailbox_id_sql, ticket_assigned_to = $resolved_assigned_to");
+    // A ticket created from an inbound email ALWAYS sends email (literal 1, never a setting): the customer who wrote in must hear back (DB 2.6.105).
+    require_once __DIR__ . '/includes/ticket_flags.php';
+    $send_email_sql = ticketFlagsReady($mysqli) ? ' ticket_send_email = 1,' : '';
+    mysqli_query($mysqli, "INSERT INTO tickets SET ticket_mail_message_id = $mail_message_id_sql, ticket_prefix = '$ticket_prefix_esc', ticket_number = $ticket_number, ticket_source = 'Email', ticket_subject = '$subject_esc',$send_email_sql ticket_details = '$message_esc', ticket_priority = 'Low', ticket_status = $ticket_status, ticket_category = $category_id, ticket_billable = $config_ticket_default_billable, ticket_created_by = 0, ticket_contact_id = $contact_id, ticket_url_key = '$url_key', ticket_client_id = $client_id, ticket_mailbox_id = $ticket_mailbox_id_sql, ticket_assigned_to = $resolved_assigned_to");
     $id = mysqli_insert_id($mysqli);
 
     // Logging
@@ -4200,6 +4251,7 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
             'recipient' => $config_ticket_new_ticket_notification_email,
             'recipient_name' => $from_name,
             'subject' => $email_subject,
+            'ticket_id' => intval($id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
             'body' => mysqli_real_escape_string($mysqli, $email_body)
         ];
     }
