@@ -39,6 +39,7 @@ $settings_groups = [
             ['Event rules', 'Create a ticket, notify someone or call a service when something happens.', 'event_rules.php', 'fa-bolt'],
             ['Job queue', 'Background deliveries and rule actions: status, retries and failures.', 'job_queue.php', 'fa-tasks'],
             ['Mail', 'Sending and receiving email.', 'settings_mail.php', 'fa-envelope'],
+            ['Email templates', 'The ticket and client portal emails sent to clients and technicians.', 'settings_mail_templates.php', 'fa-envelope-open-text'],
             ['Notifications', 'Choose which events send alerts.', 'settings_notification.php', 'fa-bell'],
             ['Identity provider', 'Set up portal single sign-on.', 'identity_provider.php', 'fa-fingerprint', (bool) $config_client_portal_enable],
         ],

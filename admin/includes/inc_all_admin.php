@@ -47,6 +47,7 @@ $admin_settings_labels = [
     'job_queue.php' => 'Job queue',
     'audit_trail.php' => 'Audit trail',
     'settings_mail.php' => 'Mail',
+    'settings_mail_templates.php' => 'Email templates',
     'settings_notification.php' => 'Notifications',
     'identity_provider.php' => 'Identity provider',
     'settings_redis.php' => 'Redis',

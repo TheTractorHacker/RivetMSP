@@ -28,7 +28,7 @@ function itflowAdminSettingsPages(): array
 {
     return ['settings.php', 'settings_company.php', 'settings_localization.php', 'settings_theme.php', 'settings_appearance.php',
         'settings_compliance.php', 'compliance_status.php', 'compliance_report.php', 'event_rules.php', 'job_queue.php',
-        'settings_security.php', 'settings_mail.php', 'oauth_microsoft_mail_callback.php', 'settings_notification.php',
+        'settings_security.php', 'settings_mail.php', 'settings_mail_templates.php', 'oauth_microsoft_mail_callback.php', 'settings_notification.php',
         'settings_default.php', 'settings_invoice.php', 'settings_quote.php', 'settings_online_payment.php', 'settings_online_payment_clients.php',
         'settings_project.php', 'settings_ticket.php', 'settings_ai.php', 'settings_custom_fields.php', 'identity_provider.php',
         'settings_telemetry.php', 'settings_module.php', 'settings_calendar_sync.php', 'settings_webhooks.php', 'webhook_form.php', 'webhook_guides.php',
