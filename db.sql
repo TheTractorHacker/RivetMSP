@@ -5073,6 +5073,7 @@ CREATE TABLE `settings` (
   `config_rmm_extstore_read_url` text DEFAULT NULL,
   `config_rmm_extstore_token` text DEFAULT NULL,
   `config_rmm_allow_linux` tinyint(1) NOT NULL DEFAULT 1,
+  `config_update_check_last_at` datetime DEFAULT NULL,
   PRIMARY KEY (`company_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -5994,6 +5995,7 @@ CREATE TABLE `user_settings` (
   `user_config_signature` longtext DEFAULT NULL,
   `user_config_theme_dark` tinyint(1) NOT NULL DEFAULT 0,
   `user_config_push_types` text DEFAULT NULL,
+  `user_config_inapp_muted_types` text DEFAULT NULL,
   PRIMARY KEY (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;

@@ -7446,3 +7446,19 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.104'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.104') {
+        // DB 2.6.105: in-app notification preferences + a daily update check. Two additive, nullable columns, nothing existing is changed:
+        //  - user_settings.user_config_inapp_muted_types: JSON list of the in-app notification categories this user switched off on
+        //    Preferences (includes/notification_categories.php). NULL = nothing muted, i.e. exactly today's behaviour for every user.
+        //  - settings.config_update_check_last_at: when cron/cron.php last ran the "new RivetMSP version" check (includes/update_check_schedule.php).
+        //    NULL = never, so the first cron run after this update checks once, then it runs once a day after 03:00 instead of every cron run.
+        mysqli_query($mysqli, "ALTER TABLE `user_settings` ADD COLUMN IF NOT EXISTS `user_config_inapp_muted_types` TEXT DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_update_check_last_at` DATETIME DEFAULT NULL");
+
+        $np_a = mysqli_query($mysqli, "SHOW COLUMNS FROM `user_settings` LIKE 'user_config_inapp_muted_types'");
+        $np_b = mysqli_query($mysqli, "SHOW COLUMNS FROM `settings` LIKE 'config_update_check_last_at'");
+        if ($np_a && mysqli_num_rows($np_a) > 0 && $np_b && mysqli_num_rows($np_b) > 0) {
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.105'");
+        }
+    }
