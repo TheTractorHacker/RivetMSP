@@ -232,7 +232,7 @@ A discrepancy worth knowing about: `db.sql` (the fresh-install schema dump) is n
 - **Stripe (payments)** — behind a generic `PaymentProviderInterface`/factory (designed for future additional gateways), currently implemented only by `includes/class_stripe_payment_provider.php`. Used for guest invoice payment, webhooks, client-portal saved cards, and agent-recorded payments.
 - **Microsoft Entra ID (client portal SSO)** — OAuth2 authorization-code flow (`client/login_microsoft.php`) plus a Microsoft Graph `/me` call for profile info at login time. This is login-only — no broader directory sync was found. Microsoft OAuth is used separately for mailbox connections (below); no Odoo integration exists anywhere in the codebase.
 - **Email** — inbound: `cron/ticket_email_parser.php` polls configured mailboxes via IMAP (Webklex library, with OAuth2 support for Microsoft 365/Google Workspace) to create/update tickets from incoming mail. Outbound: `cron/mail_queue.php` drains an app-wide mail queue via PHPMailer (SMTP or OAuth token-based sending); enqueued app-wide via `addToMailQueue()` in `functions.php`.
-- **Real-time (SSE + push)** — Server-Sent Events backed by Redis pub/sub power live ticket updates, live ticket chat (for API/mobile clients), and live in-app notifications. Firebase Cloud Messaging (`includes/firebase.php`, hand-rolled JWT/OAuth exchange) delivers push notifications to mobile devices.
+- **Real-time (SSE + push)** — Server-Sent Events backed by Redis pub/sub power live ticket updates, live ticket chat (for API/mobile clients), and live in-app notifications. Firebase Cloud Messaging (`includes/firebase.php`, hand-rolled JWT/OAuth exchange) delivers push notifications to mobile devices. In-app notifications are created by `appNotify()` (every active technician) and `notifyUser()` (one user) in `functions.php`; each user can switch whole categories off on Account > Preferences (`includes/notification_categories.php`, `user_settings.user_config_inapp_muted_types`), and a muted category is never stored, published or pushed for that user. Security notices and RMM alert escalations cannot be switched off.
 
 ### Background jobs (`cron/`)
 
@@ -240,7 +240,7 @@ All are standalone-runnable PHP CLI scripts, most also `require_once`'d from the
 
 | File | Purpose |
 |---|---|
-| `cron/cron.php` | Main dispatcher — recurring tickets/invoices/expenses, backups, ticket-automation rules, RMM sync + auto-ticketing |
+| `cron/cron.php` | Main dispatcher — recurring tickets/invoices/expenses, backups, ticket-automation rules, RMM sync + auto-ticketing; the RivetMSP release check runs once a day at 03:00 app time (`includes/update_check_schedule.php`), not on every run |
 | `cron/mail_queue.php` | Outbound email delivery |
 | `cron/ticket_email_parser.php` | Inbound IMAP mail to tickets |
 | `cron/accounting_sync.php` (+ `accounting_sync_standalone.php`) | QuickBooks push queue worker |
