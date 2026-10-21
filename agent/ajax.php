@@ -832,15 +832,24 @@ if (isset($_POST['update_kanban_ticket'])) {
                     $company_name = sanitizeInput($row['company_name']);
                     $company_phone = sanitizeInput(formatPhoneNumber($row['company_phone'], $row['company_phone_country_code']));
 
-                    // EMAIL
-                    $subject = "Ticket resolved - [$ticket_prefix$ticket_number] - $ticket_subject";
+                    // EMAIL: Admin > Settings > Email templates, "Ticket resolved" with no reply text (its Quote box is dropped); null when switched off
                     $csat_rating_html = ($config_ticket_csat_enable == 1) ? csatEmailRatingLinksHtml($config_base_url, $ticket_id, $url_key) : '';
-                    $body = "<i style=\'color: #808080\'>##- Please type your reply above this line -##</i><br><br>Hello $contact_name,<br><br>Your ticket regarding $ticket_subject has been resolved and closed.<br><br>We hope this resolved things to your satisfaction - how would you rate it?<br>$csat_rating_html<br>If you need further assistance, please reply or <a href=\'https://$config_base_url/guest/guest_view_ticket.php?ticket_id=$ticket_id&url_key=$url_key\'>re-open</a> to let us know! <br><br>Ticket: $ticket_prefix$ticket_number<br>Subject: $ticket_subject<br>Status: $ticket_status<br>Portal: <a href=\'https://$config_base_url/guest/guest_view_ticket.php?ticket_id=$ticket_id&url_key=$url_key\'>View ticket</a><br><br>--<br>$company_name - Support<br>$config_ticket_from_email<br>$company_phone";
+                    $mt_vars = [
+                        'contact_name' => $contact_name, 'ticket_number' => "$ticket_prefix$ticket_number", 'subject' => $ticket_subject, 'status' => $ticket_status,
+                        'portal_link' => "https://$config_base_url/guest/guest_view_ticket.php?ticket_id=$ticket_id&url_key=$url_key",
+                        'client_portal_link' => "https://$config_base_url/client/ticket.php?id=$ticket_id",
+                        'company_name' => $company_name, 'company_phone' => $company_phone, 'from_email' => $config_ticket_from_email,
+                        'ticket_reply' => '', 'csat_rating_html' => $csat_rating_html,
+                    ];
+                    $mt = renderMailTemplate($mysqli, 'ticket_resolved', $mt_vars);
+                    $subject = $mt['subject'] ?? '';
+                    $body = $mt['body'] ?? '';
+
+                    // Per ticket: never re-queue the previous card's emails when this contact has no valid address
+                    $data = [];
 
                     // Check email valid
-                    if (filter_var($contact_email, FILTER_VALIDATE_EMAIL)) {
-
-                        $data = [];
+                    if ($mt !== null && filter_var($contact_email, FILTER_VALIDATE_EMAIL)) {
 
                         // Email Ticket Contact
                         // Queue Mail
@@ -856,10 +865,10 @@ if (isset($_POST['update_kanban_ticket'])) {
                         ];
                     }
 
-                    // Also Email all the watchers
+                    // Also Email all the watchers (the same email with the collaborator notice inside it)
                     $sql_watchers = mysqli_query($mysqli, "SELECT watcher_email FROM ticket_watchers WHERE watcher_ticket_id = $ticket_id");
-                    $body .= "<br><br>----------------------------------------<br>YOU ARE A COLLABORATOR ON THIS TICKET";
-                    while ($row = mysqli_fetch_assoc($sql_watchers)) {
+                    $body = $mt !== null ? (renderMailTemplate($mysqli, 'ticket_resolved', $mt_vars, "<br><br>----------------------------------------<br>YOU ARE A COLLABORATOR ON THIS TICKET")['body'] ?? '') : '';
+                    while ($mt !== null && ($row = mysqli_fetch_assoc($sql_watchers))) {
                         $watcher_email = sanitizeInput($row['watcher_email']);
 
                         // Queue Mail
