@@ -164,7 +164,7 @@ $encKeyOk = \RivetMSP\Core\Adapter\Endpoint\EndpointSecretBox::keyConfigured();
         </ul>
         <?php if (!empty($dep['commands']['msi'])) { $dm = $dep['commands']['msi']; ?>
         <h6>MSI package (<?= $h($dm['filename']) ?>)</h6>
-        <div class="alert alert-warning small py-2" role="note"><div>The MSI is unsigned (SmartScreen and some policies warn or block it) and has <strong>not been run on Windows</strong>: whether msiexec accepts the appended payload, and what a repair or upgrade does, are unverified. Try it on one test PC before a rollout (the checklist is <code>docs/rmm/MSI_VERIFY.md</code> in RivetCore).</div></div>
+        <div class="alert alert-info small py-2" role="note" id="deploy-msi-warning"><div>The MSI is unsigned: SmartScreen or an application-control policy may warn. Upgrade, repair and uninstall are not yet tested.</div></div>
         <ul class="small mb-3">
             <li><strong>Stamped file (the payload is inside it):</strong> <code class="text-break"><?= $h($dm['msiexec']) ?></code> Download the file with <strong>Download installer</strong> and Format msi.</li>
             <li><strong>Unstamped template with properties</strong> (server and token on the command line): <code class="text-break"><?= $h($dm['properties']) ?></code></li>
@@ -534,6 +534,73 @@ $swLive = (int) ($swLimits['software_live_install'] ?? 0) === 1;
 </div>
 
 <?php
+// RivetCore 1.0.0-rc.29 (migration 0036): hypervisor visibility. Off by default; covers Proxmox VE and Hyper-V only. The numbers are the limits of the module
+// (Core validates them, including the two cross-field rules: the storage warning percent cannot be above the critical one, and the summary interval cannot
+// be above the full one). NEVER RUN AGAINST A REAL PROXMOX VE OR HYPER-V HOST before reading vendor/rivet/rivet-core/docs/rmm/HYPERVISORS.md section 9: start
+// with one pilot host.
+$hvLimits = (array) $cfg['limits'];
+?>
+<?php $eaTab('hypervisor'); ?>
+<div class="card mb-3" id="hypervisor">
+    <div class="card-header"><h4 class="card-title mb-0">Hypervisor visibility</h4></div>
+    <div class="card-body">
+        <p class="small text-muted">A hypervisor host used to be "just a server"; its guests were invisible. With this on, an agent running on a Proxmox VE or Hyper-V host also reports its guests, storage and cluster, read-only (no VM configuration, no console, no credential is ever read: vendor/rivet/rivet-core/docs/rmm/HYPERVISORS.md section 3). Needs an agent of RivetCore 1.0.0-rc.29 or later; older agents keep working and never report anything here. Switching it on adds "Hypervisors" to the Endpoints menu (shown to technicians who may view hypervisor hosts). <strong>Nothing here has been run against a real Proxmox VE or Hyper-V host:</strong> try one host first.</p>
+        <form action="post.php" method="post" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="form-check form-switch mb-2">
+                <input type="checkbox" class="form-check-input" id="ea_sw_hypervisor" name="feature_hypervisor" value="1" <?= !empty($cfg['features']['hypervisor']) ? 'checked' : '' ?> aria-describedby="ea_sw_hypervisor_h">
+                <label class="form-check-label fw-semibold" for="ea_sw_hypervisor">Hypervisor visibility (<code>hypervisor</code>)</label>
+            </div>
+            <p class="small text-muted" id="ea_sw_hypervisor_h"><strong>Cost:</strong> a host that announces the capability is offered a signed configuration and then reports a full list of its guests every "Full report" interval below, and a short summary of state changes in between; the data is kept in four tables and purged after "Keep history" days. A machine that is not a hypervisor is asked once every 10 minutes whether it is one (one cheap check) and otherwise sends nothing.</p>
+            <div class="row g-3">
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_full">Full report every (seconds)</label>
+                    <input type="number" class="form-control" id="ea_hv_full" name="hypervisor_full_interval_s" min="300" max="86400" value="<?= (int) ($hvLimits['hypervisor_full_interval_s'] ?? 600) ?>">
+                    <div class="form-text">Default 600 (10 minutes).</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_summary">Summary report every (seconds)</label>
+                    <input type="number" class="form-control" id="ea_hv_summary" name="hypervisor_summary_interval_s" min="60" max="600" value="<?= (int) ($hvLimits['hypervisor_summary_interval_s'] ?? 120) ?>">
+                    <div class="form-text">Default 120. Cannot be above the full interval.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_maxvms">VMs per host, at most</label>
+                    <input type="number" class="form-control" id="ea_hv_maxvms" name="hypervisor_max_vms" min="1" max="1000" value="<?= (int) ($hvLimits['hypervisor_max_vms'] ?? 1000) ?>">
+                    <div class="form-text">Default 1000.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_retention">Keep history (days)</label>
+                    <input type="number" class="form-control" id="ea_hv_retention" name="hypervisor_retention_days" min="1" max="3650" value="<?= (int) ($hvLimits['hypervisor_retention_days'] ?? 30) ?>">
+                    <div class="form-text">Default 30. A missing VM or storage is purged after this long.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_history">State changes kept per VM</label>
+                    <input type="number" class="form-control" id="ea_hv_history" name="hypervisor_history_per_vm" min="1" max="500" value="<?= (int) ($hvLimits['hypervisor_history_per_vm'] ?? 20) ?>">
+                    <div class="form-text">Default 20.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_snap">Snapshot old after (days)</label>
+                    <input type="number" class="form-control" id="ea_hv_snap" name="hypervisor_snapshot_days" min="1" max="365" value="<?= (int) ($hvLimits['hypervisor_snapshot_days'] ?? 7) ?>">
+                    <div class="form-text">Default 7.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_backup">Backup stale after (days)</label>
+                    <input type="number" class="form-control" id="ea_hv_backup" name="hypervisor_backup_days" min="1" max="365" value="<?= (int) ($hvLimits['hypervisor_backup_days'] ?? 2) ?>">
+                    <div class="form-text">Default 2.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_resolve">A stopped VM resolves after (hours)</label>
+                    <input type="number" class="form-control" id="ea_hv_resolve" name="hypervisor_vm_down_resolve_h" min="1" max="720" value="<?= (int) ($hvLimits['hypervisor_vm_down_resolve_h'] ?? 24) ?>">
+                    <div class="form-text">Default 24. Taken as switched off on purpose after this long.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_warn">Storage warning at (%)</label>
+                    <input type="number" class="form-control" id="ea_hv_warn" name="hypervisor_storage_warn_pct" min="1" max="100" value="<?= (int) ($hvLimits['hypervisor_storage_warn_pct'] ?? 85) ?>">
+                    <div class="form-text">Default 85. Cannot be above the critical percent.</div></div>
+                <div class="col-sm-6 col-lg-3"><label class="form-label" for="ea_hv_crit">Storage critical at (%)</label>
+                    <input type="number" class="form-control" id="ea_hv_crit" name="hypervisor_storage_crit_pct" min="1" max="100" value="<?= (int) ($hvLimits['hypervisor_storage_crit_pct'] ?? 95) ?>">
+                    <div class="form-text">Default 95.</div></div>
+            </div>
+            <h6 class="mt-4">Alert classes</h6>
+            <p class="small text-muted">Each class can be switched off on its own while the module stays on. The event still fires for audit purposes; only the check (and so the alert) is not raised.</p>
+            <div class="row g-2">
+                <?php foreach (['hypervisor_alert_vm_down' => 'A VM stops unexpectedly', 'hypervisor_alert_backup' => 'A VM\'s backup failed or is stale', 'hypervisor_alert_snapshot' => 'A snapshot is old',
+                    'hypervisor_alert_storage' => 'Storage is low on space', 'hypervisor_alert_pool' => 'A ZFS pool or Ceph is degraded', 'hypervisor_alert_quorum' => 'A cluster lost quorum'] as $flag => $label) { ?>
+                <div class="col-sm-6 col-lg-4 form-check form-switch">
+                    <input type="checkbox" class="form-check-input" id="ea_<?= $flag ?>" name="<?= $flag ?>" value="1" <?= (int) ($hvLimits[$flag] ?? 1) === 1 ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="ea_<?= $flag ?>"><?= $h($label) ?></label>
+                </div>
+                <?php } ?>
+            </div>
+            <button type="submit" name="save_hypervisor_settings" class="btn btn-primary mt-3"><i class="fas fa-save me-1"></i>Save hypervisor visibility settings</button>
+        </form>
+    </div>
+</div>
+
+<?php
 // RivetCore 1.0.0-rc.11 (RMM Phases 6 and 8 and the scale work): the data for the cards below is read here, the cards are printed by rivetRmmUiScaleCards() (includes/rmm_scale_cards.php).
 // Each part is off by default and is guarded so this page still loads on a database that has not been updated yet.
 $rmm_scale_scripts = true;
@@ -638,34 +705,38 @@ if ($feed->ready()) {
 <div class="card mb-3" id="binaries">
     <div class="card-header"><h4 class="card-title mb-0">Agent binaries</h4></div>
     <div class="card-body">
-        <p class="small text-muted">Upload the Windows agent executable (unstamped, as built by <code>make build</code>) for each architecture. The server checks the PE header, the machine type and that the file is not already an installer, and stores it outside the web-served area. The <strong>current</strong> binary per architecture is what per-department installers are made from; offering a binary as an update lets enrolled agents fetch it from this server. Largest accepted upload: <strong><?= $h(BinaryStore::human($uploadLimit)) ?></strong> (the lower of the <?= $h(BinaryStore::human($rmm->binaryStore()->maxBytes())) ?> cap, PHP <code>upload_max_filesize</code> <?= $h(ini_get('upload_max_filesize')) ?> and <code>post_max_size</code> <?= $h(ini_get('post_max_size')) ?>). Larger or automated uploads: <code>scripts/endpoint_agent_publish.php</code>.</p>
+        <p class="small text-muted">Upload the Windows agent executable (unstamped, as built by <code>make build</code>) for each architecture. The server checks the PE header, the machine type and that the file is not already an installer, and stores it outside the web-served area. The <strong>current</strong> binary per architecture is what per-department installers are made from; offering a binary as an update lets enrolled agents fetch it from this server. Set the platform to <strong>Linux</strong> to publish the Linux agent (<code>rivetit-agent-linux-amd64</code> / <code>-arm64</code>) as the self-update of enrolled Linux devices: the server then checks for a 64-bit Linux program for that CPU that contains the version you enter. Every binary and release belongs to one platform, so a Linux device is never offered a Windows executable or the other way round. Largest accepted upload: <strong><?= $h(BinaryStore::human($uploadLimit)) ?></strong> (the lower of the <?= $h(BinaryStore::human($rmm->binaryStore()->maxBytes())) ?> cap, PHP <code>upload_max_filesize</code> <?= $h(ini_get('upload_max_filesize')) ?> and <code>post_max_size</code> <?= $h(ini_get('post_max_size')) ?>). Larger or automated uploads: <code>scripts/endpoint_agent_publish.php</code>.</p>
         <form action="post.php" method="post" enctype="multipart/form-data" class="mb-3" autocomplete="off" id="bn_form">
             <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
             <label for="bn_file" id="bn_drop" class="d-block border border-2 rounded p-4 text-center mb-2" style="border-style:dashed !important;cursor:pointer">
                 <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2 d-block" aria-hidden="true"></i>
-                <span class="d-block fw-bold">Drop the agent .exe files here, or click to choose them</span>
+                <span class="d-block fw-bold">Drop the agent files here, or click to choose them</span>
                 <span class="d-block small text-muted">Add the x64 and the ARM64 build together. The version and architecture are read from the file name (for example <code>rivetit-agent-1.4.2-windows-amd64.exe</code>); you can correct them below.</span>
                 <input type="file" class="visually-hidden" id="bn_file" name="agent_binary[]" accept=".exe" multiple>
             </label>
             <div id="bn_rows" class="mb-2" aria-live="polite"></div>
             <div class="row g-2 align-items-end">
-                <div class="col-lg-3"><div class="form-check"><input type="checkbox" class="form-check-input" id="bn_cur" name="activate" value="1" checked><label class="form-check-label small" for="bn_cur">Make current for installers</label></div></div>
-                <div class="col-lg-3"><label class="form-label small" for="bn_ring">Offer as update</label><select class="form-select form-select-sm" id="bn_ring" name="release_ring"><option value="">No</option><option value="pilot">Pilot ring</option><option value="stable">Stable ring</option></select></div>
+                <div class="col-lg-2"><label class="form-label small" for="bn_os">Platform</label><select class="form-select form-select-sm" id="bn_os" name="os"><option value="windows" selected>Windows (.exe)</option><option value="linux">Linux (self-update)</option></select></div>
+                <div class="col-lg-2"><div class="form-check"><input type="checkbox" class="form-check-input" id="bn_cur" name="activate" value="1" checked><label class="form-check-label small" for="bn_cur">Make current for installers</label></div></div>
+                <div class="col-lg-2"><label class="form-label small" for="bn_ring">Offer as update</label><select class="form-select form-select-sm" id="bn_ring" name="release_ring"><option value="">No</option><option value="pilot">Pilot ring</option><option value="stable">Stable ring</option></select></div>
                 <div class="col-lg-2"><label class="form-label small" for="bn_pct">Rollout %</label><input class="form-control form-control-sm" id="bn_pct" name="rollout_pct" type="number" min="0" max="100" value="10"></div>
                 <div class="col-lg-2"><button class="btn btn-sm btn-primary w-100" name="upload_agent_binary" id="bn_go"><i class="fas fa-upload me-1" aria-hidden="true"></i>Upload</button></div>
             </div>
         </form>
         <div class="table-responsive"><table class="table table-sm align-middle mb-0">
-            <thead><tr><th>Version</th><th>Arch</th><th>Size</th><th>SHA-256</th><th>Uploaded</th><th>State</th><th></th></tr></thead><tbody>
-            <?php foreach ($binaries as $b) { $fid = 'bn_' . (int) $b['binary_id']; ?>
+            <thead><tr><th>Version</th><th>Platform</th><th>Size</th><th>SHA-256</th><th>Uploaded</th><th>State</th><th></th></tr></thead><tbody>
+            <?php foreach ($binaries as $b) { $fid = 'bn_' . (int) $b['binary_id']; $bOs = (string) ($b['os'] ?? 'windows'); ?>
                 <tr>
-                    <td><?= $h($b['version']) ?></td><td><?= $h($b['arch']) ?></td><td><?= $h(BinaryStore::human((int) $b['size_bytes'])) ?></td>
+                    <td><?= $h($b['version']) ?></td><td><?= $h($bOs === 'linux' ? 'Linux' : 'Windows') ?> <span class="text-muted"><?= $h($b['arch']) ?></span></td><td><?= $h(BinaryStore::human((int) $b['size_bytes'])) ?></td>
                     <td class="small font-monospace text-break"><?= $h($b['sha256']) ?></td><td><?= $h($dt($b['created_at'])) ?></td>
-                    <td><?php if (!(int) $b['active']) { echo '<span class="badge bg-secondary">Inactive</span>'; } elseif ((int) $b['is_current']) { echo '<span class="badge bg-success">Current</span>'; } else { echo '<span class="badge bg-info text-dark">Available</span>'; } ?></td>
+                    <td><?php if (!(int) $b['active']) { echo '<span class="badge bg-secondary">Inactive</span>'; } elseif ((int) $b['is_current']) { echo '<span class="badge bg-success">Current</span>'; } else { echo '<span class="badge bg-info text-dark">Available</span>'; }
+                        // RivetCore rc.30: false = the stored file is not an executable of this row's platform (a Linux program stored as Windows, or the other way round). Core never
+                        // serves it: it is deactivated, with its releases, the first time a device asks for it.
+                        if (($b['platform_ok'] ?? null) === false) { echo ' <span class="badge bg-danger" title="The stored file is not a ' . $h($bOs) . ' executable. It is never served to a device; upload the right file under a new version.">Wrong platform</span>'; } ?></td>
                     <td class="text-nowrap">
                         <form id="<?= $fid ?>" action="post.php" method="post" class="d-inline-flex gap-1 flex-wrap align-items-center"><input type="hidden" name="csrf_token" value="<?= $csrf ?>"><input type="hidden" name="binary_id" value="<?= (int) $b['binary_id'] ?>">
                         <?php if ((int) $b['active']) { ?>
-                            <?php if (!(int) $b['is_current']) { ?><button class="btn btn-xs btn-outline-primary" name="binary_action" value="make_current">Make current</button><?php } ?>
+                            <?php if (!(int) $b['is_current'] && $bOs === 'windows') { ?><button class="btn btn-xs btn-outline-primary" name="binary_action" value="make_current">Make current</button><?php } ?>
                             <select name="release_ring" class="form-select form-select-sm w-auto" aria-label="Ring"><option>pilot</option><option>stable</option></select>
                             <input type="number" name="rollout_pct" min="0" max="100" value="10" class="form-control form-control-sm" style="width:5rem" aria-label="Rollout percent">
                             <button class="btn btn-xs btn-outline-secondary" name="binary_action" value="offer_update">Offer as update</button>
@@ -684,7 +755,7 @@ if ($feed->ready()) {
     <div class="card-header"><h4 class="card-title mb-0">MSI templates</h4></div>
     <div class="card-body">
         <p class="small text-muted">Optional. An <strong>MSI installer</strong> (Deployment, Format msi) is a copy of the <em>current</em> MSI template for the architecture with the per-client payload (server address, one-time token, client) appended; the stored template is never modified. Upload the unstamped <code>rivetit-agent-windows-amd64.msi</code> built by RivetCore's <code>make msi</code> (release tag <code>agent-v*</code>, with <code>SHA256SUMS.msi</code>). The server checks that it is a Windows Installer file, within the size limit, not already stamped, and reads the platform from the package (x64 or ARM64; an Intel package is refused). Core builds <strong>x64 only</strong>; an ARM64 PC uses the exe.</p>
-        <div class="alert alert-warning small py-2" role="note"><div><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i><strong>Unsigned, and not yet verified on Windows.</strong> The package is built on Linux and table-checked, never run on Windows: whether <code>msiexec</code> accepts a package with the payload appended after the end of the file, what repair and upgrade do, and the whole custom-action flow are <strong>UNVERIFIED</strong> (RivetCore <code>docs/rmm/MSI_VERIFY.md</code> is the checklist). Windows SmartScreen and some policies warn about or block an unsigned installer. Test it on one PC before a rollout; the exe installer is unchanged and stays the default.</div></div>
+        <div class="alert alert-info small py-2" role="note" id="msi-unverified"><div><i class="fas fa-info-circle me-1" aria-hidden="true"></i>The MSI is unsigned: SmartScreen or an application-control policy may warn. Upgrade, repair and uninstall are not yet tested.</div></div>
         <?php if (!$msiReady) { ?>
         <div class="alert alert-info py-2 mb-0">Run the database update first (Administration &rarr; Updates; DB 2.6.91 adds the MSI template table), then reload this page.</div>
         <?php } else { ?>
@@ -721,6 +792,12 @@ if ($feed->ready()) {
         <?php } ?>
     </div>
 </div>
+
+<?php
+$eaTab('updates');
+require_once dirname(__DIR__) . '/includes/rmm_linux_store_ui.php';
+echo rivetAgentLinuxFilesCard($mysqli, (string) $csrf);
+?>
 
 <?php $eaTab('updates'); ?>
 <div class="card mb-3" id="deployment">
@@ -795,14 +872,16 @@ if ($feed->ready()) {
             <div class="col-lg-1"><button type="submit" name="create_enroll_token" class="btn btn-primary w-100">Create</button></div>
         </form>
         <div class="table-responsive"><table class="table table-sm table-striped align-middle mb-0">
-            <thead><tr><th>Token</th><th>Label</th><th>Client</th><th>Ring</th><th>Uses</th><th>Expires</th><th>State</th><th></th></tr></thead><tbody>
+            <thead><tr><th>Token</th><th>Label</th><th>Client</th><th>Ring</th><th>Device type</th><th>Uses</th><th>Expires</th><th>State</th><th></th></tr></thead><tbody>
             <?php foreach ($tokens as $t) {
                 $state = ['revoked' => ['Revoked', 'danger'], 'expired' => ['Expired', 'secondary'], 'used_up' => ['Used up', 'secondary'], 'active' => ['Active', 'success']][$t['state']]; ?>
                 <tr><td><code><?= $h(substr($t['selector'], 0, 8)) ?>...</code></td><td><?= $h($t['label']) ?></td><td><?= $h($clientName[(int) $t['client_id']] ?? ('#' . (int) $t['client_id'])) ?></td>
-                    <td><?= $h($t['ring']) ?></td><td><?= (int) $t['use_count'] ?> / <?= (int) $t['max_uses'] ?><?= $t['last_used_at'] ? '<div class="small text-muted">last ' . $h($dt($t['last_used_at'])) . '</div>' : '' ?></td>
+                    <td><?= $h($t['ring']) ?></td>
+                    <td><?= ($t['device_type'] ?? 'auto') === 'auto' ? '<span class="text-muted">Detect automatically</span>' : $h($t['device_type']) ?></td>
+                    <td><?= (int) $t['use_count'] ?> / <?= (int) $t['max_uses'] ?><?= $t['last_used_at'] ? '<div class="small text-muted">last ' . $h($dt($t['last_used_at'])) . '</div>' : '' ?></td>
                     <td><?= $h($dt($t['expires_at'])) ?></td><td><span class="badge bg-<?= $state[1] ?>"><?= $state[0] ?></span></td>
                     <td><?php if ($state[0] === 'Active') { ?><form action="post.php" method="post" data-ea-confirm="Revoke this enrollment token?"><input type="hidden" name="csrf_token" value="<?= $csrf ?>"><input type="hidden" name="token_id" value="<?= (int) $t['token_id'] ?>"><button class="btn btn-xs btn-outline-danger" name="revoke_enroll_token">Revoke</button></form><?php } ?></td></tr>
-            <?php } if (!$tokens) { echo '<tr><td colspan="8" class="text-muted">No enrollment tokens yet.</td></tr>'; } ?>
+            <?php } if (!$tokens) { echo '<tr><td colspan="9" class="text-muted">No enrollment tokens yet.</td></tr>'; } ?>
         </tbody></table></div>
         <?php if ($attempts) { ?>
         <h6 class="mt-3">Recent rejected enrollment attempts</h6>
@@ -830,9 +909,10 @@ if ($feed->ready()) {
                     <select class="form-select form-select-sm" id="pa_<?= (int) $d['device_id'] ?>" name="asset_id"><option value="0">Choose an asset...</option>
                         <?php foreach ($cands as $c) { echo '<option value="' . (int) $c['asset_id'] . '">' . $h($c['asset_name']) . ' (#' . (int) $c['asset_id'] . ', matched by ' . $h(implode('+', $c['matched_by'])) . (!$c['in_scope'] ? ', other client' : '') . ($c['owned_by_device_id'] ? ', already owned' : '') . ')</option>'; } ?>
                     </select></div>
-                <div class="col-lg-6 d-flex flex-wrap gap-2">
+                <div class="col-lg-6 d-flex flex-wrap align-items-center gap-2">
                     <button class="btn btn-sm btn-success" name="device_action" value="approve_link">Link to the chosen asset</button>
                     <button class="btn btn-sm btn-outline-primary" name="device_action" value="approve_create">Create a new asset</button>
+                    <span class="small text-muted" title="The installer's own device-type choice, or the agent's hardware-based detection when none was chosen">as <?= $h($d['suggested_type'] ?? 'Laptop') ?></span>
                     <button class="btn btn-sm btn-outline-danger" name="device_action" value="reject" data-ea-confirm="Reject this device and revoke its credential?">Reject</button>
                 </div>
             </form>
@@ -882,22 +962,24 @@ if ($feed->ready()) {
         <form action="post.php" method="post" class="row g-2 align-items-end mb-3" autocomplete="off">
             <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
             <div class="col-lg-1"><label class="form-label small" for="rl_v">Version</label><input class="form-control form-control-sm" id="rl_v" name="version" placeholder="1.1.0" required></div>
-            <div class="col-lg-3"><label class="form-label small" for="rl_u">Package URL (https)</label><input class="form-control form-control-sm" id="rl_u" name="url" type="url" required></div>
+            <div class="col-lg-1"><label class="form-label small" for="rl_os">Platform</label><select class="form-select form-select-sm" id="rl_os" name="os"><option value="windows" selected>Windows</option><option value="linux">Linux</option></select></div>
+            <div class="col-lg-2"><label class="form-label small" for="rl_u">Package URL (https)</label><input class="form-control form-control-sm" id="rl_u" name="url" type="url" required></div>
             <div class="col-lg-3"><label class="form-label small" for="rl_s">SHA-256 of the package</label><input class="form-control form-control-sm font-monospace" id="rl_s" name="sha256" maxlength="64" required></div>
             <div class="col-lg-1"><label class="form-label small" for="rl_m">Min version</label><input class="form-control form-control-sm" id="rl_m" name="min_version" value="0.0.0"></div>
             <div class="col-lg-1"><label class="form-label small" for="rl_r">Ring</label><select class="form-select form-select-sm" id="rl_r" name="ring"><option>pilot</option><option selected>stable</option></select></div>
             <div class="col-lg-1"><label class="form-label small" for="rl_p">Rollout %</label><input class="form-control form-control-sm" id="rl_p" name="rollout_pct" type="number" min="0" max="100" value="10"></div>
             <div class="col-lg-2"><button class="btn btn-sm btn-primary w-100" name="add_agent_release">Publish release</button></div>
         </form>
-        <div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Version</th><th>Ring</th><th>Min version</th><th>Rollout</th><th>Active</th><th>Package SHA-256</th><th></th></tr></thead><tbody>
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Version</th><th>Platform</th><th>Ring</th><th>Min version</th><th>Rollout</th><th>Active</th><th>Package SHA-256</th><th></th></tr></thead><tbody>
         <?php foreach ($releases as $r) { $fid = 'rel_' . (int) $r['release_id']; ?>
             <tr>
-                <td><?= $h($r['version']) ?><?= $r['hosted'] ? '<div class="small text-muted">hosted, ' . $h($r['arch']) . '</div>' : '' ?></td><td><?= $h($r['ring']) ?></td><td><?= $h($r['min_version']) ?></td>
+                <td><?= $h($r['version']) ?><?= $r['hosted'] ? '<div class="small text-muted">hosted</div>' : '' ?></td>
+                <td><?= $h(($r['os'] ?? 'windows') === 'linux' ? 'Linux' : 'Windows') ?><?= $r['arch'] !== '' ? ' <span class="text-muted">' . $h($r['arch']) . '</span>' : '' ?></td><td><?= $h($r['ring']) ?></td><td><?= $h($r['min_version']) ?></td>
                 <td style="max-width:7rem"><input form="<?= $fid ?>" class="form-control form-control-sm" type="number" name="rollout_pct" min="0" max="100" value="<?= (int) $r['rollout_pct'] ?>" aria-label="Rollout percent"></td>
                 <td><input form="<?= $fid ?>" type="checkbox" class="form-check-input" name="active" value="1" <?= $r['active'] ? 'checked' : '' ?> aria-label="Active"></td>
                 <td class="small font-monospace text-break"><?= $h($r['sha256']) ?></td>
                 <td><form id="<?= $fid ?>" action="post.php" method="post"><input type="hidden" name="csrf_token" value="<?= $csrf ?>"><input type="hidden" name="release_id" value="<?= (int) $r['release_id'] ?>"><button class="btn btn-xs btn-outline-primary" name="update_agent_release">Save</button></form></td></tr>
-        <?php } if (!$releases) { echo '<tr><td colspan="7" class="text-muted">No release published. Agents stay on the version they have.</td></tr>'; } ?>
+        <?php } if (!$releases) { echo '<tr><td colspan="8" class="text-muted">No release published. Agents stay on the version they have.</td></tr>'; } ?>
         </tbody></table></div>
     </div>
 </div>

@@ -36,7 +36,7 @@
             var opt = fmt.querySelector('option[value=msi]');
             if (opt) { opt.disabled = reason !== ''; }
             if (reason !== '' && fmt.value === 'msi') { fmt.value = 'exe'; }
-            if (help) { help.textContent = reason !== '' ? reason : 'An msi is the published MSI template with this client\'s payload appended (unsigned; unverified on Windows).'; }
+            if (help) { help.textContent = reason !== '' ? reason : 'An msi is the published MSI template with this client\'s payload appended. It is unsigned: SmartScreen or an application-control policy may warn. Upgrade, repair and uninstall are not yet tested.'; }
         };
         dpArch.addEventListener('change', apply);
         apply();

@@ -11,6 +11,7 @@ use RivetCore\Rmm\Contracts\RmmAuditInterface;
 use RivetCore\Rmm\Device\DeviceRepository;
 use RivetCore\Rmm\Job\JobService;
 use RivetCore\Rmm\Mesh\MeshService;
+use RivetCore\Rmm\Presentation\RemoteHeader;
 use RivetCore\Rmm\Settings\RmmSettings;
 use RivetCore\Rmm\Support\Sql;
 use RivetCore\Rmm\Technician\ActionResult;
@@ -458,6 +459,40 @@ final class RemoteActions
             'terminal_files_enabled' => $this->settings->featureOn(RemoteProtocol::FEATURE_REMOTE_TOOLS)]);
     }
 
+    /**
+     * The remote part of the shared device header ({@see \RivetCore\Rmm\Presentation\RemoteHeader}), for THIS caller: the views he may open, the one the button leads with and a sentence for the state.
+     * Built on the same facts as {@see self::meshInfo()}, which stays as it was. `$hints` are optional facts the edition knows: `server` (a server chassis or virtual server).
+     * Order of decisions: device scope (404) -> the pure decision table. A caller without remote abilities still gets the state, with every view unavailable and the reason.
+     *
+     * @param array<string,mixed> $hints
+     */
+    public function headerRemote(RmmPrincipal $who, int $deviceId, array $hints = []): ActionResult
+    {
+        [$dev, $err] = $this->deviceFor($who, $deviceId);
+        if ($err !== null || $dev === null) {
+            return $err ?? ActionResult::fail(404, 'not_found', 'Device not found.');
+        }
+        $client = (int) $dev['client_id'];
+        $cfg = $this->settings->get();
+        $inv = is_string($dev['inventory_json'] ?? null) ? json_decode($dev['inventory_json'], true) : null;
+        $inv = is_array($inv) ? $inv : [];
+        $state = $this->devices->status($dev, $cfg);
+
+        return ActionResult::ok('ok', 200, 'ok', RemoteHeader::decide([
+            'family' => \RivetCore\Rmm\Presentation\DeviceHeader::family($inv, (string) ($dev['os'] ?? '') . ' ' . (string) ($dev['os_version'] ?? '')),
+            'has_desktop' => is_bool($inv['desktop_session'] ?? null) ? $inv['desktop_session'] : null,
+            'server' => ($hints['server'] ?? false) === true,
+            'enabled' => (int) $cfg['mesh_enabled'] === 1,
+            'configured' => (string) $cfg['mesh_url'] !== '' && !empty($cfg['mesh_login_key_enc']),
+            'node' => $this->mesh->nodeFor($deviceId),
+            'agent_installed' => ($this->meshAgents?->stateFor($deviceId)['installed'] ?? false) === true,
+            'offline' => in_array($state['state'], ['offline', 'stale', 'never'], true),
+            'can_launch' => $this->authz->allowed($who->userId, RmmAbility::REMOTE_LAUNCH, $client),
+            'can_manage' => $this->authz->allowed($who->userId, RmmAbility::REMOTE_MANAGE, $client),
+            'tools_on' => $this->settings->featureOn(RemoteProtocol::FEATURE_REMOTE_TOOLS),
+        ]));
+    }
+
     // ------------------------------------------------------------------ the Mesh agent: push an install or a removal
 
     /** The reason a Mesh agent cannot be pushed right now, or null. */
@@ -493,6 +528,30 @@ final class RemoteActions
         }
 
         return $this->pushMeshInstall($who, $dev, $force);
+    }
+
+    /**
+     * The Mesh agent install an enrollment token asked for ("install the Mesh agent once this device is approved"), queued by the SERVER for a device that is already
+     * linked. There is no user: it acts as the system principal and needs no ability, because the administrator's tick-box on the installer was the decision and the
+     * device only gets here after an approval or an automatic match. Everything else is the manual path: the remote-tools switch (409 `feature_disabled`), Mesh enabled and
+     * configured (409 `not_configured`), a linked device, the announced `job:mesh_install` capability (409 `unsupported`), idempotent (`already_installed`, `already_queued`),
+     * and the same sealed job (the group id comes from the stored settings and is kept out of the job row). Called by {@see \RivetCore\Rmm\Mesh\MeshAfterApproval}.
+     *
+     * @param array<string,mixed> $dev the device row
+     */
+    public function installMeshAgentAfterApproval(array $dev): ActionResult
+    {
+        if (!$this->settings->featureOn(RemoteProtocol::FEATURE_REMOTE_TOOLS)) {
+            return ActionResult::fail(409, 'feature_disabled', self::offText(RemoteProtocol::FEATURE_REMOTE_TOOLS));
+        }
+        if (($dev['link_state'] ?? '') !== 'linked') {
+            return ActionResult::fail(409, 'conflict', 'Only a device linked to an asset can be managed. Approve it first.');
+        }
+        if (($refused = $this->meshInstallRefusal()) !== null) {
+            return $refused;
+        }
+
+        return $this->pushMeshInstall(new RmmPrincipal(0, 'System'), $dev, false);
     }
 
     /**

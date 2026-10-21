@@ -29,6 +29,7 @@ const RIVET_RMM_AUTO_FEATURES = [
     'alerting' => 'Alerting',
     'patching' => 'Patch management',
     'software_deploy' => 'Software deployment',
+    'hypervisor' => 'Hypervisor visibility',
 ];
 
 // ------------------------------------------------------------------ the internal call into the technician API

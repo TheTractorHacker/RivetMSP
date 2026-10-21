@@ -117,6 +117,20 @@ The module opens and resolves ordinary `rmm_alerts` rows (status `new`, no ticke
   `sudo -u www-data php scripts/endpoint_agent_publish.php rivetit-agent-windows-amd64.exe --version 1.2.0 --arch amd64 --activate [--release pilot --rollout 10]`.
   Files are stored under `backups/endpoint-agent/` (or `EA_BINARY_DIR`) with random names; `backups/.htaccess` and the shipped nginx rules deny that directory.
   The agent still carries the RivetIT name (service `RivetIT Agent`, installer `RivetIT-Agent-Setup-<client>-x64.exe`): a later neutral rebrand is a separate project.
+* **Per-OS binaries and releases (RivetCore 1.0.0-rc.30, migration 0037, run by DB step 2.6.103).** `endpoint_agent_binaries` and `endpoint_agent_releases` carry `os`
+  (`windows`, the default, or `linux`), unique per `(version, arch, os)` / `(version, ring, arch, os)`; before rc.30 they keyed on version and arch only, so a Linux
+  device could be offered and download the Windows .exe of the same version. A device is offered and served only releases of its own OS: the os stored on its
+  device row decides (an agent that does not send `os=` on its download, every agent before rc.30, is still served correctly), an `os=` that disagrees with it gets
+  404, and a stored file whose first bytes are not its row's platform is never streamed (Core deactivates it with its releases; the Agent binaries list shows
+  **Wrong platform**). Code that inserts into these tables keeps omitting `os` for Windows rows. Agent binaries upload, the manual release form and
+  `scripts/endpoint_agent_publish.php --os linux` take a platform; "Make current" is Windows only (it picks the binary installers are stamped from).
+* **Linux self-update vs. hosted Linux files.** Two stores with two jobs. `endpoint_agent_linux_files` + `api/v1/agent_linux_file.php` (DB 2.6.104,
+  `includes/rmm_linux_store.php`) serve **installing**: `install-linux.sh`, the agent and the tarballs, fetched by the Add device Linux command on a machine that
+  is not enrolled yet, with a per-file, per-version, expiring credential derived from the enrollment token. They never create an `endpoint_agent_releases` row.
+  **Updating** an enrolled Linux device is Core's `agent_update` from Core's own tables with `os='linux'`: whenever a Linux agent program is stored for hosting
+  (build host, Agent updates > Publish, the manual Linux upload) the same verified file also goes through `RmmAdmin::uploadBinary(..., ['os' => 'linux'])`
+  (`LinuxStore::publishToCore()`), offered to the ring chosen there. Core checks the program contains the version it is published as. A program hosted before
+  rc.30 shows "Not an agent update" on the Linux files card, with an **Add to agent binaries** button. Tests: `tests/rmm_agent_os.php`.
 * **State directory.** `backups/rmm-state/` (override `RMM_STATE_DIR` in `config.php`; set `RMM_GATE_STATE_DIR` in the web server environment too, since the gate cannot read `config.php`). It must be writable by the web user; the administration page warns when the file cannot be written.
 * **config.php constants** (all optional): `EA_ALLOW_INSECURE_HTTP` (loopback test servers only), `EA_BINARY_DIR`, `EA_TRANSFER_DIR` (file transfers, default `backups/endpoint-transfer`), `EA_BINARY_MAX_BYTES`, `EA_ALLOW_NON_WINDOWS` (the Linux test agent, never production), `RMM_STATE_DIR`.
 * **nginx / PHP-FPM.** `client_max_body_size` at least 1m for `/api/v1/agent_checkin`; PHP-FPM must pass `HTTPS` (or the proxy sets `X-Forwarded-Proto: https`). The live nginx rules are not changed by this module.
@@ -308,7 +322,7 @@ Tests: `tests/rmm_ui_p16_mesh_push.php` (the Remote tab controls, the handler, t
 
 ## 7. Not verified
 
-A real MeshCentral server (only Core's mock and our local TLS stand-in; this includes the optional Mesh agent install of 6e), the Windows agent and installer on a Windows host (including the MSI installer of 6g and the pushed Mesh install on Windows) and the Windows scripts of the starter pack (6f), and a production-sized fleet (see Core's `docs/rmm/CAPACITY.md`).
+A real MeshCentral server (only Core's mock and our local TLS stand-in; this includes the optional Mesh agent install of 6e), the Windows agent and installer on a Windows host (including the MSI installer of 6g and the pushed Mesh install on Windows) and the Windows scripts of the starter pack (6f), and a production-sized fleet (see Core's `docs/rmm/CAPACITY.md`). The per-OS self-update of RivetCore rc.30 (section 5): only fixture PE/ELF files over loopback HTTP; no real Linux, Proxmox or Hyper-V host has taken a Linux self-update from this edition, and no rc.30 agent (the one that sends `os=`) has been run against it.
 
 ## 6k. Create installer entry and the Remote access (MeshCentral) setup wizard (26.10.30, no DB change)
 

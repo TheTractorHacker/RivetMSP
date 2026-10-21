@@ -1501,8 +1501,9 @@ CREATE TABLE `endpoint_agent_binaries` (
   `active` tinyint(1) NOT NULL DEFAULT 1,
   `is_current` tinyint(1) NOT NULL DEFAULT 0,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `os` varchar(10) NOT NULL DEFAULT 'windows',
   PRIMARY KEY (`binary_id`),
-  UNIQUE KEY `uniq_version_arch` (`version`,`arch`)
+  UNIQUE KEY `uniq_version_arch_os` (`version`,`arch`,`os`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `endpoint_agent_change_records`;
@@ -1642,6 +1643,7 @@ CREATE TABLE `endpoint_agent_devices` (
   `os` varchar(20) NOT NULL DEFAULT 'windows',
   `os_version` varchar(200) NOT NULL DEFAULT '',
   `arch` varchar(10) NOT NULL DEFAULT '',
+  `detected_type` varchar(20) DEFAULT NULL,
   `serial` varchar(100) DEFAULT NULL,
   `manufacturer` varchar(200) DEFAULT NULL,
   `model` varchar(200) DEFAULT NULL,
@@ -1813,6 +1815,7 @@ DROP TABLE IF EXISTS `endpoint_agent_installer_options`;
 CREATE TABLE `endpoint_agent_installer_options` (
   `token_id` int(11) NOT NULL,
   `install_mesh_agent` tinyint(1) NOT NULL DEFAULT 0,
+  `device_type` varchar(20) NOT NULL DEFAULT 'auto',
   `created_at` datetime NOT NULL,
   PRIMARY KEY (`token_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -1850,6 +1853,32 @@ CREATE TABLE `endpoint_agent_jobs` (
   PRIMARY KEY (`job_id`),
   KEY `idx_device_state` (`device_id`,`state`),
   KEY `idx_state_updated` (`state`,`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `endpoint_agent_linux_files`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `endpoint_agent_linux_files` (
+  `file_id` int(11) NOT NULL AUTO_INCREMENT,
+  `version` varchar(40) NOT NULL,
+  `name` varchar(60) NOT NULL,
+  `kind` varchar(10) NOT NULL,
+  `arch` varchar(10) NOT NULL DEFAULT '',
+  `storage_name` char(32) NOT NULL,
+  `size_bytes` bigint(20) NOT NULL DEFAULT 0,
+  `sha256` char(64) NOT NULL,
+  `source` varchar(12) NOT NULL DEFAULT 'upload',
+  `uploaded_by` int(11) NOT NULL DEFAULT 0,
+  `release_ring` varchar(10) DEFAULT NULL,
+  `rollout_pct` tinyint(4) NOT NULL DEFAULT 100,
+  `notes` varchar(300) NOT NULL DEFAULT '',
+  `active` tinyint(1) NOT NULL DEFAULT 1,
+  `is_current` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`file_id`),
+  UNIQUE KEY `uniq_version_name` (`version`,`name`),
+  UNIQUE KEY `uniq_storage` (`storage_name`),
+  KEY `idx_current` (`name`,`is_current`,`active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `endpoint_agent_log_events`;
@@ -1993,8 +2022,9 @@ CREATE TABLE `endpoint_agent_releases` (
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `arch` varchar(10) NOT NULL DEFAULT '',
   `binary_id` int(11) DEFAULT NULL,
+  `os` varchar(10) NOT NULL DEFAULT 'windows',
   PRIMARY KEY (`release_id`),
-  UNIQUE KEY `uniq_version_ring_arch` (`version`,`ring`,`arch`)
+  UNIQUE KEY `uniq_version_ring_arch_os` (`version`,`ring`,`arch`,`os`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `endpoint_agent_remote_settings`;
@@ -3634,6 +3664,31 @@ CREATE TABLE `rmm_deploy_state` (
   KEY `idx_evaluated` (`evaluated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_device_apps`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_device_apps` (
+  `device_id` int(11) NOT NULL,
+  `package_id` int(11) NOT NULL,
+  `client_id` int(11) NOT NULL DEFAULT 0,
+  `source` varchar(8) NOT NULL DEFAULT 'auto',
+  `token_id` int(11) DEFAULT NULL,
+  `selected_by` int(11) DEFAULT NULL,
+  `install_order` int(11) NOT NULL DEFAULT 100,
+  `required` tinyint(1) NOT NULL DEFAULT 0,
+  `status` varchar(10) NOT NULL DEFAULT 'queued',
+  `reason` varchar(200) NOT NULL DEFAULT '',
+  `version_id` int(11) DEFAULT NULL,
+  `job_id` char(36) DEFAULT NULL,
+  `attempts` int(11) NOT NULL DEFAULT 0,
+  `planned_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`device_id`,`package_id`),
+  KEY `idx_open` (`status`,`device_id`),
+  KEY `idx_package` (`package_id`,`status`),
+  KEY `idx_job` (`job_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `rmm_device_checkset`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -3772,6 +3827,144 @@ CREATE TABLE `rmm_groups` (
   UNIQUE KEY `uniq_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_hosted_files`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_hosted_files` (
+  `file_id` int(11) NOT NULL AUTO_INCREMENT,
+  `filename` varchar(100) NOT NULL DEFAULT '',
+  `storage_name` char(36) NOT NULL,
+  `sha256` char(64) NOT NULL,
+  `size_bytes` bigint(20) NOT NULL,
+  `uploaded_by` int(11) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`file_id`),
+  UNIQUE KEY `uniq_storage` (`storage_name`),
+  KEY `idx_sha` (`sha256`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_hosted_grants`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_hosted_grants` (
+  `job_id` char(36) NOT NULL,
+  `file_id` int(11) NOT NULL,
+  `secret_hash` char(64) NOT NULL,
+  `expires_at` datetime NOT NULL,
+  PRIMARY KEY (`job_id`),
+  KEY `idx_expires` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_hypervisor_hosts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_hypervisor_hosts` (
+  `device_id` int(11) NOT NULL,
+  `platform` varchar(12) NOT NULL,
+  `version` varchar(60) NOT NULL DEFAULT '',
+  `cluster_name` varchar(100) NOT NULL DEFAULT '',
+  `quorate` tinyint(4) DEFAULT NULL,
+  `cluster_nodes_json` text DEFAULT NULL,
+  `failed_groups` int(11) NOT NULL DEFAULT 0,
+  `vm_count` int(11) NOT NULL DEFAULT 0,
+  `truncated` tinyint(4) NOT NULL DEFAULT 0,
+  `cfg_version` varchar(16) NOT NULL DEFAULT '',
+  `last_collected_at` datetime DEFAULT NULL,
+  `last_full_at` datetime DEFAULT NULL,
+  `last_report_at` datetime DEFAULT NULL,
+  `error` varchar(300) NOT NULL DEFAULT '',
+  `ignored` tinyint(4) NOT NULL DEFAULT 0,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`device_id`),
+  KEY `idx_platform` (`platform`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_hypervisor_storage`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_hypervisor_storage` (
+  `device_id` int(11) NOT NULL,
+  `name` varchar(48) NOT NULL,
+  `type` varchar(24) NOT NULL DEFAULT '',
+  `total_bytes` bigint(20) NOT NULL DEFAULT 0,
+  `used_bytes` bigint(20) NOT NULL DEFAULT 0,
+  `health` varchar(8) NOT NULL DEFAULT 'unknown',
+  `shared` tinyint(4) NOT NULL DEFAULT 0,
+  `last_seen_at` datetime NOT NULL,
+  `missing_since` datetime DEFAULT NULL,
+  PRIMARY KEY (`device_id`,`name`),
+  KEY `idx_missing` (`missing_since`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_hypervisor_vm_history`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_hypervisor_vm_history` (
+  `history_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `vm_id` bigint(20) NOT NULL,
+  `device_id` int(11) NOT NULL,
+  `at` datetime NOT NULL,
+  `from_state` varchar(14) NOT NULL DEFAULT '',
+  `to_state` varchar(14) NOT NULL DEFAULT '',
+  PRIMARY KEY (`history_id`),
+  KEY `idx_vm` (`vm_id`,`history_id`),
+  KEY `idx_device` (`device_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_hypervisor_vms`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_hypervisor_vms` (
+  `vm_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `device_id` int(11) NOT NULL,
+  `vm_key` varchar(64) NOT NULL,
+  `name` varchar(100) NOT NULL DEFAULT '',
+  `type` varchar(8) NOT NULL DEFAULT '',
+  `state` varchar(14) NOT NULL DEFAULT 'unknown',
+  `state_changed_at` datetime DEFAULT NULL,
+  `node` varchar(64) NOT NULL DEFAULT '',
+  `cpus` int(11) NOT NULL DEFAULT 0,
+  `cpu_pct` decimal(4,1) DEFAULT NULL,
+  `mem_bytes` bigint(20) DEFAULT NULL,
+  `mem_max_bytes` bigint(20) DEFAULT NULL,
+  `disk_bytes` bigint(20) DEFAULT NULL,
+  `disk_used_bytes` bigint(20) DEFAULT NULL,
+  `uptime_s` bigint(20) DEFAULT NULL,
+  `template` tinyint(4) NOT NULL DEFAULT 0,
+  `tags` varchar(300) NOT NULL DEFAULT '',
+  `snapshot_count` int(11) DEFAULT NULL,
+  `oldest_snapshot_at` datetime DEFAULT NULL,
+  `last_backup_at` datetime DEFAULT NULL,
+  `last_backup_result` varchar(8) DEFAULT NULL,
+  `backup_covered` tinyint(4) DEFAULT NULL,
+  `guest_agent` tinyint(4) DEFAULT NULL,
+  `replication` varchar(10) NOT NULL DEFAULT '',
+  `ignored` tinyint(4) NOT NULL DEFAULT 0,
+  `ignored_reason` varchar(200) NOT NULL DEFAULT '',
+  `ignored_by` int(11) NOT NULL DEFAULT 0,
+  `ignored_at` datetime DEFAULT NULL,
+  `first_seen_at` datetime NOT NULL,
+  `last_seen_at` datetime NOT NULL,
+  `missing_since` datetime DEFAULT NULL,
+  PRIMARY KEY (`vm_id`),
+  UNIQUE KEY `uq_device_vm` (`device_id`,`vm_key`),
+  KEY `idx_name` (`name`),
+  KEY `idx_state` (`state`),
+  KEY `idx_missing` (`missing_since`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_installer_apps`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_installer_apps` (
+  `token_id` int(11) NOT NULL,
+  `package_id` int(11) NOT NULL,
+  `selected_by` int(11) NOT NULL DEFAULT 0,
+  `selected_at` datetime NOT NULL,
+  PRIMARY KEY (`token_id`,`package_id`),
+  KEY `idx_package` (`package_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `rmm_integrations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -3842,6 +4035,22 @@ CREATE TABLE `rmm_maintenance_windows` (
   PRIMARY KEY (`window_id`),
   KEY `idx_enabled` (`enabled`),
   KEY `idx_scope` (`scope_type`,`scope_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_mesh_after_approval`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_mesh_after_approval` (
+  `device_id` int(11) NOT NULL,
+  `token_id` int(11) NOT NULL,
+  `state` varchar(12) NOT NULL DEFAULT 'waiting',
+  `reason` varchar(240) NOT NULL DEFAULT '',
+  `job_id` varchar(36) DEFAULT NULL,
+  `attempts` int(11) NOT NULL DEFAULT 0,
+  `planned_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`device_id`),
+  KEY `state` (`state`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `rmm_metric_daily`;
@@ -3926,6 +4135,32 @@ CREATE TABLE `rmm_package_assignments` (
   KEY `idx_scope` (`scope_type`,`scope_id`,`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_package_auto`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_package_auto` (
+  `package_id` int(11) NOT NULL,
+  `scope` varchar(8) NOT NULL DEFAULT 'off',
+  `os_filter` varchar(8) NOT NULL DEFAULT '',
+  `install_order` int(11) NOT NULL DEFAULT 100,
+  `required` tinyint(1) NOT NULL DEFAULT 0,
+  `set_by` int(11) NOT NULL DEFAULT 0,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`package_id`),
+  KEY `idx_scope` (`scope`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_package_auto_clients`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_package_auto_clients` (
+  `package_id` int(11) NOT NULL,
+  `client_id` int(11) NOT NULL,
+  `location_id` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`package_id`,`client_id`,`location_id`),
+  KEY `idx_client` (`client_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `rmm_package_history`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -4005,6 +4240,20 @@ CREATE TABLE `rmm_package_jobs` (
   UNIQUE KEY `uniq_idem` (`idem_key`),
   KEY `idx_device_type` (`device_id`,`type`,`applied_at`),
   KEY `idx_applied` (`applied_at`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_package_params`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_package_params` (
+  `package_id` int(11) NOT NULL,
+  `scope_type` varchar(8) NOT NULL,
+  `scope_id` int(11) NOT NULL DEFAULT 0,
+  `name` varchar(30) NOT NULL,
+  `value_enc` text NOT NULL,
+  `set_by` int(11) NOT NULL DEFAULT 0,
+  `set_at` datetime NOT NULL,
+  PRIMARY KEY (`package_id`,`scope_type`,`scope_id`,`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `rmm_package_versions`;
@@ -4519,6 +4768,16 @@ CREATE TABLE `rmm_token_buckets` (
   `tokens` double NOT NULL DEFAULT 0,
   `refilled_ms` bigint(20) NOT NULL DEFAULT 0,
   PRIMARY KEY (`bucket_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_version_hosted`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_version_hosted` (
+  `version_id` int(11) NOT NULL,
+  `file_id` int(11) NOT NULL,
+  PRIMARY KEY (`version_id`),
+  KEY `idx_file` (`file_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `security_settings`;
@@ -6071,6 +6330,11 @@ INSERT INTO `rivet_core_migrations` VALUES ('0029_rmm_software_deploy','2026-10-
 INSERT INTO `rivet_core_migrations` VALUES ('0030_rmm_change_monitor','2026-10-20 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0031_rmm_clock_skew','2026-10-20 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0032_rmm_check_set','2026-10-20 00:00:00');
+INSERT INTO `rivet_core_migrations` VALUES ('0033_rmm_auto_install','2026-10-20 00:00:00');
+INSERT INTO `rivet_core_migrations` VALUES ('0034_rmm_mesh_after_approval','2026-10-20 00:00:00');
+INSERT INTO `rivet_core_migrations` VALUES ('0035_rmm_device_type','2026-10-20 00:00:00');
+INSERT INTO `rivet_core_migrations` VALUES ('0036_rmm_hypervisors','2026-10-20 00:00:00');
+INSERT INTO `rivet_core_migrations` VALUES ('0037_rmm_agent_os','2026-10-21 00:00:00');
 INSERT INTO `rmm_patch_rings` VALUES (1,'pilot',0,10,'Try updates first, on a few machines');
 INSERT INTO `rmm_patch_rings` VALUES (2,'broad',7,20,'Most machines: a week after the pilot');
 INSERT INTO `rmm_patch_rings` VALUES (3,'last',14,30,'Sensitive machines: two weeks after the pilot');

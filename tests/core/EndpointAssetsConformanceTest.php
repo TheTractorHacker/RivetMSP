@@ -41,6 +41,22 @@ final class EndpointAssetsConformanceTest extends RmmAssetsConformanceTestCase
         ];
     }
 
+    /** rc.29 device type: RivetMSP's real asset type names (no "Hypervisor"), so the conformance kit checks the real fallback chain. */
+    protected function supportedTypes(): array
+    {
+        return \RivetMSP\Core\Adapter\Endpoint\EndpointAssets::assetTypeNames();
+    }
+
+    /** rc.29 device type: fillBlanks() only fills a blank asset_type - '' is a valid (if unusual) stored value here to exercise that. */
+    protected function createAssetWithType(array $asset, string $type): int
+    {
+        return (int) EndpointKit::db()->execute(
+            "INSERT INTO assets SET asset_type = ?, asset_name = ?, asset_make = ?, asset_model = ?, asset_serial = ?, asset_os = ?, asset_status = 'Active',
+             asset_client_id = ?, asset_archived_at = ?, asset_created_at = NOW()",
+            [$type, $asset['name'], $asset['make'], $asset['model'], $asset['serial'], $asset['os'], $asset['client_id'], $asset['archived'] ? '2026-01-01 00:00:00' : null]
+        )->insertId;
+    }
+
     /** The optional RmmAssetNamesInterface (RivetCore 1.0.0-rc.5): one batched lookup, unknown ids absent, duplicates and junk ids tolerated. */
     public function testAssetNamesBatchLookup(): void
     {

@@ -7391,3 +7391,62 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.102'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.102') {
+        // DB 2.6.103: RivetCore 1.0.0-rc.29, one edition step for all four pending Core migrations (the runner applies whichever of these are not yet
+        // recorded; re-running is harmless). 0033 install apps with the agent (EIGHT new tables, rmm_package_auto, rmm_package_auto_clients,
+        // rmm_package_params, rmm_installer_apps, rmm_device_apps, rmm_hosted_files, rmm_version_hosted, rmm_hosted_grants). 0034 Mesh agent after approval
+        // (ONE new table, rmm_mesh_after_approval). 0035 device type (TWO additive columns: endpoint_agent_installer_options.device_type 'auto' by
+        // default, endpoint_agent_devices.detected_type nullable). 0036 hypervisors (FOUR new tables, rmm_hypervisor_hosts, rmm_hypervisor_vms,
+        // rmm_hypervisor_storage, rmm_hypervisor_vm_history). Every statement is CREATE TABLE IF NOT EXISTS / guarded ADD COLUMN, no row inserted, nothing
+        // existing altered. Core owns the DDL, so this step runs the Core runner (it skips applied ids). Nothing is switched on: auto-install only plans
+        // work when software_deploy is on and a package is marked for auto-install; Mesh-after-approval only plans work when an installer's tick-box was
+        // used; device type defaults to 'auto'/NULL (unchanged behaviour); the hypervisor collector is off until its switch is on for a device. All four
+        // stay empty and cost nothing otherwise.
+        // RivetCore 1.0.0-rc.30 adds 0037 (agent OS) to the same step, as Core's adoption notes ask (the step number does not change): `os` varchar(10) NOT NULL
+        // DEFAULT 'windows' on endpoint_agent_binaries and endpoint_agent_releases, and their unique keys widened to (version, arch, os) / (version, ring, arch, os)
+        // (new key added before the old one is dropped; every statement guarded). Every row already there is a Windows binary or release, which is the default, so
+        // nothing is backfilled. The guard names 0037 so a package without it does not advance the version past this step.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Rmm\Migration\Migration0037AgentOs::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.103'");
+        }
+    }
+
+    if ($rivetit_db_version() == '2.6.103') {
+        // DB 2.6.104: hosted Linux agent files (edition-level, ported from RivetIT's own Linux-hosting work). One new table (CREATE TABLE IF NOT EXISTS, nothing existing is
+        // touched): the Linux agent binaries (amd64/arm64), install-linux.sh and the optional tarballs this server hosts for the Add device Linux install command. The bytes
+        // live outside the web root (includes/rmm_linux_store.php); the table holds the random storage name, version, SHA-256, size, who stored it, the ring/rollout and which
+        // file is current. Empty and unused until a Linux build is published (local build, GitHub Publish, or a manual upload on the Agent binaries card).
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `endpoint_agent_linux_files` (
+          `file_id` int(11) NOT NULL AUTO_INCREMENT,
+          `version` varchar(40) NOT NULL,
+          `name` varchar(60) NOT NULL,
+          `kind` varchar(10) NOT NULL,
+          `arch` varchar(10) NOT NULL DEFAULT '',
+          `storage_name` char(32) NOT NULL,
+          `size_bytes` bigint(20) NOT NULL DEFAULT 0,
+          `sha256` char(64) NOT NULL,
+          `source` varchar(12) NOT NULL DEFAULT 'upload',
+          `uploaded_by` int(11) NOT NULL DEFAULT 0,
+          `release_ring` varchar(10) DEFAULT NULL,
+          `rollout_pct` tinyint(4) NOT NULL DEFAULT 100,
+          `notes` varchar(300) NOT NULL DEFAULT '',
+          `active` tinyint(1) NOT NULL DEFAULT 1,
+          `is_current` tinyint(1) NOT NULL DEFAULT 0,
+          `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          PRIMARY KEY (`file_id`),
+          UNIQUE KEY `uniq_version_name` (`version`,`name`),
+          UNIQUE KEY `uniq_storage` (`storage_name`),
+          KEY `idx_current` (`name`,`is_current`,`active`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        $lf_res = mysqli_query($mysqli, "SHOW TABLES LIKE 'endpoint_agent_linux_files'");
+        if ($lf_res && mysqli_num_rows($lf_res) > 0) {
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.104'");
+        }
+    }

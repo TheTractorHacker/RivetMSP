@@ -15,6 +15,7 @@
  */
 
 require_once __DIR__ . '/rmm_automation.php';
+require_once __DIR__ . '/rmm_policy_pack_ui.php';   // rc.27: the policy starter pack's "Starter" badge ([pp|...] marker)
 
 use RivetCore\Rmm\Authz\RmmAbility;
 
@@ -863,7 +864,9 @@ function rivetRmmPatchPoliciesPage(array $vm, array $ctx): string
         $words[] = rivetRmmPatchSet($s, 'install_enabled') === '1' ? 'installs by itself' : '';
         $words[] = rivetRmmPatchSet($s, 'reboot_policy') !== '' ? 'restart: ' . str_replace('_', ' ', rivetRmmPatchSet($s, 'reboot_policy')) : '';
         $words[] = rivetRmmPatchSet($s, 'two_person') === '1' ? 'two people' : '';
-        $rows .= '<tr><td class="ps-3"><div class="fw-semibold">' . rmmH($p['name']) . '</div>' . ((string) $p['description'] !== '' ? '<div class="small text-muted">' . rmmH($p['description']) . '</div>' : '') . '</td><td>' . (!empty($p['enabled']) ? rivetRmmUiPill('ok', 'On') : rivetRmmUiPill('off', 'Off'))
+        $ppMarked = rivetRmmPolicyPackMarked((string) $p['description']);
+        $ppDesc = $ppMarked ? rivetRmmPolicyPackStrip((string) $p['description']) : (string) $p['description'];
+        $rows .= '<tr><td class="ps-3"><div class="fw-semibold">' . rmmH($p['name']) . ($ppMarked ? ' <span class="badge text-bg-primary rmm-starter-badge"><i class="fas fa-box-open me-1" aria-hidden="true"></i>Starter</span>' : '') . '</div>' . ($ppDesc !== '' ? '<div class="small text-muted">' . rmmH($ppDesc) . '</div>' : '') . '</td><td>' . (!empty($p['enabled']) ? rivetRmmUiPill('ok', 'On') : rivetRmmUiPill('off', 'Off'))
             . '</td><td class="small">' . rmmH(implode(', ', array_filter($words)) ?: 'sets nothing') . '</td><td>' . ($as !== '' ? $as : '<span class="text-muted small">not assigned: applies nowhere</span>') . '</td><td class="text-end pe-3">'
             . ($manage ? '<a class="btn btn-sm btn-outline-secondary" href="' . $self . '?policy_id=' . $id . '">Edit</a> ' . rivetRmmAutoActionForm(RIVET_RMM_PATCH_HANDLER, 'delete_policy', ['policy_id' => $id], $csrf, $self, 'Delete', 'btn btn-sm btn-outline-danger', 'Delete this patch policy and its assignments?') : '') . '</td></tr>';
     }

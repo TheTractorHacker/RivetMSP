@@ -35,8 +35,8 @@ function rivetAgentFeedCard(array $vm, ?array $msg, array $steps, string $csrf, 
         . '<form action="post.php" method="post" class="d-inline"><input type="hidden" name="csrf_token" value="' . $h($csrf) . '">'
         . '<button type="submit" class="btn btn-sm btn-outline-primary" name="agent_feed_refresh" value="1"><i class="fas fa-sync me-1" aria-hidden="true"></i>Check for updates</button></form></div></div><div class="card-body">';
     $o .= '<p class="small text-muted">Releases of the public repository <a href="https://github.com/' . $h($vm['repo']) . '/releases" rel="noopener noreferrer" target="_blank">' . $h($vm['repo']) . '</a> whose tag starts with <code>agent-v</code>. '
-        . '<strong>Publish</strong> downloads the Windows agent (x64 and ARM64) and the MSI template, checks each file against the release\'s own <code>SHA256SUMS</code> BEFORE storing it, and stores it exactly as an upload would '
-        . '(same checks, same audit). The Linux files (install script, tarballs, .deb, .rpm) are not copied here: they are recorded as links with their SHA-256, and the <a href="/agent/rmm_add_device.php">Build installer</a> page uses them. '
+        . '<strong>Publish</strong> downloads the Windows agent (x64 and ARM64), the MSI template, <code>install-linux.sh</code> and the Linux agent (x64 and ARM64), checking each file against the release\'s own <code>SHA256SUMS</code> BEFORE storing it, and stores it exactly as an upload would '
+        . '(same checks, same audit): the Linux files are hosted on this server too, so the Add device page can hand out a one-command Linux install with nothing to unpack. A <code>.deb</code> or <code>.rpm</code> in the release is not hosted; every Linux file, hosted or not, is also recorded as a link with its SHA-256 for the <a href="/agent/rmm_add_device.php">Build installer</a> page\'s fallback commands. '
         . 'Only <code>github.com</code> and GitHub\'s release download hosts are ever contacted.</p>';
     if (isset($ctx['build'])) {
         $o .= rivetAgentBuildBox($ctx['build'], $csrf, $ctx['local'] ?? null);
@@ -82,7 +82,7 @@ function rivetAgentFeedCard(array $vm, ?array $msg, array $steps, string $csrf, 
                 $here .= '<span class="badge bg-success me-1">Linux links</span>';
             }
             foreach ($r['rings'] as $rg) {
-                $here .= '<span class="badge bg-info text-dark me-1" title="Offered to enrolled agents">' . $h($rg['ring']) . ' ' . (int) $rg['pct'] . '% ' . $h($rg['arch']) . '</span>';
+                $here .= '<span class="badge bg-info text-dark me-1" title="Offered to enrolled agents">' . $h($rg['ring']) . ' ' . (int) $rg['pct'] . '% ' . $h($rg['arch']) . (($rg['os'] ?? 'windows') !== 'windows' ? ' ' . $h($rg['os']) : '') . '</span>';
             }
             if ($here === '') {
                 $here = '<span class="text-muted small">not published here</span>';
@@ -180,7 +180,9 @@ function rivetAgentAddDevicePage(array $ins, string $csrf, ?array $rec, bool $is
         . '<button type="submit" class="btn btn-outline-primary" name="format" value="msi" data-add="download" data-add-format="msi"' . ($msiReason !== '' || $blocked ? ' disabled' : '') . '><i class="fas fa-download me-1" aria-hidden="true"></i>Download .msi</button></div></div>'
         . '<div class="col-12"><div class="border rounded p-3"><div class="fw-bold">Deployment commands</div><p class="small text-muted mb-2">The PowerShell snippet for an RMM, Intune platform script or group policy startup script (it downloads the installer with the token), and for the MSI the <code>msiexec</code> commands.</p>'
         . '<button type="button" class="btn btn-outline-primary btn-sm" data-add="commands-windows"' . ($noWin || $blocked ? ' disabled' : '') . '><i class="fas fa-terminal me-1" aria-hidden="true"></i>Create PowerShell commands</button>'
-        . '<div id="add-win-out" class="mt-3" hidden></div></div></div></div></div></div>';
+        . '<div id="add-win-out" class="mt-3" hidden></div></div></div>'
+        . '<div class="col-12" id="rmm-add-apps-windows-wrap" hidden><div class="border rounded p-3"><div class="fw-bold mb-1">Apps to install with the agent</div><div id="rmm-add-apps-windows" data-rmm-apps-list aria-live="polite"></div></div></div>'
+        . '</div></div></div>';
 
     // Linux
     $o .= '<div class="card mb-3" id="add-linux"><div class="card-header"><h4 class="card-title mb-0"><i class="fab fa-linux me-2" aria-hidden="true"></i>3. Linux</h4></div><div class="card-body">';
@@ -201,7 +203,9 @@ function rivetAgentAddDevicePage(array $ins, string $csrf, ?array $rec, bool $is
         $files .= '</tbody></table></div>';
     }
     $o .= '<button type="button" class="btn btn-primary" data-add="commands-linux"' . ($blocked ? ' disabled' : '') . '><i class="fas fa-terminal me-1" aria-hidden="true"></i>Create install commands</button>'
-        . '<div id="add-linux-out" class="mt-3" hidden></div>' . $files . '</div></div>'
+        . '<div id="add-linux-out" class="mt-3" hidden></div>' . $files
+        . '<div class="border rounded p-3 mt-3" id="rmm-add-apps-linux-wrap" hidden><div class="fw-bold mb-1">Apps to install with the agent</div><div id="rmm-add-apps-linux" data-rmm-apps-list aria-live="polite"></div></div>'
+        . '</div></div>'
         . '<div id="rmm-add-msg" class="alert d-none" role="alert"></div></form>';
 
     return $o;

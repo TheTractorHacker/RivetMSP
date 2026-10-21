@@ -1,5 +1,6 @@
 /*
- * Administration > Endpoint agent > Agent binaries: drag-and-drop upload of one or both Windows agent builds. For every chosen file the version and the
+ * Administration > Endpoint agent > Agent binaries: drag-and-drop upload of one or both Windows agent builds (or, with the platform set to Linux, the Linux agent
+ * programs for self-update; RivetCore rc.30). For every chosen file the version and the
  * architecture are read from its name (rivetit-agent-1.4.2-windows-amd64.exe, ...-x64.exe, ...-arm64.exe) and offered as editable fields; the server
  * (RivetCore BinaryStore, via RmmAdmin::uploadBinary) validates the file itself and repeats the detection when a field is empty. Server and file text
  * is written with textContent.
@@ -10,7 +11,16 @@
     var input = document.getElementById('bn_file');
     var drop = document.getElementById('bn_drop');
     var rows = document.getElementById('bn_rows');
+    var platform = document.getElementById('bn_os');   // RivetCore rc.30: windows (.exe) or linux (an ELF agent, no extension)
+    var current = document.getElementById('bn_cur');
     if (!form || !input || !drop || !rows) { return; }
+    function isLinux() { return !!platform && platform.value === 'linux'; }
+    function applyPlatform() {
+        // a Linux program has no extension, so the chooser must not filter on .exe; "Make current" only applies to the Windows binary installers are made from
+        if (isLinux()) { input.removeAttribute('accept'); } else { input.setAttribute('accept', '.exe'); }
+        if (current) { current.disabled = isLinux(); }
+    }
+    if (platform) { platform.addEventListener('change', function () { applyPlatform(); render(); }); }
 
     function detectVersion(name) {
         var m = /(?:^|[^0-9])v?(\d+\.\d+\.\d+(?:-(?:rc|alpha|beta|pre|dev)[.0-9]*)?)/i.exec(name.replace(/\.exe$/i, ''));
@@ -41,7 +51,7 @@
             var c3 = document.createElement('div'); c3.className = 'col-6 col-lg-4';
             var l3 = document.createElement('label'); l3.className = 'form-label small'; l3.setAttribute('for', 'bn_a' + i); l3.textContent = 'Architecture';
             var a = document.createElement('select'); a.className = 'form-select form-select-sm'; a.id = 'bn_a' + i; a.name = 'arch[]'; a.required = true;
-            [['', 'Choose...'], ['amd64', 'Windows x64 (amd64)'], ['arm64', 'Windows ARM64']].forEach(function (o) {
+            [['', 'Choose...'], ['amd64', 'x64 (amd64)'], ['arm64', 'ARM64 (arm64)']].forEach(function (o) {
                 var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; a.appendChild(op);
             });
             a.value = detectArch(f.name);
@@ -51,6 +61,7 @@
         });
     }
     input.addEventListener('change', render);
+    applyPlatform();
 
     ['dragenter', 'dragover'].forEach(function (ev) {
         drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('bg-body-secondary', 'border-primary'); });
@@ -62,13 +73,16 @@
         var list = e.dataTransfer && e.dataTransfer.files;
         if (!list || !list.length) { return; }
         var dt = new DataTransfer();
-        [].forEach.call(list, function (f) { if (/\.exe$/i.test(f.name)) { dt.items.add(f); } });
+        // a dropped file named like the Linux agent switches the platform to Linux (the server checks the file itself either way)
+        var linuxNamed = [].some.call(list, function (f) { return /linux/i.test(f.name) && !/\.exe$/i.test(f.name); });
+        if (platform && linuxNamed && !isLinux()) { platform.value = 'linux'; applyPlatform(); }
+        [].forEach.call(list, function (f) { if (isLinux() ? !/\.(exe|msi|sh|gz)$/i.test(f.name) : /\.exe$/i.test(f.name)) { dt.items.add(f); } });
         if (dt.files.length) { input.files = dt.files; render(); }
     });
     // Keyboard: the zone is a label for the file input, so Enter / Space on the focused input opens the chooser; make the zone itself focusable too.
     drop.tabIndex = 0;
     drop.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
     form.addEventListener('submit', function (e) {
-        if (!input.files || !input.files.length) { e.preventDefault(); drop.focus(); rows.textContent = ''; var m = document.createElement('div'); m.className = 'alert alert-warning py-2'; m.textContent = 'Choose the agent .exe to upload.'; rows.appendChild(m); }
+        if (!input.files || !input.files.length) { e.preventDefault(); drop.focus(); rows.textContent = ''; var m = document.createElement('div'); m.className = 'alert alert-warning py-2'; m.textContent = isLinux() ? 'Choose the Linux agent program to upload.' : 'Choose the agent .exe to upload.'; rows.appendChild(m); }
     });
 }());

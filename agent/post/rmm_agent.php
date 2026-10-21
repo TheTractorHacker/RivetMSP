@@ -58,7 +58,9 @@ switch ($action) {
     case 'cancel_job':
         $out($tech->cancelJob($who, $device_id, (string) ($_POST['job_id'] ?? '')));
     case 'remote':
-        $out($tech->launchRemote($who, $device_id, !empty($_POST['force']), (string) ($_SERVER['REMOTE_ADDR'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? '')));
+        // RivetCore 1.0.0-rc.27 (RMM Phase 6, "remote tools"): a trailing view argument, desktop (default)/terminal/files - launchRemote() itself refuses
+        // terminal/files without rmm.remote.manage and the remote_tools feature switch, so an unchecked client-side view is never trusted here either.
+        $out($tech->launchRemote($who, $device_id, !empty($_POST['force']), (string) ($_SERVER['REMOTE_ADDR'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), (string) ($_POST['view'] ?? 'desktop')));
     // RivetCore 1.0.0-rc.9 (RMM Phase 1): tags and the software refresh. InventoryActions authorizes each one itself (rmm.device.manage for tags, rmm.job.run_saved
     // for the refresh) with the same client scope as the REST API.
     case 'tag_add':

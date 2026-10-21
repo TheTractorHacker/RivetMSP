@@ -15,7 +15,7 @@ use RivetCore\Rmm\Technician\ActionResult;
 mysqli_report(MYSQLI_REPORT_OFF);
 
 // 26.10.32: the page is tabs. A form posts the tab it sits in (ea_tab); a plain redirect() goes back to that tab (the hash is not sent in a Referer).
-if (isset($_POST['ea_tab']) && is_string($_POST['ea_tab']) && preg_match('/^(overview|updates|checks|remote|inventory|patching|software|security)$/', $_POST['ea_tab'])) {
+if (isset($_POST['ea_tab']) && is_string($_POST['ea_tab']) && preg_match('/^(overview|updates|checks|remote|inventory|patching|software|hypervisor|security)$/', $_POST['ea_tab'])) {
     $_SERVER['HTTP_REFERER'] = 'settings_endpoint_agent.php#tab-' . $_POST['ea_tab'];
 }
 
@@ -404,6 +404,51 @@ if (isset($_POST['save_software_settings'])) {
     ea_flash_result($r, 'Software deployment settings saved.');
 }
 
+// Hypervisor visibility (RivetCore 1.0.0-rc.29, migration 0036): the `hypervisor` sub-switch (off by default), the collection intervals and retention,
+// the alert thresholds and the six per-class alert switches. RmmAdmin validates and audits both; only values that changed are written. There is no
+// live-install concept here: this feature only reads what a Proxmox VE or Hyper-V host already reports.
+if (isset($_POST['save_hypervisor_settings'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $cur = $rmm->readModel()->settingsSummary();
+    $in = [];
+    $features = $cur['features'];
+    $want = !empty($_POST['feature_hypervisor']);
+    if ($want !== !empty($features['hypervisor'])) {
+        $features['hypervisor'] = $want;
+        $in['features_json'] = $features;
+    }
+    $stored = is_string($cur['limits_json'] ?? null) && $cur['limits_json'] !== '' ? json_decode($cur['limits_json'], true) : [];
+    $stored = is_array($stored) ? $stored : [];
+    $changedLimit = false;
+    $num = static fn (string $k, int $lo, int $hi): ?int => isset($_POST[$k]) && is_string($_POST[$k]) && preg_match('/^\d{1,9}$/', trim($_POST[$k])) === 1 ? max($lo, min($hi, (int) trim($_POST[$k]))) : null;
+    $wanted = ['hypervisor_full_interval_s' => $num('hypervisor_full_interval_s', 300, 86400), 'hypervisor_summary_interval_s' => $num('hypervisor_summary_interval_s', 60, 600),
+        'hypervisor_max_vms' => $num('hypervisor_max_vms', 1, 1000), 'hypervisor_retention_days' => $num('hypervisor_retention_days', 1, 3650),
+        'hypervisor_history_per_vm' => $num('hypervisor_history_per_vm', 1, 500), 'hypervisor_snapshot_days' => $num('hypervisor_snapshot_days', 1, 365),
+        'hypervisor_backup_days' => $num('hypervisor_backup_days', 1, 365), 'hypervisor_storage_warn_pct' => $num('hypervisor_storage_warn_pct', 1, 100),
+        'hypervisor_storage_crit_pct' => $num('hypervisor_storage_crit_pct', 1, 100), 'hypervisor_vm_down_resolve_h' => $num('hypervisor_vm_down_resolve_h', 1, 720)];
+    foreach (['hypervisor_alert_vm_down', 'hypervisor_alert_backup', 'hypervisor_alert_snapshot', 'hypervisor_alert_storage', 'hypervisor_alert_pool', 'hypervisor_alert_quorum'] as $flag) {
+        $wanted[$flag] = !empty($_POST[$flag]) ? 1 : 0;
+    }
+    foreach ($wanted as $k => $v) {
+        if ($v !== null && $v !== (int) ($cur['limits'][$k] ?? -1)) {
+            $stored[$k] = $v;
+            $changedLimit = true;
+        }
+    }
+    if ($changedLimit) {
+        $in['limits_json'] = $stored;
+    }
+    if ($in === []) {
+        flash_alert('No change to save.', 'info');
+        redirect();
+    }
+    $r = $ea_admin->saveSettings($ea_who, $in);
+    if ($r->ok) {
+        logAction('RMM', 'Settings Changed', "$session_name changed the hypervisor visibility settings (" . implode(', ', array_keys($in)) . ')');
+    }
+    ea_flash_result($r, 'Hypervisor visibility settings saved.');
+}
+
 // ---------------------------------------------------------------- agent binaries and per-client installers
 
 /**
@@ -452,11 +497,13 @@ if (isset($_POST['upload_agent_binary'])) {
     $files = ea_uploaded_binaries();
     $limit = $rmm->binaryStore()->effectiveUploadLimit();
     if ($files === []) {
-        flash_alert('Choose the agent .exe to upload.', 'error');
+        flash_alert('Choose the agent program to upload.', 'error');
         redirect();
     }
     $ring = (string) ($_POST['release_ring'] ?? '');
-    $opts = ['activate' => isset($_POST['activate']), 'release_ring' => in_array($ring, ['pilot', 'stable'], true) ? $ring : null, 'rollout_pct' => ea_post_int('rollout_pct', 0, 100, 10)];
+    // RivetCore rc.30: the platform the files are for, windows (a PE .exe, the default) or linux (an ELF agent for self-update); Core checks the file matches it.
+    $os = ($_POST['os'] ?? 'windows') === 'linux' ? 'linux' : 'windows';
+    $opts = ['activate' => $os === 'windows' && isset($_POST['activate']), 'release_ring' => in_array($ring, ['pilot', 'stable'], true) ? $ring : null, 'rollout_pct' => ea_post_int('rollout_pct', 0, 100, 10), 'os' => $os];
     // version[] / arch[] are positional with the files (the form's rows); a single version / arch field (an older form, a script) applies to its one file.
     $versions = isset($_POST['version']) ? array_values((array) $_POST['version']) : [];
     $arches = isset($_POST['arch']) ? array_values((array) $_POST['arch']) : [];
@@ -522,6 +569,98 @@ if (isset($_POST['upload_msi_template'])) {
 if (isset($_POST['msi_template_action'])) {
     validateCSRFToken($_POST['csrf_token']);
     ea_flash_result($ea_admin->msiTemplateAction($ea_who, intval($_POST['template_id'] ?? 0), (string) $_POST['msi_template_action']));
+}
+
+/**
+ * Hosted Linux files (ported from RivetIT): upload install-linux.sh / the Linux agent / the tarballs by hand, make one current, delete one that is not
+ * current. Same ability as publishing a Windows binary (rmm.binary.publish, RmmAbility::BINARY_PUBLISH) — no new ability is added. LinuxStore::store() does
+ * not authorize or audit itself (it is a raw storage primitive shared with the build host and GitHub-Publish paths), so both are done here.
+ */
+if (isset($_POST['upload_linux_files']) || isset($_POST['linux_file_action'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    require_once dirname(__DIR__, 2) . '/includes/rmm_linux_store.php';
+    $lxDenied = $rmm->authorizer()->check((int) $session_user_id, \RivetCore\Rmm\Authz\RmmAbility::BINARY_PUBLISH, 0, false);
+    if ($lxDenied !== null) {
+        flash_alert(nullable_htmlentities($lxDenied), 'error');
+        redirect();
+    }
+    if (isset($_POST['linux_file_action'])) {
+        $lxId = intval($_POST['file_id'] ?? 0);
+        $lxRow = mysqli_fetch_assoc(mysqli_query($mysqli, 'SELECT * FROM endpoint_agent_linux_files WHERE file_id = ' . $lxId));
+        $lxAction = (string) $_POST['linux_file_action'];
+        if (!$lxRow || !in_array($lxAction, ['make_current', 'delete', 'add_to_core'], true)) {
+            flash_alert('That file is not stored.', 'error');
+            redirect();
+        }
+        if ($lxAction === 'add_to_core') {
+            // RivetCore rc.30: a Linux agent program hosted before this release (or one whose Core copy failed) is published into Core's agent binaries with
+            // os=linux, not offered yet: the Agent binaries card then offers it to a ring like any other binary. uploadBinary() authorizes, validates and audits.
+            $lxPath = \RivetMsp\AgentFeed\LinuxStore::path($lxRow);
+            $lxCore = $lxPath !== null && is_file($lxPath) && hash_equals((string) $lxRow['sha256'], (string) hash_file('sha256', $lxPath))
+                ? \RivetMsp\AgentFeed\LinuxStore::publishToCore($ea_admin, $ea_who, $lxPath, (string) $lxRow['name'], (string) $lxRow['version'])
+                : ['ok' => false, 'message' => 'The hosted file is missing or no longer matches its recorded SHA-256.'];
+            if ($lxCore === null) {
+                flash_alert('Only the Linux agent programs are agent updates; install-linux.sh and the tarballs are used for installing.', 'error');
+            } else {
+                flash_alert(nullable_htmlentities($lxCore['ok'] ? $lxCore['message'] . ' Offer it to a ring under Agent binaries.' : $lxCore['message']), $lxCore['ok'] ? 'success' : 'error');
+            }
+        } elseif ($lxAction === 'make_current') {
+            $lxOk = \RivetMsp\AgentFeed\LinuxStore::setCurrent($mysqli, $lxId);
+            if ($lxOk) {
+                logAction('Endpoint Agent', 'Linux File Made Current', "$session_name made {$lxRow['name']} {$lxRow['version']} the current hosted Linux file");
+            }
+            flash_alert($lxOk ? nullable_htmlentities($lxRow['name'] . ' ' . $lxRow['version'] . ' is now the current one.') : 'That file cannot be made current.', $lxOk ? 'success' : 'error');
+        } else {
+            $lxErr = \RivetMsp\AgentFeed\LinuxStore::delete($mysqli, $lxId);
+            if ($lxErr === null) {
+                logAction('Endpoint Agent', 'Linux File Deleted', "$session_name deleted hosted {$lxRow['name']} {$lxRow['version']}");
+            }
+            flash_alert($lxErr === null ? 'The file was deleted.' : nullable_htmlentities($lxErr), $lxErr === null ? 'success' : 'error');
+        }
+        redirect();
+    }
+    $lxUp = $_FILES['linux_files'] ?? null;
+    $lxFiles = [];
+    if (is_array($lxUp) && is_array($lxUp['name'] ?? null)) {
+        foreach (array_keys($lxUp['name']) as $i) {
+            $lxFiles[] = ['name' => basename((string) $lxUp['name'][$i]), 'tmp' => (string) $lxUp['tmp_name'][$i], 'error' => (int) $lxUp['error'][$i]];
+        }
+    }
+    $lxFiles = array_slice(array_values(array_filter($lxFiles, static fn (array $f): bool => $f['error'] !== UPLOAD_ERR_NO_FILE)), 0, 5);
+    $lxVersion = trim((string) ($_POST['version'] ?? ''));
+    $lxRing = (string) ($_POST['release_ring'] ?? '');
+    if ($lxFiles === [] || preg_match(\RivetMsp\AgentFeed\LinuxStore::VERSION_RE, $lxVersion) !== 1) {
+        flash_alert($lxFiles === [] ? 'Choose the Linux file(s) to upload.' : 'Type the version, for example 1.2.0.', 'error');
+        redirect();
+    }
+    $lxDone = [];
+    $lxFailed = [];
+    foreach ($lxFiles as $f) {
+        if ($f['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($f['tmp'])) {
+            $lxFailed[] = $f['name'] . ': the upload failed or is larger than the PHP limit (upload_max_filesize ' . ini_get('upload_max_filesize') . ', post_max_size ' . ini_get('post_max_size') . ')';
+            continue;
+        }
+        $lr = \RivetMsp\AgentFeed\LinuxStore::store($mysqli, $f['tmp'], $f['name'], $lxVersion, (int) $session_user_id, ['activate' => isset($_POST['activate']), 'ring' => in_array($lxRing, ['pilot', 'stable'], true) ? $lxRing : null,
+            'pct' => ea_post_int('rollout_pct', 0, 100, 10), 'source' => 'upload', 'notes' => 'Uploaded by ' . $session_name]);
+        if ($lr['ok']) {
+            $lxDone[] = $f['name'];
+            logAction('Endpoint Agent', 'Linux File Uploaded', "$session_name uploaded {$f['name']} $lxVersion (sha256 {$lr['sha256']}, {$lr['size']} bytes)" . ($lr['current'] ? ', now current' : ''));
+            // RivetCore rc.30: an agent program is also published into Core with os=linux (self-update for enrolled Linux devices), offered to the ring chosen here.
+            $lxCore = \RivetMsp\AgentFeed\LinuxStore::publishToCore($ea_admin, $ea_who, $f['tmp'], $f['name'], $lxVersion, in_array($lxRing, ['pilot', 'stable'], true) ? $lxRing : null, ea_post_int('rollout_pct', 0, 100, 10));
+            if ($lxCore !== null && !$lxCore['ok']) {
+                $lxFailed[] = $f['name'] . ' is hosted for installing, but not available as a Linux self-update: ' . $lxCore['message'];
+            }
+        } else {
+            $lxFailed[] = (string) $lr['error'];
+        }
+    }
+    if ($lxDone !== []) {
+        flash_alert(nullable_htmlentities('Hosted on this server: ' . implode(', ', $lxDone) . '.'), 'success');
+    }
+    if ($lxFailed !== []) {
+        flash_alert(nullable_htmlentities('Not stored: ' . implode(' | ', $lxFailed)), 'error');
+    }
+    redirect();
 }
 
 if (isset($_POST['download_installer']) || isset($_POST['show_deploy_commands'])) {
@@ -611,7 +750,8 @@ if (isset($_POST['device_action'])) {
 if (isset($_POST['add_agent_release'])) {
     validateCSRFToken($_POST['csrf_token']);
     ea_flash_result($ea_admin->addExternalRelease($ea_who, trim((string) ($_POST['version'] ?? '')), trim((string) ($_POST['url'] ?? '')), trim((string) ($_POST['sha256'] ?? '')),
-        trim((string) ($_POST['min_version'] ?? '0.0.0')) ?: '0.0.0', (string) ($_POST['ring'] ?? 'stable'), ea_post_int('rollout_pct', 0, 100, 0), trim((string) ($_POST['notes'] ?? ''))));
+        trim((string) ($_POST['min_version'] ?? '0.0.0')) ?: '0.0.0', (string) ($_POST['ring'] ?? 'stable'), ea_post_int('rollout_pct', 0, 100, 0), trim((string) ($_POST['notes'] ?? '')),
+        ($_POST['os'] ?? 'windows') === 'linux' ? 'linux' : 'windows'));   // RivetCore rc.30: the platform the package is for (Core refuses anything but windows/linux)
 }
 
 if (isset($_POST['update_agent_release'])) {

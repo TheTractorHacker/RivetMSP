@@ -258,8 +258,17 @@ function rivetRmmSoftwarePanelSection(array $vm, \mysqli $mysqli, string $csrf):
         return '';
     }
     $pv['csrf'] = $csrf;
+    // rc.27: "Apps installed with the agent" (migration 0033, includes/rmm_auto_install_ui.php) - additive, '' while nothing is planned for this device.
+    $autoHtml = '';
+    try {
+        require_once __DIR__ . '/rmm_bootstrap.php';
+        require_once __DIR__ . '/rmm_auto_install_ui.php';
+        $autoHtml = rivetRmmAutoInstallDeviceSection(rivetRmmModule($mysqli), rivetRmmPrincipal((int) $vm['user_id'], (string) ($GLOBALS['session_name'] ?? '')), (int) $pv['device_id']);
+    } catch (\Throwable $e) {
+        error_log('rmm_auto_install device section: ' . get_class($e));
+    }
 
-    return rivetRmmSoftwarePanelHtml($pv) . rivetRmmAutoScriptsOn();   // (the asset page adds the in-page confirmation dialog once, in rivetRmmUiTabs())
+    return rivetRmmSoftwarePanelHtml($pv) . $autoHtml . rivetRmmAutoScriptsOn();   // (the asset page adds the in-page confirmation dialog once, in rivetRmmUiTabs())
 }
 
 /**
@@ -449,6 +458,28 @@ function rivetRmmSoftwareCatalogPage(array $vm, array $ctx): string
         if ($manage) {
             $o .= rivetRmmSoftwareVersionForm($vm, $csrf);
         }
+        // rc.27: install-apps-with-the-agent (migration 0033, includes/rmm_auto_install_ui.php) - the auto-install scope form and the vendor
+        // parameter panel for this one package. Needs its own read (overview()) because GET software_packages/{id} (Core's DeployApi) knows
+        // nothing of auto-install; additive, never fails the page if the feature is off or the read errors.
+        if ($manage) {
+            try {
+                require_once __DIR__ . '/rmm_bootstrap.php';
+                require_once __DIR__ . '/rmm_auto_install_ui.php';
+                $iaRmm = rivetRmmModule($ctx['mysqli']);
+                $iaWho = rivetRmmPrincipal((int) $ctx['uid'], (string) $ctx['name']);
+                $iaR = rivetRmmAutoInstallResult($iaRmm->autoInstallActions()->overview($iaWho));
+                if ($iaR['ok']) {
+                    $iaPkgs = array_column((array) ($iaR['data']['packages'] ?? []), null, 'package_id');
+                    $iaPkg = $iaPkgs[(int) $vm['edit']['package_id']] ?? null;
+                    if ($iaPkg !== null) {
+                        $o .= '<div class="card mb-3"><div class="card-header"><h5 class="card-title mb-0">Install with the agent</h5></div><div class="card-body">'
+                            . rivetRmmAutoInstallScopeForm($iaPkg, $csrf) . rivetRmmAutoInstallParamsPanel($iaPkg, $csrf) . '</div></div>';
+                    }
+                }
+            } catch (\Throwable $e) {
+                error_log('rmm_auto_install catalog section: ' . get_class($e));
+            }
+        }
     }
 
     // packages
@@ -465,6 +496,18 @@ function rivetRmmSoftwareCatalogPage(array $vm, array $ctx): string
         : '<div class="table-responsive"><table class="table table-sm align-middle mb-0"><caption class="visually-hidden">Software packages</caption>' . rivetRmmUiThead(['Package', 'State', 'Second person', 'Versions in use', 'Assignments', '']) . '<tbody>' . $rows . '</tbody></table></div>', '', '', $rows !== '');
 
     $o .= rivetRmmSoftwareHostsHtml($vm, $csrf, $perm);
+
+    if ($manage) {
+        try {
+            require_once __DIR__ . '/rmm_bootstrap.php';
+            require_once __DIR__ . '/rmm_auto_install_ui.php';
+            $iaRmm = rivetRmmModule($ctx['mysqli']);
+            $iaWho = rivetRmmPrincipal((int) $ctx['uid'], (string) $ctx['name']);
+            $o .= rivetRmmAutoInstallHostedFilesCard($iaRmm, $iaWho, $csrf) . rivetRmmAutoInstallTemplatesCard($csrf);
+        } catch (\Throwable $e) {
+            error_log('rmm_auto_install catalog cards: ' . get_class($e));
+        }
+    }
 
     return $o . rivetRmmAutoConfirmModal() . rivetRmmAutoScriptsOn();
 }

@@ -19,10 +19,17 @@
 namespace RivetMsp\AgentFeed;
 
 require_once __DIR__ . '/rmm_agent_build.php';
+require_once __DIR__ . '/rmm_linux_store.php';
 
 final class LocalBuild
 {
     public const FILES = ['rivetit-agent-windows-amd64.exe' => 'amd64', 'rivetit-agent-windows-arm64.exe' => 'arm64', 'rivetit-agent-windows-amd64.msi' => 'amd64', 'SHA256SUMS' => ''];
+    /**
+     * Additive (hosted Linux agent files, ported from RivetIT): a newer build host also sends these, all optional. An older build host that never sends
+     * them does not fail the job — the Windows files above are still required and verified exactly as before. Hosted by LinuxStore (rmm_linux_store.php);
+     * never validated with BinaryInspector/MsiInspector (those are PE/MSI-specific) — LinuxStore::validate() does the ELF/script/gzip checks instead.
+     */
+    public const LINUX_FILES = ['rivetit-agent-linux-amd64', 'rivetit-agent-linux-arm64', 'install-linux.sh', 'rivetit-agent-linux-amd64.tar.gz', 'rivetit-agent-linux-arm64.tar.gz'];
     public const TARGETS = ['windows-amd64', 'windows-arm64', 'linux-amd64', 'linux-arm64'];
     public const CHUNK_MAX = 1048576;           // raw bytes of one chunk
     public const SUMS_MAX = 16384;              // SHA256SUMS
@@ -671,7 +678,8 @@ final class LocalBuild
         }
         $id = (int) $j['job_id'];
         $name = $in['name'] ?? null;
-        if (!is_string($name) || !array_key_exists($name, self::FILES)) {
+        $isLinux = is_string($name) && in_array($name, self::LINUX_FILES, true);
+        if (!is_string($name) || (!array_key_exists($name, self::FILES) && !$isLinux)) {
             return [422, ['error' => 'That file name is not on the list.', 'code' => 'bad_name']];
         }
         if (str_ends_with($name, '.msi') && (int) $j['want_msi'] !== 1) {
@@ -679,7 +687,7 @@ final class LocalBuild
         }
         $idx = $in['index'] ?? null;
         $tot = $in['total'] ?? null;
-        $cap = $name === 'SHA256SUMS' ? self::SUMS_MAX : $this->maxBytes;
+        $cap = $name === 'SHA256SUMS' ? self::SUMS_MAX : ($isLinux ? LinuxStore::maxBytes($name) : $this->maxBytes);
         $maxChunks = max(1, (int) ceil($cap / self::CHUNK_MAX));
         if (!is_int($idx) || !is_int($tot) || $tot < 1 || $tot > $maxChunks || $idx < 0 || $idx >= $tot) {
             return [422, ['error' => 'index/total are out of range.', 'code' => 'bad_chunk']];
@@ -709,7 +717,10 @@ final class LocalBuild
         $fileBytes = (int) ($this->rows('SELECT COALESCE(SUM(size_bytes), 0) AS s FROM endpoint_agent_build_chunks WHERE job_id = ? AND file_name = ?', [$id, $name])[0]['s'] ?? 0);
         $jobBytes = (int) ($this->rows('SELECT COALESCE(SUM(size_bytes), 0) AS s FROM endpoint_agent_build_chunks WHERE job_id = ?', [$id])[0]['s'] ?? 0);
         $len = strlen($raw);
-        if ($fileBytes + $len > $cap || $jobBytes + $len > self::JOB_CAP_FACTOR * $this->maxBytes + self::SUMS_MAX) {
+        // the job cap allows for the two Windows exe + the MSI (JOB_CAP_FACTOR) and, additively, the optional Linux files: two binaries, two tarballs (each up to
+        // the same per-file cap as a Windows binary) and the small install-linux.sh script.
+        $jobCap = self::JOB_CAP_FACTOR * $this->maxBytes + self::SUMS_MAX + 4 * $this->maxBytes + LinuxStore::SCRIPT_MAX;
+        if ($fileBytes + $len > $cap || $jobBytes + $len > $jobCap) {
             return [413, ['error' => 'The file or the job is larger than allowed.', 'code' => 'too_large']];
         }
         $dir = $this->jobDir($id, true);
@@ -752,7 +763,7 @@ final class LocalBuild
         }
         $files = [];
         foreach ($man['files'] as $n => $h) {
-            if (!is_string($n) || !array_key_exists($n, self::FILES) || !is_string($h) || preg_match('/^[0-9a-fA-F]{64}\z/', $h) !== 1) {
+            if (!is_string($n) || (!array_key_exists($n, self::FILES) && !in_array($n, self::LINUX_FILES, true)) || !is_string($h) || preg_match('/^[0-9a-fA-F]{64}\z/', $h) !== 1) {
                 return [422, ['error' => 'The manifest lists a file or a checksum that is not allowed.', 'code' => 'bad_manifest']];
             }
             $files[$n] = strtolower($h);
@@ -806,7 +817,9 @@ final class LocalBuild
                 return ['ok' => false, 'message' => "$n is missing from the manifest."];
             }
         }
-        if (array_diff(array_keys($manifest), $need) !== []) {
+        // the optional Linux files (self::LINUX_FILES) may also be in the manifest: not required, not reassembled or validated here (LinuxStore does that, at publish
+        // time, since a Linux-only problem must never fail the Windows build) — but if SHA256SUMS already names one, it must agree with the manifest right away.
+        if (array_diff(array_keys($manifest), [...$need, ...self::LINUX_FILES]) !== []) {
             return ['ok' => false, 'message' => 'The manifest lists a file this job did not ask for.'];
         }
         if ($dir === null || !is_dir($dir)) {
@@ -836,6 +849,13 @@ final class LocalBuild
         }
         foreach ($need as $n) {
             if ($n !== 'SHA256SUMS' && (!isset($sums[$n]) || !hash_equals($sums[$n], $manifest[$n]))) {
+                return ['ok' => false, 'message' => "SHA256SUMS does not list $n with the same checksum."];
+            }
+        }
+        // a Linux file in the manifest is not reassembled here (LinuxStore validates and stores it at publish time, so a Linux-only problem never fails the
+        // Windows build), but if SHA256SUMS already names it, the two must agree now rather than silently diverge until publish.
+        foreach (self::LINUX_FILES as $n) {
+            if (isset($manifest[$n], $sums[$n]) && !hash_equals($sums[$n], $manifest[$n])) {
                 return ['ok' => false, 'message' => "SHA256SUMS does not list $n with the same checksum."];
             }
         }
@@ -932,7 +952,7 @@ final class LocalBuild
     /**
      * Publish a verified (state built) job through the existing code. The files are re-hashed against the stored manifest first (they sat in quarantine). One winner.
      *
-     * @param callable(string,string,string,array<string,mixed>):array{ok:bool,message:string} $publisher (kind exe|msi, path, arch, job)
+     * @param callable(string,string,string,array<string,mixed>):array{ok:bool,message:string} $publisher (kind exe|msi|linux, path, arch, job)
      * @return array{ok:bool,message:string}
      */
     public function publish(int $jobId, callable $publisher): array
@@ -947,8 +967,13 @@ final class LocalBuild
         $man = json_decode((string) $j['manifest'], true);
         $dir = $this->jobDir($jobId, false);
         $paths = [];
+        $linuxPaths = [];
         foreach (is_array($man) ? (array) ($man['files'] ?? []) : [] as $n => $h) {
-            if (!is_string($n) || $n === 'SHA256SUMS' || !array_key_exists($n, self::FILES)) {
+            if (!is_string($n) || $n === 'SHA256SUMS') {
+                continue;
+            }
+            $isLinux = in_array($n, self::LINUX_FILES, true);
+            if (!array_key_exists($n, self::FILES) && !$isLinux) {
                 continue;
             }
             $r = $dir !== null ? $this->assemble($jobId, $n, $dir) : 'is gone.';
@@ -957,7 +982,29 @@ final class LocalBuild
 
                 return ['ok' => false, 'message' => "Nothing was stored: $n changed in quarantine."];
             }
-            $paths[$n] = $r[0];
+            if ($isLinux) {
+                $linuxPaths[$n] = $r[0];
+            } else {
+                $paths[$n] = $r[0];
+            }
+        }
+        // Linux files first (RivetIT's own build-host pattern): storing them again is harmless (identical bytes replay), so a retry of Publish still works, and
+        // a Linux-only problem is surfaced before anything Windows-side is touched. They stay NOT current (activate false) until the whole publish succeeds below,
+        // mirroring the Windows "make current" choice (job.activate) rather than going live on their own.
+        $lxIds = [];
+        foreach ($linuxPaths as $n => $path) {
+            $lr = LinuxStore::store($this->db, $path, $n, (string) $j['version'], (int) $j['requested_by'], [
+                'activate' => false, 'ring' => in_array($j['ring'] ?? null, ['pilot', 'stable'], true) ? $j['ring'] : null, 'pct' => (int) ($j['rollout_pct'] ?? 100),
+                'source' => 'build_host', 'notes' => 'Built on build host (job #' . $jobId . ')',
+            ]);
+            if (!$lr['ok']) {
+                $msg = (string) ($lr['error'] ?? "$n could not be stored.");
+                $this->finish($jobId, 'failed', "Nothing was stored: $msg");
+                $this->say('Agent Build Finished', 'build of agent ' . $j['version'] . " (job #$jobId): Linux file $n rejected at publish - $msg Nothing was stored.");
+
+                return ['ok' => false, 'message' => "Nothing was stored: $msg"];
+            }
+            $lxIds[] = (int) $lr['file_id'];
         }
         $problems = 0;
         $stored = 0;
@@ -967,7 +1014,30 @@ final class LocalBuild
             $msgs[] = $res['message'];
             $res['ok'] ? $stored++ : $problems++;
         }
-        $msg = $stored === 0 ? 'Nothing was stored. ' . implode(' ', $msgs) : ($problems === 0 ? 'Agent ' . $j['version'] . " published ($stored files)." : 'Agent ' . $j['version'] . " published with $problems problem(s): " . implode(' ', $msgs));
+        // RivetCore rc.30: the Linux agent PROGRAMS also go into Core's own binaries with os=linux (publisher kind 'linux'), so enrolled Linux devices are offered
+        // them as their self-update through agent_update, with the ring and rollout chosen for this build. Only once every Windows file went through (a half
+        // published build offers nothing new to Linux either); a failure here is a problem of this publish like a Windows one. install-linux.sh and the tarballs
+        // are install-time files only and stay in the hosted-files table.
+        if ($problems === 0) {
+            foreach ($linuxPaths as $n => $path) {
+                $lp = LinuxStore::parseName($n);
+                if ($lp === null || $lp['kind'] !== 'binary') {
+                    continue;
+                }
+                $res = $publisher('linux', $path, $lp['arch'], $j);
+                if (!$res['ok']) {
+                    array_unshift($msgs, $n . ' was not published as a Linux self-update: ' . $res['message']);   // first, so the capped job result still shows why
+                    $problems++;
+                }
+            }
+        }
+        if ($problems === 0 && $lxIds !== [] && (int) ($j['activate'] ?? 0) === 1) {
+            foreach ($lxIds as $lid) {
+                LinuxStore::setCurrent($this->db, $lid);
+            }
+        }
+        $lxNote = $lxIds !== [] ? ' (' . count($lxIds) . ' Linux file' . (count($lxIds) === 1 ? '' : 's') . ')' : '';
+        $msg = $stored === 0 ? 'Nothing was stored. ' . implode(' ', $msgs) : ($problems === 0 ? 'Agent ' . $j['version'] . " published ($stored files)$lxNote." : 'Agent ' . $j['version'] . " published with $problems problem(s): " . implode(' ', $msgs));
         $state = $stored > 0 && $problems === 0 ? 'published' : 'failed';
         $now = self::now();
         $this->run('UPDATE endpoint_agent_build_jobs SET state = ?, result = ?, finished_at = ?, updated_at = ? WHERE job_id = ?', [$state, self::cleanText($msg, 500), $now, $now, $jobId]);
@@ -980,7 +1050,8 @@ final class LocalBuild
 
 /**
  * The publisher for a local build: the existing ability check, then RmmAdmin::uploadBinary() / uploadMsiTemplate() (which validate again and audit) as the administrator who
- * asked for the build. Ring, rollout and "make current" are the values chosen at request time.
+ * asked for the build. Ring, rollout and "make current" are the values chosen at request time. Kind 'linux' (RivetCore rc.30) publishes a Linux agent program with
+ * os=linux for self-update; ring and rollout apply, "make current" does not.
  *
  * @return callable(string,string,string,array<string,mixed>):array{ok:bool,message:string}
  */
@@ -992,6 +1063,13 @@ function rivetLocalBuildPublisher(object $rmm, object $who, int $userId): callab
             return ['ok' => false, 'message' => 'Not published: ' . $denied];
         }
         $ring = in_array($job['ring'] ?? '', ['pilot', 'stable'], true) ? $job['ring'] : '';
+        if ($kind === 'linux') {
+            // a Linux agent program for self-update (os=linux in Core's tables); never "current" (that flag only picks the Windows binary installers are stamped from)
+            $res = $rmm->admin()->uploadBinary($who, $path, (string) $job['version'], $arch, ['os' => \RivetCore\Rmm\Support\AgentOs::LINUX, 'activate' => false,
+                'release_ring' => $ring === '' ? null : $ring, 'rollout_pct' => max(0, min(100, (int) $job['rollout_pct']))]);
+
+            return ['ok' => $res->ok, 'message' => (string) $res->message];
+        }
         $o = ['activate' => (int) ($job['activate'] ?? 0) === 1];
         $res = $kind === 'msi'
             ? $rmm->admin()->uploadMsiTemplate($who, $path, (string) $job['version'], $arch, $o)

@@ -34,9 +34,12 @@ set -euo pipefail
 umask 022
 
 # ---- pins: the RivetCore commit the files are fetched from and their SHA-256. Bump all four together (see docs/RMM_MODULE.md, "Bumping the pin"). ----
-CORE_PIN_COMMIT="9d2003165e29d98ebc1ec8c85ff451d889703b5f"
+# 2026-10-20: bumped to the commit that also knows how to upload the Linux agent files (install-linux.sh, the Linux agent binaries, the optional
+# tarballs) after the Windows files, so a build host built from this pin can populate RivetMSP's hosted Linux files too (includes/rmm_linux_store.php).
+# build-host.service and build-host.timer are unchanged since the previous pin, so their SHA-256 values stay the same.
+CORE_PIN_COMMIT="26d476ca8a429d4aafb9d962d99f369635a2f9a9"
 CORE_RAW_BASE="https://raw.githubusercontent.com/TheTractorHacker/rivet-core/${CORE_PIN_COMMIT}/endpoint-agent/scripts"
-PIN_SHA_SCRIPT="a5ac6e95e2e8e2817c2eb32254632b7c811c154f65957e775908b054f630a594"
+PIN_SHA_SCRIPT="8296f46347217f00c810158ae43a353a2b331e4ec75ba466b988c417f5871714"
 PIN_SHA_SERVICE="4d73f42d88876003ab6804b0f3ebffe6e8fb85c7e91bfd9734706eaf64b1a703"
 PIN_SHA_TIMER="6cba55037c010ffba258913b265033791c786e6fcf9880805313a3b28b7cd5ba"
 

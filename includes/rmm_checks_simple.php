@@ -46,12 +46,41 @@ final class RivetChecksSimple
     ];
 
     /**
+     * Debian and Red Hat name some of the same daemon differently. The ONE catalog entry (keyed by its Red Hat/traditional name, the SERVICES key) stands for
+     * both: ticking "SSH server" schedules a check for EACH name in the pair, every one of them with params.missing = 'ignore' (the agent's own
+     * already-shipped semantic, endpoint-agent/internal/collect/service_missing_test.go: a service that does not exist on this host reports OK instead of
+     * Fail; one that exists and is stopped still fails normally). A Debian host's `ssh` and a Red Hat host's `sshd` are the same logical check; neither
+     * distro fails the other's name just because it does not ship it.
+     */
+    public const SERVICE_ALIASES = [
+        'sshd' => 'ssh',
+        'cron' => 'crond',
+        'chronyd' => 'systemd-timesyncd',
+    ];
+
+    /**
      * The OS of a service in the choice table ('windows' or 'linux'), or null for a name the table does not know (a custom service: it keeps whatever is stored,
-     * none = both). The match is exact, like the table itself.
+     * none = both). The match is exact, like the table itself; an alias partner (self::SERVICE_ALIASES) resolves to its catalog entry's OS too.
      */
     public static function serviceOs(string $name): ?string
     {
-        return isset(self::SERVICES[$name]) ? strtolower(self::SERVICES[$name][1]) : null;
+        if (isset(self::SERVICES[$name])) {
+            return strtolower(self::SERVICES[$name][1]);
+        }
+        $primary = self::canonicalServiceName($name);
+
+        return $primary !== $name && isset(self::SERVICES[$primary]) ? strtolower(self::SERVICES[$primary][1]) : null;
+    }
+
+    /** $name itself if it is a catalog key or not part of any alias pair; its catalog (primary) name if it is the alias partner side. */
+    public static function canonicalServiceName(string $name): string
+    {
+        if (isset(self::SERVICES[$name])) {
+            return $name;
+        }
+        $primary = array_search($name, self::SERVICE_ALIASES, true);
+
+        return $primary !== false ? $primary : $name;
     }
 
     /**
@@ -205,8 +234,15 @@ final class RivetChecksSimple
                 $st['reboot'] = ['on' => true, 'key' => $key];
                 $intervals[] = $iv;
             } elseif ($type === 'service' && isset($p['name']) && is_string($p['name']) && preg_match(self::SERVICE_RE, $p['name']) === 1
-                && array_diff($keys, ['name', 'expected']) === [] && (($p['expected'] ?? 'running') === 'running') && !self::hasService($st['services'], $p['name'])) {
-                $st['services'][] = ['name' => $p['name'], 'key' => $key, 'os' => \RivetCore\Rmm\Checks\RmmChecks::osOf($c) ?? self::serviceOs($p['name']) ?? ''];
+                && array_diff($keys, ['name', 'expected', 'missing']) === [] && (($p['expected'] ?? 'running') === 'running')
+                && (!isset($p['missing']) || $p['missing'] === 'ignore')) {
+                // An alias-pair entry (params.missing = 'ignore') is shown under its catalog (primary) name - ticking "SSH server" stored both `ssh` and
+                // `sshd`, but the simple form shows one tick either way: the SECOND half of an already-represented pair is recognised (its interval still
+                // counts, so it never looks like an unrecognised "other" check) but adds no second tick.
+                $canon = self::canonicalServiceName($p['name']);
+                if (!self::hasService($st['services'], $canon)) {
+                    $st['services'][] = ['name' => $canon, 'key' => $key, 'os' => \RivetCore\Rmm\Checks\RmmChecks::osOf($c) ?? self::serviceOs($canon) ?? ''];
+                }
                 $intervals[] = $iv;
             } elseif ($type === 'script' && isset($p['script']) && is_string($p['script']) && array_diff($keys, ['script', 'timeout_s']) === [] && count($st['scripts']) < self::MAX_SCRIPTS) {
                 $st['scripts'][] = ['name' => $key, 'body' => $p['script'], 'timeout' => (int) ($p['timeout_s'] ?? ChecksValidator::SCRIPT_TIMEOUT_DEFAULT_S), 'key' => $key];
@@ -454,8 +490,22 @@ final class RivetChecksSimple
             $out[] = ['key' => self::freeKey($st['reboot']['key'], 'pending_reboot', $usedKeys), 'type' => 'pending_reboot', 'params' => [], 'interval_s' => $iv];
         }
         foreach ($st['services'] as $s) {
-            $slug = 'svc_' . strtolower(trim((string) preg_replace('/[^A-Za-z0-9_.:-]+/', '_', $s['name']), '_'));
-            $out[] = ['key' => self::freeKey($s['key'], $slug, $usedKeys), 'type' => 'service', 'params' => ['name' => $s['name'], 'expected' => 'running'], 'interval_s' => $iv] + ($s['os'] !== '' ? ['os' => $s['os']] : []);
+            $osPart = $s['os'] !== '' ? ['os' => $s['os']] : [];
+            if (isset(self::SERVICE_ALIASES[$s['name']])) {
+                // An alias pair (ssh/sshd, cron/crond, chronyd/systemd-timesyncd): one tick, two checks, each tolerant of the OTHER name not existing on
+                // this host (params.missing = 'ignore', the agent's own semantic) - whichever of the two this distro actually has still fails normally
+                // if it is stopped.
+                foreach ([$s['name'], self::SERVICE_ALIASES[$s['name']]] as $n) {
+                    $slug = 'svc_' . strtolower(trim((string) preg_replace('/[^A-Za-z0-9_.:-]+/', '_', $n), '_'));
+                    // Only build on a PREVIOUSLY stored key when there is one; an empty $s['key'] (a fresh tick) must fall through to the plain $slug,
+                    // the same as every other check here, not to the literal string "_$n".
+                    $keep = $s['key'] !== '' ? $s['key'] . '_' . $n : '';
+                    $out[] = ['key' => self::freeKey($keep, $slug, $usedKeys), 'type' => 'service', 'params' => ['name' => $n, 'expected' => 'running', 'missing' => 'ignore'], 'interval_s' => $iv] + $osPart;
+                }
+            } else {
+                $slug = 'svc_' . strtolower(trim((string) preg_replace('/[^A-Za-z0-9_.:-]+/', '_', $s['name']), '_'));
+                $out[] = ['key' => self::freeKey($s['key'], $slug, $usedKeys), 'type' => 'service', 'params' => ['name' => $s['name'], 'expected' => 'running'], 'interval_s' => $iv] + $osPart;
+            }
         }
         foreach ($st['scripts'] as $s) {
             $out[] = ['key' => self::freeKey($s['key'], 'script_' . $s['key'], $usedKeys), 'type' => 'script', 'params' => ['script' => $s['body'], 'timeout_s' => $s['timeout']], 'interval_s' => $iv];

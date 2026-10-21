@@ -163,6 +163,7 @@ final class RmmModule
     private ?MeshService $mesh = null;
     private ?MeshAgentSettings $meshAgentSettings = null;
     private ?MeshAgentService $meshAgents = null;
+    private ?\RivetCore\Rmm\Mesh\MeshAfterApproval $meshAfterApproval = null;
     private ?InstallerService $installerService = null;
     private ?TechnicianActions $technician = null;
     private ?RmmAdmin $admin = null;
@@ -201,6 +202,8 @@ final class RmmModule
     private ?StarterInstaller $starterInstaller = null;
     private ?StarterActions $starterActions = null;
     private ?StarterApi $starterApi = null;
+    private ?\RivetCore\Rmm\Policy\StarterPack\PolicyPackInstaller $policyPackInstaller = null;
+    private ?\RivetCore\Rmm\Technician\PolicyPackActions $policyPackActions = null;
     private ?ScheduleGateInterface $scheduleGate = null;
     private ?RemoteSettings $remoteSettings = null;
     private ?TransferService $transferService = null;
@@ -221,6 +224,9 @@ final class RmmModule
     private ?PackageSourcePolicyInterface $packageSources = null;
     private ?\RivetCore\Rmm\Deploy\PackageCatalog $packageCatalog = null;
     private ?\RivetCore\Rmm\Deploy\DeployExpectations $deployExpectations = null;
+    private ?\RivetCore\Rmm\Deploy\PackageParams $packageParams = null;
+    private ?\RivetCore\Rmm\Deploy\HostedFiles $hostedFiles = null;
+    private ?\RivetCore\Rmm\AutoInstall\AutoInstallService $autoInstall = null;
     private ?\RivetCore\Rmm\Deploy\DeployService $deployService = null;
     private ?\RivetCore\Rmm\Deploy\DeployApprovalService $deployApprovals = null;
     private ?\RivetCore\Rmm\Deploy\DeployReader $deployReader = null;
@@ -233,13 +239,18 @@ final class RmmModule
     private ?\RivetCore\Rmm\Change\ChangeService $changeService = null;
     private ?\RivetCore\Rmm\Change\ChangeActions $changeActions = null;
     private ?\RivetCore\Rmm\Http\ChangeApi $changeApi = null;
+    private ?\RivetCore\Rmm\Hypervisor\HypervisorSettings $hypervisorSettings = null;
+    private ?\RivetCore\Rmm\Hypervisor\HypervisorAlerts $hypervisorAlerts = null;
+    private ?\RivetCore\Rmm\Hypervisor\HypervisorService $hypervisorService = null;
+    private ?\RivetCore\Rmm\Hypervisor\HypervisorActions $hypervisorActions = null;
+    private ?\RivetCore\Rmm\Http\HypervisorApi $hypervisorApi = null;
 
     private readonly RmmAuditInterface $audit;
     private readonly RmmMetricSinkInterface $metrics;
     private readonly RmmEventsInterface $events;
 
     /**
-     * @param array{binary_dir?:?string,transfer_dir?:?string,allow_insecure_http?:bool,allow_linux?:bool,host_fallback?:?string,integration_name?:string,installer_prefix?:string,max_upload_bytes?:?int,client_label?:string,denial_reasons?:array<string,string>,escalation?:RmmEscalationInterface,threshold_resolver?:ThresholdResolverInterface,cache?:\Psr\SimpleCache\CacheInterface,redis?:\RivetCore\Redis\RedisClientProviderInterface,metric_reader?:RmmMetricReaderInterface,starter_packs?:list<string>} $options
+     * @param array{binary_dir?:?string,transfer_dir?:?string,allow_insecure_http?:bool,allow_linux?:bool,host_fallback?:?string,integration_name?:string,installer_prefix?:string,max_upload_bytes?:?int,hosted_max_bytes?:?int,client_label?:string,denial_reasons?:array<string,string>,escalation?:RmmEscalationInterface,threshold_resolver?:ThresholdResolverInterface,cache?:\Psr\SimpleCache\CacheInterface,redis?:\RivetCore\Redis\RedisClientProviderInterface,metric_reader?:RmmMetricReaderInterface,starter_packs?:list<string>} $options
      */
     public function __construct(
         private readonly DatabaseInterface $database,
@@ -449,6 +460,51 @@ final class RmmModule
         return $this->changeActions ??= new \RivetCore\Rmm\Change\ChangeActions($this->devices(), $this->authorizer(), $this->settings(), $this->changeSettings(), $this->changeService(), $this->changeRules(), $this->audit);
     }
 
+    // ------------------------------------------------------------------ hypervisor visibility (Proxmox VE, Hyper-V)
+
+    /** The hypervisor limits (thresholds, intervals) and the signed configuration an agent receives. */
+    public function hypervisorSettings(): \RivetCore\Rmm\Hypervisor\HypervisorSettings
+    {
+        return $this->hypervisorSettings ??= new \RivetCore\Rmm\Hypervisor\HypervisorSettings($this->settings());
+    }
+
+    /** Alerts and events from what a hypervisor host reported (through the check pipeline). */
+    public function hypervisorAlerts(): \RivetCore\Rmm\Hypervisor\HypervisorAlerts
+    {
+        return $this->hypervisorAlerts ??= new \RivetCore\Rmm\Hypervisor\HypervisorAlerts($this->sql(), $this->settings(), $this->checks(), $this->eventPublisher());
+    }
+
+    /** Hypervisor ingest: validate a report and store hosts, VMs, storage and the state history; also the retention clean-up. */
+    public function hypervisorService(): \RivetCore\Rmm\Hypervisor\HypervisorService
+    {
+        return $this->hypervisorService ??= new \RivetCore\Rmm\Hypervisor\HypervisorService($this->sql(), $this->settings(), $this->hypervisorAlerts());
+    }
+
+    /** The hypervisor read model: hosts with VM counts, one host, the VM search, one VM with its history. */
+    public function hypervisorReader(): \RivetCore\Rmm\Hypervisor\HypervisorReader
+    {
+        return new \RivetCore\Rmm\Hypervisor\HypervisorReader($this->sql(), $this->settings());
+    }
+
+    /** Asset suggestions for a VM (hints only: the edition links, Core never auto-creates). */
+    public function hypervisorLinker(): \RivetCore\Rmm\Hypervisor\HypervisorLinker
+    {
+        return new \RivetCore\Rmm\Hypervisor\HypervisorLinker($this->sql(), $this->assets);
+    }
+
+    /** Reading hypervisors and managing the monitoring (shared by the REST API and the edition's pages). */
+    public function hypervisorActions(): \RivetCore\Rmm\Hypervisor\HypervisorActions
+    {
+        return $this->hypervisorActions ??= new \RivetCore\Rmm\Hypervisor\HypervisorActions($this->sql(), $this->devices(), $this->authorizer(), $this->settings(), $this->hypervisorSettings(), $this->hypervisorReader(),
+            $this->hypervisorAlerts(), $this->hypervisorLinker(), $this->audit);
+    }
+
+    /** The hypervisor routes (mounted by {@see technicianApi()}). */
+    public function hypervisorApi(): \RivetCore\Rmm\Http\HypervisorApi
+    {
+        return $this->hypervisorApi ??= new \RivetCore\Rmm\Http\HypervisorApi($this->hypervisorActions());
+    }
+
     /** The change-monitoring routes (mounted by {@see technicianApi()}). */
     public function changeApi(): \RivetCore\Rmm\Http\ChangeApi
     {
@@ -492,7 +548,38 @@ final class RmmModule
     /** Queue software jobs and apply their results. */
     public function deployService(): \RivetCore\Rmm\Deploy\DeployService
     {
-        return $this->deployService ??= new \RivetCore\Rmm\Deploy\DeployService($this->sql(), $this->settings(), $this->jobs(), $this->packageCatalog(), $this->deployExpectations(), $this->eventPublisher());
+        if ($this->deployService === null) {
+            $this->deployService = new \RivetCore\Rmm\Deploy\DeployService($this->sql(), $this->settings(), $this->jobs(), $this->packageCatalog(), $this->deployExpectations(), $this->eventPublisher(), $this->packageParams(), $this->hostedFiles());
+            // The result of an install job also settles the matching row of "install apps when the agent installs".
+            $this->deployService->onInstallApplied(function (int $deviceId, int $packageId, array $parsed, string $mode, bool $lost): void {
+                /** @var array{ok:bool,result:string,code:string,detail:string,version:string,reboot_required:bool} $parsed */
+                $this->autoInstall()->onInstallResult($deviceId, $packageId, $parsed, $mode, $lost);
+            });
+        }
+
+        return $this->deployService;
+    }
+
+    /** Vendor parameter values of packages, sealed with the edition's SecretBox (never returned by any read). */
+    public function packageParams(): \RivetCore\Rmm\Deploy\PackageParams
+    {
+        return $this->packageParams ??= new \RivetCore\Rmm\Deploy\PackageParams($this->sql(), $this->box, $this->packageCatalog());
+    }
+
+    /** Installer files uploaded to the server (option `binary_dir`, subdirectory `hosted`; option `hosted_max_bytes` caps one file, default 512 MiB). */
+    public function hostedFiles(): \RivetCore\Rmm\Deploy\HostedFiles
+    {
+        return $this->hostedFiles ??= new \RivetCore\Rmm\Deploy\HostedFiles($this->sql(), $this->updates(), $this->audit, $this->options['binary_dir'] ?? null, $this->options['hosted_max_bytes'] ?? null);
+    }
+
+    /**
+     * The device-facing download of a hosted installer (`GET /api/v1/agent_software/{job_id}/{secret}`); the edition mounts it next to the other device routes.
+     *
+     * @param \Closure(string,int,int):bool $rateLimit (bucket, limit, windowSeconds): true when within budget
+     */
+    public function hostedFileApi(\Closure $rateLimit): \RivetCore\Rmm\Http\HostedFileApi
+    {
+        return new \RivetCore\Rmm\Http\HostedFileApi($this->hostedFiles(), $this->settings(), $rateLimit, $this->options['allow_insecure_http'] ?? false);
     }
 
     /** Two-person approval of software runs and assignments. */
@@ -529,7 +616,29 @@ final class RmmModule
     public function deployScheduler(): \RivetCore\Rmm\Deploy\DeployScheduler
     {
         return $this->deployScheduler ??= new \RivetCore\Rmm\Deploy\DeployScheduler($this->sql(), $this->settings(), $this->devices(), $this->deployService(), $this->deployExpectations(),
-            $this->scheduleGate ?? new MaintenanceScheduleGate($this->maintenance(), $this->settings()));
+            $this->scheduleGate ?? new MaintenanceScheduleGate($this->maintenance(), $this->settings()), $this->autoInstall(), $this->hostedFiles());
+    }
+
+    /** What technicians and administrators do with auto-install (shared by the REST API and the edition's pages). */
+    public function autoInstallActions(): \RivetCore\Rmm\AutoInstall\AutoInstallActions
+    {
+        return new \RivetCore\Rmm\AutoInstall\AutoInstallActions($this->devices(), $this->authorizer(), $this->settings(), $this->packageCatalog(), $this->packageParams(), $this->hostedFiles(), $this->autoInstall(), $this->audit);
+    }
+
+    public function autoInstallApi(): \RivetCore\Rmm\Http\AutoInstallApi
+    {
+        return new \RivetCore\Rmm\Http\AutoInstallApi($this->autoInstallActions(), $this->hostedFiles()->maxBytes());
+    }
+
+    /** Install apps when the agent installs: auto-install policies, installer-time selection, planning at enrollment, the per-device app status. */
+    public function autoInstall(): \RivetCore\Rmm\AutoInstall\AutoInstallService
+    {
+        if ($this->autoInstall === null) {
+            $this->autoInstall = new \RivetCore\Rmm\AutoInstall\AutoInstallService($this->sql(), $this->settings(), $this->deployService(), $this->packageCatalog(), $this->deployExpectations(), $this->packageParams(),
+                $this->deployApprovals(), $this->tenancy, $this->audit);
+        }
+
+        return $this->autoInstall;
     }
 
     /** The patch work of the housekeeping pass. */
@@ -667,7 +776,26 @@ final class RmmModule
 
     public function enrollment(): EnrollmentService
     {
-        return $this->enrollment ??= new EnrollmentService($this->sql(), $this->settings(), $this->assets, $this->tenancy, $this->linker(), $this->audit, $this->attempts(), $this->options['allow_linux'] ?? false, $this->clientLabel(), $this->eventPublisher(), $this->cache(), $this->herd());
+        if ($this->enrollment === null) {
+            $this->enrollment = new EnrollmentService($this->sql(), $this->settings(), $this->assets, $this->tenancy, $this->linker(), $this->audit, $this->attempts(), $this->options['allow_linux'] ?? false, $this->clientLabel(), $this->eventPublisher(), $this->cache(), $this->herd());
+            // Install apps when the agent installs: plan the catalog apps of a device that has just enrolled (a no-op while `software_deploy` is off).
+            $this->enrollment->onEnrolled(function (int $deviceId, int $tokenId, string $event): void {
+                if ($this->settings()->featureOn(DeployProtocol::FEATURE) && ($dev = $this->devices()->find($deviceId)) !== null) {
+                    $this->autoInstall()->planDevice($dev, $tokenId, $event);
+                }
+                // Install the Mesh agent after the device is approved: remember the plan (only when the token asked for it) and, for an automatically linked device, start it.
+                if (($dev = $this->devices()->find($deviceId)) !== null) {
+                    $this->meshAfterApproval()->plan($dev, $tokenId);
+                }
+            });
+            $this->enrollment->onApproved(function (int $deviceId): void {
+                if (($dev = $this->devices()->find($deviceId)) !== null) {
+                    $this->meshAfterApproval()->advance($dev);
+                }
+            });
+        }
+
+        return $this->enrollment;
     }
 
     public function deviceService(): DeviceService
@@ -680,7 +808,7 @@ final class RmmModule
         return new CheckinService($this->sql(), $this->settings(), $this->devices(), $this->checks(), $this->jobs(), $this->updates(), $this->linker(), $this->assets, $this->metrics,
             function (array $work): void {
                 $this->ingestQueue()->enqueue($work);
-            }, $this->deviceState(), $this->software(), $this->eventPublisher(), $this->effectivePolicy(), $this->remoteSettings(), $this->meshAgents(), $this->changeSettings());
+            }, $this->deviceState(), $this->software(), $this->eventPublisher(), $this->effectivePolicy(), $this->remoteSettings(), $this->meshAgents(), $this->changeSettings(), $this->meshAfterApproval(), $this->hypervisorSettings(), $this->hypervisorService());
     }
 
     /** Capabilities, presence and software bookkeeping of a device (table rmm_device_state). */
@@ -791,7 +919,7 @@ final class RmmModule
         return new Housekeeping($this->sql(), $this->settings(), $this->bridge, $this->jobs(), null, $this->shedder(), $this->ingestQueue(), $this->eventPublisher(), $this->deviceState(),
             $this->databaseSink(), $this->scheduleRunner(), $this->approvals(), $this->approvedRunExecutor(), $this->jobExtras(), $this->policyStore(),
             new AlertingHousekeeping($this->maintenance(), $this->escalation(), $this->alerts(), $this->storm(), $this->checkEval()), $this->storage(), $this->cache(), $this->externalSink(),
-            $this->logService(), $this->logRules(), $this->transfers(), $this->patchScheduler(), $this->deployScheduler(), $this->changeService(), $this->changeRules());
+            $this->logService(), $this->logRules(), $this->transfers(), $this->patchScheduler(), $this->deployScheduler(), $this->changeService(), $this->changeRules(), $this->hypervisorService());
     }
 
     /** The database metric sink, whether it was passed as the sink or inside a {@see CompositeMetricSink}. */
@@ -1001,10 +1129,21 @@ final class RmmModule
         return $this->starterActions ??= new StarterActions($this->authorizer(), $this->starterInstaller(), $this->audit, $this->eventPublisher());
     }
 
+    /** The policy starter pack (checks, alerting presets, patch policies, maintenance windows, change presets; administrators). */
+    public function policyPackInstaller(): \RivetCore\Rmm\Policy\StarterPack\PolicyPackInstaller
+    {
+        return $this->policyPackInstaller ??= new \RivetCore\Rmm\Policy\StarterPack\PolicyPackInstaller($this->policyStore(), $this->patchPolicies(), $this->maintenance(), $this->changeSettings());
+    }
+
+    public function policyPackActions(): \RivetCore\Rmm\Technician\PolicyPackActions
+    {
+        return $this->policyPackActions ??= new \RivetCore\Rmm\Technician\PolicyPackActions($this->authorizer(), $this->policyPackInstaller(), $this->audit);
+    }
+
     /** The starter pack routes (mounted by {@see technicianApi()}). */
     public function starterApi(): StarterApi
     {
-        return $this->starterApi ??= new StarterApi($this->starterActions());
+        return $this->starterApi ??= new StarterApi($this->starterActions(), $this->policyPackActions());
     }
 
     // ------------------------------------------------------------------ technician and administration side
@@ -1024,7 +1163,7 @@ final class RmmModule
     {
         return $this->readModel ??= new RmmReadModel($this->sql(), $this->settings(), $this->devices(), $this->updates(), $this->binaryStore(),
             $this->assets instanceof RmmAssetNamesInterface ? $this->assets : null, $this->clientLabel(),
-            $this->policy === null ? null : $this->authorizer(), $this->tags(), $this->groups(), $this->metricReader(), $this->automationReader(), $this->cache(), $this->logService(), $this->transfers(), $this->meshAgents(), $this->patchReader(), $this->deployReader(), $this->changeService());
+            $this->policy === null ? null : $this->authorizer(), $this->tags(), $this->groups(), $this->metricReader(), $this->automationReader(), $this->cache(), $this->logService(), $this->transfers(), $this->meshAgents(), $this->patchReader(), $this->deployReader(), $this->changeService(), $this->meshAfterApproval());
     }
 
     /** Hosted agent binaries: validate, store, publish, serve. */
@@ -1046,6 +1185,11 @@ final class RmmModule
     }
 
     /** The optional MeshCentral agent: the installer's Mesh block, the device's report and the automatic node-id mapping. */
+    public function meshAfterApproval(): \RivetCore\Rmm\Mesh\MeshAfterApproval
+    {
+        return $this->meshAfterApproval ??= new \RivetCore\Rmm\Mesh\MeshAfterApproval($this->sql(), $this->settings(), $this->meshAgents(), $this->audit, fn () => $this->remoteActions());
+    }
+
     public function meshAgents(): MeshAgentService
     {
         return $this->meshAgents ??= new MeshAgentService($this->sql(), $this->settings(), $this->meshAgentSettings(), $this->devices(), $this->audit, $this->eventPublisher());
@@ -1054,7 +1198,7 @@ final class RmmModule
     /** Per-client installers and deployment snippets (the administrator side). */
     public function installerService(): InstallerService
     {
-        return $this->installerService ??= new InstallerService($this->sql(), $this->updates(), $this->installerDownload(), $this->enrollment(), $this->tenancy, $this->audit, $this->binaryStore(), $this->clientLabel(), $this->meshAgents());
+        return $this->installerService ??= new InstallerService($this->sql(), $this->updates(), $this->installerDownload(), $this->enrollment(), $this->tenancy, $this->audit, $this->binaryStore(), $this->clientLabel(), $this->meshAgents(), $this->autoInstall());
     }
 
     /** Technician and administrator actions on devices, shared by the web handlers and the REST API. */
@@ -1074,7 +1218,7 @@ final class RmmModule
     /** The technician REST API handler (`endpoint_devices`): the edition authenticates and passes the principal. */
     public function technicianApi(): TechnicianApi
     {
-        return new TechnicianApi($this->authorizer(), $this->technician(), $this->readModel(), $this->inventory(), $this->policyActions(), $this->scriptActions(), $this->fieldActions(), $this->alertingApi(), $this->remoteApi(), $this->starterApi(), $this->patchApi(), $this->deployApi(), $this->changeApi());
+        return new TechnicianApi($this->authorizer(), $this->technician(), $this->readModel(), $this->inventory(), $this->policyActions(), $this->scriptActions(), $this->fieldActions(), $this->alertingApi(), $this->remoteApi(), $this->starterApi(), $this->patchApi(), $this->deployApi(), $this->changeApi(), $this->autoInstallApi(), $this->hypervisorApi());
     }
 
     /** The alerts, maintenance windows, escalation policies and thresholds routes (mounted by {@see technicianApi()}). */
