@@ -204,9 +204,11 @@ if (isset($_GET['recurring_invoice_id'])) {
         <div class="card-body">
 
             <div class="row mb-3">
+                <?php if (!empty($company_logo) && file_exists("../uploads/settings/$company_logo")) { ?>
                 <div class="col-sm-2">
                     <img class="img-fluid" src="<?php echo "../uploads/settings/$company_logo"; ?>" alt="Company logo">
                 </div>
+                <?php } ?>
                 <div class="col-sm-6">
                     <ul class="list-unstyled">
                         <li><h4><strong><?php echo $company_name; ?></strong></h4></li>

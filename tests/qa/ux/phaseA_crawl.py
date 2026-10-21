@@ -31,16 +31,15 @@ def main(w, h, area='agent', user='admin'):
             except Exception: pass
         except Exception as e:
             results.append({'path': path, 'error': str(e)[:100]}); continue
-        for dark in (False, True):
-            set_theme(pg, dark)
+        for dark in ([True] if _os.environ.get('QA_REALDARK') else [False]):
+            if not _os.environ.get('QA_REALDARK'): set_theme(pg, False)
             tag = re.sub(r'[^a-z0-9]+', '_', path.lower()).strip('_')[:60] + f"__{w}x{h}__{'dark' if dark else 'light'}"
             pg.screenshot(path=f"{OUT}/{area}/{tag}.png", full_page=True)
-            r = audit(pg, axe=(not dark)) if True else {}
+            r = audit(pg, axe=True) if True else {}
             r.update(path=path, theme='dark' if dark else 'light', status=resp.status if resp else None,
                      console=errs.get(pg.url, [])[:3], failed=list(fails)[:4], title=pg.title()[:50])
             results.append(r)
-        set_theme(pg, False)
-    json.dump(results, open(f"{OUT}/{area}_{w}x{h}.json", 'w'), indent=1)
+    json.dump(results, open(f"{OUT}/{area}_{w}x{h}{'_dark' if _os.environ.get('QA_REALDARK') else ''}.json", 'w'), indent=1)
     b.close(); p.stop()
 
 if __name__ == '__main__':

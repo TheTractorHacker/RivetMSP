@@ -191,12 +191,12 @@ if ($balance > 0) {
     <div class="card-body">
 
         <div class="row mb-3">
-            <?php if (file_exists("../uploads/settings/$company_logo")) { ?>
+            <?php if (!empty($company_logo) && file_exists("../uploads/settings/$company_logo")) { ?>
             <div class="col-sm-2">
                 <img class="img-fluid" src="<?php echo "../uploads/settings/$company_logo"; ?>" alt="Company logo">
             </div>
             <?php } ?>
-            <div class="col-sm-6 <?php if (!file_exists("../uploads/settings/$company_logo")) { echo "col-sm-8"; } ?>">
+            <div class="col-sm-6 <?php if (empty($company_logo) || !file_exists("../uploads/settings/$company_logo")) { echo "col-sm-8"; } ?>">
                 <ul class="list-unstyled">
                     <li><h4><strong><?php echo $company_name; ?></strong></h4></li>
                     <li><?php echo $company_address; ?></li>
