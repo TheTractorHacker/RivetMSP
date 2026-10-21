@@ -50,7 +50,10 @@ function ea_reset(): void {
               // Published Windows binaries and MSI templates outlive ea_reset() too (a test file that publishes one and relies on a "clean slate" had to DELETE these itself,
               // e.g. tests/rmm_installer_ui.php before this fix): a test file that runs after one that published either sees stale rows a fresh scratch DB would never have
               // (tests/rmm_mesh_wizard.php's "nothing published" checks failed this way when run right after tests/rmm_installer_ui.php in the same scratch database).
-              'endpoint_agent_binaries', 'endpoint_agent_msi_templates'] as $t) { $q("DELETE FROM $t"); }
+              'endpoint_agent_binaries', 'endpoint_agent_msi_templates',
+              // Hosted Linux files (DB 2.6.104) the same way: tests/rmm_agent_feed.php's "exactly three new rows" / "not arm64" checks failed when it ran after
+              // tests/rmm_linux_hosting.php in the same scratch database (that file leaves 1.0.0 Linux files behind). Absent before 2.6.104: the DELETE just fails.
+              'endpoint_agent_linux_files'] as $t) { $q("DELETE FROM $t"); }
     $q("DELETE FROM rmm_integrations");
     $q("DELETE FROM endpoint_agent_settings"); $q("INSERT INTO endpoint_agent_settings (id) VALUES (1)");
     $q("UPDATE settings SET config_ticket_prefix='T', config_ticket_next_number=1000, config_module_enable_rmm=1, config_core_rmm_enabled=0 WHERE company_id=1");
