@@ -60,7 +60,7 @@ if (isset($_GET['q'])) {
 
 // Sortby
 if (!empty($_GET['sort'])) {
-    $sort = sanitizeInput(preg_replace('/[^a-z_]/', '', $_GET['sort'])); // JQ 2023-05-09 - See issue #673 on GitHub to see the reasoning why we used preg_replace technically sanitizeInput() should have been enough to escape SQL Commands
+    $sort = sanitizeInput(preg_replace('/[^a-z_.]/', '', $_GET['sort'])); // JQ 2023-05-09 - See issue #673 on GitHub to see the reasoning why we used preg_replace technically sanitizeInput() should have been enough to escape SQL Commands
 }
 
 // Date Handling (RivetCore DateRange; see includes/date_range.php)

@@ -5470,3 +5470,39 @@ function validateAssetNetworkFields($ip, $nat_ip, $ipv6, $mac) {
     }
     return '';
 }
+
+// Ordered list of pipeline stages with their suggested default win probability.
+// Won/Lost are terminal stages that also drive opportunity_status.
+function getOpportunityStages() {
+    return array(
+        'Qualification' => 20,
+        'Proposal'      => 40,
+        'Negotiation'   => 60,
+        'Won'           => 100,
+        'Lost'          => 0,
+    );
+}
+
+// Returns the Bootstrap contextual colour used for a given pipeline stage badge.
+function opportunityStageColor($stage) {
+    switch ($stage) {
+        case 'Won':          return 'success';
+        case 'Lost':         return 'danger';
+        case 'Negotiation':  return 'warning';
+        case 'Proposal':     return 'info';
+        case 'Qualification':
+        default:             return 'secondary';
+    }
+}
+
+// Maps a pipeline stage to the opportunity_status it should set.
+// Won/Lost are terminal; everything else keeps the deal open.
+function opportunityStatusForStage($stage) {
+    if ($stage === 'Won') {
+        return 'won';
+    }
+    if ($stage === 'Lost') {
+        return 'lost';
+    }
+    return 'open';
+}
