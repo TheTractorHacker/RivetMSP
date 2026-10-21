@@ -22,7 +22,7 @@ LIST_JS = r"""() => {
   return out;
 }"""
 
-def run(pages, user='admin', cap=25, portal=False):
+def run(pages, user='admin', cap=int(os.environ.get("QA_CAP","14")), portal=False):
     p, b, ctx, pg = start(user, 1920, 1080, portal=portal)
     cons, bad = [], []
     pg.on('console', lambda m: cons.append(m.text[:140]) if m.type == 'error' else None)

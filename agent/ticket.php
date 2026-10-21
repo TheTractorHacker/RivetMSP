@@ -115,6 +115,9 @@ if (isset($_GET['ticket_id'])) {
             $ticket_priority_display = "<span class='p-2 badge rounded-pill text-bg-warning'>$ticket_priority</span>";
         } elseif ($ticket_priority == "Low") {
             $ticket_priority_display = "<span class='p-2 badge rounded-pill text-bg-info'>$ticket_priority</span>";
+        } elseif ($ticket_priority !== '') {
+            // Any other stored value (e.g. "Critical" from an automation rule) is shown rather than read as "No priority"
+            $ticket_priority_display = "<span class='p-2 badge rounded-pill text-bg-dark'>$ticket_priority</span>";
         } else {
             $ticket_priority_display = "";
         }
