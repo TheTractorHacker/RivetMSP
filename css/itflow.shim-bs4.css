@@ -220,6 +220,18 @@
 .badge-light     { color: #000; background-color: var(--tblr-gray-100, #f8f9fa) !important; }
 .badge-dark      { color: #fff; background-color: var(--tblr-dark, #1f2937) !important; }
 
+/* ---- Solid badge text colour (.badge.bg-<variant> and .badge.text-bg-<variant>) ---
+   Tabler gives a bare `.badge.bg-success` NO text colour, so it inherited the
+   muted body grey (#5d6f76 on green/red = 1.1-1.9:1, text effectively invisible:
+   Compliance status Pass/Fail, ticket and invoice chips). And Tabler's own
+   text-bg-success/-warning/-info pair white text with a light-to-mid background
+   (2.1-2.9:1, below WCAG AA). Light variants get near-black text, dark ones white.
+   -lt (light tint) badges are left alone: they pick their own colour. */
+.badge.bg-primary, .badge.bg-secondary, .badge.bg-danger, .badge.bg-dark,
+.badge.text-bg-primary, .badge.text-bg-secondary, .badge.text-bg-danger, .badge.text-bg-dark { color: #fff !important; }
+.badge.bg-success, .badge.bg-warning, .badge.bg-info, .badge.bg-light,
+.badge.text-bg-success, .badge.text-bg-warning, .badge.text-bg-info, .badge.text-bg-light { color: #0b1220 !important; }
+
 /* ---- BS4 data-toggle="buttons" (radio/checkbox styled as a button group) ----
    BS5 deleted that plugin entirely, INCLUDING the CSS that visually hid the real
    <input type="radio"|"checkbox"> nested inside each label.btn. Without this the
