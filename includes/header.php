@@ -17,31 +17,13 @@ header("Referrer-Policy: strict-origin-when-cross-origin");
 // ----- Theme resolution (computed early so <html> can carry the BS5 color mode) -----
 // Preset accent name -> hex. Mirrors the AdminLTE accent-<name> presets and drives the
 // CSS-variable theme (--color-accent) so both preset and custom paths recolor the whole app.
-$theme_accent_presets = [
-    'teal'    => '#0D9488',
-    'blue'    => '#2563EB',
-    'indigo'  => '#4F46E5',
-    'purple'  => '#7C3AED',
-    'green'   => '#16A34A',
-    'red'     => '#DC2626',
-    'orange'  => '#EA580C',
-    'pink'    => '#DB2777',
-    'cyan'    => '#0891B2',
-    'yellow'  => '#D97706',
-    'lime'    => '#65A30D',
-    'fuchsia' => '#C026D3',
-    'navy'    => '#1E3A8A',
-    'maroon'  => '#9F1239',
-    'gray'    => '#475569',
-];
+// One table (includes/theme_accent.php), shared with Email Templates, so an email's accent
+// is always the same colour as the app's.
+require_once __DIR__ . '/theme_accent.php';
+$theme_accent_presets = itflow_theme_accent_presets();
 
 // Custom hex overrides the preset; otherwise fall back to the preset's hex (if known).
-$theme_accent_hex = '';
-if (!empty($config_theme_accent_custom) && preg_match('/^#[0-9A-Fa-f]{6}$/', $config_theme_accent_custom)) {
-    $theme_accent_hex = strtoupper($config_theme_accent_custom);
-} elseif (isset($theme_accent_presets[$config_theme])) {
-    $theme_accent_hex = $theme_accent_presets[$config_theme];
-}
+$theme_accent_hex = itflow_theme_accent_hex($config_theme ?? '', $config_theme_accent_custom ?? null);
 
 // Effective dark mode: per-user preference wins; otherwise the company default applies.
 $effective_theme_dark = $user_config_theme_dark ? 1 : $config_theme_dark_default;

@@ -7496,3 +7496,45 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.106'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.106') {
+        // DB 2.6.107: Email Templates (Admin > Settings > Email templates, includes/mail_templates.php). One new table and two additive,
+        // nullable settings columns, nothing existing is changed:
+        //  - mail_templates: one row per email event (ticket created/reply/resolved/closed/assigned, client portal password reset and its
+        //    confirmation) with the administrator's subject/body, an enabled switch and who last changed it. mail_template_updated_by = 0
+        //    means "never customized": those rows (and only those) follow later default-text updates (mailTemplateSyncDefaults()).
+        //  - settings.config_mail_template_header_html / _footer_html: an optional shared header/footer for every template. NULL = none.
+        // Every row is seeded with mailTemplateDefaults(), which reproduces the text the hardcoded call sites sent before (inside the new
+        // branded shell), so nothing reads differently until an administrator edits a template. Code deployed ahead of this step keeps
+        // working: renderMailTemplate() falls back to the same defaults while the table or columns are missing.
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `mail_templates` (
+          `mail_template_id` int(11) NOT NULL AUTO_INCREMENT,
+          `mail_template_event` varchar(40) NOT NULL,
+          `mail_template_subject` varchar(500) NOT NULL DEFAULT '',
+          `mail_template_body` mediumtext NOT NULL,
+          `mail_template_enabled` tinyint(1) NOT NULL DEFAULT 1,
+          `mail_template_updated_at` datetime DEFAULT NULL,
+          `mail_template_updated_by` int(11) NOT NULL DEFAULT 0,
+          PRIMARY KEY (`mail_template_id`),
+          UNIQUE KEY `uniq_mail_template_event` (`mail_template_event`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+        mysqli_query($mysqli, "ALTER TABLE `settings`
+            ADD COLUMN IF NOT EXISTS `config_mail_template_header_html` MEDIUMTEXT DEFAULT NULL,
+            ADD COLUMN IF NOT EXISTS `config_mail_template_footer_html` MEDIUMTEXT DEFAULT NULL");
+
+        // Only advance once the table, both columns and a row for every event are really there (a failure retries on the next run).
+        $mt_ok = false;
+        $mt_res = mysqli_query($mysqli, "SHOW TABLES LIKE 'mail_templates'");
+        if ($mt_res && mysqli_num_rows($mt_res) > 0) {
+            require_once __DIR__ . '/../includes/mail_templates.php';
+            mailTemplateSyncDefaults($mysqli);
+            $mt_ok = (int) mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM `mail_templates`"))[0] >= count(mailTemplateDefaults());
+            foreach (['config_mail_template_header_html', 'config_mail_template_footer_html'] as $mt_col) {
+                $mt_res = mysqli_query($mysqli, "SHOW COLUMNS FROM `settings` LIKE '$mt_col'");
+                $mt_ok = $mt_ok && $mt_res && mysqli_num_rows($mt_res) > 0;
+            }
+        }
+        if ($mt_ok) {
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.107'");
+        }
+    }

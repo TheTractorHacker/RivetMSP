@@ -10,6 +10,7 @@ require_once __DIR__ . '/includes/billing_guards.php';
 require_once __DIR__ . '/includes/net_guards.php';
 require_once __DIR__ . '/includes/rivet_time.php';   // company-time output for stored timestamps (26.10.36; same file as RivetIT)
 require_once __DIR__ . '/includes/rmm_time.php';
+require_once __DIR__ . '/includes/mail_templates.php';   // renderMailTemplate(): every ticket/portal email's subject and body (DB 2.6.107)
 
 // Role check failed wording
 DEFINE("WORDING_ROLECHECK_FAILED", "You are not permitted to do that!");
@@ -4229,16 +4230,27 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
 
     // External email
     $data = [];
+    // Admin > Settings > Email templates: "Ticket created" (null when switched off). No ticket_details: this auto-reply never quoted the
+    // sender's own email back to them (the empty Quote box is dropped). addToMailQueue() binds parameters, so the body is NOT SQL-escaped
+    // here any more (that used to leak backslashes before every quote into the email).
+    $mt = null;
     if ($config_ticket_client_general_notifications == 1 && !preg_match($bad_pattern, $contact_email)) {
-        $subject_email = "Ticket created - [$config_ticket_prefix$ticket_number] - $subject";
-        $body = "<i style='color: #808080'>##- Please type your reply above this line -##</i><br><br>Hello $contact_name,<br><br>Thank you for your email. A ticket regarding \"$subject\" has been automatically created for you.<br><br>Ticket: $config_ticket_prefix$ticket_number<br>Subject: $subject<br>Status: New<br>Portal: <a href='https://$config_base_url/guest/guest_view_ticket.php?ticket_id=$id&url_key=$url_key'>View ticket</a><br><br>--<br>$company_name - Support<br>$from_email<br>$company_phone";
+        $mt = renderMailTemplate($mysqli, 'ticket_created', [
+            'contact_name' => $contact_name, 'ticket_number' => "$config_ticket_prefix$ticket_number", 'subject' => $subject, 'status' => 'New',
+            'portal_link' => "https://$config_base_url/guest/guest_view_ticket.php?ticket_id=$id&url_key=$url_key",
+            'client_portal_link' => "https://$config_base_url/client/ticket.php?id=$id",
+            'company_name' => $company_name, 'company_phone' => $company_phone, 'from_email' => $from_email,
+            'ticket_details' => '',
+        ]);
+    }
+    if ($mt !== null) {
         $data[] = [
             'from' => $from_email,
             'from_name' => $from_name,
             'recipient' => $contact_email,
             'recipient_name' => $contact_name,
-            'subject' => $subject_email,
-            'body' => mysqli_real_escape_string($mysqli, $body),
+            'subject' => $mt['subject'],
+            'body' => $mt['body'],
             'ticket_id' => $id
         ];
     }

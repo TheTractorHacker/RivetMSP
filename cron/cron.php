@@ -381,6 +381,9 @@ if (mysqli_num_rows($sql_recurring_tickets) > 0) {
         $category = resolveTicketCategory(intval($row['recurring_ticket_category']));
         $delivery_method = getTicketDeliveryMethodForCategory($mysqli, $category);
         $delivery_method_sql = $delivery_method !== null ? "'" . mysqli_real_escape_string($mysqli, $delivery_method) . "'" : 'NULL';
+        // A guest-link key, as the manual "create now" path (agent/post/recurring_ticket.php) already gives its tickets: without one this
+        // ticket's guest links (its emails' "View ticket"/feedback links) could never open.
+        $url_key = randomString(32);
 
         $ticket_status = resolveTicketCreationStatus($assigned_id);
 
@@ -402,7 +405,7 @@ if (mysqli_num_rows($sql_recurring_tickets) > 0) {
         $ticket_number = mysqli_insert_id($mysqli);
 
         // Raise the ticket
-        mysqli_query($mysqli, "INSERT INTO tickets SET ticket_prefix = '$config_ticket_prefix', ticket_number = $ticket_number, ticket_source = 'Recurring', ticket_subject = '$subject', ticket_details = '$details', ticket_priority = '$priority', ticket_status = '$ticket_status', ticket_billable = $billable, ticket_created_by = $created_id, ticket_assigned_to = $assigned_id, ticket_contact_id = $contact_id, ticket_client_id = $client_id, ticket_asset_id = $asset_id, ticket_category = $category, ticket_recurring_ticket_id = $recurring_ticket_id, ticket_delivery_method = $delivery_method_sql");
+        mysqli_query($mysqli, "INSERT INTO tickets SET ticket_prefix = '$config_ticket_prefix', ticket_number = $ticket_number, ticket_source = 'Recurring', ticket_subject = '$subject', ticket_details = '$details', ticket_priority = '$priority', ticket_status = '$ticket_status', ticket_billable = $billable, ticket_url_key = '$url_key', ticket_created_by = $created_id, ticket_assigned_to = $assigned_id, ticket_contact_id = $contact_id, ticket_client_id = $client_id, ticket_asset_id = $asset_id, ticket_category = $category, ticket_recurring_ticket_id = $recurring_ticket_id, ticket_delivery_method = $delivery_method_sql");
         $id = mysqli_insert_id($mysqli);
 
         // Copy Additional Assets from Recurring ticket to new ticket
@@ -446,20 +449,28 @@ if (mysqli_num_rows($sql_recurring_tickets) > 0) {
         // Notify client by email their ticket has been raised, if general notifications are turned on & there is a valid contact email
         if ((!empty($config_smtp_host) || !empty($config_smtp_provider)) && $config_ticket_client_general_notifications == 1 && filter_var($contact_email, FILTER_VALIDATE_EMAIL)) {
 
-            $email_subject = "Ticket created - [$ticket_prefix$ticket_number] - $ticket_subject (scheduled)";
-            $email_body = "<i style=\'color: #808080\'>##- Please type your reply above this line -##</i><br><br>Hello $contact_name,<br><br>A ticket regarding \"$ticket_subject\" has been automatically created for you.<br><br>--------------------------------<br>$ticket_details--------------------------------<br><br>Ticket: $ticket_prefix$ticket_number<br>Subject: $ticket_subject<br>Status: Open<br>Portal: https://$config_base_url/client/ticket.php?id=$id<br><br>--<br>$company_name - Support<br>$config_ticket_from_email<br>$company_phone";
+            // Admin > Settings > Email templates: "Ticket created" (null when switched off)
+            $mt = renderMailTemplate($mysqli, 'ticket_created', [
+                'contact_name' => $contact_name, 'ticket_number' => "$ticket_prefix$ticket_number", 'subject' => $ticket_subject, 'status' => 'Open',
+                'portal_link' => "https://$config_base_url/guest/guest_view_ticket.php?ticket_id=$id&url_key=$url_key",
+                'client_portal_link' => "https://$config_base_url/client/ticket.php?id=$id",
+                'company_name' => $company_name, 'company_phone' => $company_phone, 'from_email' => $config_ticket_from_email,
+                'ticket_details' => $ticket_details,
+            ]);
 
-            $email = [
-                    'from' => $ticket_from['email'],
-                    'from_name' => $ticket_from['name'],
-                    'recipient' => $contact_email,
-                    'recipient_name' => $contact_name,
-                    'subject' => $email_subject,
-                    'ticket_id' => intval($id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
-                    'body' => $email_body
-            ];
+            if ($mt !== null) {
+                $email = [
+                        'from' => $ticket_from['email'],
+                        'from_name' => $ticket_from['name'],
+                        'recipient' => $contact_email,
+                        'recipient_name' => $contact_name,
+                        'subject' => $mt['subject'],
+                        'ticket_id' => intval($id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
+                        'body' => $mt['body']
+                ];
 
-            $data[] = $email;
+                $data[] = $email;
+            }
 
         }
 

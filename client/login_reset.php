@@ -78,26 +78,31 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
             mysqli_query($mysqli, "UPDATE users SET user_password_reset_token = '$token_hash' WHERE user_id = $user_id LIMIT 1");
             mysqli_query($mysqli, "INSERT INTO logs SET log_type = 'Contact', log_action = 'Modify', log_description = 'Sent a portal password reset e-mail for $email.', log_ip = '$ip', log_user_agent = '$user_agent', log_client_id = $client");
 
-            // Send reset email
-            $subject = "Password reset for $company_name Client Portal";
-            $body = "Hello $name,<br><br>Someone (probably you) has requested a new password for your account on $company_name\'s Client Portal.<br><br><b>Please <a href=\'$url\'>click here</a> to reset your password.</b> <br><br>Alternatively, copy and paste this URL into your browser:<br> $url<br><br><i>If you didn\'t request this change, you can safely ignore this email.</i><br><br>--<br>$company_name - Support<br>$config_ticket_from_email<br>$company_phone";
+            // Send reset email: Admin > Settings > Email templates, "Client portal password reset" (null when switched off)
+            $mt = renderMailTemplate($mysqli, 'password_reset', [
+                'contact_name' => $name, 'portal_link' => $url,
+                'company_name' => $company_name, 'company_phone' => $company_phone, 'from_email' => $config_ticket_from_email,
+            ]);
 
-            $data = [
-                [
-                    'from' => $config_mail_from_email,
-                    'from_name' => $config_mail_from_name,
-                    'recipient' => $email,
-                    'recipient_name' => $name,
-                    'subject' => $subject,
-                    'body' => $body
-                ]
-            ];
-            $mail = addToMailQueue($data);
+            if ($mt !== null) {
+                $subject = $mt['subject'];
+                $data = [
+                    [
+                        'from' => $config_mail_from_email,
+                        'from_name' => $config_mail_from_name,
+                        'recipient' => $email,
+                        'recipient_name' => $name,
+                        'subject' => $subject,
+                        'body' => $mt['body']
+                    ]
+                ];
+                $mail = addToMailQueue($data);
 
-            // Error handling
-            if ($mail !== true) {
-                mysqli_query($mysqli, "INSERT INTO notifications SET notification_type = 'Mail', notification = 'Failed to send email to $email'");
-                mysqli_query($mysqli, "INSERT INTO logs SET log_type = 'Mail', log_action = 'Error', log_description = 'Failed to send email to $email regarding $subject. $mail'");
+                // Error handling
+                if ($mail !== true) {
+                    mysqli_query($mysqli, "INSERT INTO notifications SET notification_type = 'Mail', notification = 'Failed to send email to $email'");
+                    mysqli_query($mysqli, "INSERT INTO logs SET log_type = 'Mail', log_action = 'Error', log_description = 'Failed to send email to $email regarding " . mysqli_real_escape_string($mysqli, $subject) . ". $mail'");
+                }
             }
             //End Mail IF
         }
@@ -133,28 +138,31 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
             mysqli_query($mysqli, "UPDATE users SET user_password = '$password', user_password_reset_token = NULL WHERE user_id = $user_id LIMIT 1");
             mysqli_query($mysqli, "INSERT INTO logs SET log_type = 'Contact User', log_action = 'Modify', log_description = 'Reset portal password for $email.', log_ip = '$ip', log_user_agent = '$user_agent', log_client_id = $client, log_user_id = $user_id");
 
-            // Send confirmation email
-            $subject = "Password reset confirmation for $company_name Client Portal";
-            $body = "Hello $name,<br><br>Your password for your account on $company_name\'s Client Portal was successfully reset. You should be all set! <br><br><b>If you didn\'t reset your password, please get in touch ASAP.</b><br><br>--<br>$company_name - Support<br>$config_ticket_from_email<br>$company_phone";
+            // Send confirmation email: Admin > Settings > Email templates, "Client portal password reset confirmation" (null when switched off)
+            $mt = renderMailTemplate($mysqli, 'password_changed', [
+                'contact_name' => $name, 'company_name' => $company_name, 'company_phone' => $company_phone, 'from_email' => $config_ticket_from_email,
+            ]);
 
+            if ($mt !== null) {
+                $subject = $mt['subject'];
+                $data = [
+                    [
+                        'from' => $config_mail_from_email,
+                        'from_name' => $config_mail_from_name,
+                        'recipient' => $email,
+                        'recipient_name' => $name,
+                        'subject' => $subject,
+                        'body' => $mt['body']
+                    ]
+                ];
 
-            $data = [
-                [
-                    'from' => $config_mail_from_email,
-                    'from_name' => $config_mail_from_name,
-                    'recipient' => $email,
-                    'recipient_name' => $name,
-                    'subject' => $subject,
-                    'body' => $body
-                ]
-            ];
+                $mail = addToMailQueue($data);
 
-            $mail = addToMailQueue($data);
-
-            // Error handling
-            if ($mail !== true) {
-                mysqli_query($mysqli, "INSERT INTO notifications SET notification_type = 'Mail', notification = 'Failed to send email to $email'");
-                mysqli_query($mysqli, "INSERT INTO logs SET log_type = 'Mail', log_action = 'Error', log_description = 'Failed to send email to $email regarding $subject. $mail'");
+                // Error handling
+                if ($mail !== true) {
+                    mysqli_query($mysqli, "INSERT INTO notifications SET notification_type = 'Mail', notification = 'Failed to send email to $email'");
+                    mysqli_query($mysqli, "INSERT INTO logs SET log_type = 'Mail', log_action = 'Error', log_description = 'Failed to send email to $email regarding " . mysqli_real_escape_string($mysqli, $subject) . ". $mail'");
+                }
             }
 
             // Redirect to login page
