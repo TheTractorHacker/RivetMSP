@@ -74,6 +74,53 @@ $records_per_page    = intval($pref['user_config_records_per_page'] ?: 10);
     </div>
 </div>
 
+<!-- In-app Notifications -->
+<?php
+$inapp_categories = inapp_notification_categories();
+$inapp_my_muted   = inapp_muted_categories_for_user($session_user_id);
+$inapp_total      = count($inapp_categories);
+$inapp_i          = 0;
+?>
+<div class="card card-dark" id="inapp-notifications">
+    <div class="card-header py-2">
+        <h3 class="card-title"><i class="fas fa-fw fa-bell me-2"></i>In-app Notifications</h3>
+    </div>
+    <div class="card-body">
+        <p class="small text-muted mb-3">
+            Choose what shows up under the bell. A category you switch off is not recorded for you at all, so it will not
+            appear later, in the mobile app, or as a push notification. Security notices and RMM alert escalations are always on.
+        </p>
+        <form action="post.php" method="post">
+            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+            <div class="rounded" style="border:1px solid var(--color-border,#eee);overflow:hidden;">
+                <?php foreach ($inapp_categories as $cat_key => $cat) {
+                    $inapp_i++;
+                    $cat_locked = !empty($cat['locked']);
+                    $cat_on     = $cat_locked || !in_array($cat_key, $inapp_my_muted, true);
+                    $cat_id     = 'my_inapp_cat_' . nullable_htmlentities($cat_key);
+                ?>
+                <div class="d-flex align-items-center justify-content-between p-2 px-3"
+                     style="<?= $inapp_i < $inapp_total ? 'border-bottom:1px solid var(--color-border,#eee);' : '' ?>">
+                    <div class="me-3">
+                        <label class="mb-0" for="<?= $cat_id ?>"><i class="<?= nullable_htmlentities($cat['icon']) ?> me-2 text-muted" style="width:1.1rem;text-align:center;"></i><?= nullable_htmlentities($cat['label']) ?></label>
+                        <div class="small text-muted"><?= nullable_htmlentities($cat['hint']) ?><?= $cat_locked ? ' <span class="fw-bold">Always on.</span>' : '' ?></div>
+                    </div>
+                    <div class="form-check form-switch mb-0">
+                        <input type="checkbox" class="form-check-input" id="<?= $cat_id ?>"
+                               name="inapp_categories[]" value="<?= nullable_htmlentities($cat_key) ?>"
+                               <?= $cat_on ? 'checked' : '' ?> <?= $cat_locked ? 'disabled' : '' ?>>
+                        <label class="form-check-label" for="<?= $cat_id ?>"></label>
+                    </div>
+                </div>
+                <?php } ?>
+            </div>
+            <button type="submit" name="save_my_inapp_categories" class="btn btn-sm btn-primary mt-3">
+                <i class="fas fa-save me-1"></i>Save
+            </button>
+        </form>
+    </div>
+</div>
+
 <!-- Push Notifications -->
 <?php
 $sql_my_devices = mysqli_query($mysqli, "SELECT token_id, token_name, token_fcm_token, token_last_used_at, token_created_at FROM api_tokens WHERE token_user_id = $session_user_id ORDER BY token_last_used_at IS NULL, token_last_used_at DESC, token_created_at DESC");

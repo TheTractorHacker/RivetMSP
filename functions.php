@@ -3682,8 +3682,15 @@ function appNotify($type, $details, $action = null, $client_id = 0, $entity_id =
         WHERE user_type = 1 AND user_status = 1 AND user_archived_at IS NULL
     ");
 
+    // Per-user in-app preferences (Preferences > In-app notifications): a muted category is not created at all for that user.
+    $muted_by_user = inapp_muted_categories_by_user();
+
     while ($row = mysqli_fetch_assoc($sql)) {
         $user_id = intval($row['user_id']);
+
+        if (inapp_type_muted($type, $muted_by_user[$user_id] ?? [])) {
+            continue;
+        }
 
         mysqli_query($mysqli, "INSERT INTO notifications SET notification_type = '$type_esc', notification = '$details_esc', notification_action = $action_sql, notification_client_id = $client_id, notification_entity_id = $entity_id, notification_user_id = $user_id");
 
@@ -3711,6 +3718,11 @@ function notifyUser($user_id, $type, $details, $action = null, $client_id = 0, $
 
     $user_id = intval($user_id);
     if (!$user_id) {
+        return;
+    }
+
+    // This user muted the category (Preferences > In-app notifications): nothing is created, published or pushed.
+    if (!inapp_notification_allowed_for_user($user_id, substr((string) $type, 0, 200))) {
         return;
     }
 
