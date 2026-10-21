@@ -15,6 +15,14 @@ declare(strict_types=1);
  * and a manual upload on the Agent binaries card (admin/post/settings_endpoint_agent.php). All three go through LinuxStore::store(), which validates,
  * hashes and stores. Nothing here trusts a name, a size or a hash that came from outside.
  *
+ * SELF-UPDATE (RivetCore 1.0.0-rc.30). This table is for INSTALLING: the files a person fetches with the Add device command, before the machine is enrolled.
+ * It never feeds endpoint_agent_releases (a release row without os='linux' is a Windows release since Core migration 0037, so a release made from this table
+ * would offer a Linux file to Windows PCs, or the Windows .exe to Linux devices as before rc.30). An enrolled Linux device updates itself through Core's
+ * agent_update like a Windows PC does, from Core's own endpoint_agent_binaries/endpoint_agent_releases rows with os='linux': every path that stores a Linux
+ * agent PROGRAM here (the build host, Publish, the manual upload) also hands the same verified file to RmmAdmin::uploadBinary() with os=linux
+ * (publishToCore() below), which validates it again (ELF, CPU, the version string inside the file), copies it into Core's binary directory under its own
+ * bin_<32 hex>.bin name and, when a ring was chosen, creates the os='linux' release. install-linux.sh and the tarballs stay here only: Core hosts executables.
+ *
  * DOWNLOAD CREDENTIAL. The install command must not carry the enrollment token to a URL. It carries, per file, a credential derived from the token row:
  *     rvdl1.<token selector>.<expiry>.<HMAC-SHA256(key = stored SHA-256 of the token secret, "rivetmsp-linux-dl|v1|selector|file|version|expiry")>
  * The route (api/v1/agent_linux_file.php) looks the token up by selector, refuses a revoked or expired token, recomputes the HMAC and compares in constant
@@ -371,6 +379,71 @@ final class LinuxStore
         }
 
         return ['script' => $s, 'binary' => $b, 'version' => (string) $b['version']];
+    }
+
+    // ------------------------------------------------------------------ self-update through RivetCore (rc.30)
+
+    /** Whether Core migration 0037 has given endpoint_agent_binaries and endpoint_agent_releases their os column (so a Linux binary can be published into Core). */
+    public static function coreOsReady(\mysqli $mysqli): bool
+    {
+        $q = @mysqli_query($mysqli, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = 'os' AND TABLE_NAME IN ('endpoint_agent_binaries', 'endpoint_agent_releases')");
+
+        return $q && (int) mysqli_fetch_row($q)[0] === 2;
+    }
+
+    /**
+     * Publish a Linux agent PROGRAM into RivetCore's agent binaries (os=linux), so enrolled Linux devices can be offered it as their self-update by Core's
+     * agent_update. RmmAdmin::uploadBinary() authorizes ($who needs rmm.binary.publish), validates the file again (64-bit ELF for the CPU, the version string
+     * inside it), copies it into Core's binary directory, audits, and creates the os='linux' release when a ring is given. Never made "current": that flag
+     * picks the Windows binary installers are stamped from and means nothing for Linux. Publishing the identical file again is a no-op in Core.
+     *
+     * @param object $admin RivetCore\Rmm\Admin\RmmAdmin
+     * @param object $who RivetCore\Rmm\Authz\RmmPrincipal
+     * @return array{ok:bool,message:string,binary_id:int}|null null when the name is not an agent program (install-linux.sh and the tarballs are install-time only)
+     */
+    public static function publishToCore(object $admin, object $who, string $path, string $name, string $version, ?string $ring = null, int $pct = 10): ?array
+    {
+        $p = self::parseName($name);
+        if ($p === null || $p['kind'] !== 'binary') {
+            return null;
+        }
+        $res = $admin->uploadBinary($who, $path, $version, $p['arch'], ['os' => \RivetCore\Rmm\Support\AgentOs::LINUX, 'activate' => false,
+            'release_ring' => in_array($ring, ['pilot', 'stable'], true) ? $ring : null, 'rollout_pct' => max(0, min(100, $pct))]);
+        $bin = is_array($res->data['binary'] ?? null) ? $res->data['binary'] : null;
+
+        return ['ok' => (bool) $res->ok, 'message' => (string) $res->message, 'binary_id' => $bin !== null ? (int) $bin['binary_id'] : 0];
+    }
+
+    /**
+     * For the hosted Linux agent programs in $rows: the Core binary with the same version, CPU and SHA-256 (os linux), and the rings its active releases offer.
+     *
+     * @param list<array<string,mixed>> $rows endpoint_agent_linux_files rows
+     * @return array<int,array{binary_id:int,active:bool,rings:list<array{ring:string,pct:int}>}> file_id => state (a program not in Core is absent)
+     */
+    public static function coreState(\mysqli $mysqli, array $rows): array
+    {
+        if (!self::coreOsReady($mysqli)) {
+            return [];
+        }
+        $bins = [];
+        $q = mysqli_query($mysqli, "SELECT binary_id, version, arch, sha256, active FROM endpoint_agent_binaries WHERE os = 'linux'");
+        while ($q && ($b = mysqli_fetch_assoc($q))) {
+            $bins[$b['version'] . '|' . $b['arch']] = $b;
+        }
+        $rings = [];
+        $q = mysqli_query($mysqli, "SELECT binary_id, ring, rollout_pct FROM endpoint_agent_releases WHERE os = 'linux' AND active = 1 AND binary_id IS NOT NULL ORDER BY ring");
+        while ($q && ($r = mysqli_fetch_assoc($q))) {
+            $rings[(int) $r['binary_id']][] = ['ring' => (string) $r['ring'], 'pct' => (int) $r['rollout_pct']];
+        }
+        $out = [];
+        foreach ($rows as $r) {
+            $b = $r['kind'] === 'binary' ? ($bins[$r['version'] . '|' . $r['arch']] ?? null) : null;
+            if ($b !== null && hash_equals((string) $b['sha256'], (string) $r['sha256'])) {
+                $out[(int) $r['file_id']] = ['binary_id' => (int) $b['binary_id'], 'active' => (int) $b['active'] === 1, 'rings' => $rings[(int) $b['binary_id']] ?? []];
+            }
+        }
+
+        return $out;
     }
 
     // ------------------------------------------------------------------ download credential

@@ -469,23 +469,26 @@ $ok((int) $one("SELECT COUNT(*) FROM endpoint_agent_binaries WHERE version='9.6.
 
 echo "\n--- Linux files additive: a newer build host also sends install-linux.sh and the agent binaries ---\n";
 /** A minimal 64-bit LE ELF "executable" (ET_EXEC) of the given machine, padded well past the 4096-byte floor LinuxStore::validate() requires. */
-function lb_elf(int $machine, int $size = 5000): string
+function lb_elf(int $machine, int $size = 5000, string $embed = ''): string
 {
     $h = str_repeat("\0", 64);
     $h[0] = "\x7f"; $h[1] = 'E'; $h[2] = 'L'; $h[3] = 'F'; $h[4] = "\x02"; $h[5] = "\x01"; $h[6] = "\x01";
     $h[16] = "\x02"; $h[17] = "\x00"; $h[18] = chr($machine & 0xff); $h[19] = chr(($machine >> 8) & 0xff);
+    $h .= $embed;   // the real agent carries its version string (RivetCore rc.30 checks it before a Linux program becomes a self-update)
 
     return $h . str_repeat("\x90", max(0, $size - strlen($h)));
 }
-function lb_linux_bytes(): array
+function lb_linux_bytes(string $version): array
 {
-    return ['install-linux.sh' => "#!/usr/bin/env bash\necho installing\n", 'rivetit-agent-linux-amd64' => lb_elf(62), 'rivetit-agent-linux-arm64' => lb_elf(183)];
+    $v = "rivetit-agent version $version\0";
+
+    return ['install-linux.sh' => "#!/usr/bin/env bash\necho installing\n", 'rivetit-agent-linux-amd64' => lb_elf(62, 5000, $v), 'rivetit-agent-linux-arm64' => lb_elf(183, 5000, $v)];
 }
 $lx0 = (int) $one('SELECT COUNT(*) FROM endpoint_agent_linux_files');
 $req(['bh_version' => '9.6.2', 'bh_auto' => '1', 'bh_ring' => 'stable', 'bh_pct' => '15', 'bh_activate' => '1']);
 $JLX = (int) $one("SELECT job_id FROM endpoint_agent_build_jobs WHERE version = '9.6.2'");
 bh('poll', $caps, $T1);
-[$f, $mn] = bh_set(62, ['bytes' => lb_linux_bytes()]);
+[$f, $mn] = bh_set(62, ['bytes' => lb_linux_bytes('9.6.2')]);
 $ok(bh_run($T1, $JLX, $f)[0] === 200, 'every Windows AND Linux file uploaded');
 $r = bh('complete', ['job_id' => $JLX, 'manifest' => $mn], $T1);
 $ok(($r[1]['state'] ?? '') === 'published', 'the manifest listing Linux files too still verifies and auto-publishes: ' . ($r[1]['message'] ?? json_encode($r[1])));
@@ -495,7 +498,12 @@ $ok((int) $one('SELECT COUNT(*) FROM endpoint_agent_linux_files') === $lx0 + 3, 
 foreach ($lxRows as $lr) {
     $ok((int) $lr['is_current'] === 1 && $lr['source'] === 'build_host' && (int) $lr['rollout_pct'] === 15, $lr['name'] . ': current, source build_host, rollout carried from the request (' . json_encode($lr) . ')');
 }
-$ok(count($rows("SELECT * FROM endpoint_agent_binaries WHERE version = '9.6.2'")) === 2, 'the Windows binaries still published normally alongside the Linux files');
+$ok(count($rows("SELECT * FROM endpoint_agent_binaries WHERE version = '9.6.2' AND os = 'windows'")) === 2, 'the Windows binaries still published normally alongside the Linux files');
+// RivetCore rc.30: the two Linux agent PROGRAMS are also Core agent binaries with os=linux, offered to the build's ring for self-update; the script is not.
+$lxCore = $rows("SELECT b.arch, b.os, b.is_current, r.ring, r.rollout_pct, r.os AS rel_os FROM endpoint_agent_binaries b LEFT JOIN endpoint_agent_releases r ON r.binary_id = b.binary_id WHERE b.version = '9.6.2' AND b.os = 'linux' ORDER BY b.arch");
+$ok(count($lxCore) === 2 && array_column($lxCore, 'arch') === ['amd64', 'arm64'], 'rc.30: both Linux agent programs are Core binaries with os=linux (' . json_encode($lxCore) . ')');
+$ok(count(array_filter($lxCore, static fn (array $x): bool => $x['ring'] === 'stable' && (int) $x['rollout_pct'] === 15 && $x['rel_os'] === 'linux' && (int) $x['is_current'] === 0)) === 2, 'rc.30: each is offered to the build\'s ring (stable 15%) as an os=linux release, and never "current" (that flag is the Windows installer binary)');
+$ok((int) $one("SELECT COUNT(*) FROM endpoint_agent_releases WHERE version = '9.6.2' AND os = 'windows'") === 2 && (int) $one("SELECT COUNT(*) FROM endpoint_agent_releases WHERE version = '9.6.2'") === 4, 'rc.30: the Windows and Linux releases of the same version, ring and CPU coexist (2 windows + 2 linux rows)');
 $ok($audit('Agent Build Published') >= 1, 'the aggregate build-published audit entry covers this run too (no separate per-Linux-file audit from the build host path)');
 
 echo "\n--- Linux files additive: a bad Linux file fails the WHOLE publish (mirrors RivetIT's own build-host behaviour) ---\n";
@@ -503,8 +511,8 @@ $bin0b = (int) $one('SELECT COUNT(*) FROM endpoint_agent_binaries'); $lx0b = (in
 $req(['bh_version' => '9.6.3', 'bh_auto' => '1', 'bh_activate' => '1']);
 $JBAD = (int) $one("SELECT job_id FROM endpoint_agent_build_jobs WHERE version = '9.6.3'");
 bh('poll', $caps, $T1);
-$badLinux = lb_linux_bytes();
-$badLinux['rivetit-agent-linux-amd64'] = lb_elf(183);   // arm64 bytes offered as the amd64 name: LinuxStore::validate() refuses this (wrong e_machine)
+$badLinux = lb_linux_bytes('9.6.3');
+$badLinux['rivetit-agent-linux-amd64'] = lb_elf(183, 5000, "rivetit-agent version 9.6.3\0");   // arm64 bytes offered as the amd64 name: LinuxStore::validate() refuses this (wrong e_machine)
 [$f, $mn] = bh_set(63, ['bytes' => $badLinux]);
 bh_run($T1, $JBAD, $f);
 $r = bh('complete', ['job_id' => $JBAD, 'manifest' => $mn], $T1);
@@ -521,7 +529,7 @@ echo "\n--- Linux files additive: manual publish keeps them not-current until Pu
 $req(['bh_version' => '9.6.4', 'bh_ring' => '', 'bh_activate' => '']);
 $JLXM = (int) $one("SELECT job_id FROM endpoint_agent_build_jobs WHERE version = '9.6.4'");
 bh('poll', $caps, $T1);
-[$f, $mn] = bh_set(64, ['bytes' => lb_linux_bytes()]);
+[$f, $mn] = bh_set(64, ['bytes' => lb_linux_bytes('9.6.4')]);
 bh_run($T1, $JLXM, $f);
 $r = bh('complete', ['job_id' => $JLXM, 'manifest' => $mn], $T1);
 $ok($r[0] === 200 && $r[1]['state'] === 'built', 'verified and waiting (not auto-publish)');
@@ -530,6 +538,20 @@ $ad(['agent_bh_publish' => '1', 'bh_job' => (string) $JLXM]);
 $ok($state($JLXM) === 'published', 'manual publish succeeds');
 $lxRows2 = $rows("SELECT is_current FROM endpoint_agent_linux_files WHERE version = '9.6.4'");
 $ok(count($lxRows2) === 3 && !in_array(1, array_column($lxRows2, 'is_current'), true), 'stored now, but NOT current (job.activate was off, same rule as the Windows binaries of this job)');
+$ok((int) $one("SELECT COUNT(*) FROM endpoint_agent_binaries WHERE version = '9.6.4' AND os = 'linux'") === 2 && (int) $one("SELECT COUNT(*) FROM endpoint_agent_releases WHERE version = '9.6.4'") === 0, 'rc.30: no ring chosen: the Linux programs are Core binaries (os=linux) but nothing is offered to any device');
+
+echo "\n--- rc.30: a Linux program that does not carry the version it is published as is not offered as a Linux update ---\n";
+$req(['bh_version' => '9.6.5', 'bh_auto' => '1', 'bh_ring' => 'pilot', 'bh_pct' => '10', 'bh_activate' => '1']);
+$JNV = (int) $one("SELECT job_id FROM endpoint_agent_build_jobs WHERE version = '9.6.5'");
+bh('poll', $caps, $T1);
+$noVer = lb_linux_bytes('9.6.5');
+$noVer['rivetit-agent-linux-amd64'] = lb_elf(62, 5000, "rivetit-agent version 1.2.3\0");   // a valid amd64 ELF, but built as another version
+[$f, $mn] = bh_set(65, ['bytes' => $noVer]);
+bh_run($T1, $JNV, $f);
+$r = bh('complete', ['job_id' => $JNV, 'manifest' => $mn], $T1);
+$ok(($r[1]['state'] ?? '') === 'failed' && str_contains((string) ($r[1]['message'] ?? ''), 'does not contain the version string'), 'the publish reports the problem in words: ' . json_encode($r[1]));
+$ok((int) $one("SELECT COUNT(*) FROM endpoint_agent_binaries WHERE version = '9.6.5' AND os = 'linux' AND arch = 'amd64'") === 0 && (int) $one("SELECT COUNT(*) FROM endpoint_agent_releases WHERE version = '9.6.5' AND os = 'linux' AND arch = 'amd64'") === 0, 'the mismatched amd64 program is neither a Core binary nor offered to Linux devices');
+$ok((int) $one("SELECT COUNT(*) FROM endpoint_agent_linux_files WHERE version = '9.6.5' AND is_current = 1") === 0, 'and none of this build\'s Linux files was made current (the publish had a problem)');
 
 echo "\n--- failed state, expiry, lease ---\n";
 $req(['bh_version' => '9.7.0']);

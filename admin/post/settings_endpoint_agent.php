@@ -584,13 +584,25 @@ if (isset($_POST['upload_linux_files']) || isset($_POST['linux_file_action'])) {
     }
     if (isset($_POST['linux_file_action'])) {
         $lxId = intval($_POST['file_id'] ?? 0);
-        $lxRow = mysqli_fetch_assoc(mysqli_query($mysqli, 'SELECT name, version FROM endpoint_agent_linux_files WHERE file_id = ' . $lxId));
+        $lxRow = mysqli_fetch_assoc(mysqli_query($mysqli, 'SELECT * FROM endpoint_agent_linux_files WHERE file_id = ' . $lxId));
         $lxAction = (string) $_POST['linux_file_action'];
-        if (!$lxRow || !in_array($lxAction, ['make_current', 'delete'], true)) {
+        if (!$lxRow || !in_array($lxAction, ['make_current', 'delete', 'add_to_core'], true)) {
             flash_alert('That file is not stored.', 'error');
             redirect();
         }
-        if ($lxAction === 'make_current') {
+        if ($lxAction === 'add_to_core') {
+            // RivetCore rc.30: a Linux agent program hosted before this release (or one whose Core copy failed) is published into Core's agent binaries with
+            // os=linux, not offered yet: the Agent binaries card then offers it to a ring like any other binary. uploadBinary() authorizes, validates and audits.
+            $lxPath = \RivetMsp\AgentFeed\LinuxStore::path($lxRow);
+            $lxCore = $lxPath !== null && is_file($lxPath) && hash_equals((string) $lxRow['sha256'], (string) hash_file('sha256', $lxPath))
+                ? \RivetMsp\AgentFeed\LinuxStore::publishToCore($ea_admin, $ea_who, $lxPath, (string) $lxRow['name'], (string) $lxRow['version'])
+                : ['ok' => false, 'message' => 'The hosted file is missing or no longer matches its recorded SHA-256.'];
+            if ($lxCore === null) {
+                flash_alert('Only the Linux agent programs are agent updates; install-linux.sh and the tarballs are used for installing.', 'error');
+            } else {
+                flash_alert(nullable_htmlentities($lxCore['ok'] ? $lxCore['message'] . ' Offer it to a ring under Agent binaries.' : $lxCore['message']), $lxCore['ok'] ? 'success' : 'error');
+            }
+        } elseif ($lxAction === 'make_current') {
             $lxOk = \RivetMsp\AgentFeed\LinuxStore::setCurrent($mysqli, $lxId);
             if ($lxOk) {
                 logAction('Endpoint Agent', 'Linux File Made Current', "$session_name made {$lxRow['name']} {$lxRow['version']} the current hosted Linux file");
@@ -631,6 +643,11 @@ if (isset($_POST['upload_linux_files']) || isset($_POST['linux_file_action'])) {
         if ($lr['ok']) {
             $lxDone[] = $f['name'];
             logAction('Endpoint Agent', 'Linux File Uploaded', "$session_name uploaded {$f['name']} $lxVersion (sha256 {$lr['sha256']}, {$lr['size']} bytes)" . ($lr['current'] ? ', now current' : ''));
+            // RivetCore rc.30: an agent program is also published into Core with os=linux (self-update for enrolled Linux devices), offered to the ring chosen here.
+            $lxCore = \RivetMsp\AgentFeed\LinuxStore::publishToCore($ea_admin, $ea_who, $f['tmp'], $f['name'], $lxVersion, in_array($lxRing, ['pilot', 'stable'], true) ? $lxRing : null, ea_post_int('rollout_pct', 0, 100, 10));
+            if ($lxCore !== null && !$lxCore['ok']) {
+                $lxFailed[] = $f['name'] . ' is hosted for installing, but not available as a Linux self-update: ' . $lxCore['message'];
+            }
         } else {
             $lxFailed[] = (string) $lr['error'];
         }

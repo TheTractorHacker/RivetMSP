@@ -952,7 +952,7 @@ final class LocalBuild
     /**
      * Publish a verified (state built) job through the existing code. The files are re-hashed against the stored manifest first (they sat in quarantine). One winner.
      *
-     * @param callable(string,string,string,array<string,mixed>):array{ok:bool,message:string} $publisher (kind exe|msi, path, arch, job)
+     * @param callable(string,string,string,array<string,mixed>):array{ok:bool,message:string} $publisher (kind exe|msi|linux, path, arch, job)
      * @return array{ok:bool,message:string}
      */
     public function publish(int $jobId, callable $publisher): array
@@ -1014,6 +1014,23 @@ final class LocalBuild
             $msgs[] = $res['message'];
             $res['ok'] ? $stored++ : $problems++;
         }
+        // RivetCore rc.30: the Linux agent PROGRAMS also go into Core's own binaries with os=linux (publisher kind 'linux'), so enrolled Linux devices are offered
+        // them as their self-update through agent_update, with the ring and rollout chosen for this build. Only once every Windows file went through (a half
+        // published build offers nothing new to Linux either); a failure here is a problem of this publish like a Windows one. install-linux.sh and the tarballs
+        // are install-time files only and stay in the hosted-files table.
+        if ($problems === 0) {
+            foreach ($linuxPaths as $n => $path) {
+                $lp = LinuxStore::parseName($n);
+                if ($lp === null || $lp['kind'] !== 'binary') {
+                    continue;
+                }
+                $res = $publisher('linux', $path, $lp['arch'], $j);
+                if (!$res['ok']) {
+                    array_unshift($msgs, $n . ' was not published as a Linux self-update: ' . $res['message']);   // first, so the capped job result still shows why
+                    $problems++;
+                }
+            }
+        }
         if ($problems === 0 && $lxIds !== [] && (int) ($j['activate'] ?? 0) === 1) {
             foreach ($lxIds as $lid) {
                 LinuxStore::setCurrent($this->db, $lid);
@@ -1033,7 +1050,8 @@ final class LocalBuild
 
 /**
  * The publisher for a local build: the existing ability check, then RmmAdmin::uploadBinary() / uploadMsiTemplate() (which validate again and audit) as the administrator who
- * asked for the build. Ring, rollout and "make current" are the values chosen at request time.
+ * asked for the build. Ring, rollout and "make current" are the values chosen at request time. Kind 'linux' (RivetCore rc.30) publishes a Linux agent program with
+ * os=linux for self-update; ring and rollout apply, "make current" does not.
  *
  * @return callable(string,string,string,array<string,mixed>):array{ok:bool,message:string}
  */
@@ -1045,6 +1063,13 @@ function rivetLocalBuildPublisher(object $rmm, object $who, int $userId): callab
             return ['ok' => false, 'message' => 'Not published: ' . $denied];
         }
         $ring = in_array($job['ring'] ?? '', ['pilot', 'stable'], true) ? $job['ring'] : '';
+        if ($kind === 'linux') {
+            // a Linux agent program for self-update (os=linux in Core's tables); never "current" (that flag only picks the Windows binary installers are stamped from)
+            $res = $rmm->admin()->uploadBinary($who, $path, (string) $job['version'], $arch, ['os' => \RivetCore\Rmm\Support\AgentOs::LINUX, 'activate' => false,
+                'release_ring' => $ring === '' ? null : $ring, 'rollout_pct' => max(0, min(100, (int) $job['rollout_pct']))]);
+
+            return ['ok' => $res->ok, 'message' => (string) $res->message];
+        }
         $o = ['activate' => (int) ($job['activate'] ?? 0) === 1];
         $res = $kind === 'msi'
             ? $rmm->admin()->uploadMsiTemplate($who, $path, (string) $job['version'], $arch, $o)

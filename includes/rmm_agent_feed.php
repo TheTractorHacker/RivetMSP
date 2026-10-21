@@ -581,7 +581,9 @@ final class Feed
 
             return $rows;
         };
-        foreach ($q($this->db, 'SELECT version, arch FROM endpoint_agent_binaries WHERE active = 1') as $r) {
+        // Since RivetCore rc.30 (migration 0037) Core's binaries and releases carry an os: a Linux agent published for self-update is not a Windows .exe of that version.
+        $osCols = LinuxStore::coreOsReady($this->db);
+        foreach ($q($this->db, 'SELECT version, arch FROM endpoint_agent_binaries WHERE active = 1' . ($osCols ? " AND os = 'windows'" : '')) as $r) {
             $out['exe'][(string) $r['version']][(string) $r['arch']] = true;
             if ($out['highest'] === null || version_compare((string) $r['version'], $out['highest']) > 0) {
                 $out['highest'] = (string) $r['version'];
@@ -590,8 +592,8 @@ final class Feed
         foreach ($q($this->db, 'SELECT version, arch FROM endpoint_agent_msi_templates WHERE active = 1') as $r) {
             $out['msi'][(string) $r['version']][(string) $r['arch']] = true;
         }
-        foreach ($q($this->db, 'SELECT version, arch, ring, rollout_pct, active FROM endpoint_agent_releases WHERE active = 1') as $r) {
-            $out['rings'][(string) $r['version']][] = ['arch' => (string) $r['arch'], 'ring' => (string) $r['ring'], 'pct' => (int) $r['rollout_pct']];
+        foreach ($q($this->db, 'SELECT version, arch, ring, rollout_pct, active' . ($osCols ? ', os' : '') . ' FROM endpoint_agent_releases WHERE active = 1') as $r) {
+            $out['rings'][(string) $r['version']][] = ['arch' => (string) $r['arch'], 'ring' => (string) $r['ring'], 'pct' => (int) $r['rollout_pct'], 'os' => (string) ($r['os'] ?? 'windows')];
         }
         foreach ($q($this->db, "SELECT state_key, state_value FROM endpoint_agent_feed_state WHERE state_key LIKE 'linux:%'") as $r) {
             $d = json_decode((string) $r['state_value'], true);
@@ -836,9 +838,17 @@ final class Feed
                     'activate' => !empty($opts['activate']), 'ring' => $ring === '' ? null : $ring, 'pct' => max(0, min(100, (int) $opts['pct'])),
                     'source' => 'github', 'expected_sha256' => $lxSha, 'notes' => 'Published from ' . $tag,
                 ]);
-                @unlink($file);
                 $steps[] = ['label' => "host $lxName", 'state' => $lr['ok'] ? 'ok' : 'skipped', 'detail' => $lr['ok'] ? ('hosted' . ($lr['current'] ? ', now current' : '')) : ((string) $lr['error'] . '; recorded as a link only')];
                 $lr['ok'] ? $lxStored++ : $lxSkipped++;
+                // (3c) the same verified Linux agent PROGRAM into RivetCore's binaries with os=linux (rc.30), so enrolled Linux devices get it as their self-update
+                // through agent_update, offered to the chosen ring. Never a release made from the hosted-files table. Like hosting, a problem here is reported in the
+                // steps but never blocks the Windows release.
+                $core = $lr['ok'] ? LinuxStore::publishToCore($admin, $who, $file, $lxName, $version, $ring === '' ? null : $ring, (int) $opts['pct']) : null;
+                if ($core !== null) {
+                    $steps[] = ['label' => "agent update $lxName", 'state' => $core['ok'] ? 'ok' : 'skipped',
+                        'detail' => $core['ok'] ? ($ring === '' ? 'stored for Linux self-update (not offered: no ring chosen)' : "offered to Linux devices ($ring ring)") : 'not available as a Linux self-update: ' . $core['message']];
+                }
+                @unlink($file);
             }
         }
         $stored += $lxStored;   // counts toward "Nothing was stored" below; a release with only Linux files hosted (an unusual release with no Windows assets) still counts as published
