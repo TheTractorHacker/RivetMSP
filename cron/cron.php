@@ -1163,14 +1163,17 @@ while ($row = mysqli_fetch_assoc($sql_invalid_recurring_expenses)) {
 // Settings > Telemetry. RivetMSP sends nothing anywhere; config_telemetry keeps its schema default (0).
 
 
-// Fetch Updates
-$updates = fetchUpdates();
+// Fetch Updates: once a day, on the first run at or after 03:00 app time (includes/update_check_schedule.php), not on every cron run.
+require_once dirname(__DIR__) . '/includes/update_check_schedule.php';
+if (updateCheckClaim($mysqli, time())) {
+    $updates = fetchUpdates();
 
-$update_message = $updates->update_message;
+    $update_message = $updates->update_message;
 
-if ($updates->current_version !== $updates->latest_version) {
-    // Send Alert to inform Updates Available
-    appNotify("Update", "$update_message", "/admin/update.php");
+    if ($updates->current_version !== $updates->latest_version) {
+        // Send Alert to inform Updates Available
+        appNotify("Update", "$update_message", "/admin/update.php");
+    }
 }
 
 
