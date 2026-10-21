@@ -215,3 +215,26 @@
     --bs-secondary-color:           var(--tblr-secondary-color, rgba(33,37,41,.75));
     --bs-tertiary-bg:               var(--tblr-tertiary-bg, #f8f9fa);
 }
+
+/* =============================================================================
+   DARK-MODE READABILITY (WCAG AA)
+
+   1. Links: the accent (#2563eb by default, or whatever the admin picked) is used as-is for
+      link text on the dark surface, which measures 3.2:1. In dark mode links are lightened
+      toward white (same hue, so a custom accent still reads as the brand colour). :where()
+      keeps the specificity at a bare `a`, so any component that sets its own link colour
+      (and every Tabler .text-* utility) still wins.
+   2. TomSelect: the text typed into / shown in a select box kept the light-theme #343a40 on
+      the dark field (1.45:1) - the search text was effectively invisible.
+   ========================================================================== */
+:where(:root[data-bs-theme="dark"]) a:where(:not(.btn:not(.btn-link), .badge, .nav-link, .dropdown-item, .page-link, .list-group-item-action, .navbar-brand)) {
+    color: color-mix(in srgb, var(--color-accent, #2563eb) 55%, #fff);
+}
+:where(:root[data-bs-theme="dark"]) a:where(:not(.btn:not(.btn-link), .badge, .nav-link, .dropdown-item, .page-link, .list-group-item-action, .navbar-brand)):hover {
+    color: color-mix(in srgb, var(--color-accent, #2563eb) 35%, #fff);
+}
+:root[data-bs-theme="dark"] .ts-wrapper .ts-control,
+:root[data-bs-theme="dark"] .ts-wrapper .ts-control input,
+:root[data-bs-theme="dark"] .ts-wrapper .ts-control > .item {
+    color: var(--tblr-body-color);
+}

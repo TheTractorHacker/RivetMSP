@@ -4,7 +4,7 @@ from ux_common import *
 rules = sys.argv[2].split(',')
 pages = json.load(open(sys.argv[1]))
 step = max(1, len(pages)//int(sys.argv[3]))
-p, b, ctx, pg = start('admin')
+p, b, ctx, pg = start(os.environ.get('QA_USER','admin'))
 agg = collections.defaultdict(lambda: collections.Counter())
 for path in pages[::step]:
     pg.goto(BASE+path, wait_until='domcontentloaded'); pg.wait_for_timeout(800)
