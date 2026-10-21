@@ -1501,8 +1501,9 @@ CREATE TABLE `endpoint_agent_binaries` (
   `active` tinyint(1) NOT NULL DEFAULT 1,
   `is_current` tinyint(1) NOT NULL DEFAULT 0,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `os` varchar(10) NOT NULL DEFAULT 'windows',
   PRIMARY KEY (`binary_id`),
-  UNIQUE KEY `uniq_version_arch` (`version`,`arch`)
+  UNIQUE KEY `uniq_version_arch_os` (`version`,`arch`,`os`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `endpoint_agent_change_records`;
@@ -2021,8 +2022,9 @@ CREATE TABLE `endpoint_agent_releases` (
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `arch` varchar(10) NOT NULL DEFAULT '',
   `binary_id` int(11) DEFAULT NULL,
+  `os` varchar(10) NOT NULL DEFAULT 'windows',
   PRIMARY KEY (`release_id`),
-  UNIQUE KEY `uniq_version_ring_arch` (`version`,`ring`,`arch`)
+  UNIQUE KEY `uniq_version_ring_arch_os` (`version`,`ring`,`arch`,`os`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `endpoint_agent_remote_settings`;
@@ -6332,6 +6334,7 @@ INSERT INTO `rivet_core_migrations` VALUES ('0033_rmm_auto_install','2026-10-20 
 INSERT INTO `rivet_core_migrations` VALUES ('0034_rmm_mesh_after_approval','2026-10-20 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0035_rmm_device_type','2026-10-20 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0036_rmm_hypervisors','2026-10-20 00:00:00');
+INSERT INTO `rivet_core_migrations` VALUES ('0037_rmm_agent_os','2026-10-21 00:00:00');
 INSERT INTO `rmm_patch_rings` VALUES (1,'pilot',0,10,'Try updates first, on a few machines');
 INSERT INTO `rmm_patch_rings` VALUES (2,'broad',7,20,'Most machines: a week after the pilot');
 INSERT INTO `rmm_patch_rings` VALUES (3,'last',14,30,'Sensitive machines: two weeks after the pilot');

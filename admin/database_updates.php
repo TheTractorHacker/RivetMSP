@@ -7403,7 +7403,11 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         // work when software_deploy is on and a package is marked for auto-install; Mesh-after-approval only plans work when an installer's tick-box was
         // used; device type defaults to 'auto'/NULL (unchanged behaviour); the hypervisor collector is off until its switch is on for a device. All four
         // stay empty and cost nothing otherwise.
-        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Rmm\Migration\Migration0036Hypervisors::class)) {
+        // RivetCore 1.0.0-rc.30 adds 0037 (agent OS) to the same step, as Core's adoption notes ask (the step number does not change): `os` varchar(10) NOT NULL
+        // DEFAULT 'windows' on endpoint_agent_binaries and endpoint_agent_releases, and their unique keys widened to (version, arch, os) / (version, ring, arch, os)
+        // (new key added before the old one is dropped; every statement guarded). Every row already there is a Windows binary or release, which is the default, so
+        // nothing is backfilled. The guard names 0037 so a package without it does not advance the version past this step.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Rmm\Migration\Migration0037AgentOs::class)) {
             (new \RivetCore\Migration\MigrationRunner(
                 new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
                 \RivetCore\Migration\CoreMigrations::all(),
