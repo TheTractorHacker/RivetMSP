@@ -1190,3 +1190,14 @@ a.er-recipe:hover .er-recipe-title, a.er-recipe:hover .er-recipe-blurb, a.er-rec
 .modal-dialog-scrollable .modal-content > form > .modal-body {
     overflow-y: auto;
 }
+
+/* Desktop widths: wrap the ticket/list filter row instead of scrolling it sideways. At 1366px the last controls (Search, Tags,
+   Reset) were clipped off the right edge with no visible scrollbar, and the row's overflow also cut off open dropdowns. */
+@media (min-width: 992px) {
+    .ticket-filter-bar .filter-row-nowrap,
+    .filter-bar .filter-row-nowrap {
+        flex-wrap: wrap;
+        overflow: visible;
+        row-gap: .5rem;
+    }
+}
