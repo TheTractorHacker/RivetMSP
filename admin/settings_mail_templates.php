@@ -13,9 +13,13 @@ $mt_descriptions = mailTemplateEventDescriptions();
 $mt_defaults = mailTemplateDefaults();
 $mt_hf = mailTemplateHeaderFooter($mysqli);
 $mt_rows = [];
-$sql_mt = mysqli_query($mysqli, "SELECT * FROM mail_templates");
-while ($sql_mt && $row = mysqli_fetch_assoc($sql_mt)) {
-    $mt_rows[$row['mail_template_event']] = $row;
+try {   // before DB 2.6.107 there is no table yet: show the defaults rather than fail
+    $sql_mt = mysqli_query($mysqli, "SELECT * FROM mail_templates");
+    while ($sql_mt && $row = mysqli_fetch_assoc($sql_mt)) {
+        $mt_rows[$row['mail_template_event']] = $row;
+    }
+} catch (\Throwable $e) {
+    $mt_rows = [];
 }
 
 ?>
