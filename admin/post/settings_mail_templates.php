@@ -113,12 +113,16 @@ if (isset($_POST['preview_mail_template'])) {
             exit;
         }
         $mt_from = resolveTicketFromIdentity(0);
+        // A test copy belongs to no ticket. addToMailQueue() would otherwise read the sample "[TCK-1042]" in the subject as a real ticket's
+        // token (its fallback when no ticket_id is given), stamp that ticket on the queue row - so the ticket's email switch could drop the
+        // test, and a reply to it would thread into that customer's ticket. Round brackets are never read as a ticket token.
+        $mt_test_subject = '[TEST] ' . str_replace(['[', ']'], ['(', ')'], $mt_rendered['subject']);
         addToMailQueue([[
             'from' => $mt_from['email'] ?: $config_ticket_from_email,
             'from_name' => $mt_from['name'] ?: $config_ticket_from_name,
             'recipient' => $mt_me['user_email'],
             'recipient_name' => $mt_me['user_name'],
-            'subject' => '[TEST] ' . $mt_rendered['subject'],
+            'subject' => $mt_test_subject,
             'body' => '<div style="background:#fff3cd;border:1px solid #ffecb5;padding:.75rem;margin-bottom:1rem;border-radius:.375rem;">This is a test send of the "' . nullable_htmlentities(mailTemplateEvents()[$mt_event]) . '" email template, with sample data, not a real ticket.</div>' . $mt_rendered['body'],
         ]]);
         logAction("Settings", "View", "$session_name sent a test copy of the \"" . mysqli_real_escape_string($mysqli, $mt_event) . "\" email template to themselves");

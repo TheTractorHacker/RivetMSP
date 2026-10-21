@@ -284,8 +284,10 @@ function mailTemplateDefaultBlocks(): array {
             $ticketFacts,
             $signature,
         ],
-        // agent/post/ticket.php resolve_ticket and agent/ajax.php kanban (identical), plus add_ticket_reply's resolving reply, which
-        // is the same text with the reply quoted: an empty Quote box is dropped at render time, so one template is both.
+        // agent/post/ticket.php resolve_ticket and agent/ajax.php kanban (identical), plus add_ticket_reply's resolving-reply copy,
+        // which is the same text with the reply quoted (bulk resolve sends it that way): an empty Quote box is dropped at render time,
+        // so one template is both. (add_ticket_reply re-reads the status after closing the ticket, so in practice its resolving reply
+        // goes out as "Ticket reply" - unchanged from before this feature.)
         'ticket_resolved' => [
             ['type' => 'reply_marker'],
             ['type' => 'text', 'html' => 'Hello {contact_name},<br><br>Your ticket regarding {subject} has been resolved and closed.'],

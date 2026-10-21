@@ -479,6 +479,17 @@ $q("DELETE FROM email_queue WHERE email_subject LIKE '[TEST]%'");
 [, $body] = $adminPost(['preview_mail_template' => '1', 'event' => 'ticket_reply', 'subject' => 'Draft {ticket_number}', 'body' => $custom, 'send_test' => '1']);
 $tq = $rows("SELECT email_recipient, email_subject, email_content FROM email_queue WHERE email_subject LIKE '[TEST]%'");
 $ok((json_decode($body, true)['ok'] ?? false) && count($tq) === 1 && $tq[0]['email_recipient'] === 'admin@example.test' && $tq[0]['email_subject'] === '[TEST] Draft TCK-1042' && str_contains($tq[0]['email_content'], 'CUSTOM hello Jamie Example'), 'Send test: one copy of the draft to the admin\'s own address, through the normal queue');
+// regression (review finding): a test copy of a DEFAULT ticket email names the sample ticket "[TCK-1042]" - with the TCK- prefix and a real
+// ticket 1042 whose email is off, addToMailQueue() used to treat it as that ticket's mail (dropped by its email switch, a reply threaded into it)
+$q("UPDATE settings SET config_ticket_prefix = 'TCK-' WHERE company_id = 1");
+$real1042 = $mkTicket(['ticket_prefix' => 'TCK-', 'ticket_number' => 1042, 'ticket_send_email' => 0]);
+$q("DELETE FROM email_queue WHERE email_subject LIKE '[TEST]%'");
+[, $body] = $adminPost(['preview_mail_template' => '1', 'event' => 'ticket_created', 'subject' => '', 'body' => '', 'send_test' => '1']);
+$tq = $rows("SELECT email_subject, email_ticket_id FROM email_queue WHERE email_subject LIKE '[TEST]%'");
+$ok((json_decode($body, true)['ok'] ?? false) && count($tq) === 1 && $tq[0]['email_ticket_id'] === null && !str_contains($tq[0]['email_subject'], '[TCK-1042]') && str_contains($tq[0]['email_subject'], '(TCK-1042)'),
+    'a test send is never tied to a real ticket by the sample "[TCK-1042]" (queued, no email_ticket_id, even when ticket TCK-1042 exists with email off)');
+$q("DELETE FROM tickets WHERE ticket_id = $real1042");
+$q("UPDATE settings SET config_ticket_prefix = 'T' WHERE company_id = 1");
 [, $body] = $adminPost(['preview_mail_template' => '1', 'event' => 'bogus']);
 $ok((json_decode($body, true)['ok'] ?? true) === false, 'preview of an unknown event: an error, no render');
 
