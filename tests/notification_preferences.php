@@ -78,7 +78,8 @@ $ok(inapp_muted_categories_for_user(10) === [] && updateCheckClaim($db, time()) 
 
 echo "\n--- updater 2.6.105 -> 2.6.106 (run twice) and db.sql ---\n";
 for ($i = 0; $i < 2; $i++) { shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1'); }
-$ok(LATEST_DATABASE_VERSION === '2.6.106', 'LATEST_DATABASE_VERSION is 2.6.106');
+// Not '=== 2.6.106': later steps (Email Templates, 2.6.107) follow this one in the merged chain; this test cares that its own step ran.
+$ok(version_compare(LATEST_DATABASE_VERSION, '2.6.106', '>='), 'LATEST_DATABASE_VERSION is at least 2.6.106');
 $ok((string) $one('SELECT config_current_database_version FROM settings') === LATEST_DATABASE_VERSION, 'the updater reaches the latest version');
 $colA = $rows("SHOW COLUMNS FROM user_settings LIKE 'user_config_inapp_muted_types'")[0] ?? [];
 $colB = $rows("SHOW COLUMNS FROM settings LIKE 'config_update_check_last_at'")[0] ?? [];

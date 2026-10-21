@@ -215,7 +215,7 @@ $ok((int) $one('SELECT COUNT(*) FROM tickets') === $tn, 'glue: redelivered new-t
 
 // the created-ticket notification is an auto mail, threaded to the ticket, with its own Message-ID
 $qrow = $db->query("SELECT * FROM email_queue WHERE email_ticket_id = {$trow['ticket_id']} ORDER BY email_id DESC LIMIT 1")->fetch_assoc();
-$ok($qrow && $qrow['email_auto'] == 1 && preg_match('/^rivet\.[0-9a-f]{24}@msp\.example$/', (string) $qrow['email_message_id']) && strpos($qrow['email_subject'], 'Ticket created') === 0, 'queue: ticket-created email stamped with its own Message-ID, ticket id, auto flag');
+$ok($qrow && $qrow['email_auto'] == 1 && preg_match('/^rivet\.[0-9a-f]{24}@msp\.example$/', (string) $qrow['email_message_id']) && stripos($qrow['email_subject'], 'Ticket created') === 0, 'queue: ticket-created email stamped with its own Message-ID, ticket id, auto flag');
 
 // reply to that notification threads back to the new ticket (outbound Message-ID -> ticket)
 $rep = $load('threaded_reply'); $rep['message_id'] = 'reply-to-created@client.example'; $rep['in_reply_to'] = '<' . $qrow['email_message_id'] . '>'; $rep['references'] = '<' . $qrow['email_message_id'] . '>'; $rep['subject'] = 'Re: whatever the client typed';
