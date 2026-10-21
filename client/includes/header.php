@@ -13,7 +13,7 @@
  *                                      <div class="page">
  *                                        (navbar - internally balanced)
  *                                        <div class="page-wrapper">
- *                                          <div class="page-body" role="main">
+ *                                          <div class="page-body">
  *                                            <div class="container">
  *   client/includes/footer.php  closes  container / page-body / page-wrapper /
  *                                       page, then </body></html>
@@ -307,7 +307,7 @@ if ($csp_sent !== '' && stripos($csp_sent, 'script-src') === false) {
    --------------------------------------------------------------------------- */
 ?>
 <div class="page-wrapper">
-    <div class="page-body">
+    <div class="page-body" role="main">
         <div class="container">
 
     <div class="card welcome-banner border-0 shadow-sm mb-4">

@@ -7,7 +7,7 @@ def norm(u):
     path = u.split('?')[0]; return path
 def main(user, prefix, start, limit=500):
     p, b, ctx, pg = start_(user)
-    seen = {}; per = collections.Counter(); q = [start, '/admin/', '/admin/settings.php', '/agent/reports/']
+    seen = {}; per = collections.Counter(); q = [start] + ([] if os.environ.get('QA_PORTAL') else ['/admin/', '/admin/settings.php', '/agent/reports/'])
     while q and len(seen) < limit:
         u = q.pop(0)
         if u in seen: continue
@@ -29,5 +29,5 @@ def main(user, prefix, start, limit=500):
             per[key] += 1; q.append(path)
     json.dump(seen, open(f"{OUT}/discover_{user}.json", 'w'), indent=1)
     print(len(seen)); b.close(); p.stop()
-def start_(user): return start(user)
+def start_(user): return start(user, portal=bool(os.environ.get('QA_PORTAL')))
 if __name__ == '__main__': main(sys.argv[1], sys.argv[2], sys.argv[3])
