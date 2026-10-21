@@ -362,6 +362,7 @@ if (isset($_POST['add_ticket_task_approver'])) {
                     'recipient' => $email,
                     'recipient_name' => $name,
                     'subject' => $subject,
+                    'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                     'body' => $body
                 ];
 
@@ -386,6 +387,7 @@ if (isset($_POST['add_ticket_task_approver'])) {
                 'recipient' => $contact_email,
                 'recipient_name' => $contact_name,
                 'subject' => $subject,
+                'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => $body
             ];
             addToMailQueue($data);
@@ -416,6 +418,7 @@ if (isset($_POST['add_ticket_task_approver'])) {
                     'recipient' => $technical_contact_email,
                     'recipient_name' => $technical_contact_name,
                     'subject' => $subject,
+                    'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                     'body' => $body
                 ];
             }
@@ -449,6 +452,7 @@ if (isset($_POST['add_ticket_task_approver'])) {
                         'recipient' => $billing_contact_email,
                         'recipient_name' => $billing_contact_name,
                         'subject' => $subject,
+                        'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                         'body' => $body
                 ];
             }

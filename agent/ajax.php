@@ -851,6 +851,7 @@ if (isset($_POST['update_kanban_ticket'])) {
                             'recipient' => $contact_email,
                             'recipient_name' => $contact_name,
                             'subject' => $subject,
+                            'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                             'body' => $body
                         ];
                     }
@@ -868,6 +869,7 @@ if (isset($_POST['update_kanban_ticket'])) {
                             'recipient' => $watcher_email,
                             'recipient_name' => $watcher_email,
                             'subject' => $subject,
+                            'ticket_id' => intval($ticket_id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                             'body' => $body
                         ];
                     }

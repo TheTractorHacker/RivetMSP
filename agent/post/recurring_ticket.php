@@ -178,6 +178,7 @@ if (isset($_POST['bulk_force_recurring_tickets'])) {
                         'recipient' => $contact_email,
                         'recipient_name' => $contact_name,
                         'subject' => $email_subject,
+                        'ticket_id' => intval($id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                         'body' => $email_body
                     ];
 
@@ -319,6 +320,7 @@ if (isset($_GET['force_recurring_ticket'])) {
                 'recipient' => $contact_email,
                 'recipient_name' => $contact_name,
                 'subject' => $email_subject,
+                'ticket_id' => intval($id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
                 'body' => $email_body
             ];
 

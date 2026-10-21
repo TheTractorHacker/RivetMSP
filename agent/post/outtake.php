@@ -105,31 +105,33 @@ if (isset($_POST['send_outtake_email'])) {
         redirect();
     }
 
-    $sign_url       = "https://$config_base_url/guest/outtake_sign.php?token=" . $row['outtake_sign_token'];
-    $ticket_num     = $row['ticket_prefix'] . intval($row['ticket_number']);
-    $ticket_subj    = $row['ticket_subject'];
-    $recipient      = mysqli_real_escape_string($mysqli, $row['contact_email']);
-    $recipient_name = mysqli_real_escape_string($mysqli, $row['contact_name'] ?? $row['client_name']);
-    $from           = mysqli_real_escape_string($mysqli, $config_ticket_from_email);
-    $from_name      = mysqli_real_escape_string($mysqli, $config_ticket_from_name ?: $session_company_name);
-    $subject        = mysqli_real_escape_string($mysqli, "Please sign your outtake form — Ticket $ticket_num");
-    $body           = mysqli_real_escape_string($mysqli,
-        "Hello " . ($row['contact_name'] ?: $row['client_name']) . ",<br><br>"
-        . "Your outtake form for ticket <strong>$ticket_num — $ticket_subj</strong> is ready to sign.<br><br>"
+    $sign_url    = "https://$config_base_url/guest/outtake_sign.php?token=" . rawurlencode((string) $row['outtake_sign_token']);
+    $ticket_num  = $row['ticket_prefix'] . intval($row['ticket_number']);
+    $h           = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES);
+    $greet_name  = $row['contact_name'] ?: $row['client_name'];
+    $body        = "Hello " . $h($greet_name) . ",<br><br>"
+        . "Your outtake form for ticket <strong>" . $h($ticket_num) . " — " . $h($row['ticket_subject']) . "</strong> is ready to sign.<br><br>"
         . "Please click the link below to review and sign. No account or login is required:<br><br>"
-        . "<a href=\"$sign_url\">$sign_url</a><br><br>"
+        . "<a href=\"" . $h($sign_url) . "\">" . $h($sign_url) . "</a><br><br>"
         . "This link is unique to your form. Do not share it with others.<br><br>"
-        . "Thank you,<br>$session_company_name"
-    );
+        . "Thank you,<br>" . $h($session_company_name);
 
-    mysqli_query($mysqli, "INSERT INTO email_queue SET
-        email_recipient      = '$recipient',
-        email_recipient_name = '$recipient_name',
-        email_from           = '$from',
-        email_from_name      = '$from_name',
-        email_subject        = '$subject',
-        email_content        = '$body',
-        email_queued_at      = NOW()");
+    // Queued through addToMailQueue() like every other ticket email (it used to INSERT INTO email_queue directly, which skipped the Message-ID
+    // and the per-ticket "Send email notifications" switch). Bound parameters there, so nothing is SQL-escaped here.
+    addToMailQueue([[
+        'from'           => $config_ticket_from_email,
+        'from_name'      => $config_ticket_from_name ?: $session_company_name,
+        'recipient'      => $row['contact_email'],
+        'recipient_name' => $row['contact_name'] ?? $row['client_name'],
+        'subject'        => "Please sign your outtake form — Ticket $ticket_num",
+        'body'           => $body,
+        'ticket_id'      => $ticket_id,
+    ]]);
+    if (($GLOBALS['mail_queue_last_queued'] ?? 0) === 0) {
+        logAction("Outtake", "Email", "Outtake signing link for ticket $ticket_num was not emailed: email notifications are off for this ticket", $client_id, $ticket_id);
+        flash_alert("Email notifications are off for this ticket, so the signing link was not emailed. Turn them on for the ticket, or share the link another way.", "error");
+        redirect();
+    }
 
     logAction("Outtake", "Email", "Sent outtake signing link for ticket $ticket_num to {$row['contact_email']}", $client_id, $ticket_id);
     flash_alert("Signing link emailed to <strong>{$row['contact_email']}</strong>.", "success");
