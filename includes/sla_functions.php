@@ -544,7 +544,8 @@ function slaLogEvent($mysqli, int $ticket_id, string $event_type, ?int $from_sta
  */
 function slaStatus(array $ticket, array $calendar): array {
     $now_ts     = time();
-    $created_ts = !empty($ticket['ticket_created_at']) ? strtotime($ticket['ticket_created_at']) : $now_ts;
+    // The SLA clock starts at ticket_sla_started_at when "start the SLA from now" was chosen (DB 2.6.105), else at creation; the % used is measured from there.
+    $created_ts = !empty($ticket['ticket_sla_started_at']) ? strtotime($ticket['ticket_sla_started_at']) : (!empty($ticket['ticket_created_at']) ? strtotime($ticket['ticket_created_at']) : $now_ts);
     $is_paused  = !empty($ticket['ticket_sla_paused_at']);
     // The clock is frozen at the moment the pause began, so a ticket waiting on someone never drifts into "breached".
     $ref_ts     = $is_paused ? strtotime($ticket['ticket_sla_paused_at']) : $now_ts;

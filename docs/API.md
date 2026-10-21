@@ -358,7 +358,7 @@ Operational and financial reporting. Most accept a `year` query parameter (defau
 | GET | `/reports/time-by-tech` | Time logged, grouped by technician. |
 | GET | `/reports/tech-performance` | Technician performance summary. |
 | GET | `/reports/technician-performance` | Detailed technician performance report. |
-| GET | `/reports/service-desk` | Service-desk report. |
+| GET | `/reports/service-desk` | Service-desk report. `from`, `to` (YYYY-MM-DD), `maintenance` (`include` default, `exclude`, `only`: tickets made from RMM alerts). SLA figures only count tickets that count toward SLA. |
 | GET | `/reports/csat` | Customer satisfaction report — ratings distribution and trend, per-technician/per-client breakdowns, raw feedback feed. |
 | GET | `/reports/mrr` | Monthly recurring revenue report. |
 | GET | `/reports/rmm-health` | RMM fleet health report. |

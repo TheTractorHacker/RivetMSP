@@ -7,7 +7,10 @@
     var form = document.getElementById('ticketFlagForm');
     if (!form || !window.RivetDialog) { return; }
 
+    var sending = false;
     function send(action, value, anchor) {
+        if (sending) { return; } // one change per page load: the form posts and the page reloads
+        sending = true;
         form.querySelector('[name="flag_action"]').name = action;
         form.querySelector('[name="value"]').value = value;
         form.querySelector('[name="sla_anchor"]').value = anchor || '';

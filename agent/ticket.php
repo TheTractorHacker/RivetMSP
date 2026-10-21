@@ -182,7 +182,8 @@ if (isset($_GET['ticket_id'])) {
         $sla_calendar_name = !empty($sla_calendar['calendar_name']) ? nullable_htmlentities($sla_calendar['calendar_name']) : '';
         $sla_open_now      = slaIsOpenNow($sla_calendar);
         $sla_status_data   = slaStatus([
-            'ticket_created_at'         => $ticket_sla_started_at ?: ($row['ticket_created_at'] ?? null),
+            'ticket_created_at'         => $row['ticket_created_at'] ?? null,
+            'ticket_sla_started_at'     => $ticket_sla_started_at,
             'ticket_sla_paused_at'      => $row['ticket_sla_paused_at'] ?? null,
             'ticket_status'             => $row['ticket_status'] ?? null,
             'ticket_closed_at'          => $row['ticket_closed_at'] ?? null,

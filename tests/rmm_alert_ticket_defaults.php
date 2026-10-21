@@ -52,6 +52,26 @@ $ok(str_contains($dbsql, '`ticket_send_email` tinyint(1) NOT NULL DEFAULT 1') &&
     && trim((string) shell_exec('php -r ' . escapeshellarg('require "' . $root . '/includes/database_version.php"; echo LATEST_DATABASE_VERSION;'))) === '2.6.105', 'db.sql and LATEST_DATABASE_VERSION carry the change');
 $ok(ticketFlagsReady($db), 'the code sees the new columns');
 
+// Put back what this file changes outside the tables ea_reset() owns, so a suite run after it (tests/rmm_ui.php expects the scratch company zone
+// America/Chicago, no default SLA policy...) sees the scratch database as it was.
+$keepSettings = ['config_timezone', 'config_smtp_host', 'config_ticket_from_email', 'config_ticket_from_name', 'config_ticket_client_general_notifications', 'config_ticket_csat_enable',
+    'config_ticket_new_ticket_notification_email', 'config_rmm_alert_ticket_category_id', 'config_rmm_alert_ticket_sla', 'config_rmm_alert_ticket_email', 'config_rmm_auto_ticket_severities',
+    'config_enable_cron', 'config_ticket_autoclose_hours', 'config_ticket_csat_reminder_days', 'config_module_enable_rmm'];
+$savedSettings = mysqli_fetch_assoc($db->query('SELECT ' . implode(', ', $keepSettings) . ' FROM settings WHERE company_id = 1'));
+$savedTables = [];
+foreach (['ticket_statuses', 'sla_policies', 'contacts', 'user_settings'] as $t) { $savedTables[$t] = $rows("SELECT * FROM `$t`"); }
+register_shutdown_function(function () use ($db, $savedSettings, $savedTables) {
+    $set = [];
+    foreach ($savedSettings as $k => $v) { $set[] = "`$k` = " . ($v === null ? 'NULL' : "'" . $db->real_escape_string((string) $v) . "'"); }
+    $db->query('UPDATE settings SET ' . implode(', ', $set) . ' WHERE company_id = 1');
+    foreach ($savedTables as $t => $rs) {
+        $db->query("DELETE FROM `$t`");
+        foreach ($rs as $r) {
+            $db->query("INSERT INTO `$t` SET " . implode(', ', array_map(fn($k, $v) => "`$k` = " . ($v === null ? 'NULL' : "'" . $db->real_escape_string((string) $v) . "'"), array_keys($r), $r)));
+        }
+    }
+});
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // Fixtures: UTC everywhere, statuses (3 and 6 pause the SLA), contacts, a default SLA policy so a ticket that counts toward SLA really gets due dates.
 ea_reset(); ea_seed_users();
@@ -160,6 +180,8 @@ $t = $tk($tid);
 $ok($t['ticket_counts_sla'] === '1' && $t['ticket_sla_started_at'] !== null && abs(strtotime($t['ticket_sla_started_at']) - time()) <= 5, 'the SLA start is stamped now');
 $ok(abs(strtotime($t['ticket_sla_response_due']) - (strtotime($t['ticket_sla_started_at']) + 3600)) <= 5 && abs(strtotime($t['ticket_sla_resolution_due']) - (strtotime($t['ticket_sla_started_at']) + 480 * 60)) <= 5, 'due dates run from now (not from creation 3h ago)');
 $ok(slaDueState($db, $t, $t['ticket_sla_response_due'])['breached'] === false, 'so it is not breached even though it was created 3h ago');
+$pctRow = mysqli_fetch_assoc($db->query("SELECT t.* FROM tickets t WHERE ticket_id = $tid"));   // what cron's SLA automation conditions read (slaStatus on t.*)
+$ok(slaStatus($pctRow, [])['resolution']['pct'] < 5.0, 'slaStatus measures the % used from the "now" anchor (cron automation conditions do not see a fresh SLA as ~100% used)');
 $q("UPDATE tickets SET ticket_priority = 'Low' WHERE ticket_id = $tid"); recalculateTicketSla($db, $tid); $t2 = $tk($tid);
 $ok($t2['ticket_sla_response_due'] === $t['ticket_sla_response_due'], 'a later recalculation (priority change) keeps the "from now" anchor');
 $ok(ticketSetCountsSla($db, $tid, true, 'now', 'Tester') === 'unchanged', 'turning on what is on changes nothing');
