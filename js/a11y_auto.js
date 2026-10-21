@@ -64,6 +64,19 @@
         h.className = 'visually-hidden';
         h.textContent = t.replace(/\s+/g, ' ');
         host.insertBefore(h, host.firstChild);
+        levelHeadings(host);
+    }
+
+    // The templates use h3/h4 for card titles with no h2 above them; with the h1 added, that is a skipped level. Expose them one level
+    // up via aria-level (relative structure kept) so the outline reads h1 > h2 > h3 without touching the markup or the visual size.
+    function levelHeadings(host) {
+        var hs = Array.prototype.slice.call(host.querySelectorAll('h2, h3, h4, h5, h6')).filter(function (h) { return !h.hasAttribute('aria-level'); });
+        if (!hs.length) return;
+        var min = 7;
+        hs.forEach(function (h) { min = Math.min(min, parseInt(h.tagName.charAt(1), 10)); });
+        if (min <= 2) return;
+        var shift = min - 2;
+        hs.forEach(function (h) { h.setAttribute('aria-level', String(parseInt(h.tagName.charAt(1), 10) - shift)); });
     }
 
     function run(root) {
