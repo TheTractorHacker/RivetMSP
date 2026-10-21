@@ -1,12 +1,12 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP
 /*
- * In-app notification preferences (Preferences > In-app Notifications, DB 2.6.105) and the daily update check, on a SCRATCH database with the
+ * In-app notification preferences (Preferences > In-app Notifications, DB 2.6.106) and the daily update check, on a SCRATCH database with the
  * real code (same rules as tests/endpoint_agent_lib.php: scratch DB named in config.php, throwaway Redis, never a live database):
  *   - every notification type the code creates belongs to a category; locked categories cannot be muted;
  *   - a muted category is never INSERTed (appNotify() fan-out, notifyUser(), the direct INSERT sites) nor published to the user's live stream,
  *     other categories and other users are unaffected, a missing column fails open;
- *   - the updater step 2.6.104 -> 2.6.105 (run twice) and db.sql parity;
+ *   - the updater step 2.6.105 -> 2.6.106 (run twice) and db.sql parity;
  *   - the Preferences card (render, escaping, CSRF, locked keys never stored, bogus keys dropped) over real HTTP;
  *   - the update check runs once a day at UPDATE_CHECK_HOUR (03:00 app time), driven through the real claim against the scratch DB.
  *
@@ -62,10 +62,10 @@ foreach (['Cron', 'Update', 'Ticket', 'Mail', 'Vault', 'RMM Alert Escalation', '
     $ok(isset($found[$t]), "the scan sees '$t' in the code");
 }
 
-echo "\n--- fail-open before DB 2.6.105 (new code, old database) ---\n";
+echo "\n--- fail-open before DB 2.6.106 (new code, old database) ---\n";
 $q("ALTER TABLE user_settings DROP COLUMN IF EXISTS user_config_inapp_muted_types");
 $q("ALTER TABLE settings DROP COLUMN IF EXISTS config_update_check_last_at");
-$q("UPDATE settings SET config_current_database_version = '2.6.104'");
+$q("UPDATE settings SET config_current_database_version = '2.6.105'");
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);   // the web app's default (PHP 8.1+): a missing column THROWS, it does not just return false
 appNotify('Cron', 'fail-open probe');
 $ok($count(1, 'Cron') === 1 && $count(10, 'Cron') === 1, 'without the column every user still gets the notification');
@@ -76,9 +76,9 @@ $ok(updateCheckClaim($db, time()) === false, 'without its column the update chec
 mysqli_report(MYSQLI_REPORT_OFF);
 $ok(inapp_muted_categories_for_user(10) === [] && updateCheckClaim($db, time()) === false, 'same answers with error reporting off');
 
-echo "\n--- updater 2.6.104 -> 2.6.105 (run twice) and db.sql ---\n";
+echo "\n--- updater 2.6.105 -> 2.6.106 (run twice) and db.sql ---\n";
 for ($i = 0; $i < 2; $i++) { shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1'); }
-$ok(LATEST_DATABASE_VERSION === '2.6.105', 'LATEST_DATABASE_VERSION is 2.6.105');
+$ok(LATEST_DATABASE_VERSION === '2.6.106', 'LATEST_DATABASE_VERSION is 2.6.106');
 $ok((string) $one('SELECT config_current_database_version FROM settings') === LATEST_DATABASE_VERSION, 'the updater reaches the latest version');
 $colA = $rows("SHOW COLUMNS FROM user_settings LIKE 'user_config_inapp_muted_types'")[0] ?? [];
 $colB = $rows("SHOW COLUMNS FROM settings LIKE 'config_update_check_last_at'")[0] ?? [];
