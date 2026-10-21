@@ -304,6 +304,13 @@ $dash_attention_total = array_sum(array_column($dash_attention_items, 'count'));
     </form>
 </div>
 
+<?php if ($user_config_dashboard_financial_enable != 1 && $user_config_dashboard_technical_enable != 1) { ?>
+<div class="text-center text-muted py-5">
+    <i class="fas fa-chart-line fa-2x mb-2 d-block"></i>
+    Charts and trends are hidden. Switch on <strong>Technical</strong><?php if ($session_user_role == 1 || ($session_user_role == 3 && $config_module_enable_accounting == 1)) { echo ' or <strong>Financial</strong>'; } ?> above to see them.
+</div>
+<?php } ?>
+
 <?php
 if ($user_config_dashboard_financial_enable == 1) {
 
