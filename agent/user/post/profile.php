@@ -486,3 +486,21 @@ if (isset($_POST['save_my_push_categories'])) {
     flash_alert('Push notification preferences updated.');
     redirect();
 }
+
+if (isset($_POST['save_my_inapp_categories'])) {
+    validateCSRFToken($_POST['csrf_token']);
+
+    // A switch that is on posts its key; every mutable category that did not post is muted. Locked categories are never stored.
+    $posted = $_POST['inapp_categories'] ?? [];
+    $enabled = is_array($posted) ? array_filter($posted, 'is_string') : [];
+    $muted = array_values(array_diff(inapp_mutable_category_keys(), $enabled));
+    $muted_sql = $muted ? "'" . mysqli_real_escape_string($mysqli, json_encode($muted)) . "'" : "NULL";
+
+    mysqli_query($mysqli, "INSERT INTO user_settings SET user_id = $session_user_id, user_config_inapp_muted_types = $muted_sql
+        ON DUPLICATE KEY UPDATE user_config_inapp_muted_types = $muted_sql");
+
+    logAction('User Account', 'Edit', "$session_name updated in-app notification preferences" . ($muted ? ' (muted: ' . implode(', ', $muted) . ')' : ' (all on)'));
+
+    flash_alert('In-app notification preferences updated.');
+    redirect();
+}
