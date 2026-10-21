@@ -38,7 +38,10 @@ recalculateTicketSla($db, $pre['ticket_id']);
 addToMailQueue([['from' => 'a@msp.example', 'from_name' => 'A', 'recipient' => 'b@client.example', 'recipient_name' => 'B', 'subject' => 'x', 'body' => 'y', 'ticket_id' => $pre['ticket_id']]]);
 $ok((int) $one("SELECT COUNT(*) FROM email_queue WHERE email_ticket_id = {$pre['ticket_id']}") === 1, 'before DB 2.6.105: addToMailQueue queues as before (no gate without the column)');
 shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1');
-$ok($one('SELECT config_current_database_version FROM settings LIMIT 1') === '2.6.105', 'the real updater reaches 2.6.105');
+// The real updater does not stop at 2.6.105: once consolidated with other branches' steps (notification preferences, 2.6.105 -> 2.6.106) it keeps
+// going to whatever is actually latest - this test only cares that the 2.6.104 -> 2.6.105 step itself ran and its columns are correct, not that
+// 2.6.105 is the final version on this checkout.
+$ok(version_compare((string) $one('SELECT config_current_database_version FROM settings LIMIT 1'), '2.6.105', '>='), 'the real updater reaches at least 2.6.105');
 $tc = array_column($rows('SHOW COLUMNS FROM tickets'), null, 'Field'); $sc = array_column($rows('SHOW COLUMNS FROM settings'), null, 'Field');
 $ok(($tc['ticket_rmm_sourced']['Default'] ?? '') === '0' && ($tc['ticket_counts_sla']['Default'] ?? '') === '1' && ($tc['ticket_send_email']['Default'] ?? '') === '1'
     && ($tc['ticket_sla_started_at']['Null'] ?? '') === 'YES' && ($sc['config_rmm_alert_ticket_sla']['Default'] ?? '') === '0' && ($sc['config_rmm_alert_ticket_email']['Default'] ?? '') === '0', 'six columns with the specified defaults');
@@ -46,10 +49,10 @@ $pr = mysqli_fetch_assoc($db->query("SELECT ticket_rmm_sourced, ticket_counts_sl
 $ok($pr['ticket_rmm_sourced'] === '0' && $pr['ticket_counts_sla'] === '1' && $pr['ticket_send_email'] === '1' && $pr['ticket_sla_started_at'] === null, 'an existing ticket is left exactly as it was (counts SLA, sends email, not labelled)');
 $q("UPDATE settings SET config_current_database_version = '2.6.104'");
 shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1');
-$ok($one('SELECT config_current_database_version FROM settings LIMIT 1') === '2.6.105', 're-running the step is harmless');
+$ok(version_compare((string) $one('SELECT config_current_database_version FROM settings LIMIT 1'), '2.6.105', '>='), 're-running the step is harmless');
 $dbsql = (string) file_get_contents("$root/db.sql");
 $ok(str_contains($dbsql, '`ticket_send_email` tinyint(1) NOT NULL DEFAULT 1') && str_contains($dbsql, '`config_rmm_alert_ticket_email` tinyint(1) NOT NULL DEFAULT 0')
-    && trim((string) shell_exec('php -r ' . escapeshellarg('require "' . $root . '/includes/database_version.php"; echo LATEST_DATABASE_VERSION;'))) === '2.6.105', 'db.sql and LATEST_DATABASE_VERSION carry the change');
+    && version_compare(trim((string) shell_exec('php -r ' . escapeshellarg('require "' . $root . '/includes/database_version.php"; echo LATEST_DATABASE_VERSION;'))), '2.6.105', '>='), 'db.sql and LATEST_DATABASE_VERSION carry the change (at least 2.6.105)');
 $ok(ticketFlagsReady($db), 'the code sees the new columns');
 
 // Put back what this file changes outside the tables ea_reset() owns, so a suite run after it (tests/rmm_ui.php expects the scratch company zone
