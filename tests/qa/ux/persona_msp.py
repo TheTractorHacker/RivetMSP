@@ -1,5 +1,6 @@
 """Phase C - admin, billing, account manager, sales personas (alex.morgan as admin). Nothing is sent: no invoices, quotes or e-mail."""
-import json, sys
+import json, sys, time
+TS = str(int(time.time()))[-6:]
 from flow import *
 
 def run():
@@ -21,18 +22,19 @@ def run():
     def a_user(f):
         to_admin(f, 'Users')
         f.click('text=New User', 'New User'); pg.wait_for_selector('.modal.show', timeout=5000)
-        f.type('.modal.show input[name=name]', 'QA-UI- Test User', 'name'); f.type('.modal.show input[name=email]', 'qa-ui-user@qa.example', 'email')
+        f.type('.modal.show input[name=name]', f'QA-UI- Test User {TS}', 'name'); f.type('.modal.show input[name=email]', f'qa-ui-user{TS}@qa.example', 'email')
         f.type('.modal.show input[name=password]', 'QaUi#Passw0rd-2026x', 'password')
+        f.click('.modal.show .ts-control >> nth=0', 'role dropdown'); f.click('.ts-dropdown .option:has-text("Technician")', 'choose Technician')
         f.note('role picker: ' + str(pg.evaluate("[...document.querySelectorAll('.modal.show select[name=role] option')].map(o=>o.text).join(',')")))
         shot(pg, 'admin_new_user_modal')
         f.click('.modal.show button[type=submit]', 'Create'); pg.wait_for_timeout(1200)
-        f.note('user listed: ' + str('QA-UI- Test User' in pg.inner_text('body')))
+        f.note('user listed: ' + str(f'QA-UI- Test User {TS}' in pg.inner_text('body')))
     task('admin', 'Create a user with a role', a_user)
 
     def a_disable(f):
         to_admin(f, 'Users')
-        row = pg.locator('tr', has_text='QA-UI- Test User').first
-        f.click(row.locator('.dropdown-toggle, button:has-text("...")').last if row.locator('.dropdown-toggle').count() else row.locator('button').last, 'row menu')
+        row = pg.locator('tr', has_text=f'QA-UI- Test User {TS}').first
+        f.click(row.locator('button').last, 'row menu')
         f.note('menu: ' + ', '.join(pg.locator('.dropdown-menu.show a').all_inner_texts())[:100])
         f.click('.dropdown-menu.show >> text=Disable', 'Disable') if pg.locator('.dropdown-menu.show >> text=Disable').count() else f.note('no Disable item')
         pg.wait_for_timeout(800)
@@ -71,7 +73,7 @@ def run():
         f.note('report is per-client counts, no drill-down links: ' + str(pg.locator('.page-body table a').count()) + ' links in table')
         pg.goto(BASE + '/agent/dashboard.php'); f.nav('Service Desk', 'Tickets')
         f.click(pg.locator("table tbody tr a[href*='ticket.php?ticket_id=']:visible").nth(1), 'open ticket')
-        f.click('a:has-text("Invoice")', 'Invoice button'); pg.wait_for_selector('.modal.show', timeout=5000)
+        f.click('a[data-modal-url*="ticket_invoice_add"]', 'Invoice button'); pg.wait_for_selector('.modal.show', timeout=5000)
         f.note('invoice modal: ' + pg.inner_text('.modal.show')[:200].replace('\n', ' | '))
         shot(pg, 'billing_ticket_invoice_modal')
     task('billing user', 'Create an invoice from a ticket with tracked time', b_invoice_from_time)
@@ -111,9 +113,9 @@ def run():
     # ---- Sales
     def s_lead(f):
         f.nav('Organization', 'Clients'); f.click('a:has-text("Leads")', 'Leads tab'); f.click('text=New Lead', 'New Lead'); pg.wait_for_selector('.modal.show', timeout=5000)
-        f.type('.modal.show input[name=name]', 'QA-UI- Lead Co', 'lead name')
+        f.type('.modal.show input[name=name]', f'QA-UI- Lead Co {TS}', 'lead name'); f.click('.modal.show a:has-text("Contact"), .modal.show button:has-text("Contact")', 'Contact tab'); f.type('.modal.show input[name=contact]', 'QA-UI- Lead Person', 'primary contact')
         shot(pg, 'sales_new_lead_modal'); f.note('lead modal fields: ' + pg.evaluate("[...document.querySelectorAll('.modal.show input:not([type=hidden]), .modal.show select, .modal.show textarea')].map(e=>e.name).join(',')"))
-        f.click('.modal.show button[type=submit]', 'Save lead'); pg.wait_for_timeout(1200); f.note('lead listed: ' + str('QA-UI- Lead Co' in pg.inner_text('body')))
+        f.click('.modal.show button[type=submit]', 'Save lead'); pg.wait_for_timeout(1200); f.note('lead listed: ' + str(f'QA-UI- Lead Co {TS}' in pg.inner_text('body')))
     task('sales/lead owner', 'Capture a lead', s_lead)
 
     def s_pipeline(f):
@@ -124,7 +126,7 @@ def run():
 
     def s_convert(f):
         f.nav('Organization', 'Clients'); f.click('a:has-text("Leads")', 'Leads tab')
-        row = pg.locator('tr', has_text='QA-UI- Lead Co').first
+        row = pg.locator('tr', has_text=f'QA-UI- Lead Co {TS}').first
         f.click(row.locator('.dropdown-toggle, button').last, 'row menu'); f.note('lead row menu: ' + ', '.join(pg.locator('.dropdown-menu.show a').all_inner_texts()).replace('\n', ' ')[:160])
         f.note('Lead statuses (New/Contacted/Qualified...) - is there a lead status field? ' + str('Status' in pg.inner_text('.page-body')))
     task('sales/lead owner', 'Move a lead through statuses and convert it', s_convert)

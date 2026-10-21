@@ -2,7 +2,7 @@
 // Get Main Side Bar Badge Counts
 
 // Active Clients Count
-$row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COUNT('client_id') AS num FROM clients WHERE client_archived_at IS NULL $access_permission_query"));
+$row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COUNT('client_id') AS num FROM clients WHERE client_archived_at IS NULL AND client_lead = 0 $access_permission_query"));
 $num_active_clients = $row['num'];
 
 // Active Ticket Count
