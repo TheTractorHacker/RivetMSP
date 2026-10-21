@@ -30,7 +30,7 @@
         if (label) btn.setAttribute('aria-label', label.trim());
     }
 
-    function humanise(s) { return (s || '').replace(/\[\]$/, '').replace(/[_-]+/g, ' ').replace(/^\w/, function (c) { return c.toUpperCase(); }); }
+    function humanise(s) { return (s || '').replace(/\[\]$/, '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').replace(/^\w/, function (c) { return c.toUpperCase(); }); }
 
     function nameField(el) {
         if (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || el.getAttribute('title')) return;

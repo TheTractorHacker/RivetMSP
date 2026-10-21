@@ -714,7 +714,7 @@ if (isset($_GET['ticket_id'])) {
                         <span class="avatar-badge" style="background-color:#adb5bd;"><i class="fas fa-user"></i></span>
                         <?php } ?>
                         <?php if (empty($ticket_closed_at) && lookupUserPermission("module_support") >= 2) { ?>
-                        <select id="quickAssignSelect" class="form-control form-control-sm" style="max-width:150px;font-size:.8rem;" data-ticket-id="<?= $ticket_id ?>" data-csrf="<?= $_SESSION['csrf_token'] ?>">
+                        <select id="quickAssignSelect" aria-label="Assign technician" class="form-control form-control-sm" style="max-width:150px;font-size:.8rem;" data-ticket-id="<?= $ticket_id ?>" data-csrf="<?= $_SESSION['csrf_token'] ?>">
                             <option value="0" <?= !$ticket_assigned_to ? 'selected' : '' ?>>— Unassigned —</option>
                             <?php
                             mysqli_data_seek($sql_assign_to_select, 0);

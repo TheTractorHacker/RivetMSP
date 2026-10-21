@@ -48,9 +48,8 @@ def run():
         f.click('.modal.show button[type=submit]:has-text("Save")', 'Save')
         pg.wait_for_timeout(1000)
         f.note('status now: ' + pg.locator('.tkt-pill-badge').first.inner_text().strip())
-        f.click('#quickAssignSelect + .ts-wrapper .ts-control, .ts-wrapper:has(#quickAssignSelect) .ts-control', 'assignee dropdown')
-        f.note('assign options: ' + ', '.join(pg.locator('.ts-dropdown .option').all_inner_texts())[:120])
-        f.click('.ts-dropdown .option >> nth=1', 'choose a technician'); pg.wait_for_timeout(1000)
+        f.note('assign options: ' + str(pg.evaluate("[...document.querySelectorAll('#quickAssignSelect option')].map(o=>o.text).join(', ')"))[:120])
+        pg.locator('#quickAssignSelect').select_option(index=1); f.clicks += 1; f.steps.append('select: assignee (native select, saves on change)'); pg.wait_for_timeout(1200)
     task('Change status and assign a technician', t_status_assign)
 
     def t_time(f):
