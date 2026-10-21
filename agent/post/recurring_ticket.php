@@ -169,20 +169,30 @@ if (isset($_POST['bulk_force_recurring_tickets'])) {
                 // Notify client by email their ticket has been raised, if general notifications are turned on & there is a valid contact email
                 if ((!empty($config_smtp_host) || !empty($config_smtp_provider)) && $config_ticket_client_general_notifications == 1 && filter_var($contact_email, FILTER_VALIDATE_EMAIL)) {
 
-                    $email_subject = "Ticket Created - [$ticket_prefix$ticket_number] - $ticket_subject (scheduled)";
-                    $email_body = "<i style=\'color: #808080\'>##- Please type your reply above this line -##</i><br><br>Hello $contact_name,<br><br>A ticket regarding \"$ticket_subject\" has been automatically created for you.<br><br>--------------------------------<br>$ticket_details--------------------------------<br><br>Ticket: $ticket_prefix$ticket_number<br>Subject: $ticket_subject<br>Status: Open<br>Portal: https://$config_base_url/client/ticket.php?id=$id<br><br>--<br>$company_name - Support<br>$config_ticket_from_email<br>$company_phone";
+                    // Admin > Settings > Email templates: "Ticket created" (null when switched off). The company name/phone were never set in this
+                    // handler, so the old email's signature read blank; they come from the company record now.
+                    $mt_company = getCompanyNameAndPhone();
+                    $mt = renderMailTemplate($mysqli, 'ticket_created', [
+                        'contact_name' => $contact_name, 'ticket_number' => "$ticket_prefix$ticket_number", 'subject' => $ticket_subject, 'status' => 'Open',
+                        'portal_link' => "https://$config_base_url/guest/guest_view_ticket.php?ticket_id=$id&url_key=$url_key",
+                        'client_portal_link' => "https://$config_base_url/client/ticket.php?id=$id",
+                        'company_name' => $mt_company['name'], 'company_phone' => $mt_company['phone'], 'from_email' => $config_ticket_from_email,
+                        'ticket_details' => $ticket_details,
+                    ]);
 
-                    $email = [
-                        'from' => $ticket_from['email'],
-                        'from_name' => $ticket_from['name'],
-                        'recipient' => $contact_email,
-                        'recipient_name' => $contact_name,
-                        'subject' => $email_subject,
-                        'ticket_id' => intval($id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
-                        'body' => $email_body
-                    ];
+                    if ($mt !== null) {
+                        $email = [
+                            'from' => $ticket_from['email'],
+                            'from_name' => $ticket_from['name'],
+                            'recipient' => $contact_email,
+                            'recipient_name' => $contact_name,
+                            'subject' => $mt['subject'],
+                            'ticket_id' => intval($id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
+                            'body' => $mt['body']
+                        ];
 
-                    $data[] = $email;
+                        $data[] = $email;
+                    }
 
                 }
 
@@ -311,20 +321,30 @@ if (isset($_GET['force_recurring_ticket'])) {
         // Notify client by email their ticket has been raised, if general notifications are turned on & there is a valid contact email
         if ((!empty($config_smtp_host) || !empty($config_smtp_provider)) && $config_ticket_client_general_notifications == 1 && filter_var($contact_email, FILTER_VALIDATE_EMAIL)) {
 
-            $email_subject = "Ticket created - [$ticket_prefix$ticket_number] - $ticket_subject (scheduled)";
-            $email_body = "<i style=\'color: #808080\'>##- Please type your reply above this line -##</i><br><br>Hello $contact_name,<br><br>A ticket regarding \"$ticket_subject\" has been automatically created for you.<br><br>--------------------------------<br>$ticket_details--------------------------------<br><br>Ticket: $ticket_prefix$ticket_number<br>Subject: $ticket_subject<br>Status: Open<br>Portal: https://$config_base_url/client/ticket.php?id=$id<br><br>--<br>$company_name - Support<br>$config_ticket_from_email<br>$company_phone";
+            // Admin > Settings > Email templates: "Ticket created" (null when switched off). The company name/phone were never set in this
+            // handler, so the old email's signature read blank; they come from the company record now.
+            $mt_company = getCompanyNameAndPhone();
+            $mt = renderMailTemplate($mysqli, 'ticket_created', [
+                'contact_name' => $contact_name, 'ticket_number' => "$ticket_prefix$ticket_number", 'subject' => $ticket_subject, 'status' => 'Open',
+                'portal_link' => "https://$config_base_url/guest/guest_view_ticket.php?ticket_id=$id&url_key=$url_key",
+                'client_portal_link' => "https://$config_base_url/client/ticket.php?id=$id",
+                'company_name' => $mt_company['name'], 'company_phone' => $mt_company['phone'], 'from_email' => $config_ticket_from_email,
+                'ticket_details' => $ticket_details,
+            ]);
 
-            $email = [
-                'from' => $ticket_from['email'],
-                'from_name' => $ticket_from['name'],
-                'recipient' => $contact_email,
-                'recipient_name' => $contact_name,
-                'subject' => $email_subject,
-                'ticket_id' => intval($id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
-                'body' => $email_body
-            ];
+            if ($mt !== null) {
+                $email = [
+                    'from' => $ticket_from['email'],
+                    'from_name' => $ticket_from['name'],
+                    'recipient' => $contact_email,
+                    'recipient_name' => $contact_name,
+                    'subject' => $mt['subject'],
+                    'ticket_id' => intval($id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
+                    'body' => $mt['body']
+                ];
 
-            $data[] = $email;
+                $data[] = $email;
+            }
 
         }
 
