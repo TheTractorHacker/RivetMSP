@@ -13,7 +13,7 @@
  *                                      <div class="page">
  *                                        (navbar - internally balanced)
  *                                        <div class="page-wrapper">
- *                                          <div class="page-body">
+ *                                          <div class="page-body" role="main">
  *                                            <div class="container">
  *   client/includes/footer.php  closes  container / page-body / page-wrapper /
  *                                       page, then </body></html>

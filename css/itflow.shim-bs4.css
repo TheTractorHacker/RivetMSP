@@ -232,6 +232,13 @@
 .badge.bg-success, .badge.bg-warning, .badge.bg-info, .badge.bg-light,
 .badge.text-bg-success, .badge.text-bg-warning, .badge.text-bg-info, .badge.text-bg-light { color: #0b1220 !important; }
 
+/* ---- Light-theme text contrast (WCAG AA) ---
+   Tabler's #2fb344 green is 2.7:1 as text on white, .form-text (#9095a0) is 3:1, and
+   white on the green .btn-success is 2.6:1. Dark theme is unaffected (light text on dark). */
+html:not([data-bs-theme="dark"]) .text-success { color: #1e7a30 !important; }
+html:not([data-bs-theme="dark"]) .form-text { color: #5d6b72; }
+.btn-success, .btn-success:hover, .btn-success:focus, .btn-success:active { color: #0b1220; }
+
 /* ---- BS4 data-toggle="buttons" (radio/checkbox styled as a button group) ----
    BS5 deleted that plugin entirely, INCLUDING the CSS that visually hid the real
    <input type="radio"|"checkbox"> nested inside each label.btn. Without this the

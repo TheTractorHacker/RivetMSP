@@ -44,7 +44,7 @@ CHECK_JS = r"""() => {
     if (!rc.width || !rc.height) continue;
     if (el.childNodes.length && [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) {
       if (parseFloat(cs.fontSize) < 11.5) small.push((el.className||el.tagName).toString().slice(0,40) + ':' + cs.fontSize + ':' + el.textContent.trim().slice(0,20));
-      if (el.scrollWidth > el.clientWidth + 2 && cs.overflowX !== 'visible' && cs.textOverflow !== 'ellipsis' && !el.closest('.table-responsive,.dropdown-menu,pre,code,textarea'))
+      if (el.scrollWidth > el.clientWidth + 2 && !el.classList.contains('visually-hidden') && !el.classList.contains('sr-only') && cs.overflowX !== 'visible' && cs.textOverflow !== 'ellipsis' && !el.closest('.table-responsive,.dropdown-menu,pre,code,textarea'))
         clipped.push((el.className||el.tagName).toString().slice(0,40) + ':' + el.textContent.trim().slice(0,25));
     }
     if (el.matches('button, a.btn, a[role=button]') && !el.textContent.trim() && !el.getAttribute('aria-label') && !el.getAttribute('title') && !el.getAttribute('aria-labelledby'))
@@ -68,7 +68,7 @@ def audit(pg, axe=True):
     res = pg.evaluate(CHECK_JS)
     if axe:
         try:
-            pg.add_script_tag(path=AXE)
+            pg.evaluate(open(AXE).read())
             ax = pg.evaluate("async()=>{const r=await axe.run(document,{runOnly:['wcag2a','wcag2aa','wcag22aa','best-practice']});return r.violations.map(v=>({id:v.id,impact:v.impact,n:v.nodes.length}))}")
             res['axe'] = ax
         except Exception as e:
