@@ -183,7 +183,7 @@ function updateChecks(string $dir, ?string $currentDbVersion = null, ?string $la
     if ($currentDbVersion !== null && $latestDbVersion !== null) {
         $cmp = version_compare($latestDbVersion, $currentDbVersion);
         if ($cmp > 0) {
-            $add('dbversion', 'Database matches the code', 'warn', 'The code expects database version ' . $latestDbVersion . ' but the database is at ' . $currentDbVersion . '.', 'Press Update Database below (take a backup first).');
+            $add('dbversion', 'Database matches the code', 'warn', 'The code expects database version ' . $latestDbVersion . ' but the database is at ' . $currentDbVersion . '.', 'Press Update Database at the top of this page (take a backup first).');
         } elseif ($cmp < 0) {
             $add('dbversion', 'Database matches the code', 'fail', 'The database (' . $currentDbVersion . ') is newer than this code (' . $latestDbVersion . '). The app may misbehave.', 'Do not run more updates. Bring the code forward to the release that matches the database, or restore a backup taken before the database was updated.');
         } else {
