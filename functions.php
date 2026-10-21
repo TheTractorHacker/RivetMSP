@@ -10,6 +10,7 @@ require_once __DIR__ . '/includes/billing_guards.php';
 require_once __DIR__ . '/includes/net_guards.php';
 require_once __DIR__ . '/includes/rivet_time.php';   // company-time output for stored timestamps (26.10.36; same file as RivetIT)
 require_once __DIR__ . '/includes/rmm_time.php';
+require_once __DIR__ . '/includes/mail_templates.php';   // renderMailTemplate(): every ticket/portal email's subject and body (DB 2.6.107)
 
 // Role check failed wording
 DEFINE("WORDING_ROLECHECK_FAILED", "You are not permitted to do that!");
