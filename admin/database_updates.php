@@ -7446,3 +7446,31 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.104'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.104') {
+        // DB 2.6.105: RMM tickets are Maintenance with no SLA and no email by default. FOUR additive tickets columns and TWO settings columns, all
+        // ADD COLUMN IF NOT EXISTS, so re-running is harmless. The defaults keep every EXISTING ticket exactly as it was: ticket_counts_sla = 1 and
+        // ticket_send_email = 1 (unchanged SLA and email behaviour), ticket_rmm_sourced = 0 (old RMM tickets are labelled only by the opt-in backfill
+        // tool in Administration > Integrations > RMM > Alert tickets), ticket_sla_started_at NULL (the SLA clock starts at ticket_created_at, as
+        // before). The two settings are off: new RMM alert tickets get no SLA and no outbound email unless an administrator turns them on.
+        mysqli_query($mysqli, "ALTER TABLE `tickets`
+            ADD COLUMN IF NOT EXISTS `ticket_rmm_sourced` TINYINT(1) NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `ticket_counts_sla` TINYINT(1) NOT NULL DEFAULT 1,
+            ADD COLUMN IF NOT EXISTS `ticket_send_email` TINYINT(1) NOT NULL DEFAULT 1,
+            ADD COLUMN IF NOT EXISTS `ticket_sla_started_at` DATETIME NULL DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `settings`
+            ADD COLUMN IF NOT EXISTS `config_rmm_alert_ticket_sla` TINYINT(1) NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `config_rmm_alert_ticket_email` TINYINT(1) NOT NULL DEFAULT 0");
+
+        // Only advance once every column is really there (a failed ALTER retries on the next run instead of being skipped).
+        $mt_ok = true;
+        foreach (['tickets' => ['ticket_rmm_sourced', 'ticket_counts_sla', 'ticket_send_email', 'ticket_sla_started_at'], 'settings' => ['config_rmm_alert_ticket_sla', 'config_rmm_alert_ticket_email']] as $mt_table => $mt_cols) {
+            foreach ($mt_cols as $mt_col) {
+                $mt_res = mysqli_query($mysqli, "SHOW COLUMNS FROM `$mt_table` LIKE '$mt_col'");
+                $mt_ok = $mt_ok && $mt_res && mysqli_num_rows($mt_res) > 0;
+            }
+        }
+        if ($mt_ok) {
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.105'");
+        }
+    }
