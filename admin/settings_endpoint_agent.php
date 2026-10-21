@@ -705,34 +705,38 @@ if ($feed->ready()) {
 <div class="card mb-3" id="binaries">
     <div class="card-header"><h4 class="card-title mb-0">Agent binaries</h4></div>
     <div class="card-body">
-        <p class="small text-muted">Upload the Windows agent executable (unstamped, as built by <code>make build</code>) for each architecture. The server checks the PE header, the machine type and that the file is not already an installer, and stores it outside the web-served area. The <strong>current</strong> binary per architecture is what per-department installers are made from; offering a binary as an update lets enrolled agents fetch it from this server. Largest accepted upload: <strong><?= $h(BinaryStore::human($uploadLimit)) ?></strong> (the lower of the <?= $h(BinaryStore::human($rmm->binaryStore()->maxBytes())) ?> cap, PHP <code>upload_max_filesize</code> <?= $h(ini_get('upload_max_filesize')) ?> and <code>post_max_size</code> <?= $h(ini_get('post_max_size')) ?>). Larger or automated uploads: <code>scripts/endpoint_agent_publish.php</code>.</p>
+        <p class="small text-muted">Upload the Windows agent executable (unstamped, as built by <code>make build</code>) for each architecture. The server checks the PE header, the machine type and that the file is not already an installer, and stores it outside the web-served area. The <strong>current</strong> binary per architecture is what per-department installers are made from; offering a binary as an update lets enrolled agents fetch it from this server. Set the platform to <strong>Linux</strong> to publish the Linux agent (<code>rivetit-agent-linux-amd64</code> / <code>-arm64</code>) as the self-update of enrolled Linux devices: the server then checks for a 64-bit Linux program for that CPU that contains the version you enter. Every binary and release belongs to one platform, so a Linux device is never offered a Windows executable or the other way round. Largest accepted upload: <strong><?= $h(BinaryStore::human($uploadLimit)) ?></strong> (the lower of the <?= $h(BinaryStore::human($rmm->binaryStore()->maxBytes())) ?> cap, PHP <code>upload_max_filesize</code> <?= $h(ini_get('upload_max_filesize')) ?> and <code>post_max_size</code> <?= $h(ini_get('post_max_size')) ?>). Larger or automated uploads: <code>scripts/endpoint_agent_publish.php</code>.</p>
         <form action="post.php" method="post" enctype="multipart/form-data" class="mb-3" autocomplete="off" id="bn_form">
             <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
             <label for="bn_file" id="bn_drop" class="d-block border border-2 rounded p-4 text-center mb-2" style="border-style:dashed !important;cursor:pointer">
                 <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2 d-block" aria-hidden="true"></i>
-                <span class="d-block fw-bold">Drop the agent .exe files here, or click to choose them</span>
+                <span class="d-block fw-bold">Drop the agent files here, or click to choose them</span>
                 <span class="d-block small text-muted">Add the x64 and the ARM64 build together. The version and architecture are read from the file name (for example <code>rivetit-agent-1.4.2-windows-amd64.exe</code>); you can correct them below.</span>
                 <input type="file" class="visually-hidden" id="bn_file" name="agent_binary[]" accept=".exe" multiple>
             </label>
             <div id="bn_rows" class="mb-2" aria-live="polite"></div>
             <div class="row g-2 align-items-end">
-                <div class="col-lg-3"><div class="form-check"><input type="checkbox" class="form-check-input" id="bn_cur" name="activate" value="1" checked><label class="form-check-label small" for="bn_cur">Make current for installers</label></div></div>
-                <div class="col-lg-3"><label class="form-label small" for="bn_ring">Offer as update</label><select class="form-select form-select-sm" id="bn_ring" name="release_ring"><option value="">No</option><option value="pilot">Pilot ring</option><option value="stable">Stable ring</option></select></div>
+                <div class="col-lg-2"><label class="form-label small" for="bn_os">Platform</label><select class="form-select form-select-sm" id="bn_os" name="os"><option value="windows" selected>Windows (.exe)</option><option value="linux">Linux (self-update)</option></select></div>
+                <div class="col-lg-2"><div class="form-check"><input type="checkbox" class="form-check-input" id="bn_cur" name="activate" value="1" checked><label class="form-check-label small" for="bn_cur">Make current for installers</label></div></div>
+                <div class="col-lg-2"><label class="form-label small" for="bn_ring">Offer as update</label><select class="form-select form-select-sm" id="bn_ring" name="release_ring"><option value="">No</option><option value="pilot">Pilot ring</option><option value="stable">Stable ring</option></select></div>
                 <div class="col-lg-2"><label class="form-label small" for="bn_pct">Rollout %</label><input class="form-control form-control-sm" id="bn_pct" name="rollout_pct" type="number" min="0" max="100" value="10"></div>
                 <div class="col-lg-2"><button class="btn btn-sm btn-primary w-100" name="upload_agent_binary" id="bn_go"><i class="fas fa-upload me-1" aria-hidden="true"></i>Upload</button></div>
             </div>
         </form>
         <div class="table-responsive"><table class="table table-sm align-middle mb-0">
-            <thead><tr><th>Version</th><th>Arch</th><th>Size</th><th>SHA-256</th><th>Uploaded</th><th>State</th><th></th></tr></thead><tbody>
-            <?php foreach ($binaries as $b) { $fid = 'bn_' . (int) $b['binary_id']; ?>
+            <thead><tr><th>Version</th><th>Platform</th><th>Size</th><th>SHA-256</th><th>Uploaded</th><th>State</th><th></th></tr></thead><tbody>
+            <?php foreach ($binaries as $b) { $fid = 'bn_' . (int) $b['binary_id']; $bOs = (string) ($b['os'] ?? 'windows'); ?>
                 <tr>
-                    <td><?= $h($b['version']) ?></td><td><?= $h($b['arch']) ?></td><td><?= $h(BinaryStore::human((int) $b['size_bytes'])) ?></td>
+                    <td><?= $h($b['version']) ?></td><td><?= $h($bOs === 'linux' ? 'Linux' : 'Windows') ?> <span class="text-muted"><?= $h($b['arch']) ?></span></td><td><?= $h(BinaryStore::human((int) $b['size_bytes'])) ?></td>
                     <td class="small font-monospace text-break"><?= $h($b['sha256']) ?></td><td><?= $h($dt($b['created_at'])) ?></td>
-                    <td><?php if (!(int) $b['active']) { echo '<span class="badge bg-secondary">Inactive</span>'; } elseif ((int) $b['is_current']) { echo '<span class="badge bg-success">Current</span>'; } else { echo '<span class="badge bg-info text-dark">Available</span>'; } ?></td>
+                    <td><?php if (!(int) $b['active']) { echo '<span class="badge bg-secondary">Inactive</span>'; } elseif ((int) $b['is_current']) { echo '<span class="badge bg-success">Current</span>'; } else { echo '<span class="badge bg-info text-dark">Available</span>'; }
+                        // RivetCore rc.30: false = the stored file is not an executable of this row's platform (a Linux program stored as Windows, or the other way round). Core never
+                        // serves it: it is deactivated, with its releases, the first time a device asks for it.
+                        if (($b['platform_ok'] ?? null) === false) { echo ' <span class="badge bg-danger" title="The stored file is not a ' . $h($bOs) . ' executable. It is never served to a device; upload the right file under a new version.">Wrong platform</span>'; } ?></td>
                     <td class="text-nowrap">
                         <form id="<?= $fid ?>" action="post.php" method="post" class="d-inline-flex gap-1 flex-wrap align-items-center"><input type="hidden" name="csrf_token" value="<?= $csrf ?>"><input type="hidden" name="binary_id" value="<?= (int) $b['binary_id'] ?>">
                         <?php if ((int) $b['active']) { ?>
-                            <?php if (!(int) $b['is_current']) { ?><button class="btn btn-xs btn-outline-primary" name="binary_action" value="make_current">Make current</button><?php } ?>
+                            <?php if (!(int) $b['is_current'] && $bOs === 'windows') { ?><button class="btn btn-xs btn-outline-primary" name="binary_action" value="make_current">Make current</button><?php } ?>
                             <select name="release_ring" class="form-select form-select-sm w-auto" aria-label="Ring"><option>pilot</option><option>stable</option></select>
                             <input type="number" name="rollout_pct" min="0" max="100" value="10" class="form-control form-control-sm" style="width:5rem" aria-label="Rollout percent">
                             <button class="btn btn-xs btn-outline-secondary" name="binary_action" value="offer_update">Offer as update</button>
@@ -958,22 +962,24 @@ echo rivetAgentLinuxFilesCard($mysqli, (string) $csrf);
         <form action="post.php" method="post" class="row g-2 align-items-end mb-3" autocomplete="off">
             <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
             <div class="col-lg-1"><label class="form-label small" for="rl_v">Version</label><input class="form-control form-control-sm" id="rl_v" name="version" placeholder="1.1.0" required></div>
-            <div class="col-lg-3"><label class="form-label small" for="rl_u">Package URL (https)</label><input class="form-control form-control-sm" id="rl_u" name="url" type="url" required></div>
+            <div class="col-lg-1"><label class="form-label small" for="rl_os">Platform</label><select class="form-select form-select-sm" id="rl_os" name="os"><option value="windows" selected>Windows</option><option value="linux">Linux</option></select></div>
+            <div class="col-lg-2"><label class="form-label small" for="rl_u">Package URL (https)</label><input class="form-control form-control-sm" id="rl_u" name="url" type="url" required></div>
             <div class="col-lg-3"><label class="form-label small" for="rl_s">SHA-256 of the package</label><input class="form-control form-control-sm font-monospace" id="rl_s" name="sha256" maxlength="64" required></div>
             <div class="col-lg-1"><label class="form-label small" for="rl_m">Min version</label><input class="form-control form-control-sm" id="rl_m" name="min_version" value="0.0.0"></div>
             <div class="col-lg-1"><label class="form-label small" for="rl_r">Ring</label><select class="form-select form-select-sm" id="rl_r" name="ring"><option>pilot</option><option selected>stable</option></select></div>
             <div class="col-lg-1"><label class="form-label small" for="rl_p">Rollout %</label><input class="form-control form-control-sm" id="rl_p" name="rollout_pct" type="number" min="0" max="100" value="10"></div>
             <div class="col-lg-2"><button class="btn btn-sm btn-primary w-100" name="add_agent_release">Publish release</button></div>
         </form>
-        <div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Version</th><th>Ring</th><th>Min version</th><th>Rollout</th><th>Active</th><th>Package SHA-256</th><th></th></tr></thead><tbody>
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Version</th><th>Platform</th><th>Ring</th><th>Min version</th><th>Rollout</th><th>Active</th><th>Package SHA-256</th><th></th></tr></thead><tbody>
         <?php foreach ($releases as $r) { $fid = 'rel_' . (int) $r['release_id']; ?>
             <tr>
-                <td><?= $h($r['version']) ?><?= $r['hosted'] ? '<div class="small text-muted">hosted, ' . $h($r['arch']) . '</div>' : '' ?></td><td><?= $h($r['ring']) ?></td><td><?= $h($r['min_version']) ?></td>
+                <td><?= $h($r['version']) ?><?= $r['hosted'] ? '<div class="small text-muted">hosted</div>' : '' ?></td>
+                <td><?= $h(($r['os'] ?? 'windows') === 'linux' ? 'Linux' : 'Windows') ?><?= $r['arch'] !== '' ? ' <span class="text-muted">' . $h($r['arch']) . '</span>' : '' ?></td><td><?= $h($r['ring']) ?></td><td><?= $h($r['min_version']) ?></td>
                 <td style="max-width:7rem"><input form="<?= $fid ?>" class="form-control form-control-sm" type="number" name="rollout_pct" min="0" max="100" value="<?= (int) $r['rollout_pct'] ?>" aria-label="Rollout percent"></td>
                 <td><input form="<?= $fid ?>" type="checkbox" class="form-check-input" name="active" value="1" <?= $r['active'] ? 'checked' : '' ?> aria-label="Active"></td>
                 <td class="small font-monospace text-break"><?= $h($r['sha256']) ?></td>
                 <td><form id="<?= $fid ?>" action="post.php" method="post"><input type="hidden" name="csrf_token" value="<?= $csrf ?>"><input type="hidden" name="release_id" value="<?= (int) $r['release_id'] ?>"><button class="btn btn-xs btn-outline-primary" name="update_agent_release">Save</button></form></td></tr>
-        <?php } if (!$releases) { echo '<tr><td colspan="7" class="text-muted">No release published. Agents stay on the version they have.</td></tr>'; } ?>
+        <?php } if (!$releases) { echo '<tr><td colspan="8" class="text-muted">No release published. Agents stay on the version they have.</td></tr>'; } ?>
         </tbody></table></div>
     </div>
 </div>

@@ -497,11 +497,13 @@ if (isset($_POST['upload_agent_binary'])) {
     $files = ea_uploaded_binaries();
     $limit = $rmm->binaryStore()->effectiveUploadLimit();
     if ($files === []) {
-        flash_alert('Choose the agent .exe to upload.', 'error');
+        flash_alert('Choose the agent program to upload.', 'error');
         redirect();
     }
     $ring = (string) ($_POST['release_ring'] ?? '');
-    $opts = ['activate' => isset($_POST['activate']), 'release_ring' => in_array($ring, ['pilot', 'stable'], true) ? $ring : null, 'rollout_pct' => ea_post_int('rollout_pct', 0, 100, 10)];
+    // RivetCore rc.30: the platform the files are for, windows (a PE .exe, the default) or linux (an ELF agent for self-update); Core checks the file matches it.
+    $os = ($_POST['os'] ?? 'windows') === 'linux' ? 'linux' : 'windows';
+    $opts = ['activate' => $os === 'windows' && isset($_POST['activate']), 'release_ring' => in_array($ring, ['pilot', 'stable'], true) ? $ring : null, 'rollout_pct' => ea_post_int('rollout_pct', 0, 100, 10), 'os' => $os];
     // version[] / arch[] are positional with the files (the form's rows); a single version / arch field (an older form, a script) applies to its one file.
     $versions = isset($_POST['version']) ? array_values((array) $_POST['version']) : [];
     $arches = isset($_POST['arch']) ? array_values((array) $_POST['arch']) : [];
@@ -748,7 +750,8 @@ if (isset($_POST['device_action'])) {
 if (isset($_POST['add_agent_release'])) {
     validateCSRFToken($_POST['csrf_token']);
     ea_flash_result($ea_admin->addExternalRelease($ea_who, trim((string) ($_POST['version'] ?? '')), trim((string) ($_POST['url'] ?? '')), trim((string) ($_POST['sha256'] ?? '')),
-        trim((string) ($_POST['min_version'] ?? '0.0.0')) ?: '0.0.0', (string) ($_POST['ring'] ?? 'stable'), ea_post_int('rollout_pct', 0, 100, 0), trim((string) ($_POST['notes'] ?? ''))));
+        trim((string) ($_POST['min_version'] ?? '0.0.0')) ?: '0.0.0', (string) ($_POST['ring'] ?? 'stable'), ea_post_int('rollout_pct', 0, 100, 0), trim((string) ($_POST['notes'] ?? '')),
+        ($_POST['os'] ?? 'windows') === 'linux' ? 'linux' : 'windows'));   // RivetCore rc.30: the platform the package is for (Core refuses anything but windows/linux)
 }
 
 if (isset($_POST['update_agent_release'])) {

@@ -82,7 +82,7 @@ function rivetAgentFeedCard(array $vm, ?array $msg, array $steps, string $csrf, 
                 $here .= '<span class="badge bg-success me-1">Linux links</span>';
             }
             foreach ($r['rings'] as $rg) {
-                $here .= '<span class="badge bg-info text-dark me-1" title="Offered to enrolled agents">' . $h($rg['ring']) . ' ' . (int) $rg['pct'] . '% ' . $h($rg['arch']) . '</span>';
+                $here .= '<span class="badge bg-info text-dark me-1" title="Offered to enrolled agents">' . $h($rg['ring']) . ' ' . (int) $rg['pct'] . '% ' . $h($rg['arch']) . (($rg['os'] ?? 'windows') !== 'windows' ? ' ' . $h($rg['os']) : '') . '</span>';
             }
             if ($here === '') {
                 $here = '<span class="text-muted small">not published here</span>';

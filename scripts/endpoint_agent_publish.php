@@ -9,6 +9,8 @@
 //               current template with the per-client payload appended. Unsigned: SmartScreen or an application-control policy may warn. Upgrade, repair and uninstall are not yet tested.
 //   --activate  make it the binary new per-client installers are stamped from for that architecture
 //   --release   also offer it to already enrolled agents of that architecture as a self-update (staged by --rollout percent)
+//   --os        windows (default; a PE .exe) or linux (the Linux agent program, for the self-update of enrolled Linux devices; RivetCore 1.0.0-rc.30). Every binary and
+//               release belongs to one platform: a Linux device is never offered a Windows executable. --activate does not apply to linux.
 // Run it as the web server user (sudo -u www-data php ...) or as root (the stored file is then handed to the directory owner).
 
 chdir(__DIR__);
@@ -27,7 +29,7 @@ mysqli_report(MYSQLI_REPORT_OFF);
 $opts = [];
 $file = null;
 $args = array_slice($argv, 1);
-$valueOpts = ['version', 'arch', 'release', 'rollout', 'notes'];
+$valueOpts = ['version', 'arch', 'release', 'rollout', 'notes', 'os'];
 for ($i = 0; $i < count($args); $i++) {
     $a = $args[$i];
     if (strncmp($a, '--', 2) === 0) {
@@ -52,12 +54,17 @@ for ($i = 0; $i < count($args); $i++) {
     }
 }
 if (isset($opts['help']) || $file === null || !isset($opts['version'], $opts['arch'])) {
-    echo "Usage: php endpoint_agent_publish.php <exe> --version X.Y.Z --arch amd64|arm64 [--activate] [--release stable|pilot [--rollout N] [--notes TEXT]]\n"
+    echo "Usage: php endpoint_agent_publish.php <exe> --version X.Y.Z --arch amd64|arm64 [--os windows|linux] [--activate] [--release stable|pilot [--rollout N] [--notes TEXT]]\n"
         . "       php endpoint_agent_publish.php <msi> --msi --version X.Y.Z --arch amd64|arm64 [--activate]\n";
     exit(isset($opts['help']) ? 0 : 1);
 }
 if (isset($opts['msi']) && (isset($opts['release']) || isset($opts['rollout']) || isset($opts['notes']))) {
     fwrite(STDERR, "Error: an MSI template is never offered as an agent update; --release, --rollout and --notes do not apply to --msi.\n");
+    exit(1);
+}
+$os = (string) ($opts['os'] ?? 'windows');
+if (!in_array($os, ['windows', 'linux'], true) || (isset($opts['msi']) && $os !== 'windows') || ($os === 'linux' && isset($opts['activate']))) {
+    fwrite(STDERR, "Error: --os must be windows or linux; an MSI template is Windows only, and --activate (the binary installers are stamped from) is Windows only.\n");
     exit(1);
 }
 if (Db_tableMissing(isset($opts['msi']) ? 'endpoint_agent_msi_templates' : 'endpoint_agent_binaries')) {
@@ -85,14 +92,15 @@ $res = rivetRmmModule()->binaryStore()->publish($file, (string) $opts['version']
     'release_ring' => $opts['release'] ?? null,
     'rollout_pct' => (int) ($opts['rollout'] ?? 10),
     'notes' => (string) ($opts['notes'] ?? ''),
+    'os' => $os,
 ]);
 if (!$res['ok']) {
     fwrite(STDERR, 'Error: ' . $res['error'] . "\n");
     exit(1);
 }
 $b = $res['binary'];
-logAction('Endpoint Agent', 'Binary Published', "CLI published agent binary {$b['version']} ({$b['arch']}, sha256 {$b['sha256']})" . (isset($opts['activate']) ? ' as current' : ''));
-printf("%s %s %s  %s  %s bytes%s\n", $res['created'] ? 'Published' : 'Already published', $b['version'], $b['arch'], $b['sha256'], $b['size_bytes'], $b['is_current'] ? '  (current)' : '');
+logAction('Endpoint Agent', 'Binary Published', "CLI published agent binary {$b['version']} ({$b['arch']}, $os, sha256 {$b['sha256']})" . (isset($opts['activate']) ? ' as current' : ''));
+printf("%s %s %s %s  %s  %s bytes%s\n", $res['created'] ? 'Published' : 'Already published', $b['version'], $b['arch'], $os, $b['sha256'], $b['size_bytes'], $b['is_current'] ? '  (current)' : '');
 exit(0);
 
 function Db_tableMissing(string $table = 'endpoint_agent_binaries'): bool
