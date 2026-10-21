@@ -23,10 +23,10 @@ $recurring_invoices_sql = mysqli_query($mysqli, "SELECT * FROM recurring_invoice
 
 // Get Payment Provide Details
 $payment_provider_sql = mysqli_query($mysqli, "SELECT * FROM payment_providers WHERE payment_provider_active = 1 LIMIT 1");
-$row = mysqli_fetch_assoc($payment_provider_sql);
-$payment_provider_id = intval($row['payment_provider_id']);
-$payment_provider_name = nullable_htmlentities($row['payment_provider_name']);
-$payment_provider_threshold = floatval($row['payment_provider_threshold']);
+$row = mysqli_fetch_assoc($payment_provider_sql) ?: [];   // no active payment provider is a normal state
+$payment_provider_id = intval($row['payment_provider_id'] ?? 0);
+$payment_provider_name = nullable_htmlentities($row['payment_provider_name'] ?? '');
+$payment_provider_threshold = floatval($row['payment_provider_threshold'] ?? 0);
 
 ?>
 

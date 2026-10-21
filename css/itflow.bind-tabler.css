@@ -251,3 +251,19 @@ p a:not(.btn), nav > a:not(.nav-link):not(.btn):not(.navbar-brand), .form-text a
     text-decoration: underline;
     text-underline-offset: .15em;
 }
+
+/* Client portal / guest pages (no vertical app sidebar): the default teal accent (#0d9488) gives white button text only 3.7:1.
+   Darken primary buttons toward black and outline/link text likewise, so the main actions ("New Ticket", "Raise ticket", "View all")
+   meet WCAG AA. The agent app keeps its own accent untouched. */
+html:not(:has(.navbar-vertical)) .btn-primary {
+    --tblr-btn-bg: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000);
+    --tblr-btn-border-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000);
+    --tblr-btn-hover-bg: color-mix(in srgb, var(--color-accent, #0d9488) 66%, #000);
+    --tblr-btn-hover-border-color: color-mix(in srgb, var(--color-accent, #0d9488) 66%, #000);
+    --tblr-btn-color: #fff;
+}
+html:not(:has(.navbar-vertical)) .btn-outline-primary { --tblr-btn-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); --tblr-btn-border-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); }
+html:not(:has(.navbar-vertical)) footer .text-center, html:not(:has(.navbar-vertical)) footer p { color: #4b5563; }
+html:not(:has(.navbar-vertical)) .btn-primary { background-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); border-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); color: #fff; }
+html:not(:has(.navbar-vertical)) .btn-primary:hover, html:not(:has(.navbar-vertical)) .btn-primary:focus-visible { background-color: color-mix(in srgb, var(--color-accent, #0d9488) 66%, #000); border-color: color-mix(in srgb, var(--color-accent, #0d9488) 66%, #000); }
+html:not(:has(.navbar-vertical)) .btn-outline-primary { color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); border-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); }
