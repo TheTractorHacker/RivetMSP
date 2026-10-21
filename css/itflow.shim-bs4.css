@@ -284,3 +284,9 @@ html:not([data-bs-theme="dark"]) .form-text { color: #5d6b72; }
 
 /* Warning alerts: Tabler's amber text on the cream tint measures 2:1 (.alert-warning inside forms/modals). Light theme only. */
 html:not([data-bs-theme="dark"]) .alert-warning { color: #664d03; }
+
+/* Pill/badge text on a user-chosen background (ticket status, category, assignee): tagTextClass() picks text-light or text-dark by
+   luminance, but Tabler renders those as #f9fafb / #e7eeef (dark theme remaps text-dark to light), which defeated the choice
+   (2.1-3.8:1). Pin them to real white / near-black. */
+.badge.text-light { color: #fff !important; }
+.badge.text-dark  { color: #212529 !important; }
