@@ -6,9 +6,14 @@ The app never calls `window.alert()`, `window.confirm()` or `window.prompt()`. U
 await RivetDialog.alert('Saved.');                                       // resolves true
 if (!(await RivetDialog.confirm('Delete it?', { variant: 'danger', okText: 'Delete' }))) return;   // true / false
 const pw = await RivetDialog.prompt('Password?', { type: 'password', required: true });          // string / null
+const when = await RivetDialog.choice('Start the SLA from when?', [                               // 'now' / 'created' / null
+    { value: 'now', label: 'Start from now' },
+    { value: 'created', label: 'Start from ticket creation', variant: 'secondary' },
+], { title: 'Count toward SLA' });
 ```
 
 Options: `title`, `okText`, `cancelText`, `variant` (`primary`, `danger`, `warning`), and for prompts `defaultValue`, `placeholder`, `type` (`text` or `password`), `required`.
+`choice(message, choices, opts)` shows Cancel plus one button per choice (1 to 4; each `{ value, label, variant }`, variant `primary` by default, also `secondary`, `success`, `warning`, `danger`) and resolves to the chosen `value` (a string), or `null` for Cancel / Esc / backdrop / X. Labels are set with `textContent` like the message. Cancel has the initial focus. Used by the ticket page's "Count toward SLA" switch (start the SLA from now or from ticket creation).
 The message and title are set with `textContent`; markup is shown literally, so server or user text can be passed without escaping. `\n` makes a line break.
 
 Event handlers that used to confirm synchronously:
