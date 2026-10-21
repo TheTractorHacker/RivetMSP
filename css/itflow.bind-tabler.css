@@ -267,3 +267,9 @@ html:not(:has(.navbar-vertical)) footer .text-center, html:not(:has(.navbar-vert
 html:not(:has(.navbar-vertical)) .btn-primary { background-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); border-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); color: #fff; }
 html:not(:has(.navbar-vertical)) .btn-primary:hover, html:not(:has(.navbar-vertical)) .btn-primary:focus-visible { background-color: color-mix(in srgb, var(--color-accent, #0d9488) 66%, #000); border-color: color-mix(in srgb, var(--color-accent, #0d9488) 66%, #000); }
 html:not(:has(.navbar-vertical)) .btn-outline-primary { color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); border-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); }
+
+/* Dark theme: remaining accent/red text on dark surfaces (outline buttons, pagination, danger text) below AA. */
+:root[data-bs-theme="dark"] .btn-outline-primary, :root[data-bs-theme="dark"] .page-link {
+    color: color-mix(in srgb, var(--color-accent, #2563eb) 55%, #fff);
+}
+:root[data-bs-theme="dark"] .text-danger { color: #f47a7a !important; }
