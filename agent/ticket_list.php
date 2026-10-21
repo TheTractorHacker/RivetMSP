@@ -298,6 +298,9 @@ foreach ($_cat_subs as $_pid => $_subs) {
                                     <?php if (!empty($row['ticket_merged_into_id'])) { ?>
                                     <small class="text-muted ms-1"><i class="fas fa-code-branch fa-sm"></i> Merged</small>
                                     <?php } ?>
+                                    <?php if (isset($row['ticket_send_email']) && intval($row['ticket_send_email']) === 0) { ?>
+                                    <small class="text-muted ms-1" title="Email notifications are off for this ticket"><i class="fas fa-envelope fa-sm"></i> No email</small>
+                                    <?php } ?>
 
                                     <?php if ($task_count) { ?>
                                     <div class="d-flex align-items-center mt-1" style="gap:5px;">

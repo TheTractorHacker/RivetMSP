@@ -148,6 +148,14 @@ if (isset($_GET['ticket_id'])) {
             $ticket_assigned_user_name = nullable_htmlentities($row['user_name']);
         }
 
+        // Per-ticket switches (DB 2.6.105). Before the update runs: both on, no switches drawn.
+        require_once "../includes/ticket_flags.php";
+        $ticket_flags_ready = ticketFlagsReady($mysqli);
+        $ticket_counts_sla = intval($row['ticket_counts_sla'] ?? 1) === 1;
+        $ticket_send_email = intval($row['ticket_send_email'] ?? 1) === 1;
+        $ticket_email_origin = ticketIsEmailOrigin($row);
+        $ticket_sla_started_at = $row['ticket_sla_started_at'] ?? null;
+
         $ticket_contract_id = intval($row['ticket_contract_id'] ?? 0);
         $ticket_sla_response_due = $row['ticket_sla_response_due'] ?? null;
         $ticket_sla_resolution_due = $row['ticket_sla_resolution_due'] ?? null;
@@ -174,7 +182,7 @@ if (isset($_GET['ticket_id'])) {
         $sla_calendar_name = !empty($sla_calendar['calendar_name']) ? nullable_htmlentities($sla_calendar['calendar_name']) : '';
         $sla_open_now      = slaIsOpenNow($sla_calendar);
         $sla_status_data   = slaStatus([
-            'ticket_created_at'         => $row['ticket_created_at'] ?? null,
+            'ticket_created_at'         => $ticket_sla_started_at ?: ($row['ticket_created_at'] ?? null),
             'ticket_sla_paused_at'      => $row['ticket_sla_paused_at'] ?? null,
             'ticket_status'             => $row['ticket_status'] ?? null,
             'ticket_closed_at'          => $row['ticket_closed_at'] ?? null,
@@ -607,6 +615,9 @@ if (isset($_GET['ticket_id'])) {
 
                     <div class="d-flex align-items-center flex-wrap text-muted small" style="gap:.6rem;">
                         <span>Ticket# <?= "$ticket_prefix$ticket_number" ?></span>
+                        <?php if ($ticket_flags_ready && !$ticket_send_email) { ?>
+                        <small class="text-muted" title="Email notifications are off for this ticket"><i class="fas fa-envelope fa-sm"></i> No email</small>
+                        <?php } ?>
 
                         <?php if (lookupUserPermission("module_support") >= 2 && empty($ticket_closed_at)) { ?>
                         <a class="ajax-modal" href="#" data-modal-url="modals/ticket/ticket_status.php?id=<?= $ticket_id ?>" title="Change Status">
@@ -618,6 +629,35 @@ if (isset($_GET['ticket_id'])) {
                         <span class="badge rounded-pill tkt-pill-badge <?= tagTextClass($ticket_status_color) ?>" style="background-color:<?= $ticket_status_color ?>;">
                             <?= $ticket_status_name ?>
                         </span>
+                        <?php } ?>
+
+                        <?php if ($ticket_flags_ready) {
+                            $flags_can_edit = lookupUserPermission("module_support") >= 2;
+                            $email_locked = $ticket_email_origin && $ticket_send_email; // a ticket created from an email always sends email
+                        ?>
+                        <span class="d-inline-flex align-items-center flex-wrap" style="gap:.75rem;" id="ticketFlagSwitches">
+                            <span class="form-check form-switch mb-0" title="<?= $ticket_counts_sla ? 'This ticket has SLA due dates and counts in the SLA reports' : 'No SLA: no due dates, never breached, left out of the SLA reports' ?>">
+                                <input class="form-check-input js-ticket-flag" type="checkbox" role="switch" id="ticketCountsSla" data-flag="counts_sla" <?= $ticket_counts_sla ? 'checked' : '' ?> <?= $flags_can_edit ? '' : 'disabled' ?>>
+                                <label class="form-check-label" for="ticketCountsSla">Count toward SLA</label>
+                            </span>
+                            <span class="form-check form-switch mb-0" title="<?= $email_locked ? 'Created from an email: email notifications always stay on' : ($ticket_send_email ? 'Email about this ticket is sent as usual' : 'No email about this ticket is sent') ?>">
+                                <input class="form-check-input js-ticket-flag" type="checkbox" role="switch" id="ticketSendEmail" data-flag="send_email" <?= $ticket_send_email ? 'checked' : '' ?> <?= ($flags_can_edit && !$email_locked) ? '' : 'disabled' ?>>
+                                <label class="form-check-label" for="ticketSendEmail">Email notifications</label>
+                            </span>
+                            <?php if ($ticket_counts_sla && !empty($ticket_sla_started_at)) {
+                                require_once "../includes/rmm_time.php"; ?>
+                            <small>SLA counted from <?= nullable_htmlentities(rivetRmmTime($ticket_sla_started_at, false)) ?></small>
+                            <?php } ?>
+                        </span>
+                        <?php if ($flags_can_edit) { ?>
+                        <form id="ticketFlagForm" action="post.php" method="post" hidden>
+                            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                            <input type="hidden" name="ticket_id" value="<?= $ticket_id ?>">
+                            <input type="hidden" name="flag_action" value="1">
+                            <input type="hidden" name="value" value="">
+                            <input type="hidden" name="sla_anchor" value="">
+                        </form>
+                        <?php } ?>
                         <?php } ?>
 
                         <?php
@@ -727,7 +767,7 @@ if (isset($_GET['ticket_id'])) {
                         $sla_source_label = $sla_policy_name
                             ? ($sla_policy_name . ($sla_calendar_name ? ' &middot; ' . $sla_calendar_name : ''))
                             : $sla_contract_name;
-                        $sla_created_ts = !empty($row['ticket_created_at']) ? strtotime($row['ticket_created_at']) : time();
+                        $sla_created_ts = !empty($ticket_sla_started_at) ? strtotime($ticket_sla_started_at) : (!empty($row['ticket_created_at']) ? strtotime($row['ticket_created_at']) : time());
                         $sla_meter_items = [
                             'Response'   => ['st' => $sla_status_data['response'],   'due' => $ticket_sla_response_due],
                             'Resolution' => ['st' => $sla_status_data['resolution'], 'due' => $ticket_sla_resolution_due],
@@ -911,6 +951,18 @@ if (isset($_GET['ticket_id'])) {
                                 </div>
 
                             </div>
+
+                            <?php if ($ticket_flags_ready && !$ticket_send_email) { ?>
+                            <div class="alert alert-warning py-2 mb-2" id="ticketEmailOffBanner">
+                                <i class="fas fa-envelope me-1"></i>Email notifications are off for this ticket: a <strong>Public + Email</strong> reply is saved on the ticket but not emailed.
+                                <?php if ($contact_email) { ?>
+                                <div class="form-check mt-1 mb-0">
+                                    <input type="checkbox" class="form-check-input" name="email_override" value="1" id="replyEmailOverride">
+                                    <label class="form-check-label" for="replyEmailOverride">Email this one reply anyway (choose <strong>Public + Email</strong>; the ticket stays on no email)</label>
+                                </div>
+                                <?php } ?>
+                            </div>
+                            <?php } ?>
 
                             <div class="form-group">
                                 <div id="ticket-reply-draft-banner" class="alert alert-warning mb-2" style="display:none;border-radius:6px;padding:8px 14px;align-items:center;justify-content:space-between;">
@@ -2587,6 +2639,7 @@ require_once "../includes/footer.php";
 <!-- Outtake form creation + in-person signing -->
 <script src="/js/signature_pad.js"></script>
 <script src="/js/outtake.js"></script>
+<script src="/js/ticket_flags.js?v=<?= (int) @filemtime(dirname(__DIR__) . '/js/ticket_flags.js') ?>"></script>
 
 <?php if (empty($ticket_closed_at)) { ?>
     <!-- create js variable related to ticket timer setting -->
