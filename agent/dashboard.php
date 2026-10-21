@@ -153,7 +153,7 @@ $sql_years_select = mysqli_query($mysqli, "
 <?php
 // Dashboard stat cards
 $dash_open_tickets = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM tickets WHERE ticket_closed_at IS NULL AND ticket_resolved_at IS NULL"))[0]);
-$dash_active_clients = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM clients WHERE client_archived_at IS NULL"))[0]);
+$dash_active_clients = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM clients WHERE client_archived_at IS NULL AND client_lead = 0"))[0]);
 $dash_my_tickets = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM tickets WHERE ticket_assigned_to = $session_user_id AND ticket_closed_at IS NULL"))[0]);
 $dash_pending_invoices = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM invoices WHERE invoice_status IN ('Sent', 'Viewed', 'Partial')"))[0]);
 $dash_hour = intval(date('G'));
