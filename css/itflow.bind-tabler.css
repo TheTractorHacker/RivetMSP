@@ -238,3 +238,9 @@
 :root[data-bs-theme="dark"] .ts-wrapper .ts-control > .item {
     color: var(--tblr-body-color);
 }
+
+/* Light-theme links: the default accent (#2563eb) is 4.1:1 on the striped table rows / tinted panels, just under AA. Darken it ~12%
+   toward black (same hue; a custom accent follows). Same :where() trick as the dark rule above: component colours still win. */
+:where(:root:not([data-bs-theme="dark"])) a:where(:not(.btn:not(.btn-link), .badge, .nav-link, .dropdown-item, .page-link, .list-group-item-action, .navbar-brand, .alert-link)) {
+    color: color-mix(in srgb, var(--color-accent, #2563eb) 88%, #000);
+}
