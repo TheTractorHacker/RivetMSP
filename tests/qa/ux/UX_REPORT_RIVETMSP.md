@@ -21,7 +21,7 @@ Read this first: the screenshots in `shots/before/` come from a throwaway export
 | Defects fixed and re-verified | 27 (some are bundles of one root cause; 4 of them are known items carried over) |
 | Defects not fixed | 7 (1 needs a schema change, 1 an owner decision on the colour presets, the rest are low) |
 | Improvement proposals | 24 (list B, nothing built) |
-| Commits on the branch | 32 on top of `65b82edc5` |
+| Commits on the branch | 33 on top of `65b82edc5` |
 
 Automated accessibility (axe-core, 246 pages, light): pages with a violation, before -> after.
 
