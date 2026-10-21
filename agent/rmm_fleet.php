@@ -26,11 +26,11 @@ mysqli_report(MYSQLI_REPORT_OFF);
 $rmm_denied = static function (string $title, string $detail): void {
     echo '<div class="card card-dark"><div class="card-body text-center py-5"><h3 class="text-secondary"><i class="fas fa-fw fa-power-off me-2"></i>' . nullable_htmlentities($title)
         . '</h3><p class="text-muted mb-0">' . nullable_htmlentities($detail) . '</p></div></div>';
-    require_once "../includes/footer.php";
 };
 
 if (!$config_core_rmm_enabled || !rivetRmmEnabled($mysqli)) {
     $rmm_denied('RMM module is turned off', 'The RMM module is switched off, so there is nothing to show and no installer can be created. An administrator can switch it on under Administration > Endpoint agent (the RMM module card).');
+    require_once "../includes/footer.php";   // top level: inside the closure the footer lost $csp_nonce and the page title
     return;
 }
 
@@ -57,6 +57,7 @@ $rmm_filters['q'] = mb_substr($rmm_filters['q'], 0, 100);
 $rmm_fleet = rivetRmmUiFleet($mysqli, (int) $session_user_id, $rmm_filters);
 if ($rmm_fleet === null) {
     $rmm_denied('No access', 'Your role cannot view agent devices.');
+    require_once "../includes/footer.php";   // top level: inside the closure the footer lost $csp_nonce and the page title
     return;
 }
 // "Add device": null (no button, no dialog) for a user who may neither administer the module nor manage enrollment tokens.
