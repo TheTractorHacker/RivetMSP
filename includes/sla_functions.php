@@ -303,13 +303,26 @@ function slaPolicyTargetsForPriority(array $policy, ?string $priority): array {
  *     ticket_created_at; NULL when no contract / no hours).
  */
 function recalculateTicketSla($mysqli, int $ticket_id): void {
+    require_once __DIR__ . '/ticket_flags.php';
+    $flag_cols = ticketFlagsReady($mysqli) ? ', ticket_counts_sla, ticket_sla_started_at' : '';
     $ticket = mysqli_fetch_assoc(mysqli_query($mysqli,
-        "SELECT ticket_contract_id, ticket_priority, ticket_created_at, ticket_sla_paused_seconds FROM tickets WHERE ticket_id = $ticket_id"
+        "SELECT ticket_contract_id, ticket_priority, ticket_created_at, ticket_sla_paused_seconds$flag_cols FROM tickets WHERE ticket_id = $ticket_id"
     ));
     if (!$ticket) return;
 
+    // PRECEDENCE (DB 2.6.105): ticket_counts_sla = 0 beats everything. Such a ticket has NO SLA at all - no due dates, no policy - so every list,
+    // badge, tile, automation condition and report that keys off a non-NULL due date treats it exactly like a ticket without an SLA: never at
+    // risk, never breached, not in the SLA numbers. The per-status "pauses the SLA clock" bookkeeping (slaSyncPause/slaAccruePause) may still
+    // record pauses for it, but every path that turns a pause into due dates ends here, so a pause can never bring the SLA back. Only a
+    // ticket with ticket_counts_sla = 1 gets the pause-aware due dates computed below.
+    if (isset($ticket['ticket_counts_sla']) && intval($ticket['ticket_counts_sla']) === 0) {
+        mysqli_query($mysqli, "UPDATE tickets SET ticket_sla_response_due = NULL, ticket_sla_resolution_due = NULL, ticket_sla_policy_id = NULL WHERE ticket_id = $ticket_id");
+        return;
+    }
+
     $priority   = $ticket['ticket_priority'] ?? '';
-    $created_ts = strtotime($ticket['ticket_created_at']);
+    // The clock starts at ticket_sla_started_at when a technician chose "start the SLA from now", else at creation (as always).
+    $created_ts = strtotime(!empty($ticket['ticket_sla_started_at']) ? $ticket['ticket_sla_started_at'] : $ticket['ticket_created_at']);
     $paused_sec = intval($ticket['ticket_sla_paused_seconds'] ?? 0);
 
     // --- Legacy contract-hour targets (fallback for either field) ---

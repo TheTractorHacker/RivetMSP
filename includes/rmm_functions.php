@@ -50,6 +50,16 @@ function createTicketFromRmmAlert($mysqli, array $alert, int $created_by, string
     }
     $category_sql = $placement['category_id'] > 0 ? "ticket_category=" . (int) $placement['category_id'] . "," : '';
 
+    // Every RMM alert ticket (all four callers: cron auto-ticketing, the "Create ticket" button, automation rules, endpoint escalation) is labelled
+    // RMM-sourced and, by default, has no SLA and sends no email; Administration > Integrations > RMM > Alert tickets can turn either default on.
+    // Read here, at creation, only: the per-ticket switches decide from then on (DB 2.6.105; before it, nothing changes).
+    require_once __DIR__ . '/ticket_flags.php';
+    $flags_ready = ticketFlagsReady($mysqli);
+    $flag_defaults = rmmAlertTicketFlagDefaults($mysqli);
+    $flags_sql = $flags_ready
+        ? "ticket_rmm_sourced=1, ticket_counts_sla=" . ($flag_defaults['sla'] ? 1 : 0) . ", ticket_send_email=" . ($flag_defaults['email'] ? 1 : 0) . ","
+        : '';
+
     // Enrich details with asset/RMM context
     $asset_name   = '';
     $rmm          = null;
@@ -110,6 +120,7 @@ function createTicketFromRmmAlert($mysqli, array $alert, int $created_by, string
          ticket_status=$ticket_status,
          ticket_priority='$priority_esc',
          $category_sql
+         $flags_sql
          ticket_source='$source_esc',
          ticket_client_id=$client_id,
          ticket_asset_id=$asset_id,
@@ -119,6 +130,12 @@ function createTicketFromRmmAlert($mysqli, array $alert, int $created_by, string
          ticket_created_at=NOW()"
     );
     $ticket_id = intval(mysqli_insert_id($mysqli));
+
+    // SLA only when "RMM tickets count toward SLA" is on (with it off the ticket keeps no due dates; recalculateTicketSla() would leave them NULL anyway).
+    if ($flags_ready && $flag_defaults['sla']) {
+        require_once __DIR__ . '/sla_functions.php';
+        recalculateTicketSla($mysqli, $ticket_id);
+    }
 
     // Link alert to the new ticket and acknowledge it
     mysqli_query($mysqli,
