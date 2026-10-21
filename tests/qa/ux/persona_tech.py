@@ -40,14 +40,17 @@ def run():
         f.nav('Service Desk', 'Tickets'); f.click(pg.locator("table tbody tr a[href*='ticket.php?ticket_id=']:visible").nth(1), 'open a ticket (subject link)'); pg.wait_for_selector('.tkt-pill-badge', timeout=8000)
         f.click("text=Open >> nth=0", 'status pill') if False else None
         f.note('status pill -> dropdown')
-        pill = pg.locator('.tkt-pill-badge').first
-        f.click(pill, 'status pill')
-        opts = pg.locator('.dropdown-menu.show a, .dropdown-menu.show button').all_inner_texts()
-        f.note('status options: ' + ', '.join(o.strip() for o in opts)[:100])
-        f.click(".dropdown-menu.show >> text=On Hold", 'choose On Hold'); pg.wait_for_timeout(900)
-        sel = pg.locator('#quickAssignSelect')
-        f.click(sel, 'assign select')
-        f.note('assign select options: ' + str(pg.evaluate("[...document.querySelectorAll('#quickAssignSelect option')].map(o=>o.text).join(',')")))
+        f.click(pg.locator('.tkt-pill-badge').first, 'status pill (opens a modal)')
+        pg.wait_for_selector('.modal.show select[name=ticket_status_id]', state='attached', timeout=5000)
+        f.click('.modal.show .ts-control', 'open status dropdown')
+        f.note('status options: ' + ', '.join(pg.locator('.ts-dropdown .option').all_inner_texts())[:100])
+        f.click('.ts-dropdown .option:has-text("On Hold")', 'choose On Hold')
+        f.click('.modal.show button[type=submit]:has-text("Save")', 'Save')
+        pg.wait_for_timeout(1000)
+        f.note('status now: ' + pg.locator('.tkt-pill-badge').first.inner_text().strip())
+        f.click('#quickAssignSelect + .ts-wrapper .ts-control, .ts-wrapper:has(#quickAssignSelect) .ts-control', 'assignee dropdown')
+        f.note('assign options: ' + ', '.join(pg.locator('.ts-dropdown .option').all_inner_texts())[:120])
+        f.click('.ts-dropdown .option >> nth=1', 'choose a technician'); pg.wait_for_timeout(1000)
     task('Change status and assign a technician', t_status_assign)
 
     def t_time(f):

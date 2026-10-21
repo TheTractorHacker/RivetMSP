@@ -169,12 +169,14 @@ foreach ($_cat_subs as $_pid => $_subs) {
                             $contact_email = nullable_htmlentities($row['contact_email']);
                             $has_client = $client_id ? "&client_id=$client_id" : "";
 
-                            if ($ticket_priority == "High") {
-                                $ticket_priority_color = "danger";
+                            if ($ticket_priority == "High" || $ticket_priority == "Critical") {
+                                $ticket_priority_color = "danger";   // Critical must never read as the calm "Low" blue
                             } elseif ($ticket_priority == "Medium") {
                                 $ticket_priority_color = "warning";
-                            } else {
+                            } elseif ($ticket_priority == "Low") {
                                 $ticket_priority_color = "info";
+                            } else {
+                                $ticket_priority_color = "secondary";
                             }
 
                             $ticket_assigned_to = intval($row['ticket_assigned_to']);

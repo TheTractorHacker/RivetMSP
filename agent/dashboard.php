@@ -1078,7 +1078,7 @@ if ($user_config_dashboard_technical_enable == 1) {
                                 $has_client = "";
                             }
 
-                            $ticket_priority_color = $ticket_priority == "High" ? "danger" : ($ticket_priority == "Medium" ? "warning" : "info");
+                            $ticket_priority_color = ($ticket_priority == "High" || $ticket_priority == "Critical") ? "danger" : ($ticket_priority == "Medium" ? "warning" : ($ticket_priority == "Low" ? "info" : "secondary"));
                             $contact_display = empty($contact_name) ? "-" : "<a href='contact_details.php?client_id=$client_id&contact_id=$contact_id'>$contact_name</a>";
 
                             $_sla_due = null;
