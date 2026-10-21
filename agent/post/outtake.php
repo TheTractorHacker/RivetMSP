@@ -116,7 +116,7 @@ if (isset($_POST['send_outtake_email'])) {
         . "This link is unique to your form. Do not share it with others.<br><br>"
         . "Thank you,<br>" . $h($session_company_name);
 
-    // Queued through addToMailQueue() like every other ticket email (it used to INSERT INTO email_queue directly, which skipped the Message-ID
+    // Queued through addToMailQueue() like every other ticket email (it used to write the queue table directly, which skipped the Message-ID
     // and the per-ticket "Send email notifications" switch). Bound parameters there, so nothing is SQL-escaped here.
     addToMailQueue([[
         'from'           => $config_ticket_from_email,
