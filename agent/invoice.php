@@ -344,7 +344,7 @@ if (isset($_GET['invoice_id'])) {
                     <h5 class="badge badge-<?php echo $invoice_badge_color; ?> p-2 float-end">
                         <?php echo "$invoice_status"; ?>
                     </h5>
-                    <table class="table table-sm table-borderless">
+                    <table class="table table-sm table-borderless align-middle">
                         <tr>
                             <th>Invoice #:</th>
                             <td class="text-end"><?php echo "$invoice_prefix$invoice_number"; ?></td>

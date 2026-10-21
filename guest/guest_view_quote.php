@@ -147,7 +147,7 @@ if ($quote_status == "Draft" || $quote_status == "Sent" || $quote_status == "Vie
                 <h5 class="badge badge-<?php echo $quote_badge_color; ?> p-2 float-end">
                     <?php echo "$quote_status"; ?>
                 </h5>
-                <table class="table table-sm table-borderless">
+                <table class="table table-sm table-borderless align-middle">
                     <tr>
                         <th>Quote #:</th>
                         <td class="text-end"><?php echo "$quote_prefix$quote_number"; ?></td>
