@@ -272,7 +272,7 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
             line-height: 1.15;
         }
         .ticket-stat-box .ticket-stat-label {
-            font-size: .7rem;
+            font-size: .75rem;
             text-transform: uppercase;
             letter-spacing: .03em;
             color: var(--color-text-muted);
