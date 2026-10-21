@@ -1216,8 +1216,12 @@ function report_render_email_html(mysqli $mysqli, $report_key)
  * so both surfaces return identical numbers. $date_from/$date_to are 'Y-m-d' strings and are
  * validated here (defence in depth); metrics that are point-in-time snapshots (open-ticket
  * aging, current per-tech open workload) intentionally ignore the range.
+ *
+ * $maintenance (DB 2.6.105): 'include' (default, every ticket), 'exclude' (leave out tickets made from RMM alerts, ticket_rmm_sourced = 1) or
+ * 'only' (just those). It filters every number, volume included. Independently of it, the SLA compliance numbers only ever count tickets with
+ * ticket_counts_sla = 1: a ticket that does not count toward SLA has no due dates and is never in the SLA numbers, but is still in the volume.
  */
-function getServiceDeskReport(mysqli $mysqli, $date_from, $date_to, ?int $client_id = null)
+function getServiceDeskReport(mysqli $mysqli, $date_from, $date_to, ?int $client_id = null, string $maintenance = 'include')
 {
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $date_from)) {
         $date_from = date('Y-01-01');
@@ -1232,6 +1236,15 @@ function getServiceDeskReport(mysqli $mysqli, $date_from, $date_to, ?int $client
     // always calls this with $client_id = null (company-wide).
     $client_clause   = $client_id !== null ? " AND ticket_client_id = " . intval($client_id) : '';
     $client_clause_t = $client_id !== null ? " AND t.ticket_client_id = " . intval($client_id) : '';
+    // Maintenance (RMM alert ticket) filter, folded into the same clauses so every query below honours it.
+    require_once __DIR__ . '/includes/ticket_flags.php';
+    $flags_ready = ticketFlagsReady($mysqli);
+    $maintenance = in_array($maintenance, ['include', 'exclude', 'only'], true) && $flags_ready ? $maintenance : 'include';
+    if ($maintenance !== 'include') {
+        $client_clause   .= " AND ticket_rmm_sourced = " . ($maintenance === 'only' ? 1 : 0);
+        $client_clause_t .= " AND t.ticket_rmm_sourced = " . ($maintenance === 'only' ? 1 : 0);
+    }
+    $sla_counts_clause = $flags_ready ? ' AND ticket_counts_sla = 1' : '';
     $created_range = "ticket_created_at BETWEEN '$from_dt' AND '$to_dt'$client_clause";
 
     // --- Ticket volume trend (opened vs resolved, grouped by month, set-based) ---
@@ -1301,7 +1314,7 @@ function getServiceDeskReport(mysqli $mysqli, $date_from, $date_to, ?int $client
             SUM(CASE WHEN ticket_sla_resolution_due IS NOT NULL THEN 1 ELSE 0 END) AS reso_total,
             SUM(CASE WHEN ticket_sla_resolution_due IS NOT NULL AND ticket_resolved_at IS NOT NULL
                      AND ticket_resolved_at <= ticket_sla_resolution_due THEN 1 ELSE 0 END) AS reso_met
-         FROM tickets WHERE $created_range AND ticket_archived_at IS NULL"));
+         FROM tickets WHERE $created_range AND ticket_archived_at IS NULL$sla_counts_clause"));
     $resp_total = intval($sla_row['resp_total'] ?? 0);
     $resp_met   = intval($sla_row['resp_met'] ?? 0);
     $reso_total = intval($sla_row['reso_total'] ?? 0);
@@ -1407,6 +1420,7 @@ function getServiceDeskReport(mysqli $mysqli, $date_from, $date_to, ?int $client
     return [
         'date_from' => $date_from,
         'date_to'   => $date_to,
+        'maintenance' => $maintenance,
         'totals'    => [
             'opened'   => $total_opened,
             'resolved' => $total_resolved,
