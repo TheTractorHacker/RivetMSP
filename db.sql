@@ -2539,6 +2539,21 @@ CREATE TABLE `mail_requests` (
   KEY `idx_mail_request_message_id` (`mail_request_message_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `mail_templates`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `mail_templates` (
+  `mail_template_id` int(11) NOT NULL AUTO_INCREMENT,
+  `mail_template_event` varchar(40) NOT NULL,
+  `mail_template_subject` varchar(500) NOT NULL DEFAULT '',
+  `mail_template_body` mediumtext NOT NULL,
+  `mail_template_enabled` tinyint(1) NOT NULL DEFAULT 1,
+  `mail_template_updated_at` datetime DEFAULT NULL,
+  `mail_template_updated_by` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`mail_template_id`),
+  UNIQUE KEY `uniq_mail_template_event` (`mail_template_event`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `mailboxes`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -5078,6 +5093,8 @@ CREATE TABLE `settings` (
   `config_rmm_alert_ticket_sla` tinyint(1) NOT NULL DEFAULT 0,
   `config_rmm_alert_ticket_email` tinyint(1) NOT NULL DEFAULT 0,
   `config_update_check_last_at` datetime DEFAULT NULL,
+  `config_mail_template_header_html` mediumtext DEFAULT NULL,
+  `config_mail_template_footer_html` mediumtext DEFAULT NULL,
   PRIMARY KEY (`company_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
