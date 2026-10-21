@@ -14,17 +14,2987 @@
   "rawerr": null,
   "axe": [
    {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/admin/",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Users"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/admin/admin_user.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Users"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/ai_provider.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - AI Provider"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "DIV:10.88px:GETread",
+   "DIV:10.88px:POSTcreate",
+   "DIV:10.88px:PUTupdate",
+   "DIV:10.88px:DELETEremove"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 9
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-in-text-block",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/admin/api_docs.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - API Docs"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
     "id": "heading-order",
     "impact": "moderate",
     "n": 1
    }
   ],
-  "path": "/agent/dashboard.php",
+  "path": "/admin/api_keys.php",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Dashboard"
+  "title": "Northwind Managed IT - API Keys"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/app_log.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - App Log"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/audit_log.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Audit Log"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/audit_log.php?action=Update",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Audit Log"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/audit_log.php?q=Alex+Morgan+successfully+logged+in",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Audit Log"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/admin/audit_trail.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Audit Trail"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/canned_responses.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Canned Responses"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "landmark-banner-is-top-level",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/admin/catalog_setup.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Catalog Setup"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/category.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Category"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/category.php?category=Expense",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Category"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 0,
+  "small": [
+   "SMALL:10.8333px:Security-relevant ac",
+   "SMALL:10.8333px:Standards expect log",
+   "SMALL:10.8333px:Pick the standard yo",
+   "SMALL:10.8333px:Passwords alone are ",
+   "SMALL:10.8333px:Ask them to enrol an",
+   "SMALL:10.8333px:Administrator accoun"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "landmark-one-main",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "region",
+    "impact": "moderate",
+    "n": 11
+   }
+  ],
+  "path": "/admin/compliance_report.php?format=html",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Compliance status report"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 0,
+  "small": [
+   "SMALL:10.8333px:Security-relevant ac",
+   "SMALL:10.8333px:Standards expect log",
+   "SMALL:10.8333px:Pick the standard yo",
+   "SMALL:10.8333px:Passwords alone are ",
+   "SMALL:10.8333px:Ask them to enrol an",
+   "SMALL:10.8333px:Administrator accoun"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "landmark-one-main",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "region",
+    "impact": "moderate",
+    "n": 11
+   }
+  ],
+  "path": "/admin/compliance_report.php?format=html&framework=iso27001",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Compliance status report"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 2
+   }
+  ],
+  "path": "/admin/compliance_status.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Compliance Status"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 2
+   }
+  ],
+  "path": "/admin/compliance_status.php?framework=iso27001",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Compliance Status"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/contract_template.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Contract Template"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/custom_link.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Custom Link"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-in-text-block",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/admin/debug.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Debug"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/document_template.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Document Template"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/email_log.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Email Log"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/event_rules.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Event Rules"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/event_rules.php?new=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Event Rules"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "CODE:10.5px:ticket_id",
+   "CODE:10.5px:ticket_number",
+   "CODE:10.5px:ticket_subject",
+   "CODE:10.5px:ticket_priority",
+   "CODE:10.5px:ticket_status",
+   "CODE:10.5px:client_id"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/event_rules.php?recipe=critical-ticket",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Event Rules"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/holidays.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Holidays"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/identity_provider.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Identity Provider"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "CODE:10.5px:webhook.deliver",
+   "CODE:10.5px:automation.action",
+   "CODE:10.5px:rmm.ingest"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   }
+  ],
+  "path": "/admin/job_queue.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Job Queue"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "CODE:10.5px:webhook.deliver",
+   "CODE:10.5px:automation.action",
+   "CODE:10.5px:rmm.ingest"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   }
+  ],
+  "path": "/admin/job_queue.php?status=pending",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Job Queue"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/labor_type.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Labor Type"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/mail_queue.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Mail Queue"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/mail_requests.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Mail Requests"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/mailbox.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Mailbox"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "landmark-banner-is-top-level",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/admin/maintenance.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Maintenance"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/onboarding_templates.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Onboarding Templates"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/payment_method.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Payment Method"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/payment_provider.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Payment Provider"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/project_template.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Project Template"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 4
+   }
+  ],
+  "path": "/admin/project_template_details.php?project_template_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Project Template Details"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "badge text-bg-secondary fs-6:10px:0 of 5 steps done",
+   "user-select-all:10.5px:node node_modules/me",
+   "CODE:10.5px:https://mesh.example",
+   "CODE:10.5px:%ProgramData%\\RivetI"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/rmm_mesh_wizard.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - RMM Mesh Wizard"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/roles.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Roles"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "landmark-banner-is-top-level",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/admin/settings.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings"
+ },
+ {
+  "hscroll": null,
+  "h1": 0,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "page-has-heading-one",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/admin/settings_accounting.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT"
+ },
+ {
+  "hscroll": null,
+  "h1": 0,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "page-has-heading-one",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/admin/settings_accounting.php?tab=connection",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_ai.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings AI"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "label-title-only",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/admin/settings_appearance.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Appearance"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_company.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Company"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "badge bg-secondary fs-6:10px:No preset"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_compliance.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Compliance"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_default.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Default"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "badge bg-success fs-6:10px:On",
+   "CODE:10.5px:503 module_disabled",
+   "CODE:10.5px:config_core_rmm_enab"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 8
+   },
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   },
+   {
+    "id": "target-size",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/admin/settings_endpoint_agent.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Endpoint Agent"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 4
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/admin/settings_integrations.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Integrations"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 4
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/admin/settings_integrations.php?tab=rmm",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Integrations"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_invoice.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Invoice"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "CODE:10.5px:module_kb"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_kb.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings KB"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_localization.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Localization"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [
+   "<input type=\"text\" class=\"form-control\" readonly=\"\" value=\"https://localhost:8191/admin/oa"
+  ],
+  "nameCounts": [
+   0,
+   1
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "label",
+    "impact": "critical",
+    "n": 1
+   }
+  ],
+  "path": "/admin/settings_mail.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Mail"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_module.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Module"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "small fw-bold text-uppercase text-muted :11.2px:Setup Steps",
+   "push-step-num:11.2px:1",
+   "push-step-num:11.2px:2",
+   "push-step-num:11.2px:3",
+   "push-step-num:11.2px:4",
+   "push-step-num:11.2px:5"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "label",
+    "impact": "critical",
+    "n": 6
+   },
+   {
+    "id": "link-in-text-block",
+    "impact": "serious",
+    "n": 2
+   }
+  ],
+  "path": "/admin/settings_notification.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Notification"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_project.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Project"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_quote.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Quote"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "badge bg-success fs-6:10px:Connected"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_redis.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Redis"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "CODE:10.5px:sudo php scripts/key"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/admin/settings_security.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Security"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_telemetry.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Telemetry"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "image-alt",
+    "impact": "critical",
+    "n": 1
+   }
+  ],
+  "path": "/admin/settings_theme.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Theme"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "label-title-only",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/admin/settings_ticket.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Ticket"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_webhooks.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Webhooks"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/settings_webhooks.php?detect=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Settings Webhooks"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/sla_calendars.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - SLA Calendars"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/sla_policies.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - SLA Policies"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/software_template.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Software Template"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/tag.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tag"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/tag.php?type=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tag"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/tax.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tax"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "landmark-banner-is-top-level",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/admin/template_library.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Template Library"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/ticket_automation.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Ticket Automation"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/ticket_automation_log.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Ticket Automation Log"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/admin/ticket_status.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Ticket Status"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/ticket_template.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Ticket Template"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [
+   "<button type=\"submit\" name=\"add_ticket_template_task\" class=\"btn btn-primary\"><i class=\"fa"
+  ],
+  "nolabel": [],
+  "nameCounts": [
+   1,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "button-name",
+    "impact": "critical",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/admin/ticket_template_details.php?ticket_template_id=2",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Ticket Template Details"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "landmark-banner-is-top-level",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/admin/ticketing_setup.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Ticketing Setup"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "CODE:10.5px:fork/master",
+   "CODE:10.6971px:2257ab49d",
+   "CODE:10.6971px:qa-ux-20261021",
+   "CODE:10.5px:fork/beta",
+   "CODE:10.5px:qa-ux-20261021"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/update.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Update"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/admin/users.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Users"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/vendor_template.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Vendor Template"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/webhook_form.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Webhook Form"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "CODE:10.5px:https://n8n.example.",
+   "CODE:10.5px:X-Rivet-Signature-V2"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/webhook_form.php?dest=n8n",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Webhook Form"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "CODE:10.5px:https://n8n.example.",
+   "CODE:10.5px:X-Rivet-Signature-V2"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/webhook_form.php?destination=n8n",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Webhook Form"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 2,
+  "small": [
+   "CODE:11.008px:ticket.created",
+   "wg-nav-title:10.88px:Basics",
+   "wg-nav-title:10.88px:Automation platforms",
+   "wg-nav-title:10.88px:Home automation",
+   "wg-nav-title:10.88px:Push and notificatio",
+   "wg-nav-title:10.88px:Team chat"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 6
+   },
+   {
+    "id": "landmark-banner-is-top-level",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "landmark-main-is-top-level",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "landmark-no-duplicate-main",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "landmark-unique",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/admin/webhook_guides.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Webhook Guides"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   }
+  ],
+  "path": "/admin/workflow_templates.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Workflow Templates"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/admin/worksheet_template.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Worksheet Template"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/accounts.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Accounts"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/alerts.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Alerts"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/alerts.php?status=new&source=all",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Alerts"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/alerts.php?status=new&source=all&severity=critical",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Alerts"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 3
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 2
+   },
+   {
+    "id": "link-in-text-block",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/asset_details.php?client_id=5&asset_id=17",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Bluebird Bakery & Cafe - BBC-DES-01"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 3
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 2
+   },
+   {
+    "id": "link-in-text-block",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/asset_details.php?client_id=5&asset_id=17&view=0",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Bluebird Bakery & Cafe - BBC-DES-01"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/assets.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Assets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/assets.php?&type=",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Assets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/assets.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Assets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/assets.php?client_id=1&type=",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Assets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [
+   "fc-event-title:TCK-122 created - Mailbox",
+   "fc-event-title:TCK-112 created - Scanner",
+   "fc-event-title:TCK-107 created - Shared ",
+   "fc-event-title:TCK-100 created - Outlook",
+   "fc-event-title:TCK-111 created - MFA enr",
+   "fc-event-title:TCK-102 created - New hir"
+  ],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "aria-allowed-attr",
+    "impact": "critical",
+    "n": 3
+   },
+   {
+    "id": "role-img-alt",
+    "impact": "serious",
+    "n": 2
+   },
+   {
+    "id": "target-size",
+    "impact": "serious",
+    "n": 16
+   }
+  ],
+  "path": "/agent/calendar.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Calendar"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [
+   "fc-event-title:TCK-112 created - Scanner",
+   "fc-event-title:TCK-100 created - Outlook",
+   "fc-event-title:TCK-118 created - Confere",
+   "fc-event-title:INV-9001 created -scope: "
+  ],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "role-img-alt",
+    "impact": "serious",
+    "n": 2
+   },
+   {
+    "id": "target-size",
+    "impact": "serious",
+    "n": 4
+   }
+  ],
+  "path": "/agent/calendar.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Calendar"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/campaigns.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Campaigns"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/certificates.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Certificates"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/certificates.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Certificates"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/changes.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Changes"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/client_compliance.php?client_id=9",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "- Client Compliance"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "scrollable-region-focusable",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/client_overview.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Client Overview"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 2
+   }
+  ],
+  "path": "/agent/clients.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Clients"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 2
+   }
+  ],
+  "path": "/agent/clients.php?leads=0",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Clients"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/compliance_clients.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Compliance Clients"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [
+   "<button type=\"button\" class=\"btn btn-default float-end ajax-modal\" data-modal-url=\"modals/"
+  ],
+  "nolabel": [],
+  "nameCounts": [
+   1,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "button-name",
+    "impact": "critical",
+    "n": 1
+   },
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 3
+   },
+   {
+    "id": "label-title-only",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/contact_details.php?client_id=6&contact_id=6",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Summit Accounting Co. - Casey Lund"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [
+   "<button type=\"button\" class=\"btn btn-default float-end ajax-modal\" data-modal-url=\"modals/"
+  ],
+  "nolabel": [],
+  "nameCounts": [
+   1,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "button-name",
+    "impact": "critical",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 2
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/contact_details.php?contact_id=9",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - QA Contact"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/contacts.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Contacts"
  },
  {
   "hscroll": null,
@@ -53,105 +3023,15 @@
    {
     "id": "link-name",
     "impact": "serious",
-    "n": 2
+    "n": 1
    }
   ],
-  "path": "/agent/clients.php",
+  "path": "/agent/contacts.php?client_id=9",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Clients"
- },
- {
-  "hscroll": null,
-  "h1": 1,
-  "main": 1,
-  "small": [
-   "text-secondary text-uppercase:11.2px:Boards"
-  ],
-  "clipped": [],
-  "noname": [],
-  "nolabel": [],
-  "nameCounts": [
-   0,
-   0
-  ],
-  "rawerr": null,
-  "axe": [
-   {
-    "id": "color-contrast",
-    "impact": "serious",
-    "n": 5
-   },
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 2
-   },
-   {
-    "id": "link-name",
-    "impact": "serious",
-    "n": 10
-   },
-   {
-    "id": "target-size",
-    "impact": "serious",
-    "n": 10
-   }
-  ],
-  "path": "/agent/tickets.php",
-  "theme": "light",
-  "status": 200,
-  "console": [],
-  "failed": [],
-  "title": "Northwind Managed IT - Tickets"
- },
- {
-  "hscroll": null,
-  "h1": 1,
-  "main": 1,
-  "small": [
-   "avatar-badge:11.2px:PN"
-  ],
-  "clipped": [],
-  "noname": [
-   "<button type=\"button\" class=\"btn btn-outline-purple\" id=\"startStopTimer\"><i class=\"fas fa-"
-  ],
-  "nolabel": [],
-  "nameCounts": [
-   1,
-   0
-  ],
-  "rawerr": null,
-  "axe": [
-   {
-    "id": "button-name",
-    "impact": "critical",
-    "n": 1
-   },
-   {
-    "id": "color-contrast",
-    "impact": "serious",
-    "n": 1
-   },
-   {
-    "id": "frame-title",
-    "impact": "serious",
-    "n": 1
-   },
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 2
-   }
-  ],
-  "path": "/agent/ticket.php?ticket_id=23",
-  "theme": "light",
-  "status": 200,
-  "console": [],
-  "failed": [],
-  "title": "TCK-122 - Mailbox full warning"
+  "title": "- Contacts"
  },
  {
   "hscroll": null,
@@ -171,19 +3051,325 @@
     "id": "heading-order",
     "impact": "moderate",
     "n": 1
-   },
-   {
-    "id": "link-name",
-    "impact": "serious",
-    "n": 2
    }
   ],
-  "path": "/agent/invoices.php",
+  "path": "/agent/contracts.php?client_id=1",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Invoices"
+  "title": "Harbor Dental Group - Contracts"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   }
+  ],
+  "path": "/agent/credentials.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Credentials"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/credentials.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Credentials"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/csat.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - CSAT"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/csat.php?followup=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - CSAT"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/dashboard.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Dashboard"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/domains.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Domains"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/domains.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Domains"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/expenses.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Expenses"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/files.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Files"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/files.php?client_id=1&view=0&folder_id=0",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Files"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/global_search.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Global Search"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [
+   "<button class=\"btn btn-secondary text-success\" type=\"submit\" name=\"add_invoice_item\">\n    "
+  ],
+  "nolabel": [],
+  "nameCounts": [
+   1,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "button-name",
+    "impact": "critical",
+    "n": 1
+   },
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 2
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 2
+   }
+  ],
+  "path": "/agent/invoice.php?client_id=1&invoice_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - INV-9001"
  },
  {
   "hscroll": null,
@@ -239,22 +3425,881 @@
   "rawerr": null,
   "axe": [
    {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   },
+    "id": "link-name",
+    "impact": "serious",
+    "n": 2
+   }
+  ],
+  "path": "/agent/invoices.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Invoices"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
    {
     "id": "link-name",
     "impact": "serious",
     "n": 2
    }
   ],
-  "path": "/agent/quotes.php",
+  "path": "/agent/invoices.php?&status=Draft",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Quotes"
+  "title": "Northwind Managed IT - Invoices"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/invoices.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Invoices"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/invoices.php?client_id=1&status=Draft",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Invoices"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 2
+   }
+  ],
+  "path": "/agent/kb_article.php?id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - KB Article"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "aria-prohibited-attr",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/kb_articles.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - KB Articles"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/locations.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Locations"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/locations.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Locations"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/locations.php?client_id=5&q=Main%20Office",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Bluebird Bakery & Cafe - Locations"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/mail_requests.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Mail Requests"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/network_drives.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Network Drives"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/networks.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Networks"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/networks.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Networks"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/opportunities.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Opportunities"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/opportunities.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Opportunities"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   }
+  ],
+  "path": "/agent/payments.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Payments"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/payments.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Payments"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/pipeline.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Pipeline"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/printers.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Printers"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/problems.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Problems"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/products.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Products"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/products.php?type=service",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Products"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "progress-bar bg-secondary:10.5px:2 / 6"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/project_details.php?client_id=1&project_id=2",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "PRJ-93 - Firewall Replacement"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "progress-bar bg-secondary:10.5px:2 / 6"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/project_details.php?project_id=2",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "PRJ-93 - Firewall Replacement"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/project_gantt.php?client_id=1&project_id=2",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "PRJ-93 - Firewall Replacement"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/project_gantt.php?project_id=2",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "PRJ-93 - Firewall Replacement"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 2
+   }
+  ],
+  "path": "/agent/project_kanban.php?client_id=1&project_id=2",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "PRJ-93 - Firewall Replacement"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/project_kanban.php?project_id=2",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "PRJ-93 - Firewall Replacement"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "progress-bar bg-secondary:10.5px:2 / 6",
+   "progress-bar bg-primary:10.5px:1 / 4",
+   "progress-bar bg-secondary:10.5px:3 / 12",
+   "progress-bar bg-secondary:10.5px:3 / 9"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/projects.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Projects"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "progress-bar bg-secondary:10.5px:2 / 6"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/projects.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Projects"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "progress-bar bg-secondary:10.5px:2 / 6"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/projects.php?client_id=1&status=0",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Projects"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "progress-bar bg-secondary:10.5px:2 / 6",
+   "progress-bar bg-primary:10.5px:1 / 4",
+   "progress-bar bg-secondary:10.5px:3 / 12",
+   "progress-bar bg-secondary:10.5px:3 / 9"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/projects.php?status=0",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Projects"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [
+   "<button class=\"btn btn-secondary text-success\" type=\"submit\" name=\"add_quote_item\">\n      "
+  ],
+  "nolabel": [],
+  "nameCounts": [
+   1,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "button-name",
+    "impact": "critical",
+    "n": 1
+   },
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 2
+   }
+  ],
+  "path": "/agent/quote.php?client_id=1&quote_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - QUO-9001"
  },
  {
   "hscroll": null,
@@ -310,59 +4355,17 @@
   "rawerr": null,
   "axe": [
    {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   },
-   {
-    "id": "scrollable-region-focusable",
-    "impact": "serious",
-    "n": 1
-   }
-  ],
-  "path": "/agent/client_overview.php?client_id=1",
-  "theme": "light",
-  "status": 200,
-  "console": [],
-  "failed": [],
-  "title": "Harbor Dental Group - Client Overview"
- },
- {
-  "hscroll": null,
-  "h1": 1,
-  "main": 1,
-  "small": [],
-  "clipped": [],
-  "noname": [],
-  "nolabel": [],
-  "nameCounts": [
-   0,
-   0
-  ],
-  "rawerr": null,
-  "axe": [
-   {
-    "id": "empty-table-header",
-    "impact": "minor",
-    "n": 1
-   },
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   },
-   {
     "id": "link-name",
     "impact": "serious",
-    "n": 1
+    "n": 2
    }
   ],
-  "path": "/agent/contacts.php",
+  "path": "/agent/quotes.php",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Contacts"
+  "title": "Northwind Managed IT - Quotes"
  },
  {
   "hscroll": null,
@@ -384,12 +4387,60 @@
     "n": 1
    }
   ],
-  "path": "/agent/assets.php",
+  "path": "/agent/quotes.php?client_id=1",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Assets"
+  "title": "Harbor Dental Group - Quotes"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/racks.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Racks"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/recurring_expenses.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Recurring Expenses"
  },
  {
   "hscroll": null,
@@ -408,242 +4459,6 @@
    {
     "id": "color-contrast",
     "impact": "serious",
-    "n": 3
-   },
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 2
-   },
-   {
-    "id": "link-in-text-block",
-    "impact": "serious",
-    "n": 1
-   }
-  ],
-  "path": "/agent/asset_details.php?client_id=5&asset_id=17",
-  "theme": "light",
-  "status": 200,
-  "console": [],
-  "failed": [],
-  "title": "Bluebird Bakery & Cafe - BBC-DES-01"
- },
- {
-  "hscroll": null,
-  "h1": 1,
-  "main": 1,
-  "small": [
-   "progress-bar bg-secondary:10.5px:2 / 6",
-   "progress-bar bg-primary:10.5px:1 / 4",
-   "progress-bar bg-secondary:10.5px:3 / 12",
-   "progress-bar bg-secondary:10.5px:3 / 9"
-  ],
-  "clipped": [],
-  "noname": [],
-  "nolabel": [],
-  "nameCounts": [
-   0,
-   0
-  ],
-  "rawerr": null,
-  "axe": [
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   }
-  ],
-  "path": "/agent/projects.php",
-  "theme": "light",
-  "status": 200,
-  "console": [],
-  "failed": [],
-  "title": "Northwind Managed IT - Projects"
- },
- {
-  "hscroll": null,
-  "h1": 1,
-  "main": 1,
-  "small": [],
-  "clipped": [
-   "fc-event-title:TCK-122 created - Mailbox",
-   "fc-event-title:TCK-112 created - Scanner",
-   "fc-event-title:TCK-107 created - Shared ",
-   "fc-event-title:TCK-100 created - Outlook",
-   "fc-event-title:TCK-111 created - MFA enr",
-   "fc-event-title:TCK-102 created - New hir"
-  ],
-  "noname": [],
-  "nolabel": [],
-  "nameCounts": [
-   0,
-   0
-  ],
-  "rawerr": null,
-  "axe": [
-   {
-    "id": "aria-allowed-attr",
-    "impact": "critical",
-    "n": 3
-   },
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   },
-   {
-    "id": "role-img-alt",
-    "impact": "serious",
-    "n": 2
-   },
-   {
-    "id": "target-size",
-    "impact": "serious",
-    "n": 16
-   }
-  ],
-  "path": "/agent/calendar.php",
-  "theme": "light",
-  "status": 200,
-  "console": [],
-  "failed": [],
-  "title": "Northwind Managed IT - Calendar"
- },
- {
-  "hscroll": null,
-  "h1": 1,
-  "main": 1,
-  "small": [],
-  "clipped": [],
-  "noname": [],
-  "nolabel": [],
-  "nameCounts": [
-   0,
-   0
-  ],
-  "rawerr": null,
-  "axe": [
-   {
-    "id": "color-contrast",
-    "impact": "serious",
-    "n": 1
-   },
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 2
-   }
-  ],
-  "path": "/agent/pipeline.php",
-  "theme": "light",
-  "status": 200,
-  "console": [],
-  "failed": [],
-  "title": "Northwind Managed IT - Pipeline"
- },
- {
-  "hscroll": null,
-  "h1": 1,
-  "main": 1,
-  "small": [],
-  "clipped": [],
-  "noname": [],
-  "nolabel": [],
-  "nameCounts": [
-   0,
-   0
-  ],
-  "rawerr": null,
-  "axe": [
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   }
-  ],
-  "path": "/agent/opportunities.php",
-  "theme": "light",
-  "status": 200,
-  "console": [],
-  "failed": [],
-  "title": "Northwind Managed IT - Opportunities"
- },
- {
-  "hscroll": null,
-  "h1": 1,
-  "main": 1,
-  "small": [],
-  "clipped": [],
-  "noname": [],
-  "nolabel": [],
-  "nameCounts": [
-   0,
-   0
-  ],
-  "rawerr": null,
-  "axe": [
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 3
-   }
-  ],
-  "path": "/agent/reports/",
-  "theme": "light",
-  "status": 200,
-  "console": [],
-  "failed": [],
-  "title": "Northwind Managed IT - Index"
- },
- {
-  "hscroll": null,
-  "h1": 1,
-  "main": 1,
-  "small": [],
-  "clipped": [],
-  "noname": [],
-  "nolabel": [],
-  "nameCounts": [
-   0,
-   0
-  ],
-  "rawerr": null,
-  "axe": [
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 2
-   }
-  ],
-  "path": "/agent/reports/clients_with_balance.php",
-  "theme": "light",
-  "status": 200,
-  "console": [],
-  "failed": [],
-  "title": "Northwind Managed IT - Clients With Balance"
- },
- {
-  "hscroll": null,
-  "h1": 1,
-  "main": 1,
-  "small": [],
-  "clipped": [],
-  "noname": [],
-  "nolabel": [],
-  "nameCounts": [
-   0,
-   0
-  ],
-  "rawerr": null,
-  "axe": [
-   {
-    "id": "color-contrast",
-    "impact": "serious",
-    "n": 1
-   },
-   {
-    "id": "heading-order",
-    "impact": "moderate",
     "n": 1
    },
    {
@@ -674,22 +4489,17 @@
   "rawerr": null,
   "axe": [
    {
-    "id": "empty-table-header",
-    "impact": "minor",
-    "n": 1
-   },
-   {
     "id": "heading-order",
     "impact": "moderate",
     "n": 1
    }
   ],
-  "path": "/agent/payments.php",
+  "path": "/agent/recurring_invoices.php?client_id=1",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Payments"
+  "title": "Harbor Dental Group - Recurring Invoices"
  },
  {
   "hscroll": null,
@@ -711,7 +4521,320 @@
     "n": 1
    }
   ],
-  "path": "/agent/expenses.php",
+  "path": "/agent/recurring_invoices.php?client_id=1&status=active",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Recurring Invoices"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/recurring_invoices.php?status=active",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Recurring Invoices"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/recurring_tickets.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Recurring Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/recurring_tickets.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Recurring Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 2
+   }
+  ],
+  "path": "/agent/reports/",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Index"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/budget.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Budget"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/reports/client_ticket_time_detail.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Client Ticket Time Detail"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/reports/clients_with_balance.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Clients With Balance"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/credential_rotation.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Credential Rotation"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "info-box-text:10px:0 of 7 closed",
+   "info-box-text:10px:rated \u2264 2/5, not yet"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/reports/csat.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - CSAT"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/expense_by_vendor.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Expense By Vendor"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/expense_summary.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Expense Summary"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 2
+   }
+  ],
+  "path": "/agent/reports/expenses.php?dtf=2026-1-01&dtt=2026-1-31",
   "theme": "light",
   "status": 200,
   "console": [],
@@ -735,15 +4858,81 @@
    {
     "id": "heading-order",
     "impact": "moderate",
-    "n": 1
+    "n": 2
    }
   ],
-  "path": "/agent/products.php",
+  "path": "/agent/reports/expenses.php?q=Advertising&dtf=2026-1-01&dtt=2026-1-31",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Products"
+  "title": "Northwind Managed IT - Expenses"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "text-muted:10.08px:(hrs, 30 min/ticket)",
+   "text-muted:10.08px:(hrs, 1 hr/ticket)"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/included_issues.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Included Issues"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/income_by_client.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Income By Client"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/income_summary.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Income Summary"
  },
  {
   "hscroll": null,
@@ -760,7 +4949,733 @@
   "rawerr": null,
   "axe": [
    {
-    "id": "aria-prohibited-attr",
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/reports/mrr.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - MRR"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 4
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/reports/profit_loss.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Profit Loss"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/recurring_by_client.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Recurring By Client"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/rmm_health.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - RMM Health"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/schedules.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Schedules"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/reports/service_desk.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Service Desk"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/tax_summary.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tax Summary"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/reports/technician_performance.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Technician Performance"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/ticket_by_client.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Ticket By Client"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/ticket_charges.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Ticket Charges"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/ticket_summary.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Ticket Summary"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/tickets_unbilled.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tickets Unbilled"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/reports/time_by_tech.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Time By Tech"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/revenues.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Revenues"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "CODE:10.5px:setup --silent",
+   "CODE:10.5px:msiexec"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/rmm_add_device.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - RMM Add Device"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/rmm_alerts.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - RMM Alerts"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/rmm_alerts.php?status=new",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - RMM Alerts"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/rmm_alerts.php?status=new&severity=critical",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - RMM Alerts"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/rmm_assets.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - RMM Assets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/rmm_assets.php?status=online",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - RMM Assets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "info-box-text:10px:last 24h"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/rmm_dashboard.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - RMM Dashboard"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "info-box-text rmm-ib-sub:10px:of 0 managed",
+   "info-box-text rmm-ib-sub:10px:quiet up to 7 days",
+   "info-box-text rmm-ib-sub:10px:quiet over 7 days",
+   "info-box-text rmm-ib-sub:10px:enrolled, no check-i",
+   "info-box-text rmm-ib-sub:10px:waiting for a decisi",
+   "info-box-text rmm-ib-sub:10px:agent alerts"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/rmm_fleet.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - RMM Fleet"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "CODE:10.5px:setup --silent",
+   "CODE:10.5px:msiexec"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/rmm_fleet.php?add=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - RMM Add Device"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/segments.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Segments"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/services.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Services"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/services.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Services"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/software.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Software"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/software.php?client_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Harbor Dental Group - Software"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "avatar-badge:11.2px:PN"
+  ],
+  "clipped": [],
+  "noname": [
+   "<button type=\"button\" class=\"btn btn-outline-purple\" id=\"startStopTimer\"><i class=\"fas fa-"
+  ],
+  "nolabel": [],
+  "nameCounts": [
+   1,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "button-name",
+    "impact": "critical",
+    "n": 1
+   },
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "frame-title",
     "impact": "serious",
     "n": 1
    },
@@ -770,12 +5685,418 @@
     "n": 2
    }
   ],
-  "path": "/agent/kb_articles.php",
+  "path": "/agent/ticket.php?ticket_id=23",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - KB Articles"
+  "title": "TCK-122 - Mailbox full warning"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "avatar-badge:11.2px:AM"
+  ],
+  "clipped": [],
+  "noname": [
+   "<button type=\"button\" class=\"btn btn-outline-purple\" id=\"startStopTimer\"><i class=\"fas fa-"
+  ],
+  "nolabel": [],
+  "nameCounts": [
+   1,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "button-name",
+    "impact": "critical",
+    "n": 1
+   },
+   {
+    "id": "frame-title",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 2
+   }
+  ],
+  "path": "/agent/ticket.php?ticket_id=24&client_id=6",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "TCK-123 - Zoom camera not detected"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "avatar-badge:11.2px:AM"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 2
+   }
+  ],
+  "path": "/agent/ticket.php?ticket_id=7&invoice_id=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "TCK-106 - VPN not connecting from home"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "text-secondary text-uppercase:11.2px:Boards"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 5
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 10
+   },
+   {
+    "id": "target-size",
+    "impact": "serious",
+    "n": 10
+   }
+  ],
+  "path": "/agent/tickets.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "text-secondary text-uppercase:11.2px:Boards",
+   "SPAN:10px:0/3"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 13
+   },
+   {
+    "id": "target-size",
+    "impact": "serious",
+    "n": 7
+   }
+  ],
+  "path": "/agent/tickets.php?assigned=0",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "text-secondary text-uppercase:11.2px:Boards"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 5
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 10
+   },
+   {
+    "id": "target-size",
+    "impact": "serious",
+    "n": 10
+   }
+  ],
+  "path": "/agent/tickets.php?assigned_to=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "text-secondary text-uppercase:11.2px:Boards"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/tickets.php?board%5B%5D=79&status=Open",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "SPAN:10px:1/3"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 4
+   }
+  ],
+  "path": "/agent/tickets.php?client_id=3&billable=1&unbilled",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Cedar Ridge Builders - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 3
+   }
+  ],
+  "path": "/agent/tickets.php?client_id=6",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Summit Accounting Co. - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/tickets.php?client_id=6&assigned=unassigned",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Summit Accounting Co. - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "SPAN:10px:1/3"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 4
+   }
+  ],
+  "path": "/agent/tickets.php?client_id=6&status=All",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Summit Accounting Co. - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 1
+   }
+  ],
+  "path": "/agent/tickets.php?client_id=6&status=Open&assigned%5B%5D=me",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Summit Accounting Co. - Tickets"
  },
  {
   "hscroll": null,
@@ -802,12 +6123,12 @@
     "n": 1
    }
   ],
-  "path": "/admin/users.php",
+  "path": "/agent/tickets.php?client_id=6&status=Open&due_today=1",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Users"
+  "title": "Summit Accounting Co. - Tickets"
  },
  {
   "hscroll": null,
@@ -824,17 +6145,22 @@
   "rawerr": null,
   "axe": [
    {
-    "id": "landmark-banner-is-top-level",
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
     "impact": "moderate",
     "n": 1
    }
   ],
-  "path": "/admin/settings.php",
+  "path": "/agent/tickets.php?client_id=6&status=Open&onsite=1",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Settings"
+  "title": "Summit Accounting Co. - Tickets"
  },
  {
   "hscroll": null,
@@ -851,17 +6177,304 @@
   "rawerr": null,
   "axe": [
    {
-    "id": "landmark-banner-is-top-level",
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 2
+   },
+   {
+    "id": "heading-order",
     "impact": "moderate",
     "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 3
    }
   ],
-  "path": "/admin/ticketing_setup.php",
+  "path": "/agent/tickets.php?client_id=6&status=Open&overdue=1",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Ticketing Setup"
+  "title": "Summit Accounting Co. - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "text-secondary text-uppercase:11.2px:Boards"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 5
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 10
+   },
+   {
+    "id": "target-size",
+    "impact": "serious",
+    "n": 10
+   }
+  ],
+  "path": "/agent/tickets.php?status=Open",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "text-secondary text-uppercase:11.2px:Boards",
+   "SPAN:10px:1/3"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 3
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 5
+   },
+   {
+    "id": "target-size",
+    "impact": "serious",
+    "n": 5
+   }
+  ],
+  "path": "/agent/tickets.php?status=Open&assigned%5B%5D=me",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "text-secondary text-uppercase:11.2px:Boards"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/tickets.php?status=Open&due_today=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "text-secondary text-uppercase:11.2px:Boards"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/tickets.php?status=Open&onsite%5B%5D=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "text-secondary text-uppercase:11.2px:Boards"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   }
+  ],
+  "path": "/agent/tickets.php?status=Open&onsite=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "text-secondary text-uppercase:11.2px:Boards"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 6
+   },
+   {
+    "id": "heading-order",
+    "impact": "moderate",
+    "n": 1
+   },
+   {
+    "id": "link-name",
+    "impact": "serious",
+    "n": 10
+   },
+   {
+    "id": "target-size",
+    "impact": "serious",
+    "n": 10
+   }
+  ],
+  "path": "/agent/tickets.php?status=Open&overdue=1",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Tickets"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/transfers.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Transfers"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/trips.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Trips"
  },
  {
   "hscroll": null,
@@ -883,12 +6496,191 @@
     "n": 1
    }
   ],
-  "path": "/admin/audit_log.php",
+  "path": "/agent/trips.php?client_id=1",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Audit Log"
+  "title": "Harbor Dental Group - Trips"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "text-muted:11px:2026-10-21 17:42:25",
+   "text-muted:11px:2026-10-21 17:42:06",
+   "text-muted:11px:2026-10-21 17:41:14",
+   "text-muted:11px:2026-10-21 17:40:14",
+   "text-muted:11px:2026-10-21 17:37:12",
+   "text-muted:11px:2026-10-21 17:36:06"
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/user/user_activity.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - User Activity"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [
+   "<input type=\"text\" class=\"form-control\" value=\"Administrator\" disabled=\"\" style=\"\">"
+  ],
+  "nameCounts": [
+   0,
+   1
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "frame-title",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "label",
+    "impact": "critical",
+    "n": 1
+   }
+  ],
+  "path": "/agent/user/user_details.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - User Details"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [],
+  "path": "/agent/user/user_integrations.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - User Integrations"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [
+   "small text-muted fw-bold mb-2 text-upper:11.2px:My Devices",
+   "badge text-bg-secondary:11.2px:Idle",
+   "badge text-bg-light border:11.2px:Never used",
+   "small text-muted fw-bold mb-1 text-upper:11.2px:What gets pushed to "
+  ],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   },
+   {
+    "id": "label",
+    "impact": "critical",
+    "n": 6
+   }
+  ],
+  "path": "/agent/user/user_preferences.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - User Preferences"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "color-contrast",
+    "impact": "serious",
+    "n": 1
+   },
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 3
+   }
+  ],
+  "path": "/agent/user/user_security.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - User Security"
+ },
+ {
+  "hscroll": null,
+  "h1": 1,
+  "main": 1,
+  "small": [],
+  "clipped": [],
+  "noname": [],
+  "nolabel": [],
+  "nameCounts": [
+   0,
+   0
+  ],
+  "rawerr": null,
+  "axe": [
+   {
+    "id": "empty-table-header",
+    "impact": "minor",
+    "n": 1
+   }
+  ],
+  "path": "/agent/vendors.php",
+  "theme": "light",
+  "status": 200,
+  "console": [],
+  "failed": [],
+  "title": "Northwind Managed IT - Vendors"
  },
  {
   "hscroll": null,
@@ -910,12 +6702,12 @@
     "n": 1
    }
   ],
-  "path": "/admin/roles.php",
+  "path": "/agent/vendors.php?client_id=1",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Roles"
+  "title": "Harbor Dental Group - Vendors"
  },
  {
   "hscroll": null,
@@ -930,45 +6722,12 @@
    0
   ],
   "rawerr": null,
-  "axe": [
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   }
-  ],
-  "path": "/agent/locations.php",
+  "axe": [],
+  "path": "/agent/workflow_runs.php",
   "theme": "light",
   "status": 200,
   "console": [],
   "failed": [],
-  "title": "Northwind Managed IT - Locations"
- },
- {
-  "hscroll": null,
-  "h1": 1,
-  "main": 1,
-  "small": [],
-  "clipped": [],
-  "noname": [],
-  "nolabel": [],
-  "nameCounts": [
-   0,
-   0
-  ],
-  "rawerr": null,
-  "axe": [
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   }
-  ],
-  "path": "/agent/contracts.php?client_id=1",
-  "theme": "light",
-  "status": 200,
-  "console": [],
-  "failed": [],
-  "title": "Harbor Dental Group - Contracts"
+  "title": "Northwind Managed IT - Workflow Runs"
  }
 ]
