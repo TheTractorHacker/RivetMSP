@@ -281,3 +281,6 @@ html:not([data-bs-theme="dark"]) .form-text { color: #5d6b72; }
     flex-wrap: wrap;
     align-items: flex-start;
 }
+
+/* Warning alerts: Tabler's amber text on the cream tint measures 2:1 (.alert-warning inside forms/modals). Light theme only. */
+html:not([data-bs-theme="dark"]) .alert-warning { color: #664d03; }

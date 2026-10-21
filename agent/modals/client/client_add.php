@@ -414,7 +414,7 @@ ob_start();
         </div>
     </div>
     <div class="modal-footer">
-        <button type="submit" name="add_client" class="btn btn-primary text-bold js-prompt-primary-contact"><i class="fa fa-check me-2"></i>Create Client</button>
+        <button type="submit" name="add_client" class="btn btn-primary text-bold js-prompt-primary-contact"><i class="fa fa-check me-2"></i>Create <?php echo $leads_filter == 1 ? "Lead" : "Client"; ?></button>
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal"><i class="fa fa-times me-2"></i>Close</button>
     </div>
 </form>
