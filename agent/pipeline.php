@@ -77,6 +77,8 @@ while ($row = mysqli_fetch_assoc($sql)) {
     #pipeline-board .kanban-column {
         min-height: 200px;
         max-height: none;
+        min-width: 240px;   /* five stages fit a 1366px screen without the last one being cut off */
+        max-width: none;
     }
     #pipeline-board .kanban-status {
         min-height: 120px;

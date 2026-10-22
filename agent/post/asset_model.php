@@ -17,6 +17,11 @@ if ($dhcp == 1) {
 $ipv6 = sanitizeInput($_POST['ipv6']);
 $nat_ip = sanitizeInput($_POST['nat_ip']);
 $mac = sanitizeInput($_POST['mac']);
+
+if ($net_err = validateAssetNetworkFields($ip, $nat_ip, $ipv6, $mac)) {
+    flash_alert($net_err, 'error');
+    redirect();
+}
 $uri = sanitizeInput($_POST['uri']);
 $uri_2 = sanitizeInput($_POST['uri_2']);
 $uri_client = sanitizeInput($_POST['uri_client']);

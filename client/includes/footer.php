@@ -63,10 +63,12 @@
      Tabler's CSS is used. -->
 <script src="/plugins/bootstrap5/js/bootstrap.bundle.min.js"></script>
 
+<script src="/js/a11y_auto.js?v=<?= (int) @filemtime($_SERVER['DOCUMENT_ROOT'] . '/js/a11y_auto.js') ?>" defer></script>
+
 <!--- TinyMCE -->
 <script src="/plugins/tinymce/tinymce.min.js" referrerpolicy="origin"></script>
 
-<script>
+<script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
     
     // Initialize TinyMCE
     tinymce.init({

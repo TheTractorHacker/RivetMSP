@@ -1,0 +1,178 @@
+[
+ {
+  "module": "contact",
+  "page": "/agent/contacts.php?client_id=1",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "location",
+  "page": "/agent/locations.php?client_id=1",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "asset",
+  "page": "/agent/assets.php?client_id=1",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "vendor",
+  "page": "/agent/vendors.php",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "product",
+  "page": "/agent/products.php",
+  "invalid_after_fill": "[object HTMLInputElement],price",
+  "modal_still_open": true,
+  "validation": "[object HTMLInputElement]:undefined | price:Please match the requested format.",
+  "result": "NOT-SAVED"
+ },
+ {
+  "module": "expense",
+  "page": "/agent/expenses.php",
+  "invalid_after_fill": ",amount",
+  "modal_still_open": true,
+  "validation": ":undefined | amount:Please match the requested format.",
+  "result": "NOT-SAVED"
+ },
+ {
+  "module": "revenue",
+  "page": "/agent/revenues.php",
+  "invalid_after_fill": ",amount",
+  "modal_still_open": true,
+  "validation": ":undefined | amount:Please match the requested format.",
+  "result": "NOT-SAVED"
+ },
+ {
+  "module": "account",
+  "page": "/agent/accounts.php",
+  "invalid_after_fill": "[object HTMLInputElement],opening_balance",
+  "modal_still_open": true,
+  "validation": "[object HTMLInputElement]:undefined | opening_balance:Please match the requested format.",
+  "result": "NOT-SAVED"
+ },
+ {
+  "module": "project",
+  "page": "/agent/projects.php",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "domain",
+  "page": "/agent/domains.php?client_id=1",
+  "invalid_after_fill": "",
+  "result": "ERROR Locator.click: Timeout 3000ms exceeded."
+ },
+ {
+  "module": "certificate",
+  "page": "/agent/certificates.php?client_id=1",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "credential",
+  "page": "/agent/credentials.php?client_id=1",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "network",
+  "page": "/agent/networks.php?client_id=1",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "trip",
+  "page": "/agent/trips.php",
+  "invalid_after_fill": ",miles,destination",
+  "modal_still_open": true,
+  "validation": ":undefined | miles:Please match the requested format. | destination:Please select an item in the list.",
+  "result": "NOT-SAVED"
+ },
+ {
+  "module": "quote",
+  "page": "/agent/quotes.php",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved?(name not found in list)"
+ },
+ {
+  "module": "invoice",
+  "page": "/agent/invoices.php",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved?(name not found in list)"
+ },
+ {
+  "module": "recurring invoice",
+  "page": "/agent/recurring_invoices.php",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved?(name not found in list)"
+ },
+ {
+  "module": "recurring ticket",
+  "page": "/agent/recurring_tickets.php",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "recurring expense",
+  "page": "/agent/recurring_expenses.php",
+  "invalid_after_fill": ",day,amount",
+  "modal_still_open": true,
+  "validation": ":undefined | day:Please match the requested format. | amount:Please match the requested format.",
+  "result": "NOT-SAVED"
+ },
+ {
+  "module": "contract",
+  "page": "/agent/contracts.php?client_id=1",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "software",
+  "page": "/agent/software.php",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "campaign",
+  "page": "/agent/campaigns.php",
+  "result": "NO-NEW-BUTTON"
+ },
+ {
+  "module": "segment",
+  "page": "/agent/segments.php",
+  "result": "NO-NEW-BUTTON"
+ },
+ {
+  "module": "problem",
+  "page": "/agent/problems.php",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "change",
+  "page": "/agent/changes.php",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ }
+]

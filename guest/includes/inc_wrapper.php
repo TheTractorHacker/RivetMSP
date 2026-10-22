@@ -35,5 +35,5 @@
    --------------------------------------------------------------------------- */
 ?>
 <div class="page-wrapper">
-    <div class="page-body">
+    <div class="page-body" role="main">
         <div class="container">

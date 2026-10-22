@@ -12,6 +12,11 @@ if ($_POST['dhcp'] == 1){
 }
 $nat_ip = sanitizeInput($_POST['nat_ip']);
 $ipv6 = sanitizeInput($_POST['ipv6']);
+
+if ($net_err = validateAssetNetworkFields($ip, $nat_ip, $ipv6, $mac)) {
+    flash_alert($net_err, 'error');
+    redirect();
+}
 $network = intval($_POST['network']);
 $notes = sanitizeInput($_POST['notes']);
 $connected_to = intval($_POST['connected_to']);

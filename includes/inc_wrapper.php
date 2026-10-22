@@ -50,5 +50,5 @@ if (!empty($itflow_top_nav_html)) {
     $itflow_top_nav_html = '';
 }
 ?>
-    <div class="page-body">
+    <div class="page-body" role="main">
         <div class="container-xl">

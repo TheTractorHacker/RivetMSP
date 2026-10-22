@@ -1,0 +1,109 @@
+[
+ {
+  "persona": "client contact",
+  "task": "Submit a ticket (attachment?)",
+  "clicks": 3,
+  "typed": 2,
+  "outcome": "completed",
+  "steps": [
+   "click: New Ticket (home)",
+   "type: subject",
+   "click: Raise ticket"
+  ],
+  "notes": [
+   "attachment field present: False",
+   "landed: /client/ticket.php?id=61 ticket visible: True"
+  ],
+  "end": "/client/ticket.php?id=61"
+ },
+ {
+  "persona": "client contact",
+  "task": "See ticket status and reply",
+  "clicks": 2,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "click: Tickets",
+   "click: open ticket"
+  ],
+  "notes": [
+   "reply box present: True",
+   "status shown: Ticket TCK-37 | QC | Welcome back, QA Contact | Northwind Managed IT Client Portal | Hom"
+  ],
+  "end": "/client/ticket.php?id=61"
+ },
+ {
+  "persona": "client contact",
+  "task": "Find a knowledge-base article",
+  "clicks": 0,
+  "typed": 0,
+  "outcome": "blocked-no-KB-in-portal",
+  "steps": [],
+  "notes": [
+   "portal top nav: Northwind Managed IT | Home | Tickets | Finance | Technical | QA Contact"
+  ],
+  "end": "/client/index.php"
+ },
+ {
+  "persona": "client contact",
+  "task": "Update my profile",
+  "clicks": 2,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "click: user menu",
+   "click: Profile"
+  ],
+  "notes": [
+   "menu: Account, Sign out",
+   "editable fields: new_password"
+  ],
+  "end": "/client/profile.php"
+ },
+ {
+  "persona": "client contact",
+  "task": "See my invoices",
+  "clicks": 2,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "click: Finance menu",
+   "click: Invoices"
+  ],
+  "notes": [
+   "finance items: Invoices, Recurring Invoices, Quotes, Saved Payments",
+   "invoices page: Invoices | QC | Welcome back, QA Contact | Northwind Managed IT Client Portal | Invoices | #\tSCOPE\tAMOUNT\tDATE\tDUE\tSTATUS | No invoi"
+  ],
+  "end": "/client/invoices.php"
+ },
+ {
+  "persona": "client contact",
+  "task": "Find a quote to approve",
+  "clicks": 2,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "click: Finance menu",
+   "click: Quotes"
+  ],
+  "notes": [
+   "quotes page: Quotes | QC | Welcome back, QA Contact | Northwind Managed IT Client Portal | Quotes | #\tSCOPE\tAMOUNT\tDATE\tSTATUS | No quotes found.",
+   "no seeded quote for this client; approve/pay not exercised (would send mail / take payment)"
+  ],
+  "end": "/client/quotes.php"
+ },
+ {
+  "persona": "client contact",
+  "task": "See my assets/documents",
+  "clicks": 1,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "click: Technical menu"
+  ],
+  "notes": [
+   "technical items: Contacts, Assets, Contracts & Docs, Documents, Domains, Certificates, All tickets"
+  ],
+  "end": "/client/index.php"
+ }
+]

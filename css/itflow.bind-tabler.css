@@ -215,3 +215,61 @@
     --bs-secondary-color:           var(--tblr-secondary-color, rgba(33,37,41,.75));
     --bs-tertiary-bg:               var(--tblr-tertiary-bg, #f8f9fa);
 }
+
+/* =============================================================================
+   DARK-MODE READABILITY (WCAG AA)
+
+   1. Links: the accent (#2563eb by default, or whatever the admin picked) is used as-is for
+      link text on the dark surface, which measures 3.2:1. In dark mode links are lightened
+      toward white (same hue, so a custom accent still reads as the brand colour). :where()
+      keeps the specificity at a bare `a`, so any component that sets its own link colour
+      (and every Tabler .text-* utility) still wins.
+   2. TomSelect: the text typed into / shown in a select box kept the light-theme #343a40 on
+      the dark field (1.45:1) - the search text was effectively invisible.
+   ========================================================================== */
+:where(:root[data-bs-theme="dark"]) a:where(:not(.btn:not(.btn-link), .badge, .nav-link, .dropdown-item, .page-link, .list-group-item-action, .navbar-brand)) {
+    color: color-mix(in srgb, var(--color-accent, #2563eb) 55%, #fff);
+}
+:where(:root[data-bs-theme="dark"]) a:where(:not(.btn:not(.btn-link), .badge, .nav-link, .dropdown-item, .page-link, .list-group-item-action, .navbar-brand)):hover {
+    color: color-mix(in srgb, var(--color-accent, #2563eb) 35%, #fff);
+}
+:root[data-bs-theme="dark"] .ts-wrapper .ts-control,
+:root[data-bs-theme="dark"] .ts-wrapper .ts-control input,
+:root[data-bs-theme="dark"] .ts-wrapper .ts-control > .item {
+    color: var(--tblr-body-color);
+}
+
+/* Light-theme links: the default accent (#2563eb) is 4.1:1 on the striped table rows / tinted panels, just under AA. Darken it ~12%
+   toward black (same hue; a custom accent follows). Same :where() trick as the dark rule above: component colours still win. */
+:where(:root:not([data-bs-theme="dark"])) a:where(:not(.btn:not(.btn-link), .badge, .nav-link, .dropdown-item, .page-link, .list-group-item-action, .navbar-brand, .alert-link)) {
+    color: color-mix(in srgb, var(--color-accent, #2563eb) 88%, #000);
+}
+
+/* Links that sit inside running text (paragraphs, help text, alerts) must not rely on colour alone (WCAG 1.4.1): underline them.
+   Links in tables, buttons, menus and cards keep their plain look. */
+p a:not(.btn), nav > a:not(.nav-link):not(.btn):not(.navbar-brand), .form-text a, .alert a:not(.btn), small a, .small a, .text-muted a, .text-secondary a, .card-text a, .help-block a {
+    text-decoration: underline;
+    text-underline-offset: .15em;
+}
+
+/* Client portal / guest pages (no vertical app sidebar): the default teal accent (#0d9488) gives white button text only 3.7:1.
+   Darken primary buttons toward black and outline/link text likewise, so the main actions ("New Ticket", "Raise ticket", "View all")
+   meet WCAG AA. The agent app keeps its own accent untouched. */
+html:not(:has(.navbar-vertical)) .btn-primary {
+    --tblr-btn-bg: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000);
+    --tblr-btn-border-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000);
+    --tblr-btn-hover-bg: color-mix(in srgb, var(--color-accent, #0d9488) 66%, #000);
+    --tblr-btn-hover-border-color: color-mix(in srgb, var(--color-accent, #0d9488) 66%, #000);
+    --tblr-btn-color: #fff;
+}
+html:not(:has(.navbar-vertical)) .btn-outline-primary { --tblr-btn-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); --tblr-btn-border-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); }
+html:not(:has(.navbar-vertical)) footer .text-center, html:not(:has(.navbar-vertical)) footer p { color: #4b5563; }
+html:not(:has(.navbar-vertical)) .btn-primary { background-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); border-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); color: #fff; }
+html:not(:has(.navbar-vertical)) .btn-primary:hover, html:not(:has(.navbar-vertical)) .btn-primary:focus-visible { background-color: color-mix(in srgb, var(--color-accent, #0d9488) 66%, #000); border-color: color-mix(in srgb, var(--color-accent, #0d9488) 66%, #000); }
+html:not(:has(.navbar-vertical)) .btn-outline-primary { color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); border-color: color-mix(in srgb, var(--color-accent, #0d9488) 78%, #000); }
+
+/* Dark theme: remaining accent/red text on dark surfaces (outline buttons, pagination, danger text) below AA. */
+:root[data-bs-theme="dark"] .btn-outline-primary, :root[data-bs-theme="dark"] .page-link {
+    color: color-mix(in srgb, var(--color-accent, #2563eb) 55%, #fff);
+}
+:root[data-bs-theme="dark"] .text-danger { color: #f47a7a !important; }

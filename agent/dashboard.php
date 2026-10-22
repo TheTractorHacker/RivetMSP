@@ -153,7 +153,7 @@ $sql_years_select = mysqli_query($mysqli, "
 <?php
 // Dashboard stat cards
 $dash_open_tickets = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM tickets WHERE ticket_closed_at IS NULL AND ticket_resolved_at IS NULL"))[0]);
-$dash_active_clients = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM clients WHERE client_archived_at IS NULL"))[0]);
+$dash_active_clients = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM clients WHERE client_archived_at IS NULL AND client_lead = 0"))[0]);
 $dash_my_tickets = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM tickets WHERE ticket_assigned_to = $session_user_id AND ticket_closed_at IS NULL"))[0]);
 $dash_pending_invoices = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM invoices WHERE invoice_status IN ('Sent', 'Viewed', 'Partial')"))[0]);
 $dash_hour = intval(date('G'));
@@ -303,6 +303,13 @@ $dash_attention_total = array_sum(array_column($dash_attention_items, 'count'));
         <?php } ?>
     </form>
 </div>
+
+<?php if ($user_config_dashboard_financial_enable != 1 && $user_config_dashboard_technical_enable != 1) { ?>
+<div class="text-center text-muted py-5">
+    <i class="fas fa-chart-line fa-2x mb-2 d-block"></i>
+    Charts and trends are hidden. Switch on <strong>Technical</strong><?php if ($session_user_role == 1 || ($session_user_role == 3 && $config_module_enable_accounting == 1)) { echo ' or <strong>Financial</strong>'; } ?> above to see them.
+</div>
+<?php } ?>
 
 <?php
 if ($user_config_dashboard_financial_enable == 1) {
@@ -1078,7 +1085,7 @@ if ($user_config_dashboard_technical_enable == 1) {
                                 $has_client = "";
                             }
 
-                            $ticket_priority_color = $ticket_priority == "High" ? "danger" : ($ticket_priority == "Medium" ? "warning" : "info");
+                            $ticket_priority_color = ($ticket_priority == "High" || $ticket_priority == "Critical") ? "danger" : ($ticket_priority == "Medium" ? "warning" : ($ticket_priority == "Low" ? "info" : "secondary"));
                             $contact_display = empty($contact_name) ? "-" : "<a href='contact_details.php?client_id=$client_id&contact_id=$contact_id'>$contact_name</a>";
 
                             $_sla_due = null;

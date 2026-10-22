@@ -18,3 +18,14 @@
 @media (max-width: 575.98px) {
     .tvf-options { grid-template-columns: 1fr; }
 }
+
+/* Below 1700px the two-column layout leaves the ticket table ~850px (1366 screens), which hid Status / Assigned / Created behind a
+   scroll and clipped the stat-tile labels and the search box. Stack the views panel above the list instead (as a wrapping row of pills),
+   so the table gets the full content width. */
+@media (max-width: 1699.98px) {
+    .tvf-views-col, .tvf-main-col { flex: 0 0 100%; max-width: 100%; width: 100%; }
+    .tvf-views-col .ticket-saved-views > ul.nav.flex-column { flex-direction: row !important; flex-wrap: wrap; gap: .25rem .75rem; }
+    .tvf-views-col .ticket-saved-views > ul.nav.flex-column > .nav-item { min-width: 11rem; }
+    .tvf-views-col .ticket-saved-views > hr { display: none; }
+    .tvf-views-col .ticket-saved-views > h6 { margin-top: .5rem; }
+}

@@ -18,16 +18,17 @@ mysqli_report(MYSQLI_REPORT_OFF);
 $rmm_denied = static function (string $title, string $detail): void {
     echo '<div class="card card-dark"><div class="card-body text-center py-5"><h3 class="text-secondary"><i class="fas fa-fw fa-power-off me-2"></i>' . nullable_htmlentities($title)
         . '</h3><p class="text-muted mb-0">' . nullable_htmlentities($detail) . '</p></div></div>';
-    require_once "../includes/footer.php";
 };
 
 if (!$config_core_rmm_enabled || !rivetRmmEnabled($mysqli)) {
     $rmm_denied('RMM module is turned off', 'The RMM module is switched off, so installers cannot be created. An administrator can switch it on under Administration > Endpoint agent (the RMM module card).');
+    require_once "../includes/footer.php";   // top level: inside the closure the footer lost $csp_nonce and the page title
     return;
 }
 $rmm_installer = rivetRmmUiInstaller($mysqli, (int) $session_user_id, null, (int) ($_GET['client_id'] ?? 0) ?: null);
 if ($rmm_installer === null) {
     $rmm_denied('No access', 'Your role lacks the permission "Create enrollment tokens" (rmm.token.manage), so it cannot build installers. Ask an administrator to grant it under Administration > Roles.');
+    require_once "../includes/footer.php";   // top level: inside the closure the footer lost $csp_nonce and the page title
     return;
 }
 $rmm_feed = new \RivetMsp\AgentFeed\Feed($mysqli);

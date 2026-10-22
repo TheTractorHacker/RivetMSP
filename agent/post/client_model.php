@@ -1,7 +1,13 @@
 <?php
 defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 
-$name = cleanInput($_POST['name']);
+$name = trim(cleanInput($_POST['name']));
+
+// A blank or whitespace-only name is never valid (add and edit share this model)
+if ($name === '') {
+    flash_alert("Client name is required", 'error');
+    redirect();
+}
 $type = cleanInput($_POST['type']);
 $website = preg_replace("(^https?://)", "", cleanInput($_POST['website']));
 $referral = cleanInput($_POST['referral']);

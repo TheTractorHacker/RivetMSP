@@ -169,12 +169,14 @@ foreach ($_cat_subs as $_pid => $_subs) {
                             $contact_email = nullable_htmlentities($row['contact_email']);
                             $has_client = $client_id ? "&client_id=$client_id" : "";
 
-                            if ($ticket_priority == "High") {
-                                $ticket_priority_color = "danger";
+                            if ($ticket_priority == "High" || $ticket_priority == "Critical") {
+                                $ticket_priority_color = "danger";   // Critical must never read as the calm "Low" blue
                             } elseif ($ticket_priority == "Medium") {
                                 $ticket_priority_color = "warning";
-                            } else {
+                            } elseif ($ticket_priority == "Low") {
                                 $ticket_priority_color = "info";
+                            } else {
+                                $ticket_priority_color = "secondary";
                             }
 
                             $ticket_assigned_to = intval($row['ticket_assigned_to']);
@@ -330,8 +332,8 @@ foreach ($_cat_subs as $_pid => $_subs) {
                                     $cat_label = $ticket_category_name ?: 'Uncategorized';
                                     if (lookupUserPermission("module_support") >= 2 && empty($ticket_closed_at)) { ?>
                                     <div class="dropdown">
-                                        <span class="badge rounded-pill tkt-pill-badge dropdown-toggle" data-bs-toggle="dropdown" data-boundary="window"
-                                             style="background:<?= htmlspecialchars($cat_color) ?>;color:#fff;cursor:pointer;">
+                                        <span class="badge rounded-pill tkt-pill-badge dropdown-toggle <?= tagTextClass($cat_color) ?>" data-bs-toggle="dropdown" data-boundary="window"
+                                             style="background:<?= htmlspecialchars($cat_color) ?>;cursor:pointer;">
                                             <?= htmlspecialchars($cat_label) ?>
                                         </span>
                                         <div class="dropdown-menu shadow-sm" style="min-width:180px;max-height:280px;overflow-y:auto;">
@@ -363,7 +365,7 @@ foreach ($_cat_subs as $_pid => $_subs) {
                                         </div>
                                     </div>
                                     <?php } else { ?>
-                                    <span class="badge rounded-pill tkt-pill-badge" style="background:<?= htmlspecialchars($cat_color) ?>;color:#fff;">
+                                    <span class="badge rounded-pill tkt-pill-badge <?= tagTextClass($cat_color) ?>" style="background:<?= htmlspecialchars($cat_color) ?>;">
                                         <?= htmlspecialchars($cat_label) ?>
                                     </span>
                                     <?php } ?>
@@ -488,8 +490,8 @@ foreach ($_cat_subs as $_pid => $_subs) {
                                     $agent_color = $ticket_assigned_to ? $agent_colors[$ticket_assigned_to % count($agent_colors)] : '#adb5bd';
                                     if (lookupUserPermission("module_support") >= 2 && empty($ticket_closed_at)) { ?>
                                     <div class="dropdown">
-                                        <span class="badge rounded-pill tkt-pill-badge dropdown-toggle" data-bs-toggle="dropdown" data-boundary="window"
-                                             style="background:<?= $agent_color ?>;color:#fff;cursor:pointer;">
+                                        <span class="badge rounded-pill tkt-pill-badge dropdown-toggle <?= tagTextClass($agent_color) ?>" data-bs-toggle="dropdown" data-boundary="window"
+                                             style="background:<?= $agent_color ?>;cursor:pointer;">
                                             <?= htmlspecialchars($agent_label) ?>
                                         </span>
                                         <div class="dropdown-menu shadow-sm" style="min-width:160px;">
@@ -511,7 +513,7 @@ foreach ($_cat_subs as $_pid => $_subs) {
                                         </div>
                                     </div>
                                     <?php } else { ?>
-                                    <span class="badge rounded-pill tkt-pill-badge" style="background:<?= $agent_color ?>;color:#fff;">
+                                    <span class="badge rounded-pill tkt-pill-badge <?= tagTextClass($agent_color) ?>" style="background:<?= $agent_color ?>;">
                                         <?= htmlspecialchars($agent_label) ?>
                                     </span>
                                     <?php } ?>

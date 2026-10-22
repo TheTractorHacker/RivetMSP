@@ -32,6 +32,11 @@ $purifier_config->set('Cache.DefinitionImpl', null); // Disable cache by setting
 $purifier_config->set('URI.AllowedSchemes', ['data' => true, 'src' => true, 'http' => true, 'https' => true]);
 $purifier = new HTMLPurifier($purifier_config);
 
+// No ticket_id at all falls through to the normal "Nothing to see here" page instead of undefined-variable warnings
+if (!isset($_GET['ticket_id'])) {
+    $_GET['ticket_id'] = 0;
+}
+
 if (isset($_GET['ticket_id'])) {
     $ticket_id = intval($_GET['ticket_id']);
 
@@ -110,6 +115,9 @@ if (isset($_GET['ticket_id'])) {
             $ticket_priority_display = "<span class='p-2 badge rounded-pill text-bg-warning'>$ticket_priority</span>";
         } elseif ($ticket_priority == "Low") {
             $ticket_priority_display = "<span class='p-2 badge rounded-pill text-bg-info'>$ticket_priority</span>";
+        } elseif ($ticket_priority !== '') {
+            // Any other stored value (e.g. "Critical" from an automation rule) is shown rather than read as "No priority"
+            $ticket_priority_display = "<span class='p-2 badge rounded-pill text-bg-dark'>$ticket_priority</span>";
         } else {
             $ticket_priority_display = "";
         }
@@ -706,7 +714,7 @@ if (isset($_GET['ticket_id'])) {
                         <span class="avatar-badge" style="background-color:#adb5bd;"><i class="fas fa-user"></i></span>
                         <?php } ?>
                         <?php if (empty($ticket_closed_at) && lookupUserPermission("module_support") >= 2) { ?>
-                        <select id="quickAssignSelect" class="form-control form-control-sm" style="max-width:150px;font-size:.8rem;" data-ticket-id="<?= $ticket_id ?>" data-csrf="<?= $_SESSION['csrf_token'] ?>">
+                        <select id="quickAssignSelect" aria-label="Assign technician" class="form-control form-control-sm" style="max-width:150px;font-size:.8rem;" data-ticket-id="<?= $ticket_id ?>" data-csrf="<?= $_SESSION['csrf_token'] ?>">
                             <option value="0" <?= !$ticket_assigned_to ? 'selected' : '' ?>>— Unassigned —</option>
                             <?php
                             mysqli_data_seek($sql_assign_to_select, 0);

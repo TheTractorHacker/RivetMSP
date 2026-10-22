@@ -1,0 +1,268 @@
+[
+ {
+  "persona": "admin",
+  "task": "Create a user with a role",
+  "clicks": 7,
+  "typed": 3,
+  "outcome": "completed",
+  "steps": [
+   "click: user menu",
+   "click: Administration",
+   "nav: Users",
+   "click: New User",
+   "type: name",
+   "type: email",
+   "type: password",
+   "click: role dropdown",
+   "click: choose Technician",
+   "click: Create"
+  ],
+  "notes": [
+   "role picker: - Role -,Accountant,Administrator,Technician",
+   "user listed: True"
+  ],
+  "end": "/admin/users.php"
+ },
+ {
+  "persona": "admin",
+  "task": "Disable a user",
+  "clicks": 5,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "click: user menu",
+   "click: Administration",
+   "nav: Users",
+   "click: row menu",
+   "click: Disable"
+  ],
+  "notes": [
+   "menu: Disable, Archive",
+   "confirm dialog shown: False"
+  ],
+  "end": "/admin/users.php"
+ },
+ {
+  "persona": "admin",
+  "task": "Find who changed something (audit log)",
+  "clicks": 4,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "click: user menu",
+   "click: Administration",
+   "nav: Settings",
+   "click: Audit log"
+  ],
+  "notes": [
+   "Settings page links: General, Workflows, Access & communication, Connections & data, Company details Business identity, address, and contact details., Language & region Time zone, currency, and date formats., Theme Colors"
+  ],
+  "end": "/admin/settings_compliance.php"
+ },
+ {
+  "persona": "admin",
+  "task": "Run and export a report",
+  "clicks": 3,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "nav: Reports",
+   "click: Clients with a Balance",
+   "click: Export CSV"
+  ],
+  "notes": [
+   "after Reports nav: /agent/reports/",
+   "csv filename: ar_aging_2026-10-21.csv"
+  ],
+  "end": "/agent/reports/clients_with_balance.php"
+ },
+ {
+  "persona": "admin",
+  "task": "Review system health (view only)",
+  "clicks": 3,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "click: user menu",
+   "click: Administration",
+   "nav: Maintenance"
+  ],
+  "notes": [
+   "maintenance text: Maintenance |  | Check scheduled work, review activity, and manage recovery. |  | Jobs & mail | Activity & diagnostics | Server | Recovery & updates | Jobs & mail |  | See what is scheduled and what is waiting to send. |  | "
+  ],
+  "end": "/admin/maintenance.php"
+ },
+ {
+  "persona": "admin",
+  "task": "Manage ticket statuses, categories, templates, SLAs",
+  "clicks": 3,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "click: user menu",
+   "click: Administration",
+   "nav: Ticketing"
+  ],
+  "notes": [
+   "ticketing setup text: Ticketing |  | Set up ticket handling, mail intake, and service targets. |  | Tickets | Email intake | Service levels | Tickets |  | Control ticket labels and automated actions. |  | Ticket statuses | Set the stages tickets move through. | Labor types | Classify time spent on tickets. | Ti"
+  ],
+  "end": "/admin/ticketing_setup.php"
+ },
+ {
+  "persona": "billing user",
+  "task": "Create an invoice from a ticket with tracked time",
+  "clicks": 6,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "nav: Reports",
+   "click: Unbilled Tickets report",
+   "nav: Service Desk",
+   "nav: Tickets",
+   "click: open ticket",
+   "click: Invoice button"
+  ],
+  "notes": [
+   "report is per-client counts, no drill-down links: 3 links in table",
+   "invoice modal: Invoice ticket | \u00d7 | Invoice Date * | Invoice Category * | - Select a Category - | Service | - Select a Category - | Invoice Title | October 2026 Tickets | Ticket TCK-123 - Zoom camera not detected | Item * | Item Descript"
+  ],
+  "end": "/agent/ticket.php?ticket_id=24&client_id=6"
+ },
+ {
+  "persona": "billing user",
+  "task": "Record a payment (modal opened, not submitted on seeded invoice)",
+  "clicks": 4,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "nav: Billing",
+   "nav: Invoices",
+   "click: open invoice",
+   "click: Add Payment"
+  ],
+  "notes": [
+   "payment modal fields: date, amount, account, , payment_method, , reference"
+  ],
+  "end": "/agent/invoice.php?client_id=1&invoice_id=1"
+ },
+ {
+  "persona": "billing user",
+  "task": "Chase an overdue invoice",
+  "clicks": 2,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "nav: Billing",
+   "nav: Invoices"
+  ],
+  "notes": [
+   "status filter options: ",
+   "invoice list has overdue/aging filter: True",
+   "invoice list has per-row Send reminder: False"
+  ],
+  "end": "/agent/invoices.php"
+ },
+ {
+  "persona": "billing user",
+  "task": "Produce an aged-debt report",
+  "clicks": 2,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "nav: Reports",
+   "click: Clients with a Balance"
+  ],
+  "notes": [
+   "AR aging buckets visible: True"
+  ],
+  "end": "/agent/reports/clients_with_balance.php"
+ },
+ {
+  "persona": "account manager",
+  "task": "See one client's health",
+  "clicks": 3,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "nav: Organization",
+   "nav: Clients",
+   "click: open client"
+  ],
+  "notes": [
+   "overview shows: open tickets=True assets=False contracts=False expiring=False balance=True spend/revenue=False"
+  ],
+  "end": "/agent/client_overview.php?client_id=1"
+ },
+ {
+  "persona": "account manager",
+  "task": "Prepare a monthly client report",
+  "clicks": 1,
+  "typed": 0,
+  "outcome": "partial",
+  "steps": [
+   "nav: Reports"
+  ],
+  "notes": [
+   "reports menu entries: Reports, Income, Income By Client, Recurring Income By Client, MRR & Forecast, Clients with a Balance, Expense, Expense By Vendor, Tax Summary, Profit & Loss, Annual Budget, Unbilled Tickets, Client Time Detail Audit, Included Support Issues, Service Desk & SLA, Tickets, Ticket Charges, Tickets by Client, Time by Technician, Technician Performance, Customer Satisfaction, RMM Health, Credential rotation, Scheduled Rep",
+   "no per-client monthly report/QBR; closest: Income by Client, Tickets by Client, Client Time Detail Audit"
+  ],
+  "end": "/agent/reports/"
+ },
+ {
+  "persona": "sales/lead owner",
+  "task": "Capture a lead",
+  "clicks": 6,
+  "typed": 2,
+  "outcome": "completed",
+  "steps": [
+   "nav: Organization",
+   "nav: Clients",
+   "click: Leads tab",
+   "click: New Lead",
+   "type: lead name",
+   "click: Contact tab",
+   "type: primary contact",
+   "click: Save lead"
+  ],
+  "notes": [
+   "lead modal fields: name,lead,abbreviation,type,referral,,website,lead_source,lead_status,,lead_owner,,lead_score,tags[],,address,city,state,zip,country,,location_phone_country_code,location_phone,location_extension,location_fax_country_code,location_fax,contact,title,contact_phone_country_code,contact_phone,contact_extension,contact_mobile_country_code,contact_mobile,contact_email,rate,net_terms,,tax_id_number,notes",
+   "lead listed: True"
+  ],
+  "end": "/agent/clients.php?leads=1"
+ },
+ {
+  "persona": "sales/lead owner",
+  "task": "Create an opportunity and see the pipeline",
+  "clicks": 3,
+  "typed": 1,
+  "outcome": "completed",
+  "steps": [
+   "nav: CRM",
+   "nav: Pipeline",
+   "click: New Opportunity",
+   "type: name"
+  ],
+  "notes": [
+   "opp fields: name,client_id,,contact_id,,stage,,probability,amount,close_date,owner,,notes"
+  ],
+  "end": "/agent/pipeline.php"
+ },
+ {
+  "persona": "sales/lead owner",
+  "task": "Move a lead through statuses and convert it",
+  "clicks": 4,
+  "typed": 0,
+  "outcome": "completed",
+  "steps": [
+   "nav: Organization",
+   "nav: Clients",
+   "click: Leads tab",
+   "click: row menu"
+  ],
+  "notes": [
+   "lead row menu: Clients 8, Client compliance, Onboarding & Offboarding, Edit, Convert to Client, Archive",
+   "Lead statuses (New/Contacted/Qualified...) - is there a lead status field? False"
+  ],
+  "end": "/agent/clients.php?leads=1"
+ }
+]

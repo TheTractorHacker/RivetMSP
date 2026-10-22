@@ -85,3 +85,6 @@
     background-color: rgba(13, 148, 136, .15);
     transition: background-color 0.2s ease;
 }
+
+/* Tabler's `.card + .card { margin-top }` pushed every column after the first down 16px: the board's columns must share one top edge. */
+.kanban-column.card, .kanban-column.card + .kanban-column.card { margin: 0 10px; }

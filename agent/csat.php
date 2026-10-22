@@ -233,7 +233,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
     </div>
 </div>
 
-<script>
+<script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
 $(document).on('change', '.js-csat-public-toggle', function () {
     var $box = $(this);
     var approved = $box.is(':checked') ? 1 : 0;

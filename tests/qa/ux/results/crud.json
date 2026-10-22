@@ -1,0 +1,44 @@
+[
+ {
+  "module": "contact",
+  "page": "/agent/contacts.php?client_id=1",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "asset",
+  "page": "/agent/assets.php?client_id=1",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "expense",
+  "page": "/agent/expenses.php",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "project",
+  "page": "/agent/projects.php",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved"
+ },
+ {
+  "module": "quote",
+  "page": "/agent/quotes.php",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved?(name not found in list)"
+ },
+ {
+  "module": "invoice",
+  "page": "/agent/invoices.php",
+  "invalid_after_fill": "",
+  "modal_still_open": false,
+  "result": "saved?(name not found in list)"
+ }
+]
