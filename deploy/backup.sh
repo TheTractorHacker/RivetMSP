@@ -159,7 +159,9 @@ validate_args() {
     if [[ "${OFFSITE_ENABLED}" -eq 0 && "${OFFSITE_DISABLED}" -eq 0 && -f "${OFFSITE_CONFIG}" ]]; then
         OFFSITE_ENABLED=1
     fi
-    [[ "${OFFSITE_DISABLED}" -eq 1 ]] && OFFSITE_ENABLED=0
+    if [[ "${OFFSITE_DISABLED}" -eq 1 ]]; then
+        OFFSITE_ENABLED=0
+    fi
 }
 
 setup_logging() {

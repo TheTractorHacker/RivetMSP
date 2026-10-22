@@ -138,6 +138,30 @@ $ok(str_contains($kc, $KEY) && str_contains($kc, "fingerprint: $FP"), 'the key f
 $rk = sec_sh('bash -c ' . escapeshellarg('source ' . escapeshellarg("$root/deploy/restore.sh") . '; load_settings_key_file ' . escapeshellarg($kf) . ' ' . escapeshellarg($FP) . '; echo "KEY=[$MANIFEST_SETTINGS_ENC_KEY]"'));
 $ok($rk[0] === 0 && str_contains($rk[1], "KEY=[$KEY]"), 'restore reads the key file backup.sh wrote and checks the fingerprint');
 
+// ------------------------------------------------------------------ regression: validate_args() must not abort under `set -e` when off-site is simply not configured
+// A bare `[[ cond ]] && cmd` used as a standalone statement is itself the whole statement's exit status: when cond is false (the normal,
+// unconfigured case - OFFSITE_DISABLED=0), that status is 1 and `set -e` kills the script right there with no output at all. This is the exact
+// failure that made deploy/backup.sh fail completely silently (exit 1, nothing printed) on any host with no /etc/itflow/offsite.conf.
+$appDir = "$tmp/fakeapp"; mkdir($appDir, 0755, true); file_put_contents("$appDir/config.php", "<?php\n");
+$passFile = "$tmp/fakepass"; file_put_contents($passFile, "not a real passphrase but 16+ chars\n"); chmod($passFile, 0600);
+$va = function (string $extraEnv = '') use ($root, $appDir, $passFile, $tmp): array {
+    return sec_sh('bash -c ' . escapeshellarg(
+        'set -euo pipefail; source ' . escapeshellarg("$root/deploy/backup.sh") . ';'
+        . ' APP_DIR=' . escapeshellarg($appDir) . '; PASSPHRASE_FILE=' . escapeshellarg($passFile) . '; RETENTION_DAYS=7;'
+        . ' OFFSITE_CONFIG=' . escapeshellarg("$tmp/no-such-offsite.conf") . ';'
+        . " $extraEnv validate_args; echo \"OFFSITE_ENABLED=[\$OFFSITE_ENABLED]\""
+    ));
+};
+[$c, $o] = $va();   // OFFSITE_DISABLED unset -> defaults to 0 (false), offsite.conf absent: the exact silent-failure scenario
+$ok($c === 0 && str_contains($o, 'OFFSITE_ENABLED=[0]'), 'validate_args() does not abort when off-site is unconfigured (OFFSITE_DISABLED unset, no offsite.conf)');
+[$c, $o] = $va('OFFSITE_DISABLED=1;');
+$ok($c === 0 && str_contains($o, 'OFFSITE_ENABLED=[0]'), 'validate_args() still turns off-site off when --no-offsite was passed (OFFSITE_DISABLED=1)');
+$bshSrc = (string) file_get_contents("$root/deploy/backup.sh");
+$ok(!preg_match('/^\s*\[\[[^\n]*\]\]\s*&&\s*\S/m', $bshSrc), 'no bare `[[ ... ]] && cmd` standalone statement remains in backup.sh (the same latent set -e abort bug)');
+foreach (['deploy/update.sh', 'deploy/restore.sh'] as $f) {
+    $ok(!preg_match('/^\s*\[\[[^\n]*\]\]\s*&&\s*\S/m', (string) file_get_contents("$root/$f")), "no bare \`[[ ... ]] && cmd\` standalone statement in $f either");
+}
+
 // ------------------------------------------------------------------ deploy/restore.sh: decrypt a new (600000) and an OLD (default iterations) archive
 $build = function (string $iterArgs, string $name) use ($tmp, $PASS): string {
     $d = "$tmp/pl_$name"; mkdir($d); file_put_contents("$d/backup-x.sql", "-- dump\n"); file_put_contents("$d/backup-manifest.json", '{"schema_version":2}');
