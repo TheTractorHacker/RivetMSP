@@ -4,6 +4,19 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.42] RivetMSP — web UI/UX QA fixes (no database change)
+
+**Deploy notes:** code only; no migration. Pull this branch and reload PHP.
+
+- **CRM:** Pipeline and Opportunities were blank pages (`getOpportunityStages()` and two helpers had been dropped from `functions.php` in 26.10.14); restored. Pipeline columns now share one top edge and fit five stages.
+- **Lists:** sorting Problems, Changes or Onboarding runs by a column crashed the page (the sort whitelist stripped the dot of `problems.title`); fixed in `includes/filter_header.php`.
+- **Tickets at 1366x768 and below 1700px:** the views panel stacks above the list and filter rows wrap, so Status, Assigned, Created, search and More Filters are no longer off screen. Critical priority now shows as red on the list and as a badge (not "No priority") on the ticket page.
+- **Contrast and dark mode (WCAG AA):** solid `badge bg-*` text was invisible (Compliance status Pass/Fail); text typed into select boxes and links were unreadable in dark mode; light-theme muted, success, warning, danger and info text, links, nav pills, danger/success/info buttons, custom-colour ticket pills and the portal's primary buttons now pass.
+- **Accessibility:** `main` landmark and a page heading on every shell, icon-only buttons and unlabelled selects/inputs named (`js/a11y_auto.js`), links in running text underlined.
+- **Invoices and quotes:** no more broken "Company logo" image when none is set; header labels aligned.
+- **Other:** calendar icon font allowed by the CSP (previous/next buttons were blank); RMM pages with the module off keep their CSP nonce and title; template detail pages no longer loop on a missing script path; sidebar Clients badge and dashboard Active Clients no longer count leads; New Lead modal button says Create Lead; dashboard explains an empty chart area; ticket prefix pattern valid; PHP warnings on ticket/user/quote/portal actions removed; duplicate user e-mail and blank client name rejected; CSP nonce on CSAT and portal footer scripts.
+- **Known, not fixed:** Administration > Settings > Accounting (QuickBooks) still fatals because `accounting_entity_map` lacks `map_remote_name` and `map_local_subtype` (needs a migration). Report and scripts: `tests/qa/ux/`.
+
 ## [26.10.41] RivetMSP — RivetCore 1.0.0-rc.30; RMM tickets Maintenance/no-SLA/no-email by default; Email Templates; in-app notification preferences; Administration > Update redesigned (DB 2.6.104 to 2.6.107)
 
 **Deploy notes:** back up the database, pull this tag, run **Administration > Updates** once: it walks four additive, guarded steps in order, each safe to re-run and each leaving existing data exactly as it was until an administrator opts in to the new behaviour.
