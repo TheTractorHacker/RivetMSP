@@ -1632,6 +1632,17 @@ CREATE TABLE `endpoint_agent_checks` (
   PRIMARY KEY (`device_id`,`check_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `endpoint_agent_config_seq`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `endpoint_agent_config_seq` (
+  `name` varchar(40) NOT NULL,
+  `seq` bigint(20) unsigned NOT NULL,
+  `body_hash` char(64) NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `endpoint_agent_devices`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -3853,6 +3864,7 @@ CREATE TABLE `rmm_hosted_files` (
   `size_bytes` bigint(20) NOT NULL,
   `uploaded_by` int(11) NOT NULL DEFAULT 0,
   `created_at` datetime NOT NULL,
+  `verified_fp` varchar(64) NOT NULL DEFAULT '',
   PRIMARY KEY (`file_id`),
   UNIQUE KEY `uniq_storage` (`storage_name`),
   KEY `idx_sha` (`sha256`)
@@ -6360,6 +6372,7 @@ INSERT INTO `rivet_core_migrations` VALUES ('0034_rmm_mesh_after_approval','2026
 INSERT INTO `rivet_core_migrations` VALUES ('0035_rmm_device_type','2026-10-20 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0036_rmm_hypervisors','2026-10-20 00:00:00');
 INSERT INTO `rivet_core_migrations` VALUES ('0037_rmm_agent_os','2026-10-21 00:00:00');
+INSERT INTO `rivet_core_migrations` VALUES ('0038_rmm_config_seq','2026-10-23 00:00:00');
 INSERT INTO `rmm_patch_rings` VALUES (1,'pilot',0,10,'Try updates first, on a few machines');
 INSERT INTO `rmm_patch_rings` VALUES (2,'broad',7,20,'Most machines: a week after the pilot');
 INSERT INTO `rmm_patch_rings` VALUES (3,'last',14,30,'Sensitive machines: two weeks after the pilot');

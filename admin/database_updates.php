@@ -7538,3 +7538,23 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.107'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.107') {
+        // DB 2.6.108: RivetCore 1.0.0-rc.31, Core migration 0038_rmm_config_seq. Core owns the DDL and this step only runs the Core runner (it applies every id not yet in
+        // rivet_core_migrations and skips the rest, so re-running is harmless). It is a new step, not the 2.6.103 step's guard changing as for 0037: a database
+        // already past 2.6.103 never runs that step again, so 0038 would never reach it. Purely additive, nothing is written:
+        //  - endpoint_agent_config_seq (CREATE TABLE IF NOT EXISTS): the stored, monotonic seq of each signed agent configuration (change monitor, hypervisor) with a
+        //    hash of the body it belongs to, so a database restore or a clock step backwards cannot lock agents out of new configurations (Core review F11). Empty
+        //    until Core next offers a configuration; before this step Core offers the old updated_at-based seq.
+        //  - rmm_hosted_files.verified_fp (guarded ADD COLUMN, '' by default): the stat fingerprint of a hosted installer whose SHA-256 was verified, so a download does
+        //    not re-hash the file every time (Core review F7). '' simply means "hash it on the next download".
+        // The guard names 0038 so a package without it does not advance the version past this step.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Rmm\Migration\Migration0038ConfigSeq::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+            mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.108'");
+        }
+    }
