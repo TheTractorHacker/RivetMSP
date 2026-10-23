@@ -160,7 +160,9 @@ if (isset($_POST['add_project'])) {
             $resolved_assigned_to = resolveTicketAssignee(0);
             $ticket_status = $resolved_assigned_to > 0 ? 2 : 1;
 
-            mysqli_query($mysqli, "INSERT INTO tickets SET ticket_prefix = '$config_ticket_prefix', ticket_number = $ticket_number, ticket_subject = '$ticket_template_subject', ticket_details = '$ticket_template_details', ticket_priority = 'Low', ticket_status = $ticket_status, ticket_created_by = $session_user_id, ticket_client_id = $client_id, ticket_project_id = $project_id, ticket_assigned_to = $resolved_assigned_to");
+            // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.
+            $ticket_prefix_sql = mysqli_real_escape_string($mysqli, (string) $config_ticket_prefix);
+            mysqli_query($mysqli, "INSERT INTO tickets SET ticket_prefix = '$ticket_prefix_sql', ticket_number = $ticket_number, ticket_subject = '$ticket_template_subject', ticket_details = '$ticket_template_details', ticket_priority = 'Low', ticket_status = $ticket_status, ticket_created_by = $session_user_id, ticket_client_id = $client_id, ticket_project_id = $project_id, ticket_assigned_to = $resolved_assigned_to");
 
             $ticket_id = mysqli_insert_id($mysqli);
 

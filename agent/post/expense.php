@@ -16,7 +16,9 @@ if (isset($_POST['add_expense'])) {
 
     enforceClientAccess();
 
-    mysqli_query($mysqli,"INSERT INTO expenses SET expense_date = '$date', expense_amount = $amount, expense_currency_code = '$session_company_currency', expense_account_id = $account, expense_vendor_id = $vendor, expense_client_id = $client_id, expense_category_id = $category, expense_description = '$description', expense_reference = '$reference'");
+    // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.
+    $company_currency_sql = mysqli_real_escape_string($mysqli, (string) $session_company_currency);
+    mysqli_query($mysqli,"INSERT INTO expenses SET expense_date = '$date', expense_amount = $amount, expense_currency_code = '$company_currency_sql', expense_account_id = $account, expense_vendor_id = $vendor, expense_client_id = $client_id, expense_category_id = $category, expense_description = '$description', expense_reference = '$reference'");
 
     $expense_id = mysqli_insert_id($mysqli);
 

@@ -15,7 +15,9 @@ if (isset($_POST['add_product'])) {
     require_once 'product_model.php';
     $type = sanitizeInput($_POST['type']);
 
-    mysqli_query($mysqli,"INSERT INTO products SET product_name = '$name', product_type = '$type', product_description = '$description', product_code = '$code', product_location = '$location', product_price = '$price', product_currency_code = '$session_company_currency', product_tax_id = $tax, product_category_id = $category");
+    // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.
+    $company_currency_sql = mysqli_real_escape_string($mysqli, (string) $session_company_currency);
+    mysqli_query($mysqli,"INSERT INTO products SET product_name = '$name', product_type = '$type', product_description = '$description', product_code = '$code', product_location = '$location', product_price = '$price', product_currency_code = '$company_currency_sql', product_tax_id = $tax, product_category_id = $category");
 
     $product_id = mysqli_insert_id($mysqli);
 
