@@ -77,7 +77,8 @@ if (isset($_POST['add_recurring_invoice'])) {
     enforceUserPermission('module_sales', 2);
 
     $client_id = intval($_POST['client_id']);
-    $frequency = sanitizeInput($_POST['frequency']);
+    // Allow-list: the stored value is later used as a SQL INTERVAL unit (cron + force send), which cannot be quoted or bound.
+    $frequency = ($_POST['frequency'] ?? '') === 'year' ? 'year' : 'month';
     $start_date = sanitizeInput($_POST['start_date']);
     $category = intval($_POST['category']);
     $scope = sanitizeInput($_POST['scope']);
@@ -116,7 +117,8 @@ if (isset($_POST['edit_recurring_invoice'])) {
     enforceUserPermission('module_sales', 2);
 
     $recurring_invoice_id = intval($_POST['recurring_invoice_id']);
-    $frequency = sanitizeInput($_POST['frequency']);
+    // Allow-list: the stored value is later used as a SQL INTERVAL unit (cron + force send), which cannot be quoted or bound.
+    $frequency = ($_POST['frequency'] ?? '') === 'year' ? 'year' : 'month';
     $next_date = sanitizeInput($_POST['next_date']);
     $category = intval($_POST['category']);
     $scope = sanitizeInput($_POST['scope']);
@@ -464,7 +466,9 @@ if (isset($_GET['force_recurring'])) {
     $row = mysqli_fetch_assoc($sql_recurring_invoice_total);
     $new_recurring_invoice_amount = floatval($row['recurring_invoice_total']) - $recurring_invoice_discount_amount;
 
-    mysqli_query($mysqli,"UPDATE recurring_invoices SET recurring_invoice_amount = $new_recurring_invoice_amount, recurring_invoice_last_sent = CURDATE(), recurring_invoice_next_date = DATE_ADD(CURDATE(), INTERVAL 1 $recurring_invoice_frequency) WHERE recurring_invoice_id = $recurring_invoice_id");
+    // INTERVAL units are SQL keywords, not values: map the stored frequency through an allow-list (never interpolate the stored text).
+    $recurring_interval_unit = $recurring_invoice_frequency === 'year' ? 'YEAR' : 'MONTH';
+    mysqli_query($mysqli,"UPDATE recurring_invoices SET recurring_invoice_amount = $new_recurring_invoice_amount, recurring_invoice_last_sent = CURDATE(), recurring_invoice_next_date = DATE_ADD(CURDATE(), INTERVAL 1 $recurring_interval_unit) WHERE recurring_invoice_id = $recurring_invoice_id");
 
     //Also update the newly created invoice with the new amounts
     mysqli_query($mysqli,"UPDATE invoices SET invoice_amount = $new_recurring_invoice_amount WHERE invoice_id = $new_invoice_id");
