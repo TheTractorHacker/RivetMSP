@@ -28,7 +28,7 @@ The repository entry stays (Core is not on Packagist, [ADR-006](docs/architectur
 }
 ```
 
-Dependencies Core requires: `php >=8.2`, `guzzlehttp/guzzle ^7.0 || ^8.0`, `predis/predis ^3.5`, `psr/log ^3`, `psr/simple-cache ^3.0`.
+Dependencies Core requires: `php >=8.5`, `guzzlehttp/guzzle ^7.0 || ^8.0`, `predis/predis ^3.5`, `psr/log ^3`, `psr/simple-cache ^3.0`.
 `psr/log` arrived in 0.17.0 and `predis/predis` in 0.2.0; an edition that vendors its dependencies in git must commit the new vendor files.
 
 ### 2. Breaking and behaviour changes since 0.7
@@ -84,6 +84,18 @@ No migration, nothing is required. To get the short header, render from the new 
 2. Render `chips` (at most four; colour from `level`), a "N more" link from `chips[disk].more` that opens a modal listing `volumes` (pools once with their `children`; hide `pseudo` rows by default), and the Remote access control as a split button: `remote.primary` is the main action, the other `views` with `available: false` are greyed with their `reason`, show `remote.hint` for any state but `ready`, and a "map by hand" action when `can_map_manually`.
 3. Remove: one chip per volume, the single greyed "Launch remote session" button, and the "An administrator maps this device to a MeshCentral node first" text (use `remote.hint`).
 4. Agents older than this release have no `source`/`desktop_session`; the grouping heuristics and the OS rules apply until they update.
+
+## Adopting the rc.31 security fixes (1.0.0-rc.31; migration 0038)
+
+Fixes from the security review of rc.21 to rc.30 ([docs/security/REVIEW_RC30.md](docs/security/REVIEW_RC30.md)). **Can an edition just bump the pin? Yes, and nothing breaks.** The device protocol is unchanged, old agents keep working, the golden replay is identical. Two things need your attention for it to be complete:
+
+1. **Migration 0038 (recommended, not required).** `CoreMigrations::all()` ends with `0038_rmm_config_seq` (creates `endpoint_agent_config_seq`, adds `rmm_hosted_files.verified_fp varchar(64) NOT NULL DEFAULT ''`; idempotent, nothing is written). If your updater runs the Core migration runner (as for 0037) the bump is enough. Copy the table and the column into your fresh-install `db.sql` (`endpoint_agent_config_seq (name varchar(40) PK, seq bigint(20) unsigned NOT NULL, body_hash char(64) NOT NULL, updated_at datetime NOT NULL)`). Without the migration the server offers the old `updated_at`-based config seq and re-hashes a hosted installer on every download, exactly as in rc.30.
+2. **Mesh node mapping now waits for an administrator (behaviour change, F1).** A node id reported by a device is no longer mapped by itself: `map_state` is the new value `needs_approval` (the device detail shows it as before: `mesh_agent.map_state`, `mesh_agent.node_id`), nothing is mapped, and "Remote" answers `unmapped` until an administrator maps the node on the device page (`TechnicianActions::setMeshNode`, REST `PUT .../remote/node`: the existing manual mapping). Show `needs_approval` ("check this node in MeshCentral, then map it") wherever you show `conflict` and `kept_manual`; a UI that does not know the value should treat it as "not mapped". Re-enrolled machines keep working without approval when the new device is linked to the same asset of the same client as the retired one. Mappings that exist stay as they are. If your product wants the old one-click flow, add an "Approve" button that calls `setMeshNode` with the device's reported `node_id`.
+3. **Escape device text on output.** Core now removes markup characters from the change alerts and `rmm.change.*` webhooks (F4), but stored change records keep what the device sent, as before. Keep escaping `old_value`, `new_value`, `summary`, `target`, `item`, `actor` and `process` wherever you render them.
+4. **`clientIp`.** The hosted installer download is rate limited per `RmmRequest::$clientIp` (120 per minute). Behind a proxy or CDN that does not pass the real address, every device shares one budget; give `clientIp` the real address (F7).
+5. **Upload route.** If you receive installer uploads yourself instead of mounting `AutoInstallApi`, call `AutoInstallActions::uploadGate($who)` before reading the body (F5).
+6. **Agents.** The agent of this release hashes some files differently (one extra `modified` change per redacted or hash-only file at the first poll, F3), refuses a Mesh agent that is not root-owned (F10) and keeps the hypervisor config seq on disk (F11). Older agents work unchanged.
+7. **Unchanged but worth a look in your edition** (not in Core, see the review): the build host `poll/status/upload/complete` endpoints, alert rendering, and `auto_create` for unmatched devices.
 
 ## Adopting per-OS agent binaries (1.0.0-rc.30)
 

@@ -123,8 +123,11 @@ final class ChangeService
             $this->rules?->evaluate($dev, $fresh);
             if ($this->events !== null) {
                 foreach (array_slice($fresh, 0, self::EVENT_CAP) as $r) {
-                    $this->events->emit(RmmEvent::CHANGE_DETECTED, $dev, ['kind' => $r['kind'], 'watch' => $r['watch'], 'change' => ChangeProtocol::changeName($r['change']), 'target' => $r['target'],
-                        'item' => $r['item'], 'old_value' => $r['old'], 'new_value' => $r['new'], 'summary' => $r['summary'], 'actor' => $r['actor'], 'process' => $r['process']]);
+                    // device-supplied text goes into webhooks and tickets: markup characters, quotes and backticks are removed here (the stored record keeps its text, escape it on output)
+                    $t = static fn (string $v, int $max): string => ChangeProtocol::alertText($v, $max);
+                    $this->events->emit(RmmEvent::CHANGE_DETECTED, $dev, ['kind' => $r['kind'], 'watch' => $r['watch'], 'change' => ChangeProtocol::changeName($r['change']), 'target' => $t($r['target'], ChangeProtocol::TARGET_MAX),
+                        'item' => $t($r['item'], ChangeProtocol::ITEM_MAX), 'old_value' => $t($r['old'], ChangeProtocol::VALUE_MAX), 'new_value' => $t($r['new'], ChangeProtocol::VALUE_MAX), 'summary' => $t($r['summary'], ChangeProtocol::SUMMARY_MAX),
+                        'actor' => $t($r['actor'], ChangeProtocol::ACTOR_MAX), 'process' => $t($r['process'], ChangeProtocol::PROCESS_MAX)]);
                 }
             }
         }
@@ -349,9 +352,10 @@ final class ChangeService
      * newest first, with the people and programs behind them (blank when Windows did not record them) and a per-day count.
      *
      * @param array<string,mixed> $f from, to (default the last 30 days; at most 365)
+     * @param bool $software false leaves the software inventory history out (the caller may see changes but not software)
      * @return array{items:list<array<string,mixed>>,actors:list<array<string,mixed>>,days:list<array<string,mixed>>,from:string,to:string,truncated:bool}
      */
-    public function timeline(int $deviceId, array $f, int $limit = 200): array
+    public function timeline(int $deviceId, array $f, int $limit = 200, bool $software = true): array
     {
         $now = $this->sql->time();
         $to = self::when($f['to'] ?? null, $now);
@@ -363,7 +367,7 @@ final class ChangeService
             WHERE e.device_id = ? AND e.occurred_at BETWEEN ? AND ? ORDER BY e.occurred_at DESC, e.change_id DESC LIMIT $limit", [$deviceId, $a, $b]);
         $items = array_map(self::present(...), $rows);
         try {
-            $soft = $this->sql->all("SELECT * FROM rmm_software_history WHERE device_id = ? AND occurred_at BETWEEN ? AND ? ORDER BY occurred_at DESC, history_id DESC LIMIT $limit", [$deviceId, $a, $b]);
+            $soft = !$software ? [] : $this->sql->all("SELECT * FROM rmm_software_history WHERE device_id = ? AND occurred_at BETWEEN ? AND ? ORDER BY occurred_at DESC, history_id DESC LIMIT $limit", [$deviceId, $a, $b]);
         } catch (\Throwable) {
             $soft = [];   // the inventory tables do not exist yet
         }
