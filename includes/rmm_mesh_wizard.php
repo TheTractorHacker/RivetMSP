@@ -56,7 +56,7 @@ function rivetRmmMeshWizardSteps(array $cfg, ?array $view, array $counts, ?array
     $s4 = $ready ? 'Installers can include the MeshCentral agent.' : 'Not ready: ' . ($view === null ? 'the Mesh install tables are missing.' : (string) ($view['install_refusal'] ?? 'finish steps 1 to 3.'));
     $mapped = (int) $counts['mapped'];
     $s5 = $mapped > 0 ? $mapped . ' of ' . (int) $counts['devices'] . ' enrolled device(s) are mapped to MeshCentral, so Remote can open them.'
-        : 'No enrolled device is mapped yet. Install the agent with the box ticked on one test PC, then check back here.';
+        : 'No enrolled device is mapped yet. Install the agent with the box ticked on one test PC, approve the MeshCentral node it reports on its device page, then check back here.';
 
     return [
         ['n' => 1, 'ok' => $missing === [] && ($test === null || $test['ok']), 'title' => 'Connect your MeshCentral server', 'status' => $s1],
@@ -166,7 +166,7 @@ function rivetRmmMeshWizardPage(array $cfg, ?array $view, array $steps, array $o
 
     // ---- 5
     $b5 = '<ol class="small mb-3"><li>Run the installer on one test PC and wait a minute or two for it to check in.</li>'
-        . '<li>Open the device from <a href="/agent/rmm_fleet.php">Agent fleet</a>. Its <em>Remote access</em> card should say <strong>MeshCentral node mapped</strong>.</li>'
+        . '<li>Open the device from <a href="/agent/rmm_fleet.php">Agent fleet</a>. Its <em>Remote access</em> card shows the MeshCentral node it reported as <strong>Node not approved yet</strong>: check in MeshCentral that the node is this PC, then press <strong>Approve and map this node</strong>. The card then says <strong>MeshCentral node mapped</strong>.</li>'
         . '<li>Press <strong>Remote access</strong>. A new tab opens at MeshCentral on that device. Press MeshCentral\'s own <strong>Connect</strong> button once: MeshCentral never connects by itself.</li></ol>'
         . '<a href="/agent/rmm_fleet.php" class="btn btn-outline-primary"><i class="fas fa-satellite me-1" aria-hidden="true"></i>Open Agent fleet</a>';
     $o .= rivetRmmMeshWizardStepCard($steps[4], $b5);
@@ -179,7 +179,7 @@ function rivetRmmMeshWizardTroubleshooting(): string
 {
     $items = [
         'Remote opens the MeshCentral home page instead of the device' => 'RivetMSP does not know which MeshCentral device this computer is (the "node id" is not mapped), or MeshCentral did not recognise it. Open the device in RivetMSP: the Remote access card must say <strong>MeshCentral node mapped</strong>. If not, install the MeshCentral agent (step 4), or ask an administrator to paste the device\'s address from MeshCentral into the node box on the device page. If it says mapped and you still land on the home page, copy the address bar of the device in MeshCentral and paste it into the node box again.',
-        'The node id is not mapped' => 'The device has no MeshCentral agent yet, or the agent could not tell RivetMSP its identity. Use <em>Install MeshCentral agent</em> on the device page, wait a few minutes, and reload. A device whose id is already used by another live device is never taken over: check which computer really owns it (a cloned PC image is the usual cause).',
+        'The node id is not mapped' => 'A node the device reports is never mapped by itself: when the Remote access card says <strong>Node not approved yet</strong>, check the node in MeshCentral and press <strong>Approve and map this node</strong> (administrators). Otherwise the device has no MeshCentral agent yet, or the agent could not tell RivetMSP its identity. Use <em>Install MeshCentral agent</em> on the device page, wait a few minutes, and reload. A device whose id is already used by another live device is never taken over: check which computer really owns it (a cloned PC image is the usual cause).',
         'The MeshCentral agent is not installed' => 'The installer was run without the box ticked, or the download failed (wrong group address, server unreachable, certificate mismatch). The RivetMSP agent is installed anyway. Fix steps 2 and 3 here, then use <em>Install MeshCentral agent</em> on the device page. The reason is shown on the device\'s Remote access card; on the PC the file <code>%ProgramData%\\RivetIT\\Agent\\install.log</code> has details.',
         'Certificate errors' => '"Certificate does not match the pinned hash": the certificate was renewed or the pin is wrong. Read it again in step 3 and save the new pin, or empty the pin if your server uses a public authority. "Certificate signed by unknown authority": your server uses a private or self-signed certificate and there is no pin, so pin it in step 3.',
         'The server answered HTTP 404, or sent a web page instead of an installer' => 'The device group address is wrong. Open the group in MeshCentral, press Add Agent, Windows 64-bit, copy the address again and paste it in step 2.',

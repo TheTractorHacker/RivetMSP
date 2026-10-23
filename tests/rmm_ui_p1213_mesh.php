@@ -418,6 +418,7 @@ $mReport('MA4', ['installed' => true, 'version' => '1.1.61', 'node_id' => $mNode
 $ok(str_contains($body, 'data-rmm-mesh-hint="needs_approval"') && str_contains($body, 'data-rmm-mesh-approve="' . htmlspecialchars($mNodeC, ENT_QUOTES) . '"') && (string) $one('SELECT mesh_node_id FROM endpoint_agent_mesh_nodes WHERE device_id = ' . $mDev['MA4']) === $mNodeB,
     'F1 regression: with the switch on the reported node does NOT replace the manual one any more; it waits for approval (hint and Approve button)');
 $ok($mAudit('Mesh Node Mapped') === $mappedAudit0 + 2 && $mAudit('Mesh Node Needs Approval') === $needsAudit0 + 2, 'audit: no Mesh Node Mapped for MA4\'s report (only the earlier mapping by hand), a Mesh Node Needs Approval instead');
+$ok(str_contains($mPg()[1], 'Offer the agent\'s node for approval when it differs from a node an administrator mapped by hand') && str_contains($mPg()[1], 'A node the agent reports never replaces a mapping by itself.'), 'the switch\'s label and help say what it does now');
 $mAdm($full + ['mesh_group_id' => $mGroup, 'mesh_server_cert_pin' => '']);
 $mCfg()->refresh();
 $ok($mCfg()->get()['auto_map_overwrite'] === false, 'and the switch turned off again');

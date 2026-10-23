@@ -2,8 +2,9 @@
 
 /*
  * Administration > Endpoint agent > MeshCentral: the install settings of the optional MeshCentral agent (RivetCore 1.0.0-rc.12, migration 0023; the group id in MeshCentral's URL form and the pin guidance came with rc.15, migration 0024).
- * The device group the devices join, the optional pin of the Mesh server's certificate (with a button that READS the certificate and only PROPOSES a pin), the switch that lets an
- * automatically found node id replace one an administrator mapped by hand, and for experts the corrections to the agent-id and install-argument tables.
+ * The device group the devices join, the optional pin of the Mesh server's certificate (with a button that READS the certificate and only PROPOSES a pin), the overwrite switch
+ * (`mesh_auto_map_overwrite`; since RivetCore 1.0.0-rc.31, review F1, a reported node never replaces a mapping, so on it only turns a differing report into "waiting for
+ * approval" instead of "your mapping was kept"), and for experts the corrections to the agent-id and install-argument tables.
  *
  * Plain functions. The card's fields are rendered here (no query); the page (admin/settings_endpoint_agent.php) reads the data with rivetRmmMeshInstallView() and the handler
  * (admin/post/settings_endpoint_agent.php) turns the form into the array RmmAdmin::saveMesh() takes with rivetRmmMeshInstallRead(). Core validates, authorizes and audits;
@@ -203,7 +204,7 @@ function rivetRmmMeshInstallCard(?array $v, array $old, ?array $probe, string $c
     }
     $f = $hide . '<div class="col-12 border-top pt-3"><h5 class="h6 mb-1"><i class="fas fa-download me-1" aria-hidden="true"></i>Install the MeshCentral agent with the RivetMSP agent <span class="text-muted fw-normal">(optional)</span></h5>'
         . '<p class="small text-muted mb-2">When these are set, the Add device dialog and the deployment forms offer a tick-box <em>Also install the MeshCentral agent</em> (off by default). The installer never contains a Mesh binary: after the RivetMSP agent is in place it downloads the agent for <strong>your</strong> Mesh server and device group over https. '
-        . 'A failure never fails the RivetMSP install. Afterwards the device\'s Mesh node is mapped to it automatically, so Remote access works without pasting a node id. <span data-rmm-mesh-ready>' . $state . '</span></p>'
+        . 'A failure never fails the RivetMSP install. Afterwards the device reports its Mesh node; an administrator checks it in MeshCentral and approves it on the device page with one click, so nobody has to paste a node id. A device only reporting a node does not map it. <span data-rmm-mesh-ready>' . $state . '</span></p>'
         . '<input type="hidden" name="mesh_install_fields" value="1"></div>'
         . '<div class="col-lg-6"><label class="form-label" for="mc_group">Device group id <span class="badge bg-warning text-dark">secret</span></label>'
         . '<input type="password" class="form-control font-monospace" id="mc_group" name="mesh_group_id" maxlength="2000" autocomplete="off" spellcheck="false" value="' . $e($group) . '" aria-describedby="mc_group_h">'
@@ -214,8 +215,8 @@ function rivetRmmMeshInstallCard(?array $v, array $old, ?array $probe, string $c
         . '<button type="submit" form="mesh-pin-probe" class="btn btn-outline-secondary" formnovalidate' . $probeDisabled . '><i class="fas fa-search me-1" aria-hidden="true"></i>Read it from the server</button></div>'
         . '<div class="form-text" id="mc_pin_h">Leave empty when the server certificate is issued by a public CA such as Let\'s Encrypt (the system roots verify it; such a certificate is renewed every 60 to 90 days and a pin of it would break). Use a pin only for a private CA or a self-signed certificate (SHA-384, 96 hex, or SHA-256, 64 hex). The button connects to the saved address, shows the certificate and <strong>never saves a pin</strong>; for a self-signed certificate compare the hash, then press Save here.'
         . ($urlSaved ? '' : ' Save the MeshCentral address first.') . '</div></div>'
-        . '<div class="col-12"><div class="form-check form-switch"><input type="checkbox" class="form-check-input" id="mc_over" name="mesh_auto_map_overwrite" value="1"' . ($over ? ' checked' : '') . ' aria-describedby="mc_over_h"><label class="form-check-label" for="mc_over">Let the agent\'s node id replace a node an administrator mapped by hand</label></div>'
-        . '<div class="form-text" id="mc_over_h">Off (recommended): a node set by hand is kept and the device shows a hint when the agent reports a different one. A node already mapped to another live device is never taken over, whatever this switch says.</div></div>'
+        . '<div class="col-12"><div class="form-check form-switch"><input type="checkbox" class="form-check-input" id="mc_over" name="mesh_auto_map_overwrite" value="1"' . ($over ? ' checked' : '') . ' aria-describedby="mc_over_h"><label class="form-check-label" for="mc_over">Offer the agent\'s node for approval when it differs from a node an administrator mapped by hand</label></div>'
+        . '<div class="form-text" id="mc_over_h">A node the agent reports never replaces a mapping by itself. Off (recommended): the node set by hand is kept and the device shows a hint. On: the node set by hand is still kept, and the reported node is shown as waiting for approval, with an Approve button for administrators. A node already mapped to another live device is never taken over, whatever this switch says.</div></div>'
         . '<div class="col-12"><details class="rmm-mesh-advanced" data-rmm-mesh-advanced' . (array_filter($ids, static fn ($x) => (string) $x !== '') !== [] || array_filter($args, static fn ($x) => (string) $x !== '') !== [] ? ' open' : '') . '><summary class="fw-semibold">Advanced: agent numbers and install arguments</summary>'
         . '<div class="alert alert-warning py-2 my-2" role="note"><div><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' . $e((string) ($v['note'] ?? 'The agent ids, download address and install arguments were not verified against a real MeshCentral server: check them against your Mesh version.'))
         . ' Verify these against your own Mesh server before rolling out to a fleet. Leave both boxes empty to use the built-in tables.</div></div>'
