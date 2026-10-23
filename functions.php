@@ -3799,22 +3799,23 @@ function logAction($type, $action, $description, $client_id = 0, $entity_id = 0)
         $session_user_id = 0;
     }
 
-    // Only 1 of ~900 call sites across the app pre-escapes its $description (most
-    // just interpolate a client/product/ticket name straight in) - any dynamic
-    // value containing a single quote (e.g. "O'Brien", an item name with an
-    // apostrophe) previously broke the INSERT with a SQL syntax fatal. Escaping
-    // here, once, covers every caller instead of requiring each of the ~900 to
-    // remember to do it themselves.
+    // ~900 call sites interpolate names, subjects etc. straight into $description, so every value is bound here, once, rather
+    // than trusting each caller to escape. (Before this the values were escaped and interpolated; the stored text is the same.)
     $raw_log_type = (string) $type;
     $raw_log_action = (string) $action;
     $raw_log_description = (string) $description;
-    $type = mysqli_real_escape_string($mysqli, substr($type, 0, 200));
-    $action = mysqli_real_escape_string($mysqli, substr($action, 0, 255));
-    $description = mysqli_real_escape_string($mysqli, substr($description, 0, 1000));
-    $session_ip_esc = mysqli_real_escape_string($mysqli, (string) $session_ip);
-    $session_user_agent_esc = mysqli_real_escape_string($mysqli, (string) $session_user_agent);
+    $type = substr($raw_log_type, 0, 200);
+    $action = substr($raw_log_action, 0, 255);
+    $description = substr($raw_log_description, 0, 1000);
+    $log_ip = (string) $session_ip;
+    $log_user_agent = (string) $session_user_agent;
 
-    mysqli_query($mysqli, "INSERT INTO logs SET log_type = '$type', log_action = '$action', log_description = '$description', log_ip = '$session_ip_esc', log_user_agent = '$session_user_agent_esc', log_client_id = $client_id, log_user_id = $session_user_id, log_entity_id = $entity_id");
+    $stmt = mysqli_prepare($mysqli, "INSERT INTO logs SET log_type = ?, log_action = ?, log_description = ?, log_ip = ?, log_user_agent = ?, log_client_id = ?, log_user_id = ?, log_entity_id = ?");
+    if ($stmt) {
+        mysqli_stmt_bind_param($stmt, 'sssssiii', $type, $action, $description, $log_ip, $log_user_agent, $client_id, $session_user_id, $entity_id);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+    }
 
     // RivetCore audit trail (structured, append-only). Logins plus administrative/security actions (see CoreBridge::AUDITED_TYPES); OFF unless
     // settings.config_core_audit_enabled = 1, and fail-safe: it can never break a log call or a sign-in.
