@@ -288,13 +288,15 @@
         var b = document.getElementById(id);
         if (b) { b.addEventListener('click', function () { openRemote(false, b.getAttribute('data-rmm-remote-view')); }); }
     });
-    Array.prototype.forEach.call(panel.querySelectorAll('.rmm-act-remote-view'), function (b) {
+    // the header strip (and so this dropdown) is rendered above #rmm-panel (agent/asset_details.php): look in the whole document
+    Array.prototype.forEach.call(document.querySelectorAll('.rmm-act-remote-view'), function (b) {
         b.addEventListener('click', function () { openRemote(false, b.getAttribute('data-rmm-remote-view')); });
     });
 
     // ---- MeshCentral node mapping (administrators): the Remote tab's inline copy and the header's "Map Mesh node" modal copy (RivetCore 1.0.0-rc.28
     // device header view-model) share the same .rmm-mesh-map-form class and 'set_mesh_node' POST action instead of a single #rmm-mesh-form id.
-    Array.prototype.forEach.call(panel.querySelectorAll('.rmm-mesh-map-form'), function (mf) {
+    // Looked up in the whole document, not in #rmm-panel: the header strip and its modal are rendered above the panel (agent/asset_details.php).
+    Array.prototype.forEach.call(document.querySelectorAll('.rmm-mesh-map-form'), function (mf) {
         mf.addEventListener('submit', function (e) {
             e.preventDefault();
             var nodeField = mf.querySelector('input[name="mesh_node_id"]');
