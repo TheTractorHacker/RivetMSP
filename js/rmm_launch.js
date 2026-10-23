@@ -12,6 +12,17 @@
 (function () {
     'use strict';
 
+    // The session URL comes from the server. Only an http(s) address is followed: the blank tab shares this page's origin, so a
+    // javascript: or data: URL sent there would run as this app.
+    function safeUrl(url) {
+        try {
+            var u = new URL(String(url), window.location.href);
+            return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
     function begin() {
         var w = null;
         try { w = window.open('about:blank', '_blank'); } catch (e) { w = null; }
@@ -23,8 +34,10 @@
             // true when the tab existed (not blocked), is still open, and was sent to the session
             go: function (url) {
                 if (!w || w.closed) { return false; }
+                var safe = safeUrl(url);
+                if (!safe) { try { w.close(); } catch (e) { /* nothing to do */ } return false; }
                 try { w.opener = null; } catch (e) { /* not fatal */ }
-                try { w.location.replace(url); } catch (e) { w.location = url; }
+                try { w.location.replace(safe); } catch (e) { w.location = safe; }
                 return true;
             },
             // drop the blank tab after a failed launch
@@ -37,8 +50,14 @@
 
     // The fallback when the browser refused the tab: a plain link, opened by the person's own click.
     function link(url, label) {
+        var safe = safeUrl(url);
+        if (!safe) {
+            var s = document.createElement('span');
+            s.textContent = 'The remote session address was not valid.';
+            return s;
+        }
         var a = document.createElement('a');
-        a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        a.href = safe; a.target = '_blank'; a.rel = 'noopener noreferrer';
         a.className = 'rmm-open-session-link';
         a.textContent = label || 'Open remote session';
         return a;

@@ -4875,9 +4875,14 @@ function redirect($url = null, $permanent = false) {
         header('Location: ' . $url, true, $permanent ? 301 : 302);
         exit;
     } else {
-        // Fallback for headers already sent
+        // Fallback for headers already sent. The URL goes into a script, so it is JSON-encoded with <, >, &, ' and " hex-escaped
+        // (addslashes() let "</script>" end the script block), and only an http(s) or relative URL is followed, never javascript:/data:.
         global $csp_nonce;
-        echo "<script nonce=\"" . htmlspecialchars($csp_nonce ?? '') . "\">window.location.href = '" . addslashes($url) . "';</script>";
+        $url = (string) $url;
+        if (preg_match('/^([a-z][a-z0-9+.\-]*):/i', preg_replace('/[\x00-\x20]+/', '', $url), $m) && !in_array(strtolower($m[1]), ['http', 'https'], true)) {
+            $url = 'index.php';
+        }
+        echo "<script nonce=\"" . htmlspecialchars($csp_nonce ?? '') . "\">window.location.href = " . json_encode($url, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) . ";</script>";
         echo '<noscript><meta http-equiv="refresh" content="0;url=' . htmlspecialchars($url) . '"></noscript>';
         exit;
     }
