@@ -1,7 +1,7 @@
 # RivetMSP — Docker Compose runtime image.
 #
 # This image is deliberately NOT a self-contained distributable — it ships
-# nginx + PHP-FPM 8.4 + supervisord + redis-server only. The application
+# nginx + PHP-FPM 8.5 + supervisord + redis-server only. The application
 # code always comes from a bind mount (see ../docker-compose.yml), the same
 # git checkout you cloned from GitHub, so config.php/uploads/backups/vendor
 # written at runtime live on the host and survive image rebuilds, and
@@ -9,11 +9,16 @@
 # new image with new code" step to keep in sync with deploy/update.sh's
 # git-pull model.
 #
-# Extension list mirrors deploy/install.sh's REQUIRED_PHP_PACKAGES exactly
-# (php8.4-mysql -> mysqli+pdo_mysql, php8.4-curl, php8.4-gd, php8.4-mbstring,
-# php8.4-intl, php8.4-xml, php8.4-zip, php8.4-bcmath, php8.4-opcache) so this
-# image and a bare-metal install.sh box behave the same way at the PHP
-# level. Keep the two lists in sync if either changes.
+# PHP 8.5 because rivet/rivet-core 1.0.0-rc.31 requires it: on 8.4,
+# vendor/composer/platform_check.php stops every request with a fatal error.
+#
+# Extension list mirrors deploy/install.sh's REQUIRED_PHP_PACKAGES (mysql ->
+# mysqli+pdo_mysql, curl, gd, mbstring, intl, xml, zip, bcmath, opcache) so
+# this image and a bare-metal install.sh box behave the same way at the PHP
+# level. Keep the two lists in sync if either changes. OPcache is not in the
+# docker-php-ext-install line: since PHP 8.5 it is always compiled in (the
+# official image already loads it, and building it as an extension fails).
+# deploy/install.sh still names php8.4 packages and must move to 8.5 too.
 #
 # redis-server is included (run by supervisord on 127.0.0.1:6380, matching
 # includes/redis_functions.php's hardcoded REDIS_HOST/REDIS_PORT) so live
@@ -23,7 +28,7 @@
 
 FROM composer:2 AS composer
 
-FROM php:8.4-fpm-bookworm
+FROM php:8.5-fpm-bookworm
 
 COPY --from=composer /usr/bin/composer /usr/bin/composer
 
@@ -43,7 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libonig-dev libcurl4-openssl-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
-        mysqli pdo_mysql gd intl zip bcmath opcache mbstring curl \
+        mysqli pdo_mysql gd intl zip bcmath mbstring curl \
     && apt-get purge -y \
         libicu-dev libzip-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev \
         libonig-dev libcurl4-openssl-dev \
