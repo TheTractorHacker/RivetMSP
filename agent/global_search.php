@@ -18,7 +18,9 @@ if (isset($_GET['query'])) {
         $phone_query = $query;
     }
 
-    $ticket_num_query = str_replace("$config_ticket_prefix", "", "$query");
+    // Strip the ticket prefix from the cleaned input BEFORE escaping: removing it from the escaped string could split an escape
+    // sequence (a prefix starting with n/r/Z follows the backslash of \n, \r, \Z) and leave a bare backslash in the quoted literal.
+    $ticket_num_query = sanitizeInput(str_replace((string) $config_ticket_prefix, '', cleanInput($_GET['query'])));
 
     $sql_clients = mysqli_query($mysqli, "SELECT * FROM clients
         LEFT JOIN locations ON clients.client_id = locations.location_client_id AND location_primary = 1

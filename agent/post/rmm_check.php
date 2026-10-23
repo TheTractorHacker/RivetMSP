@@ -104,12 +104,16 @@ if ($action === 'push_policy') {
             }
         }
 
-        $cid_val = $check_id ? "'$check_id'" : 'NULL';
-        mysqli_query($mysqli,
+        // $check_id comes from the Tactical RMM API response: bind it, never interpolate.
+        $cid_val = $check_id ? (string) $check_id : null;
+        $stmt = mysqli_prepare($mysqli,
             "INSERT INTO rmm_check_deployments SET
-             policy_id=$policy_id, link_id=$link_id,
-             tactical_check_id=$cid_val, status='active'"
+             policy_id = ?, link_id = ?,
+             tactical_check_id = ?, status = 'active'"
         );
+        mysqli_stmt_bind_param($stmt, 'iis', $policy_id, $link_id, $cid_val);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
         $pushed++;
     }
 

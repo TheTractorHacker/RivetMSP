@@ -59,8 +59,13 @@ if (isset($_GET['q'])) {
 }
 
 // Sortby
-if (!empty($_GET['sort'])) {
-    $sort = sanitizeInput(preg_replace('/[^a-z_.]/', '', $_GET['sort'])); // JQ 2023-05-09 - See issue #673 on GitHub to see the reasoning why we used preg_replace technically sanitizeInput() should have been enough to escape SQL Commands
+if (!empty($_GET['sort']) && is_string($_GET['sort'])) {
+    // $sort goes into ORDER BY unquoted, where escaping does nothing: keep the character filter (issue #673) and then accept
+    // only a real column / known list alias (sortColumnAllowed). Otherwise the page's default $sort stays.
+    $sort_requested = preg_replace('/[^a-z_.]/', '', $_GET['sort']);
+    if (sortColumnAllowed($mysqli, $sort_requested)) {
+        $sort = $sort_requested;
+    }
 }
 
 // Date Handling (RivetCore DateRange; see includes/date_range.php)

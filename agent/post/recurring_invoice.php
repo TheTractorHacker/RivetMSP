@@ -40,7 +40,9 @@ if (isset($_POST['add_invoice_recurring'])) {
 
     $recurring_invoice_number = mysqli_insert_id($mysqli);
 
-    mysqli_query($mysqli,"INSERT INTO recurring_invoices SET recurring_invoice_prefix = '$config_recurring_invoice_prefix', recurring_invoice_number = $recurring_invoice_number, recurring_invoice_scope = '$invoice_scope', recurring_invoice_frequency = '$recurring_invoice_frequency', recurring_invoice_next_date = DATE_ADD('$invoice_date', INTERVAL 1 $recurring_invoice_frequency), recurring_invoice_status = 1, recurring_invoice_amount = $invoice_amount, recurring_invoice_currency_code = '$invoice_currency_code', recurring_invoice_note = '$invoice_note', recurring_invoice_category_id = $category_id, recurring_invoice_client_id = $client_id");
+    // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.
+    $recurring_invoice_prefix_sql = mysqli_real_escape_string($mysqli, (string) $config_recurring_invoice_prefix);
+    mysqli_query($mysqli,"INSERT INTO recurring_invoices SET recurring_invoice_prefix = '$recurring_invoice_prefix_sql', recurring_invoice_number = $recurring_invoice_number, recurring_invoice_scope = '$invoice_scope', recurring_invoice_frequency = '$recurring_invoice_frequency', recurring_invoice_next_date = DATE_ADD('$invoice_date', INTERVAL 1 $recurring_invoice_frequency), recurring_invoice_status = 1, recurring_invoice_amount = $invoice_amount, recurring_invoice_currency_code = '$invoice_currency_code', recurring_invoice_note = '$invoice_note', recurring_invoice_category_id = $category_id, recurring_invoice_client_id = $client_id");
 
     $recurring_invoice_id = mysqli_insert_id($mysqli);
 
@@ -77,7 +79,8 @@ if (isset($_POST['add_recurring_invoice'])) {
     enforceUserPermission('module_sales', 2);
 
     $client_id = intval($_POST['client_id']);
-    $frequency = sanitizeInput($_POST['frequency']);
+    // Allow-list: the stored value is later used as a SQL INTERVAL unit (cron + force send), which cannot be quoted or bound.
+    $frequency = ($_POST['frequency'] ?? '') === 'year' ? 'year' : 'month';
     $start_date = sanitizeInput($_POST['start_date']);
     $category = intval($_POST['category']);
     $scope = sanitizeInput($_POST['scope']);
@@ -95,7 +98,10 @@ if (isset($_POST['add_recurring_invoice'])) {
 
     $recurring_invoice_number = mysqli_insert_id($mysqli);
 
-    mysqli_query($mysqli,"INSERT INTO recurring_invoices SET recurring_invoice_prefix = '$config_recurring_invoice_prefix', recurring_invoice_number = $recurring_invoice_number, recurring_invoice_scope = '$scope', recurring_invoice_frequency = '$frequency', recurring_invoice_next_date = '$start_date', recurring_invoice_category_id = $category, recurring_invoice_status = 1, recurring_invoice_currency_code = '$session_company_currency', recurring_invoice_client_id = $client_id");
+    // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.
+    $recurring_invoice_prefix_sql = mysqli_real_escape_string($mysqli, (string) $config_recurring_invoice_prefix);
+    $company_currency_sql = mysqli_real_escape_string($mysqli, (string) $session_company_currency);
+    mysqli_query($mysqli,"INSERT INTO recurring_invoices SET recurring_invoice_prefix = '$recurring_invoice_prefix_sql', recurring_invoice_number = $recurring_invoice_number, recurring_invoice_scope = '$scope', recurring_invoice_frequency = '$frequency', recurring_invoice_next_date = '$start_date', recurring_invoice_category_id = $category, recurring_invoice_status = 1, recurring_invoice_currency_code = '$company_currency_sql', recurring_invoice_client_id = $client_id");
 
     $recurring_invoice_id = mysqli_insert_id($mysqli);
 
@@ -116,7 +122,8 @@ if (isset($_POST['edit_recurring_invoice'])) {
     enforceUserPermission('module_sales', 2);
 
     $recurring_invoice_id = intval($_POST['recurring_invoice_id']);
-    $frequency = sanitizeInput($_POST['frequency']);
+    // Allow-list: the stored value is later used as a SQL INTERVAL unit (cron + force send), which cannot be quoted or bound.
+    $frequency = ($_POST['frequency'] ?? '') === 'year' ? 'year' : 'month';
     $next_date = sanitizeInput($_POST['next_date']);
     $category = intval($_POST['category']);
     $scope = sanitizeInput($_POST['scope']);
@@ -422,7 +429,9 @@ if (isset($_GET['force_recurring'])) {
     //Generate a unique URL key for clients to access
     $url_key = randomString(32);
 
-    mysqli_query($mysqli,"INSERT INTO invoices SET invoice_prefix = '$config_invoice_prefix', invoice_number = $new_invoice_number, invoice_scope = '$recurring_invoice_scope', invoice_date = CURDATE(), invoice_due = DATE_ADD(CURDATE(), INTERVAL $client_net_terms day), invoice_discount_amount = $recurring_invoice_discount_amount, invoice_amount = $recurring_invoice_amount, invoice_currency_code = '$recurring_invoice_currency_code', invoice_note = '$recurring_invoice_note', invoice_category_id = $category_id, invoice_status = 'Sent', invoice_url_key = '$url_key', invoice_recurring_invoice_id = $recurring_invoice_id, invoice_client_id = $client_id");
+    // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.
+    $invoice_prefix_sql = mysqli_real_escape_string($mysqli, (string) $config_invoice_prefix);
+    mysqli_query($mysqli,"INSERT INTO invoices SET invoice_prefix = '$invoice_prefix_sql', invoice_number = $new_invoice_number, invoice_scope = '$recurring_invoice_scope', invoice_date = CURDATE(), invoice_due = DATE_ADD(CURDATE(), INTERVAL $client_net_terms day), invoice_discount_amount = $recurring_invoice_discount_amount, invoice_amount = $recurring_invoice_amount, invoice_currency_code = '$recurring_invoice_currency_code', invoice_note = '$recurring_invoice_note', invoice_category_id = $category_id, invoice_status = 'Sent', invoice_url_key = '$url_key', invoice_recurring_invoice_id = $recurring_invoice_id, invoice_client_id = $client_id");
 
     $new_invoice_id = mysqli_insert_id($mysqli);
 
@@ -464,7 +473,9 @@ if (isset($_GET['force_recurring'])) {
     $row = mysqli_fetch_assoc($sql_recurring_invoice_total);
     $new_recurring_invoice_amount = floatval($row['recurring_invoice_total']) - $recurring_invoice_discount_amount;
 
-    mysqli_query($mysqli,"UPDATE recurring_invoices SET recurring_invoice_amount = $new_recurring_invoice_amount, recurring_invoice_last_sent = CURDATE(), recurring_invoice_next_date = DATE_ADD(CURDATE(), INTERVAL 1 $recurring_invoice_frequency) WHERE recurring_invoice_id = $recurring_invoice_id");
+    // INTERVAL units are SQL keywords, not values: map the stored frequency through an allow-list (never interpolate the stored text).
+    $recurring_interval_unit = $recurring_invoice_frequency === 'year' ? 'YEAR' : 'MONTH';
+    mysqli_query($mysqli,"UPDATE recurring_invoices SET recurring_invoice_amount = $new_recurring_invoice_amount, recurring_invoice_last_sent = CURDATE(), recurring_invoice_next_date = DATE_ADD(CURDATE(), INTERVAL 1 $recurring_interval_unit) WHERE recurring_invoice_id = $recurring_invoice_id");
 
     //Also update the newly created invoice with the new amounts
     mysqli_query($mysqli,"UPDATE invoices SET invoice_amount = $new_recurring_invoice_amount WHERE invoice_id = $new_invoice_id");

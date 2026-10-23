@@ -20,7 +20,9 @@ if (isset($_POST['add_revenue'])) {
     $description = sanitizeInput($_POST['description']);
     $reference = sanitizeInput($_POST['reference']);
 
-    mysqli_query($mysqli,"INSERT INTO revenues SET revenue_date = '$date', revenue_amount = $amount, revenue_currency_code = '$session_company_currency', revenue_payment_method = '$payment_method', revenue_reference = '$reference', revenue_description = '$description', revenue_category_id = $category, revenue_account_id = $account");
+    // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.
+    $company_currency_sql = mysqli_real_escape_string($mysqli, (string) $session_company_currency);
+    mysqli_query($mysqli,"INSERT INTO revenues SET revenue_date = '$date', revenue_amount = $amount, revenue_currency_code = '$company_currency_sql', revenue_payment_method = '$payment_method', revenue_reference = '$reference', revenue_description = '$description', revenue_category_id = $category, revenue_account_id = $account");
 
     $revenue_id = mysqli_insert_id($mysqli);
 

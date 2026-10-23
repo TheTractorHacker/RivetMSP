@@ -25,10 +25,12 @@ if (isset($_POST['add_transfer'])) {
     $row = mysqli_fetch_assoc($sql);
     $destination_account_name = sanitizeInput($row['account_name']);
 
-    mysqli_query($mysqli,"INSERT INTO expenses SET expense_date = '$date', expense_amount = $amount, expense_currency_code = '$session_company_currency', expense_vendor_id = 0, expense_category_id = 0, expense_account_id = $account_from");
+    // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.
+    $company_currency_sql = mysqli_real_escape_string($mysqli, (string) $session_company_currency);
+    mysqli_query($mysqli,"INSERT INTO expenses SET expense_date = '$date', expense_amount = $amount, expense_currency_code = '$company_currency_sql', expense_vendor_id = 0, expense_category_id = 0, expense_account_id = $account_from");
     $expense_id = mysqli_insert_id($mysqli);
 
-    mysqli_query($mysqli,"INSERT INTO revenues SET revenue_date = '$date', revenue_amount = $amount, revenue_currency_code = '$session_company_currency', revenue_account_id = $account_to, revenue_category_id = 0");
+    mysqli_query($mysqli,"INSERT INTO revenues SET revenue_date = '$date', revenue_amount = $amount, revenue_currency_code = '$company_currency_sql', revenue_account_id = $account_to, revenue_category_id = 0");
     $revenue_id = mysqli_insert_id($mysqli);
 
     mysqli_query($mysqli,"INSERT INTO transfers SET transfer_expense_id = $expense_id, transfer_revenue_id = $revenue_id, transfer_method = '$transfer_method', transfer_notes = '$notes'");

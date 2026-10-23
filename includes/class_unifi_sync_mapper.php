@@ -447,12 +447,16 @@ class UnifiSyncMapper {
         }
 
         if ($mac_norm !== '') {
-            $m   = $this->mysqli;
-            $row = mysqli_fetch_assoc(mysqli_query($m,
+            // $mac_norm is the device MAC exactly as the UniFi controller / Site Manager API reported it: bind it, never interpolate.
+            $stmt = mysqli_prepare($this->mysqli,
                 "SELECT a.asset_id, a.asset_serial, a.asset_name FROM assets a
                  JOIN asset_interfaces ai ON ai.interface_asset_id = a.asset_id
-                 WHERE REPLACE(UPPER(ai.interface_mac), ':', '')='$mac_norm' AND a.asset_archived_at IS NULL LIMIT 1"
-            ));
+                 WHERE REPLACE(UPPER(ai.interface_mac), ':', '') = ? AND a.asset_archived_at IS NULL LIMIT 1"
+            );
+            mysqli_stmt_bind_param($stmt, 's', $mac_norm);
+            mysqli_stmt_execute($stmt);
+            $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+            mysqli_stmt_close($stmt);
             if ($row) return $row;
         }
 

@@ -284,7 +284,13 @@ if (isset($_GET['approve_ticket_task'])) {
 
     // Notify tech
     if (inapp_notification_allowed_for_user($created_by, 'Ticket')) {
-        mysqli_query($mysqli, "INSERT INTO notifications SET notification_type = 'Ticket', notification = 'Guest approved ticket task $task_name', notification_action = 'ticket.php?ticket_id=$ticket_id', notification_user_id = $created_by");
+        // $task_name is HTML-escaped only (a trailing backslash would end the SQL literal): bind it.
+        $notification = "Guest approved ticket task $task_name";
+        $notification_action = "ticket.php?ticket_id=$ticket_id";
+        $stmt = mysqli_prepare($mysqli, "INSERT INTO notifications SET notification_type = 'Ticket', notification = ?, notification_action = ?, notification_user_id = ?");
+        mysqli_stmt_bind_param($stmt, 'ssi', $notification, $notification_action, $created_by);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
     }
 
     // Logging

@@ -843,7 +843,9 @@ while ($row = mysqli_fetch_assoc($sql_recurring_invoices)) {
 
     //Update recurring dates
 
-    mysqli_query($mysqli, "UPDATE recurring_invoices SET recurring_invoice_last_sent = CURDATE(), recurring_invoice_next_date = DATE_ADD(CURDATE(), INTERVAL 1 $recurring_invoice_frequency) WHERE recurring_invoice_id = $recurring_invoice_id");
+    // INTERVAL units are SQL keywords, not values: map the stored frequency through an allow-list (never interpolate the stored text).
+    $recurring_interval_unit = $recurring_invoice_frequency === 'year' ? 'YEAR' : 'MONTH';
+    mysqli_query($mysqli, "UPDATE recurring_invoices SET recurring_invoice_last_sent = CURDATE(), recurring_invoice_next_date = DATE_ADD(CURDATE(), INTERVAL 1 $recurring_interval_unit) WHERE recurring_invoice_id = $recurring_invoice_id");
 
     // Get details of the newly generated invoice
     $sql = mysqli_query(
