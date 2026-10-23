@@ -964,7 +964,7 @@ if (isset($_POST['add_telemetry'])) {
                         $commands = ['whois', 'dig', 'git'];
 
                         foreach ($commands as $command) {
-                            $which = trim(shell_exec("which $command 2>/dev/null"));
+                            $which = trim((string) shell_exec('which ' . escapeshellarg($command) . ' 2>/dev/null'));
                             $exists = !empty($which);
                             $shellCommands[] = [
                                 'name' => "Command '$command' available",

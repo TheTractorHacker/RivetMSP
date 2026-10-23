@@ -792,18 +792,23 @@ function getDomainRecords($name)
         $records['a'] = '';
         $records['ns'] = '';
         $records['mx'] = '';
+        $records['txt'] = '';
         $records['whois'] = '';
         return $records;
     }
 
-    $domain = escapeshellarg(str_replace('www.', '', $name));
+    $domain = str_replace('www.', '', $name);
 
-    // Get A, NS, MX, TXT, and WHOIS records
-    $records['a'] = trim(strip_tags(shell_exec("dig +short $domain")));
-    $records['ns'] = trim(strip_tags(shell_exec("dig +short NS $domain")));
-    $records['mx'] = trim(strip_tags(shell_exec("dig +short MX $domain")));
-    $records['txt'] = trim(strip_tags(shell_exec("dig +short TXT $domain")));
-    $records['whois'] = substr(trim(strip_tags(shell_exec("whois -H $domain | head -30 | sed 's/   //g'"))), 0, 254);
+    // Get A, NS, MX, TXT, and WHOIS records. The name passed the hostname check above (so it cannot start with "-", "+" or "@" and be
+    // read as an option); every argument is still escaped, and whois gets "--" so nothing after it can be an option. dig +short output
+    // is stored and diffed by cron/domain_refresher.php, so it is kept rather than reformatted from dns_get_record().
+    $records['a'] = trim(strip_tags((string) shell_exec('dig +short ' . escapeshellarg($domain))));
+    $records['ns'] = trim(strip_tags((string) shell_exec('dig +short NS ' . escapeshellarg($domain))));
+    $records['mx'] = trim(strip_tags((string) shell_exec('dig +short MX ' . escapeshellarg($domain))));
+    $records['txt'] = trim(strip_tags((string) shell_exec('dig +short TXT ' . escapeshellarg($domain))));
+    // First 30 lines with runs of three spaces removed (formerly `| head -30 | sed 's/   //g'`, now done in PHP: no shell pipeline).
+    $whois = implode("\n", array_slice(explode("\n", (string) shell_exec('whois -H -- ' . escapeshellarg($domain))), 0, 30));
+    $records['whois'] = substr(trim(strip_tags(str_replace('   ', '', $whois))), 0, 254);
 
     // Sort A records (if multiple records exist)
     if (!empty($records['a'])) {
@@ -3416,9 +3421,14 @@ function fetchUpdates() {
 }
 
 function getDomainExpirationDate($domain) {
-    // Execute the whois command
-    $result = shell_exec("whois " . escapeshellarg($domain));
-    if (!$result || !checkdnsrr($domain, 'SOA')) {
+    // Only a real hostname reaches whois: escapeshellarg() stops shell injection but not option injection, so a domain name such as
+    // "--version" or "-hHOST" was read by whois as an option. "--" ends option parsing as a second guard.
+    $domain = (string) $domain;
+    if (!filter_var($domain, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) || !checkdnsrr($domain, 'SOA')) {
+        return null;
+    }
+    $result = shell_exec('whois -- ' . escapeshellarg($domain));
+    if (!$result) {
         return null; // Return null if WHOIS query fails
     }
 
