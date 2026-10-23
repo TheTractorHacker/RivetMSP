@@ -947,12 +947,12 @@ if (isset($_POST['add_telemetry'])) {
                         'value' => $post_max_size,
                     ];
 
-                    // Check PHP version >= 8.2.0
+                    // Check PHP version >= 8.5.0 (RivetCore's minimum since 1.0.0-rc.31)
                     $php_version = PHP_VERSION;
-                    $php_passed = version_compare($php_version, '8.2.0', '>=');
+                    $php_passed = version_compare($php_version, '8.5.0', '>=');
 
                     $phpConfig[] = [
-                        'name' => 'PHP version >= 8.2.0',
+                        'name' => 'PHP version >= 8.5.0',
                         'passed' => $php_passed,
                         'value' => $php_version,
                     ];
