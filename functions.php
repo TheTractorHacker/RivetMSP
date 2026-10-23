@@ -2640,6 +2640,42 @@ function cleanInput($input) {
 }
 
 
+/**
+ * ORDER BY column for list pages (?sort=, read by includes/filter_header.php).
+ *
+ * A column name cannot be a bound parameter, so the requested value is accepted only when it is an identifier
+ * ([a-z_], optionally qualified by a table or alias) whose column part is a real column of this database or one of the
+ * SELECT aliases list pages sort by. Anything else returns false and the page keeps its default sort. Before this the
+ * value was only character-filtered, so any column of any joined table could be named, and an unknown one made the
+ * query fail.
+ */
+function sortColumnAllowed($mysqli, string $sort): bool {
+    // SELECT aliases (not table columns) that list pages offer as sort links.
+    static $aliases = ['dnshost_name', 'mailhost_name', 'product_qty', 'registrar_name', 'task_count', 'tech_name',
+        'transfer_account_from', 'transfer_account_to', 'transfer_amount', 'transfer_date', 'webhost_name'];
+    static $known = [];
+
+    if (preg_match('/^[a-z_]+(\.[a-z_]+)?$/', $sort) !== 1) {
+        return false;
+    }
+    $parts = explode('.', $sort);
+    $column = end($parts);
+    if (in_array($column, $aliases, true)) {
+        return true;
+    }
+    if (!array_key_exists($column, $known)) {
+        $stmt = mysqli_prepare($mysqli, "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = ? LIMIT 1");
+        if (!$stmt) {
+            return false;
+        }
+        mysqli_stmt_bind_param($stmt, 's', $column);
+        mysqli_stmt_execute($stmt);
+        $known[$column] = mysqli_fetch_row(mysqli_stmt_get_result($stmt)) !== null;
+        mysqli_stmt_close($stmt);
+    }
+    return $known[$column];
+}
+
 function sanitizeForEmail($data)
 {
     $sanitized = htmlspecialchars($data);
