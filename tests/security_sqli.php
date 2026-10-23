@@ -7,6 +7,7 @@ if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests 
  *   - UnifiSyncMapper::findExistingAsset(): the controller-reported MAC is bound, so an injection payload matches nothing
  *     and raises no SQL error (includes/class_unifi_sync_mapper.php)
  *   - the recurring-invoice frequency INTERVAL allow-list (cron + force send) only ever yields MONTH/YEAR
+ *   - logAction(): type/action/description/IP/user agent are bound, so payloads are stored verbatim in one row
  *   - agent/post/certificate.php add + edit over HTTP: an injection payload in the certificate name is stored verbatim,
  *     creates exactly one row, and the change-history row is written (second-order path), proving no breakout
  *
@@ -69,6 +70,21 @@ $ok($interval_unit("month), recurring_invoice_amount=(SELECT 1)#") === 'MONTH', 
 // And the value DATE_ADD actually receives is a bare keyword, so the statement parses.
 $r = $db->query("SELECT DATE_ADD(CURDATE(), INTERVAL 1 " . $interval_unit("month') OR 1=1-- -") . ")");
 $ok($r !== false, 'recurring: the mapped unit is a valid INTERVAL keyword');
+
+// ---------------------------------------------------------------- logAction(): every value is a bound parameter
+// ~900 callers interpolate names/subjects straight into the description; the stored row must hold the text verbatim.
+$db->query("DELETE FROM logs WHERE log_type = 'SQLiTest'");
+$session_ip = "10.0.0.1' OR '1'='1"; $session_user_agent = "ua\\'; DROP TABLE logs;--";
+$GLOBALS['session_ip'] = $session_ip; $GLOBALS['session_user_agent'] = $session_user_agent;
+$log_payload = "created certificate $INJ \\ trailing";
+logAction('SQLiTest', "Act $INJ", $log_payload, 0, 0);
+$log_rows = $rows("SELECT * FROM logs WHERE log_type = 'SQLiTest'");
+$ok(count($log_rows) === 1, 'logAction: exactly one log row written (no breakout, no stacked statement)');
+$ok(($log_rows[0]['log_description'] ?? null) === $log_payload, 'logAction: the description payload (quotes + backslash) is stored verbatim');
+$ok(($log_rows[0]['log_action'] ?? null) === "Act $INJ" && ($log_rows[0]['log_ip'] ?? null) === $session_ip && ($log_rows[0]['log_user_agent'] ?? null) === $session_user_agent, 'logAction: action, IP and user agent payloads are stored verbatim too');
+$ok((int) $one("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='logs'") === 1, 'logAction: logs table intact');
+$db->query("DELETE FROM logs WHERE log_type = 'SQLiTest'");
+$GLOBALS['session_ip'] = $session_ip = '127.0.0.1'; $GLOBALS['session_user_agent'] = $session_user_agent = 'test';
 
 // ---------------------------------------------------------------- certificate add/edit over HTTP (the headline files)
 $sdir = sys_get_temp_dir() . '/sqli_sess_' . bin2hex(random_bytes(3));
