@@ -6,16 +6,22 @@ $order = "ASC";
 
 require_once "includes/inc_all_admin.php";
 
-$sql = mysqli_query(
+// The search text is bound; $sort is a schema-checked column (sortColumnAllowed) and $order / $archive_query are fixed
+// literals from filter_header.php, because identifiers and keywords cannot be bound.
+$users_search = '%' . cleanInput($_GET['q'] ?? '') . '%';
+$stmt = mysqli_prepare(
     $mysqli,
     "SELECT SQL_CALC_FOUND_ROWS * FROM users
     LEFT JOIN user_roles ON user_role_id = role_id
     LEFT JOIN user_settings ON users.user_id = user_settings.user_id
-    WHERE (user_name LIKE '%$q%' OR user_email LIKE '%$q%')
+    WHERE (user_name LIKE ? OR user_email LIKE ?)
     AND user_type = 1
     AND user_$archive_query
-    ORDER BY $sort $order LIMIT $record_from, $record_to"
+    ORDER BY $sort $order LIMIT ?, ?"
 );
+mysqli_stmt_bind_param($stmt, 'ssii', $users_search, $users_search, $record_from, $record_to);
+mysqli_stmt_execute($stmt);
+$sql = mysqli_stmt_get_result($stmt);
 
 $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
 
