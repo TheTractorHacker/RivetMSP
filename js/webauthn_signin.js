@@ -84,7 +84,9 @@
             var result = await completeResp.json();
 
             if (result.ok) {
-                window.location.href = result.redirect || '/agent/dashboard.php';
+                // The server sends "/agent/<start page>". Follow only a path on this site (not "//host" or "/\host", which leave it).
+                var next = typeof result.redirect === 'string' && /^\/(?![\/\\])/.test(result.redirect) ? result.redirect : '/agent/dashboard.php';
+                window.location.href = next;
             } else {
                 showError(result.error || 'Sign-in failed. Try your password instead.');
             }

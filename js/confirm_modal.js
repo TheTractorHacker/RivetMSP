@@ -18,7 +18,12 @@ document.addEventListener('DOMContentLoaded', function () {
             confirmBtn.parentNode.replaceChild(fresh, confirmBtn);
             fresh.addEventListener('click', function () {
                 if (href) {
-                    window.location.href = href;
+                    // Only follow an ordinary http(s) or relative link: a javascript:, data: or vbscript: href would run script in this page.
+                    var target = null;
+                    try { target = new URL(href, window.location.href); } catch (err) { target = null; }
+                    if (target && (target.protocol === 'https:' || target.protocol === 'http:')) {
+                        window.location.href = target.href;
+                    }
                 } else if (link.form) {
                     // form.submit() does NOT include the activating submit
                     // button's name/value (there's no "clicked button" in a

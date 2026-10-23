@@ -293,7 +293,7 @@ async function alertAction(alertId, action) {
     .then(r => r.json())
     .then(d => {
         if (d.success) {
-            if (d.redirect) { window.location.href = d.redirect; return; }
+            if (d.redirect && /^\/agent\/ticket\.php\?ticket_id=\d+$/.test(d.redirect)) { window.location.href = d.redirect; return; }
             const row = document.getElementById('alert-row-' + alertId);
             if (row) row.style.opacity = '0.3';
         } else {

@@ -1,0 +1,7 @@
+# Reviewed shell calls whose command is held in a variable (tests/no_unsafe_shell.php cannot follow it). Format: file|snippet|reason
+# Re-review the code that builds the variable before adding a line; a line that stops matching fails the test, so remove it then.
+setup/setup_functions.php|exec($cmd)|openssl manifest decrypt: sprintf() of a fixed -iter literal and three escapeshellarg() temp paths
+admin/post/backup.php|exec($cmd)|openssl manifest encrypt: sprintf() of three escapeshellarg() temp paths
+admin/post/cron.php|exec($command . ' 2>&1')|fixed /usr/bin/sudo -n /usr/local/sbin/rivetit-cron-schedule path, every argument escapeshellarg()'d in the loop above
+src/Recovery/RestoreDrill.php|proc_open($cmd)|both calls pass an argv array (no shell): php binary + script path, and the mysql client + option strings
+src/Recovery/RestoreDrill.php|exec($cmd)|openssl manifest decrypt: fixed -iter literal and three escapeshellarg() paths in the drill work folder

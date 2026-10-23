@@ -1999,7 +1999,7 @@ async function assetAlertAction(alertId, action, btn) {
         body: 'csrf_token=<?= $_SESSION["csrf_token"] ?>&action=' + action + '&alert_id=' + alertId
     }).then(r => r.json()).then(d => {
         if (d.success) {
-            if (d.redirect) { window.location.href = d.redirect; }
+            if (d.redirect && /^\/agent\/ticket\.php\?ticket_id=\d+$/.test(d.redirect)) { window.location.href = d.redirect; }
             else {
                 const row = document.getElementById('ral-row-' + alertId);
                 if (row) row.style.opacity = '0.4';
@@ -2034,7 +2034,7 @@ async function runRmmScript(linkId) {
     }).then(r => r.json()).then(d => {
         if (d.success) {
             if (d.warning) RivetDialog.alert(d.warning);
-            window.location.href = '/agent/rmm_script_run.php?run_id=' + d.run_id;
+            window.location.href = '/agent/rmm_script_run.php?run_id=' + encodeURIComponent(d.run_id);
         } else {
             RivetDialog.alert('Script failed: ' + (d.error || 'Unknown error'));
         }

@@ -11,12 +11,17 @@
 
 require_once __DIR__ . '/release_channel.php';
 
-/** Run git in $dir with a time limit. @return array{0:int,1:list<string>} */
-function updateCheckGit(string $dir, string $args): array
+/**
+ * Run git in $dir with a time limit. Arguments are passed one per element and escaped by releaseGitCommand(), never as a raw string.
+ *
+ * @param list<string> $args
+ * @return array{0:int,1:list<string>}
+ */
+function updateCheckGit(string $dir, array $args): array
 {
     $out = [];
     $code = 1;
-    @exec('LC_ALL=C timeout 10 git -C ' . escapeshellarg($dir) . ' ' . $args . ' 2>&1', $out, $code);
+    @exec('LC_ALL=C timeout 10 ' . releaseGitCommand($dir, $args) . ' 2>&1', $out, $code);
 
     return [$code, $out];
 }
@@ -47,7 +52,7 @@ function updateChecks(string $dir, ?string $currentDbVersion = null, ?string $la
 
         return $checks;
     }
-    [$code, $out] = updateCheckGit($dir, '--version');
+    [$code, $out] = updateCheckGit($dir, ['--version']);
     if ($code !== 0) {
         $add('git', 'Git is installed', 'fail', 'Git did not run as ' . $user . '.', 'Install git (for example: apt install git) and make sure it is in the web server\'s PATH.');
 
@@ -61,7 +66,7 @@ function updateChecks(string $dir, ?string $currentDbVersion = null, ?string $la
 
         return $checks;
     }
-    [$code, $out] = updateCheckGit($dir, 'rev-parse --is-inside-work-tree');
+    [$code, $out] = updateCheckGit($dir, ['rev-parse', '--is-inside-work-tree']);
     $text = trim(implode(' ', $out));
     if ($code !== 0 && stripos($text, 'dubious ownership') !== false) {
         $add('repo', 'This folder is a git checkout', 'fail', 'Git refuses to work here because the folder is owned by a different user than ' . $user . '.',
@@ -110,7 +115,7 @@ function updateChecks(string $dir, ?string $currentDbVersion = null, ?string $la
 
     // 5. Remote configured (config only: no network call)
     $remote = RELEASE_REMOTE;
-    [$code, $out] = updateCheckGit($dir, 'config --get ' . escapeshellarg("remote.$remote.url"));
+    [$code, $out] = updateCheckGit($dir, ['config', '--get', "remote.$remote.url"]);
     $url = $code === 0 ? trim((string) ($out[0] ?? '')) : '';
     if ($url === '') {
         $add('remote', 'The update source is set', 'fail', 'There is no git remote named "' . $remote . '", so there is nowhere to check for updates.', 'Add it: git -C ' . $dir . ' remote add ' . $remote . ' <repository url>');
@@ -136,7 +141,7 @@ function updateChecks(string $dir, ?string $currentDbVersion = null, ?string $la
         // 6. Has a fetch worked before? (local refs only)
         $channel = releaseChannelFromBranch(releaseCurrentBranch($dir));
         $ref = $remote . '/' . releaseChannelBranch($channel);
-        [$code] = updateCheckGit($dir, 'rev-parse --verify --quiet ' . escapeshellarg($ref . '^{commit}'));
+        [$code] = updateCheckGit($dir, ['rev-parse', '--verify', '--quiet', $ref . '^{commit}']);
         $fetchHead = $git . '/FETCH_HEAD';
         $last = is_file($fetchHead) ? (int) filemtime($fetchHead) : 0;
         if ($code !== 0) {
@@ -147,7 +152,7 @@ function updateChecks(string $dir, ?string $currentDbVersion = null, ?string $la
     }
 
     // 7. Local changes that block a pull. Generated files (vendor/composer) are reset by Update App itself.
-    [$code, $out] = updateCheckGit($dir, 'status --porcelain --untracked-files=no');
+    [$code, $out] = updateCheckGit($dir, ['status', '--porcelain', '--untracked-files=no']);
     if ($code === 0) {
         $generated = [];
         $other = [];
