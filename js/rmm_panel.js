@@ -311,7 +311,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('.rmm-mesh-approve'), function (b) {
         b.addEventListener('click', function () {
             var node = b.getAttribute('data-rmm-mesh-approve') || '';
-            RivetDialog.confirm('Map MeshCentral node ' + node + ' to this device?\n\nOnly approve it after checking in MeshCentral that this node really is this machine: Remote opens whatever node is mapped here.',
+            RivetDialog.confirm('Map MeshCentral node ' + node + ' to this device?\n\nOnly approve it after checking in MeshCentral that this node really is this machine: Remote opens whatever node is mapped here. A node mapped to this device now is replaced.',
                 { title: 'Approve MeshCentral node', okText: 'Approve and map' }).then(function (yes) {
                 if (!yes) { return; }
                 b.disabled = true;
