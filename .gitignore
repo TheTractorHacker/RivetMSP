@@ -8,6 +8,13 @@ keystore_base64.txt
 backups/*
 !backups/.htaccess
 
+# Never commit a database dump/backup accidentally (two such files, full application exports including
+# credentials tables, were committed by mistake on 2024-02-05 and later removed from the tree - see
+# commits 74fb7931f/717f4d9e1; they remain in git history, which is a separate, explicit cleanup this
+# rule does not address). The tracked schema-only file db.sql is the one intentional exception.
+*.sql
+!/db.sql
+
 uploads/favicon.ico
 uploads/contracts/*
 uploads/clients/*
