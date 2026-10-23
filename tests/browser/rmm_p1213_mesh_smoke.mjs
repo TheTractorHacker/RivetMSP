@@ -1,6 +1,7 @@
 // Browser smoke for the optional MeshCentral agent (RivetCore 1.0.0-rc.12, migration 0023): the install settings on Administration > Endpoint agent (device group id, certificate
 // pin and the "read it from the server" button that only PROPOSES, the overwrite switch, the advanced corrections), the tick-box in the Add device dialog, and the device's Mesh
-// agent state (installed / failed / mapped / conflict / kept manual) on the asset page, desktop and phone, light and dark.
+// agent state (installed / failed / waiting for approval and its Approve button (RivetCore 1.0.0-rc.31, review F1) / mapped / conflict / kept manual) on the asset page,
+// desktop and phone, light and dark.
 //
 //   RIVETMSP_WEBHOOK_ALLOW_PRIVATE=1 /tmp/claude-1000/rc13msp_browser.sh 8681 tests/browser/rmm_p1213_mesh_smoke.mjs
 //
@@ -363,17 +364,46 @@ await T('Linux command without the tick has no Mesh flag', async () => {
 });
 
 // ------------------------------------------------------------------------------------------------ devices that report a Mesh agent
-await T('devices: installed and mapped, failed, conflict, kept manual', async () => {
+await T('devices: installed and waiting for approval, approved with one click, failed, conflict, kept manual', async () => {
   fx = phpJson(['devices']);
   php(['report', 'M1', JSON.stringify({ installed: true, version: '1.1.60', node_id: NODE_A })]);
   php(['report', 'M2', JSON.stringify({ installed: true, version: '1.1.60', node_id: NODE_A })]);
   php(['report', 'M3', JSON.stringify({ installed: false, error: 'download failed: the Mesh server certificate does not match the pinned hash' })]);
   const asset = (n) => `/agent/asset_details.php?asset_id=${fx.asset[n]}`;
+  // M1 (RivetCore 1.0.0-rc.31): the node the device reported is NOT mapped by itself; the card and the header say so and offer "Approve"
   await go(asset('M1'));
+  await trapDialogs();
   let t = await p.eval(`document.querySelector('#rmm-remote').innerText.replace(/\\s+/g,' ')`);
-  assert(/MeshCentral agent installed/.test(t) && /version 1\.1\.60/.test(t) && /mapped to this device/.test(t), 'M1: ' + t.slice(0, 400));
-  assert(await p.exists('#rmm-remote [data-rmm-mesh-map=mapped]') && !(await p.exists('#rmm-remote [data-rmm-mesh-hint]')), 'M1: should be mapped without a hint');
-  assert((await p.eval(`document.getElementById('rmm-mesh-node').value`)) === NODE_A, 'M1: the mapping form should hold the automatically found node');
+  assert(/MeshCentral agent installed/.test(t) && /version 1\.1\.60/.test(t) && !/mapped to this device/.test(t), 'M1: ' + t.slice(0, 400));
+  assert(await p.exists('#rmm-remote [data-rmm-mesh-map=needs_approval]') && await p.exists('#rmm-remote [data-rmm-mesh-hint=needs_approval]'), 'M1: should be waiting for approval, with a hint');
+  t = await p.eval(`document.querySelector('#rmm-remote [data-rmm-mesh-hint=needs_approval]').innerText.replace(/\\s+/g,' ')`);
+  assert(/Node not approved yet/.test(t) && /check this node in MeshCentral, then map it/.test(t) && t.includes(NODE_A), 'M1 hint: ' + t);
+  assert((await p.eval(`document.getElementById('rmm-mesh-node').value`)) === '', 'M1: nothing is mapped yet, so the mapping form is empty');
+  assert((await p.eval(`document.querySelector('#rmm-remote .rmm-mesh-approve').getAttribute('data-rmm-mesh-approve')`)) === NODE_A, 'M1: the Approve button carries the reported node');
+  assert(await p.exists('#rmm-act-remote-approve') && /waiting for approval/.test(await p.eval(`document.getElementById('rmm-act-remote-unmapped').innerText`)), 'M1: the header offers Approve and says the node waits for approval');
+  await shotEl('#rmm-remote', 'device-mesh-needs-approval-desktop-light');
+  // Cancel in the RivetDialog maps nothing
+  await click('#rmm-remote .rmm-mesh-approve');
+  await p.waitSel('.rivet-dialog');
+  t = await p.eval(`document.querySelector('.rivet-dialog').innerText.replace(/\\s+/g,' ')`);
+  assert(t.includes(NODE_A) && /really is this machine/.test(t), 'the confirmation names the node and says what approving means: ' + t);
+  await p.click('.rivet-dialog .btn-secondary');
+  await sleep(800);
+  assert((await p.eval('window.__dialogs')) === 0, 'a native dialog was opened (the confirmation must be a RivetDialog)');
+  await go(asset('M1'));
+  assert(await p.exists('#rmm-remote [data-rmm-mesh-hint=needs_approval]'), 'M1: Cancel must not map the node');
+  // Approve (from the header, which sits outside #rmm-panel), confirm: the page reloads with the node mapped
+  await trapDialogs();
+  await click('#rmm-act-remote-approve');
+  await p.waitSel('.rivet-dialog');
+  const origin = await p.eval('performance.timeOrigin');
+  await p.click('.rivet-dialog .btn-primary');
+  for (let i = 0; i < 40 && (await p.eval(`(()=>{try{return performance.timeOrigin}catch(e){return 0}})()`).catch(() => 0)) === origin; i++) await sleep(250);
+  await sleep(900);
+  assert(await p.exists('#rmm-remote [data-rmm-mesh-map=mapped]') && !(await p.exists('#rmm-remote [data-rmm-mesh-hint]')) && !(await p.exists('.rmm-mesh-approve')), 'M1: after Approve the node is mapped, no hint, no Approve button');
+  t = await p.eval(`document.querySelector('#rmm-remote').innerText.replace(/\\s+/g,' ')`);
+  assert(/mapped to this device/.test(t), 'M1 after approval: ' + t.slice(0, 400));
+  assert((await p.eval(`document.getElementById('rmm-mesh-node').value`)) === NODE_A, 'M1: the mapping form holds the approved node');
   await shotEl('#rmm-remote', 'device-mesh-mapped-desktop-light');
   await go(asset('M2'));
   assert(await p.exists('#rmm-remote [data-rmm-mesh-hint=conflict]'), 'M2: the conflict hint is missing');
@@ -381,22 +411,26 @@ await T('devices: installed and mapped, failed, conflict, kept manual', async ()
   assert(/Not mapped/.test(t) && /cloned from an image/.test(t), 'M2 hint: ' + t);
   assert(await p.exists(`#rmm-remote a[href="/agent/rmm_agent_device.php?device_id=${fx.dev.M1}"]`), 'M2: the hint should link the other device of the same client');
   assert((await p.eval(`document.querySelector('#rmm-remote [data-rmm-mesh-hint=conflict]').getAttribute('role')`)) === 'alert', 'M2: the conflict hint should be role=alert');
+  assert(!(await p.exists('.rmm-mesh-approve')), 'M2: a conflict offers no Approve button');
   await shotEl('#rmm-remote', 'device-mesh-conflict-desktop-light');
   await go(asset('M3'));
   t = await p.eval(`document.querySelector('#rmm-remote').innerText.replace(/\\s+/g,' ')`);
   assert(/MeshCentral agent not installed/.test(t) && /does not match the pinned hash/.test(t) && /The RivetMSP agent itself is fine/.test(t), 'M3: ' + t.slice(0, 400));
   await shotEl('#rmm-remote', 'device-mesh-failed-desktop-light');
-  // M4: mapped by hand through the existing form, then the agent reports a different node
+  // M4: mapped by hand through the header's "Map Mesh node" modal (outside #rmm-panel), then the agent reports a different node
   await go(asset('M4'));
-  await p.type('#rmm-mesh-node', NODE_B);
-  await click('#rmm-mesh-form button[type=submit]');
-  await sleep(1500);
+  await click('#rmm-act-remote-map');
+  await p.waitSel('#rmmMeshMapModal.show');
+  await sleep(400);
+  await p.type('#rmm-mesh-node-modal', NODE_B);
+  await click('#rmmMeshMapModal button[type=submit]');
+  await sleep(1800);
   php(['report', 'M4', JSON.stringify({ installed: true, version: '1.1.60', node_id: NODE_C })]);
   await go(asset('M4'));
-  assert(await p.exists('#rmm-remote [data-rmm-mesh-hint=kept_manual]'), 'M4: the kept-manual hint is missing (the mapping form may not have saved)');
+  assert(await p.exists('#rmm-remote [data-rmm-mesh-hint=kept_manual]'), 'M4: the kept-manual hint is missing (the header modal may not have saved)');
   t = await p.eval(`document.querySelector('#rmm-remote [data-rmm-mesh-hint=kept_manual]').innerText.replace(/\\s+/g,' ')`);
-  assert(/Your mapping was kept/.test(t) && /Administration/.test(t), 'M4 hint: ' + t);
-  assert(await p.exists('#rmm-remote [data-rmm-mesh-hint=kept_manual] a[href="/admin/settings_endpoint_agent.php#mesh"]'), 'M4: link to the Mesh settings missing');
+  assert(/Your mapping was kept/.test(t) && /check it in MeshCentral, then map it below/.test(t), 'M4 hint: ' + t);
+  assert((await p.eval(`document.getElementById('rmm-mesh-node').value`)) === NODE_B, 'M4: the node mapped by hand is kept');
   await shotEl('#rmm-remote', 'device-mesh-kept-manual-desktop-light');
   // M5 never reported
   await go(asset('M5'));

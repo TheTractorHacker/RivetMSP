@@ -255,7 +255,16 @@ function rivetRmmUiStrip(array $vm): string
             $actions .= '<button type="button" class="btn btn-outline-success btn-sm" id="rmm-act-remote" disabled aria-disabled="true" title="' . rmmH($rh['hint']) . '"><i class="fas fa-desktop me-1" aria-hidden="true"></i>Remote access</button>';
         }
     } elseif (in_array($rh['state'], ['unmapped', 'unmapped_agent_installed'], true)) {
-        $actions .= '<span class="text-muted small me-2" id="rmm-act-remote-unmapped"><i class="fas fa-desktop me-1" aria-hidden="true"></i>' . rmmH($rh['hint']) . '</span>';
+        // RivetCore 1.0.0-rc.31 (review F1): an installed Mesh agent's node is no longer mapped by itself, so Core's unmapped_agent_installed hint ("restart the agent")
+        // does not fit a device whose reported node is waiting for approval; that one gets its own sentence and, for an administrator, the same Approve button as the
+        // Remote access card (js/rmm_panel.js wires every .rmm-mesh-approve on the page).
+        $ma = is_array($vm['mesh_agent'] ?? null) ? $vm['mesh_agent'] : null;
+        $approve = $ma !== null && $ma['map_state'] === 'needs_approval';
+        $actions .= '<span class="text-muted small me-2" id="rmm-act-remote-unmapped"><i class="fas fa-desktop me-1" aria-hidden="true"></i>'
+            . rmmH($approve ? 'This device reported a MeshCentral node that is waiting for approval: check it in MeshCentral, then map it.' : $rh['hint']) . '</span>';
+        if ($approve && !empty($rh['can_map_manually']) && $ma['node_id'] !== '') {
+            $actions .= '<button type="button" class="btn btn-outline-primary btn-sm rmm-mesh-approve" id="rmm-act-remote-approve" data-rmm-mesh-approve="' . rmmH($ma['node_id']) . '"><i class="fas fa-check me-1" aria-hidden="true"></i>Approve Mesh node</button>';
+        }
         if (!empty($rh['can_map_manually'])) {
             $actions .= '<button type="button" class="btn btn-outline-secondary btn-sm" id="rmm-act-remote-map" data-bs-toggle="modal" data-bs-target="#rmmMeshMapModal"><i class="fas fa-link me-1" aria-hidden="true"></i>Map Mesh node</button>';
         }
@@ -478,8 +487,9 @@ function rivetRmmUiAlertsCard(array $vm): string
 
 /**
  * The MeshCentral agent state of a device (RivetCore 1.0.0-rc.12): installed with its version, or the install error; and what the server did with the reported node id.
- * A `conflict` and a `kept_manual` carry a visible hint (an alert, not just a pill) because the technician has something to decide. Empty string for a device that never
- * reported a Mesh agent. Server text (the error) is escaped here.
+ * A `conflict`, a `kept_manual` and a `needs_approval` (RivetCore 1.0.0-rc.31) carry a visible hint (an alert, not just a pill) because the technician has something to
+ * decide; `needs_approval` also carries an administrator's "Approve and map this node" button (wired by js/rmm_panel.js and agent/rmm_agent_device.php). Empty string
+ * for a device that never reported a Mesh agent. Server text (the error) and the node id are escaped here.
  *
  * @param array<string,mixed>|null $ma rivetRmmUiMeshAgent()
  * @param bool $nested true inside an existing card body (the Remote tab), false as a block of its own in a card
@@ -507,8 +517,17 @@ function rivetRmmUiMeshAgentHtml(?array $ma, bool $admin, bool $nested = false):
             . $other . ', so nothing was moved. A machine cloned from an image carries the same node id. Check which machine really owns the node before mapping it by hand.</div></div>';
     } elseif ($ma['map_state'] === 'kept_manual') {
         $o .= '<div class="alert alert-info py-2 mt-2 mb-0" role="status" data-rmm-mesh-hint="kept_manual"><div><i class="fas fa-info-circle me-1" aria-hidden="true"></i><strong>Your mapping was kept.</strong> The agent reported a different node than the one an administrator mapped by hand'
-            . ($ma['node_id'] !== '' ? ' (' . rmmH($ma['node_id']) . ')' : '') . '. ' . ($admin ? 'To use the reported node, map it below, or turn on <em>Let the agent\'s node id replace a node mapped by hand</em> under <a href="/admin/settings_endpoint_agent.php#mesh">Administration &gt; Endpoint agent &gt; MeshCentral</a>.'
+            . ($ma['node_id'] !== '' ? ' (' . rmmH($ma['node_id']) . ')' : '') . '. ' . ($admin ? 'To use the reported node, check it in MeshCentral, then map it below. A node the agent reports never replaces a mapping by itself.'
                 : 'An administrator can change the mapping.') . '</div></div>';
+    } elseif ($ma['map_state'] === 'needs_approval') {
+        // RivetCore 1.0.0-rc.31 (review F1): the node id is only what the device says, so Core no longer maps it by itself. The Approve button is the old one-click flow
+        // Core's notes suggest: the same 'set_mesh_node' action as the mapping form, with the node id shown here (the one the administrator checked), behind a RivetDialog.
+        $node = $admin ? (string) $ma['node_id'] : '';
+        $o .= '<div class="alert alert-warning py-2 mt-2 mb-0" role="status" data-rmm-mesh-hint="needs_approval"><div><i class="fas fa-user-check me-1" aria-hidden="true"></i><strong>Node not approved yet.</strong> This device reported a MeshCentral node'
+            . ($node !== '' ? ' (' . rmmH($node) . ')' : '') . ' that nobody has approved. A device\'s own report does not prove that the node is this machine, so Remote does not use it until '
+            . ($admin ? 'you check this node in MeshCentral, then map it.' : 'an administrator checks the node in MeshCentral and maps it.') . '</div>'
+            . ($node !== '' ? '<div class="mt-2"><button type="button" class="btn btn-sm btn-outline-primary rmm-mesh-approve" data-rmm-mesh-approve="' . rmmH($node) . '"><i class="fas fa-check me-1" aria-hidden="true"></i>Approve and map this node</button></div>' : '')
+            . '</div>';
     }
 
     return $o . '</div>';
@@ -528,7 +547,7 @@ function rivetRmmUiMeshMapForm(string $nodeId, string $suffix = ''): string
     return '<form class="row g-2 align-items-end rmm-mesh-map-form"><div class="col-12"><label class="form-label small mb-1" for="' . $nodeField . '">MeshCentral node id (administrators)</label>'
         . '<input class="form-control form-control-sm font-monospace" id="' . $nodeField . '" name="mesh_node_id" maxlength="2048" value="' . rmmH($nodeId) . '" placeholder="node//... or the MeshCentral address of the device" aria-describedby="' . $helpId . '">'
         . '<div class="form-text" id="' . $helpId . '">In MeshCentral open the device and copy the address bar, or paste the node id. Any form is accepted and shown as <code>node//</code> plus 64 characters.</div></div>'
-        . '<div class="col-12"><button class="btn btn-sm btn-outline-primary" type="submit">Save mapping</button> <span class="small text-muted">Leave empty to clear. A node set here is kept when the Mesh agent reports a different one, unless the MeshCentral setting that lets the agent\'s node replace it is on.</span></div></form>';
+        . '<div class="col-12"><button class="btn btn-sm btn-outline-primary" type="submit">Save mapping</button> <span class="small text-muted">Leave empty to clear. A node set here is kept when the Mesh agent reports a different one: a node the agent reports is used only once an administrator maps it.</span></div></form>';
 }
 
 /** The header's "Map Mesh node" modal (RivetCore 1.0.0-rc.28 device header view-model) - same form as the Remote tab's, reused via rivetRmmUiMeshMapForm(). */

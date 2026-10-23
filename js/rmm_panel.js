@@ -306,6 +306,22 @@
             }).catch(function () { say('Network error.', false); });
         });
     });
+    // "Approve and map this node" on a node the device reported but nobody approved (RivetCore 1.0.0-rc.31 needs_approval): the same 'set_mesh_node' action
+    // as the form above, with the node id the administrator was shown, after a confirmation that says what approving means. The header strip has one too.
+    Array.prototype.forEach.call(document.querySelectorAll('.rmm-mesh-approve'), function (b) {
+        b.addEventListener('click', function () {
+            var node = b.getAttribute('data-rmm-mesh-approve') || '';
+            RivetDialog.confirm('Map MeshCentral node ' + node + ' to this device?\n\nOnly approve it after checking in MeshCentral that this node really is this machine: Remote opens whatever node is mapped here.',
+                { title: 'Approve MeshCentral node', okText: 'Approve and map' }).then(function (yes) {
+                if (!yes) { return; }
+                b.disabled = true;
+                post('set_mesh_node', { mesh_node_id: node }).then(function (d) {
+                    say(d.success ? 'Mapping saved.' : (d.error || 'Not saved.'), !!d.success);
+                    if (d.success) { window.setTimeout(function () { window.location.reload(); }, 700); } else { b.disabled = false; }
+                }).catch(function () { b.disabled = false; say('Network error.', false); });
+            });
+        });
+    });
 
     // ---- jobs: cancel, lazy output
     Array.prototype.forEach.call(panel.querySelectorAll('.rmm-cancel-btn'), function (b) {
