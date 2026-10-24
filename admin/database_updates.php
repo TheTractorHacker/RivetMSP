@@ -7605,3 +7605,13 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_core_panel_enabled` TINYINT(1) NOT NULL DEFAULT 0");
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.111'");
     }
+
+    if ($rivetit_db_version() == '2.6.111') {
+        // Roadmap #16: dedicated AnyDesk ID field for assets, with a one-click "anydesk:" launch link on the asset
+        // details page - separate from the generic asset_uri/_2/_client fields so it's discoverable without needing
+        // to know AnyDesk's URI scheme (ported from RivetIT's own asset_anydesk_id column; functions.php's
+        // sanitize_url() already allows the anydesk scheme on both editions, so no change needed there).
+        mysqli_query($mysqli, "ALTER TABLE `assets` ADD COLUMN IF NOT EXISTS `asset_anydesk_id` varchar(50) DEFAULT NULL AFTER `asset_uri_client`");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.112'");
+    }
