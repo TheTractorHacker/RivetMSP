@@ -1201,6 +1201,7 @@ CREATE TABLE `credentials` (
   `credential_archived_at` datetime DEFAULT NULL,
   `credential_accessed_at` datetime DEFAULT NULL,
   `credential_password_changed_at` datetime DEFAULT current_timestamp(),
+  `credential_rotation_due_at` date DEFAULT NULL,
   `credential_folder_id` int(11) NOT NULL DEFAULT 0,
   `credential_important` tinyint(1) NOT NULL DEFAULT 0,
   `credential_vendor_id` int(11) NOT NULL DEFAULT 0,

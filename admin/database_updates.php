@@ -7558,3 +7558,11 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.108'");
         }
     }
+
+    if ($rivetit_db_version() == '2.6.108') {
+        // DB 2.6.109: credential rotation due dates (GitHub roadmap #9). An optional date an agent sets on a
+        // credential; nothing computes or enforces it (auto-rotation is explicitly out of scope per the issue -
+        // this is tracking and reminding only, the same spirit as domain_expire/certificate_expire).
+        mysqli_query($mysqli, "ALTER TABLE `credentials` ADD COLUMN IF NOT EXISTS `credential_rotation_due_at` DATE DEFAULT NULL");
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.109'");
+    }

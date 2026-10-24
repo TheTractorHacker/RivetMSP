@@ -22,6 +22,7 @@ $credential_otp_secret = nullable_htmlentities(decryptOtpSecret($row['credential
 $credential_note = nullable_htmlentities($row['credential_note']);
 $credential_created_at = nullable_htmlentities($row['credential_created_at']);
 $credential_archived_at = nullable_htmlentities($row['credential_archived_at']);
+$credential_rotation_due_at = nullable_htmlentities($row['credential_rotation_due_at'] ?? '');
 $credential_favorite = intval($row['credential_favorite']);
 $credential_contact_id = intval($row['credential_contact_id']);
 $credential_asset_id = intval($row['credential_asset_id']);
@@ -147,6 +148,16 @@ ob_start();
                         <div class="input-group-append">
                             <span class="input-group-text"><i class="fa fa-fw fa-eye"></i></span>
                         </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Rotation Due <span class="text-secondary">(optional - a reminder only, nothing is rotated automatically)</span></label>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="fa fa-fw fa-history"></i></span>
+                        </div>
+                        <input type="date" class="form-control" name="rotation_due_at" max="2999-12-31" value="<?php echo $credential_rotation_due_at; ?>">
                     </div>
                 </div>
 

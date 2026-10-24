@@ -316,6 +316,31 @@ foreach ($certificateAlertArray as $day) {
 // Logging
 // logAction("Cron", "Task", "Cron created notifications for certificates expiring");
 
+// CREDENTIAL ROTATION DUE (GitHub roadmap #9) - a reminder only, same shape as the domain/certificate expiry
+// notifications above. Nothing here rotates a credential automatically (explicitly out of scope per the issue).
+
+$credentialRotationAlertArray = [1, 7, 45];
+
+foreach ($credentialRotationAlertArray as $day) {
+
+    $sql = mysqli_query(
+        $mysqli,
+        "SELECT * FROM credentials
+        LEFT JOIN clients ON credential_client_id = client_id
+        WHERE credential_rotation_due_at IS NOT NULL AND credential_archived_at IS NULL AND credential_rotation_due_at = CURDATE() + INTERVAL $day DAY"
+    );
+
+    while ($row = mysqli_fetch_assoc($sql)) {
+        $credential_id = intval($row['credential_id']);
+        $credential_name = sanitizeInput($row['credential_name']);
+        $credential_rotation_due_at = sanitizeInput($row['credential_rotation_due_at']);
+        $client_id = intval($row['client_id']);
+        $client_name = sanitizeInput($row['client_name']);
+
+        appNotify("Credential Rotation Due", "Credential $credential_name for $client_name is due for rotation in $day day(s) on $credential_rotation_due_at", "/agent/credentials.php?client_id=$client_id", $client_id);
+    }
+}
+
 // Asset Warranties Expiring
 
 $warranty_alert_array = [1,7,45];
