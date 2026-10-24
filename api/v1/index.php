@@ -139,6 +139,15 @@ if ($resource === 'agent_enroll' || $resource === 'agent_checkin' || $resource =
     exit;
 }
 
+// RivetPanel device-token API (GitHub roadmap "Prompt 2"). Twin of the agent_* block above and routed here for the
+// same reason: a panel device credential is not an api_tokens row, and PanelApi bounds and rate-limits its own
+// body read. The module is off by default (settings.config_core_panel_enabled): PanelApi itself answers
+// 503 module_disabled while off (see includes/panel_bootstrap.php, api/v1/includes/panel_device_api.php).
+if ($resource === 'panel_enroll' || $resource === 'panel_me' || $resource === 'panel_categories' || $resource === 'panel_tickets' || $resource === 'panel_ticket_chat') {
+    require __DIR__ . '/' . $resource . '.php';
+    exit;
+}
+
 // All other endpoints require Bearer token
 $api_token_row  = null;
 $api_user_id    = null;

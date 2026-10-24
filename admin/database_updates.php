@@ -7585,3 +7585,23 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         mysqli_query($mysqli, "ALTER TABLE `changes` ADD INDEX IF NOT EXISTS `idx_changes_client_id` (`client_id`)");
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.110'");
     }
+
+    if ($rivetit_db_version() == '2.6.110') {
+        // DB 2.6.111: RivetCore 1.0.0-rc.37 (the fleet-token release; no migration of its own) pulled in via Core's own
+        // migration runner, which - since this is the first edition DB step to run it since 2.6.108 - also picks up every
+        // migration still pending from rc.32 through rc.37 in one pass: 0039_rmm_automation_disabled (one column, off by
+        // default, unrelated to Panel) and 0040_panel_api (RivetPanel: kind/contact_id on the two endpoint_agent_* token/
+        // device tables, plus panel_client_settings and panel_ticket_owner - see vendor/rivet/rivet-core/src/Panel/
+        // Migration/PanelSchema.php). Idempotent either way. Nothing here enables anything: the agent protocol is
+        // unchanged, and the Panel API routes/pages/settings column are separate application code (this edition's own
+        // config_core_panel_enabled, added right after, default OFF).
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+        }
+        mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_core_panel_enabled` TINYINT(1) NOT NULL DEFAULT 0");
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.111'");
+    }

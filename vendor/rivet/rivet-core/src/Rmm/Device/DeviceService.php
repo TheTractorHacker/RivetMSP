@@ -80,7 +80,7 @@ final class DeviceService
         // The credential hash stays so the device is told "revoked" (not just "unknown") on its next call.
         $this->sql->run('UPDATE endpoint_agent_devices SET revoked_at = ?, revoked_reason = ? WHERE device_id = ?', [$this->sql->utcNow(), mb_substr($reason, 0, 100), $deviceId]);
         $this->jobs->cancelAllQueued($deviceId, 'device_revoked');
-        $this->audit->record('Device Revoked', "Device $deviceId revoked by user $userId: " . mb_substr($reason, 0, 100), (int) $dev['client_id'], (int) $dev['asset_id']);
+        $this->audit->record(($dev['kind'] ?? 'agent') === 'panel' ? 'Panel Device Revoked' : 'Device Revoked', "Device $deviceId revoked by user $userId: " . mb_substr($reason, 0, 100), (int) $dev['client_id'], (int) $dev['asset_id']);
         $this->cache?->invalidate(RmmCache::GROUP_FLEET, true);
 
         return true;
@@ -165,6 +165,23 @@ final class DeviceService
             return false;
         }
         $this->sql->run('UPDATE endpoint_agent_devices SET ring = ? WHERE device_id = ?', [$ring, $deviceId]);
+
+        return true;
+    }
+
+    /**
+     * device_automation_disabled (1.0.0-rc.31): for a device another tool already manages (a second RMM/patch
+     * agent), so RivetCore's own scheduled scripts and patch installs never fire on it - see
+     * {@see \RivetCore\Rmm\Scripts\TargetResolver} and {@see \RivetCore\Rmm\Patch\PatchScheduler::queueInstalls()}.
+     * Monitoring, inventory, patch scanning and a technician's own deliberate "run now" are unaffected.
+     * False for a device that does not exist.
+     */
+    public function setAutomationDisabled(int $deviceId, bool $disabled): bool
+    {
+        if ($this->devices->find($deviceId) === null) {
+            return false;
+        }
+        $this->sql->run('UPDATE endpoint_agent_devices SET device_automation_disabled = ? WHERE device_id = ?', [$disabled ? 1 : 0, $deviceId]);
 
         return true;
     }

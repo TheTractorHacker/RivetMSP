@@ -76,6 +76,32 @@ the public API freeze (docblock `@api`/`@internal` and array-shape annotations, 
 (`docs/security/`), and the adapter conformance kit under `RivetCore\Testing` ([ADR-009](docs/architecture/ADR-009-test-helpers-in-package.md)).
 If a release candidate breaks something that this guide did not warn about, that is a bug in the release candidate: report it.
 
+## Adopting the shared design assets (unreleased; no migration)
+
+Opt-in. Nothing happens until an edition runs the installer. Full guide and the RivetMSP checklist: [docs/ui/DESIGN_ASSETS.md](docs/ui/DESIGN_ASSETS.md).
+
+1. Update the pin to the release that contains `assets/ui`.
+2. `php vendor/rivet/rivet-core/scripts/install-ui-assets.php --css=css --js=js --dry-run`, review, then run it without `--dry-run`. Commit the copies.
+3. In the header, link the files in the order of `assets/ui/MANIFEST.json` (`load_order`); the two `*.edition.css` links are optional and point at the edition's own override files.
+4. Keep edition-only rules (portal, KB, training, branding) in `css/itflow_custom.edition.css` and `css/itflow_design.edition.css` and never edit a shared file in the edition.
+5. Add `php vendor/rivet/rivet-core/scripts/check-ui-assets.php --css=css --js=js` to the edition's CI and release gate.
+
+RivetIT: its `css/` and `js/` already equal the shared files except the two split stylesheets and two reviewed changes; replace the two split ones with the Core copies and move the removed rules into the two override files (kept in the handoff directory), and run the installer with `--js=js` too. Two things change for RivetIT once it installs: **muted text becomes slightly darker** (`--if-muted` `#5d6f76` to `#4b5d64`, the WCAG AA value RivetMSP already used; `.text-muted`, table headers, helper text, chart axis labels), and `js/webhook_wizard.js` reads two optional attributes (`data-wz-networks`, `data-wz-edit`) with the old page names as defaults, so nothing else changes. `js/event_rules.js` is not shipped by Core and stays in RivetIT. RivetMSP: not safe to drop in yet. Five widgets (icon picker, date range picker, event picker, event rules, webhook wizard) were restyled under new class names together with their scripts, so the CSS and the scripts must move together: Core now ships the scripts for the first three, the webhook wizard and the webhook guides; MSP must port RivetIT's `event_rules.js` page, API and engine side itself, and the wizard needs MSP pages and endpoints it does not have (`webhook_new.php`, `webhook_edit.php`, `modals/webhook/webhook_action.php`, `webhook_guide.php`, plus `webhook_form.css`). See sections 3b and 4 of the guide.
+
+## Adopting the RivetPanel API (1.0.0-rc.35; migration 0040)
+
+Optional and additive: an edition that does nothing keeps working exactly as before (the agent protocol is unchanged). To serve RivetPanel with per-device tokens, per [docs/panel/PANEL_API.md](docs/panel/PANEL_API.md):
+
+1. **Migration.** Run the Core migrations (`0040_panel_api`) and mirror the DDL in `db.sql`: `Panel\Migration\PanelSchema::columns()` (four `ALTER`s, appended as the LAST columns of `endpoint_agent_enrollment_tokens` and `endpoint_agent_devices`) and `PanelSchema::tables()` (`panel_client_settings`, `panel_ticket_owner`; the latter has an `owner_id` auto-increment key and a NULLable unique `ticket_id`, because it is also the idempotency ledger of ticket creation). Existing rows become `kind = 'agent'`. Run it before deploying code that mints panel tokens; the agent endpoints work before and after.
+2. **Gateway adapter.** Implement `Panel\Contracts\PanelTicketGatewayInterface` over the edition's tickets, replies, categories and contacts (plain-text in, no internal notes out, always filed under the client and contact Core passes; create exactly one ticket per call, never merge calls, and either return the id or throw having created nothing: Core reserves the `client_request_id` itself, so you implement no idempotency) and run `Testing\PanelTicketGatewayConformanceTestCase` against it.
+3. **Wire it.** `new Panel\PanelModule($database, $clock, $tenancy, $audit, $gateway, ['enabled' => fn () => ..., 'limits' => [...]])`, then `->api($rateLimit)` with the same limiter closure shape the RMM `deviceApi()` takes (`(bucket, limit, windowSeconds): bool`). No RMM module is needed.
+4. **Thin wrappers.** `api/v1/panel_enroll.php`, `panel_me.php`, `panel_categories.php`, `panel_tickets.php`, `panel_ticket_chat.php`: build an `Rmm\Http\RmmRequest` with `endpoint` set to the file's name (ticket id as `pathSegments[0]` or `?ticket_id=`), call `PanelApi::handle()` and emit the `RmmResponse` (`Rmm\Http\SapiEmitter`). These routes must NOT go through the legacy API-key or user-token authentication; the device token is the only credential. Make sure the web server and PHP accept request bodies up to `PanelLimits::postBodyMax()` (about 14 MiB by default) on these routes, and keep the existing TLS / trusted-proxy rule for `secureTransport`.
+5. **Deploy page.** Mint the enrollment token with `PanelModule::enrollment()->createToken($clientId, $contactId|null, $ttlHours, $label, $userId[, $maxUses = 1])` (`$maxUses` > 1 mints a capped fleet token for mass deployment) (the plaintext is shown once; a contact is optional), list with `PanelModule::admin()->devices($clientId)` / `tokens($clientId)`, and revoke with the existing RMM device actions or `admin()->revokeDevice()`. Panel devices appear in the RMM device list with `kind = 'panel'`.
+6. **Per-client setting** "Allow tickets from client-level devices" (default off): `PanelModule::settings()->allowClientLevelTickets($clientId)` / `setAllowClientLevelTickets($clientId, $bool, $userId)`.
+7. **Audit.** The actions listed in the changelog arrive through your existing `RmmAuditInterface`; nothing to add if it already feeds the audit trail.
+8. **Legacy path.** The shared-key panel endpoints can stay during the migration; they are not Core's concern. Retire them once every panel has enrolled.
+
+
 ## Adopting the device header view-model (1.0.0-rc.27)
 
 No migration, nothing is required. To get the short header, render from the new arrays instead of walking `inventory.disks` and `metrics.disk` yourself:
