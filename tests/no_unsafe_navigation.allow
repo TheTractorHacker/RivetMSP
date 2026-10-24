@@ -1,0 +1,13 @@
+# Reviewed navigations to a computed URL (tests/no_unsafe_navigation.php). Format: file|sink snippet|guard|reason
+# The guard must still appear in the file: it is the check that makes the sink safe. Re-review before adding a line.
+functions.php|window.location.href = " . json_encode($url|!in_array(strtolower($m[1]), ['http', 'https'], true)|redirect() fallback: non-http(s) schemes replaced with index.php, value JSON-encoded with <>&'" hex-escaped
+js/confirm_modal.js|window.location.href = target.href|target && (target.protocol === 'https:'|the link's href is resolved with new URL() and followed only when it is http(s)
+js/rmm_alr.js|window.location.href = j.redirect|/^\/agent\/ticket\.php\?ticket_id=\d+$/.test(j.redirect)|server redirect must be /agent/ticket.php?ticket_id=<digits>
+js/rmm_launch.js|location.replace(safe)|return u.protocol === 'https:'|remote-session URL from the server, http(s) only via safeUrl()
+js/rmm_launch.js|w.location = safe|return u.protocol === 'https:'|same value as above (fallback when replace() throws)
+js/webauthn_signin.js|window.location.href = next|/^\/(?![\/\\])/.test(result.redirect)|passkey sign-in redirect must be a same-site path (not //host or /\host)
+js/webhook_form.js|window.location.href = d.edit_url|/^webhook_form\.php\?id=\d+$/.test(String(d.edit_url))|duplicate-webhook redirect must be webhook_form.php?id=<digits>
+agent/rmm_alerts.php|window.location.href = d.redirect|/^\/agent\/ticket\.php\?ticket_id=\d+$/.test(d.redirect)|server redirect must be /agent/ticket.php?ticket_id=<digits>
+agent/alerts.php|window.location.href = d.redirect|/^\/agent\/ticket\.php\?ticket_id=\d+$/.test(d.redirect)|server redirect must be /agent/ticket.php?ticket_id=<digits>
+agent/asset_details.php|window.location.href = d.redirect|/^\/agent\/ticket\.php\?ticket_id=\d+$/.test(d.redirect)|server redirect must be /agent/ticket.php?ticket_id=<digits>
+agent/rmm_dashboard.php|window.location.href = d.redirect|/^\/agent\/ticket\.php\?ticket_id=\d+$/.test(d.redirect)|server redirect must be /agent/ticket.php?ticket_id=<digits>

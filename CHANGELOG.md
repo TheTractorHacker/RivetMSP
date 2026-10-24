@@ -4,6 +4,18 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.43] RivetMSP — security fixes from an external scan (no database change)
+
+**Deploy notes:** code and vendored `predis/predis` only; no migration, no new setting. Pull and reload PHP. The Administration > Identity Providers page no longer shows the saved Entra client secret; leave the field blank to keep it.
+
+- **Redis client:** `predis/predis` 3.5.1 -> 3.7.0 (GHSA-v32q-pmmw-cf38 / GHSA-w6f5-v2h6-g786, CRLF command smuggling; the 3.3.0 fix was incomplete until 3.6.1). RivetMSP uses the single-node client, so practical exposure was low.
+- **SQL injection:** a full pass over the code's queries. Real holes fixed: the recurring-invoice frequency reached `DATE_ADD(... INTERVAL 1 <frequency>)` unquoted (cron and "force send"; now month/year only); global search stripped the ticket prefix after escaping, which some prefixes turned into a break-out; the UniFi controller's MAC and the Tactical RMM check id went into SQL unescaped. Values that only broke queries (an apostrophe in a document prefix or currency, a task name ending in a backslash) are escaped or bound. `logAction()` and the certificate, user-search, UniFi, Tactical check and outtake-file queries are prepared statements. List pages accept `?sort=` only for a real column or a known list alias.
+- **Shell commands:** the domain WHOIS lookup could be fed a whois option (e.g. a "domain" of `--version`); it now requires a real hostname and passes `--`. Git commands of the update checks are built from escaped argument arrays. New guard test `tests/no_unsafe_shell.php`.
+- **Navigation targets:** every computed `window.location` / redirect target is validated (http(s) or same-site paths, or encoded ids). `confirm_modal.js` followed a `javascript:` link on confirm; it no longer does. The PHP `redirect()` fallback can no longer break out of its `<script>`. New guard test `tests/no_unsafe_navigation.php`.
+- **Entra client secret:** Administration > Identity Providers echoed the decrypted secret into the page on every load; the field is now always blank, a blank save keeps the stored secret, and the save is a prepared statement. Storage was already encrypted.
+- **Repository hygiene:** `.gitignore` refuses `*.sql` other than `db.sql`, so a database export cannot be committed by accident again.
+- **Tests:** new `tests/security_sqli.php`, `tests/security_identity_provider.php`, `tests/no_unsafe_shell.php`, `tests/no_unsafe_navigation.php`; `tests/security_backup.php`, `tests/release_channel.php`, `tests/audit_chain.php` and the rest of the security and mail/ticket suites pass.
+
 ## [26.10.42] RivetMSP — web UI/UX QA fixes (no database change)
 
 **Deploy notes:** code only; no migration. Pull this branch and reload PHP.

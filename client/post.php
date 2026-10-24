@@ -290,7 +290,9 @@ if (isset($_GET['approve_ticket_task'])) {
 
     // Notify tech
     if (inapp_notification_allowed_for_user($created_by, 'Ticket')) {
-        mysqli_query($mysqli, "INSERT INTO notifications SET notification_type = 'Ticket', notification = '$session_contact_email approved ticket task $task_name', notification_action = 'ticket.php?ticket_id=$ticket_id&client_id=$session_client_id', notification_client_id = $session_client_id, notification_user_id = $created_by");
+        // $task_name is HTML-escaped only; SQL-escape it too ($session_contact_email is already escaped by check_login.php).
+        $task_name_sql = mysqli_real_escape_string($mysqli, $task_name);
+        mysqli_query($mysqli, "INSERT INTO notifications SET notification_type = 'Ticket', notification = '$session_contact_email approved ticket task $task_name_sql', notification_action = 'ticket.php?ticket_id=$ticket_id&client_id=$session_client_id', notification_client_id = $session_client_id, notification_user_id = $created_by");
     }
     // TODO: Email agent
 

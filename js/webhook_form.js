@@ -904,7 +904,7 @@
     if ((b = t.closest('[data-whf-duplicate]'))) {
       b.disabled = true;
       postTools('webhook_tools.php', { action: 'duplicate', webhook_id: b.getAttribute('data-whf-duplicate'), csrf_token: csrf() })
-        .then(function (d) { if (d && d.ok) window.location.href = d.edit_url; else { b.disabled = false; flash(b, (d && d.error) || 'Could not duplicate.'); } })
+        .then(function (d) { if (d && d.ok && /^webhook_form\.php\?id=\d+$/.test(String(d.edit_url))) window.location.href = d.edit_url; else { b.disabled = false; flash(b, (d && d.error) || 'Could not duplicate.'); } })
         .catch(function () { b.disabled = false; flash(b, 'Could not reach the server.'); });
       return;
     }

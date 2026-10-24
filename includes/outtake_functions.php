@@ -228,17 +228,23 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
         $folder_id = mysqli_insert_id($mysqli);
     }
 
-    $pdf_name_esc = mysqli_real_escape_string($mysqli, $pdf_name);
-    mysqli_query($mysqli, "INSERT INTO files SET
-        file_reference_name = '$pdf_ref',
-        file_name = '$pdf_name_esc',
-        file_description = 'Signed outtake form for ticket $ticket_num',
+    // $ticket_num carries the ticket prefix exactly as stored (admin-entered text): bind the values, never interpolate them.
+    $file_description = "Signed outtake form for ticket $ticket_num";
+    $pdf_size = (int) $pdf_size;
+    $folder_id = (int) $folder_id;
+    $stmt = mysqli_prepare($mysqli, "INSERT INTO files SET
+        file_reference_name = ?,
+        file_name = ?,
+        file_description = ?,
         file_ext = 'pdf',
         file_mime_type = 'application/pdf',
-        file_size = $pdf_size,
-        file_folder_id = $folder_id,
-        file_client_id = $client_id,
+        file_size = ?,
+        file_folder_id = ?,
+        file_client_id = ?,
         file_created_by = 0");
+    mysqli_stmt_bind_param($stmt, 'sssiii', $pdf_ref, $pdf_name, $file_description, $pdf_size, $folder_id, $client_id);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
     $file_id = mysqli_insert_id($mysqli);
 
     // Add internal ticket reply noting PDF is attached

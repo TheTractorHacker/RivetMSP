@@ -502,7 +502,7 @@ function runScriptNow() {
     }).then(r => r.json()).then(d => {
         if (d.success) {
             $('#runModal').modal('hide');
-            window.location.href = '/agent/rmm_script_run.php?run_id=' + d.run_id;
+            window.location.href = '/agent/rmm_script_run.php?run_id=' + encodeURIComponent(d.run_id);
         } else {
             msg.innerHTML = '<div class="alert alert-danger p-2 small">' + (d.error || 'Failed') + '</div>';
         }

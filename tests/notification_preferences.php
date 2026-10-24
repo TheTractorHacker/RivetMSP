@@ -140,7 +140,16 @@ $ok(inapp_notification_allowed_for_user(10, 'Ticket') === false && inapp_notific
 foreach (['agent/post/task.php' => 2, 'client/post.php' => 1, 'guest/guest_post.php' => 1] as $f => $n) {
     $src = $read($f);
     $all = preg_match_all('/INSERT INTO notifications SET/', $src);
-    $gated = preg_match_all('/if \(inapp_notification_allowed_for_user\(\$\w+, \'Ticket\'\)\) \{\s*\n\s*mysqli_query\(\$mysqli, "INSERT INTO notifications SET/', $src);
+    // The INSERT does not have to be the very next line after the gate any more (a SQL-injection-hardening pass since this test was written
+    // added an escape-and-bind step, or a full mysqli_prepare(), ahead of some of these INSERTs) - what still must hold is that every
+    // "INSERT INTO notifications SET", via mysqli_query() or a bound mysqli_prepare(), is reached only from inside one of these gated
+    // blocks, not line-adjacent to it. Capture each gated `{ ... }` body up to its own closing brace and look for the INSERT inside it.
+    $gated = 0;
+    if (preg_match_all('/if \(inapp_notification_allowed_for_user\(\$\w+, \'Ticket\'\)\) \{(.*?)\n\s*\}/s', $src, $m)) {
+        foreach ($m[1] as $body) {
+            if (preg_match('/mysqli_(?:query\(\$mysqli, "|prepare\(\$mysqli, ")INSERT INTO notifications SET/', $body)) { $gated++; }
+        }
+    }
     $ok($all === $n && $gated === $n, "$f: all $n per-user notification INSERT(s) sit behind the preference check");
 }
 $fn = $read('functions.php');

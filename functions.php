@@ -792,18 +792,23 @@ function getDomainRecords($name)
         $records['a'] = '';
         $records['ns'] = '';
         $records['mx'] = '';
+        $records['txt'] = '';
         $records['whois'] = '';
         return $records;
     }
 
-    $domain = escapeshellarg(str_replace('www.', '', $name));
+    $domain = str_replace('www.', '', $name);
 
-    // Get A, NS, MX, TXT, and WHOIS records
-    $records['a'] = trim(strip_tags(shell_exec("dig +short $domain")));
-    $records['ns'] = trim(strip_tags(shell_exec("dig +short NS $domain")));
-    $records['mx'] = trim(strip_tags(shell_exec("dig +short MX $domain")));
-    $records['txt'] = trim(strip_tags(shell_exec("dig +short TXT $domain")));
-    $records['whois'] = substr(trim(strip_tags(shell_exec("whois -H $domain | head -30 | sed 's/   //g'"))), 0, 254);
+    // Get A, NS, MX, TXT, and WHOIS records. The name passed the hostname check above (so it cannot start with "-", "+" or "@" and be
+    // read as an option); every argument is still escaped, and whois gets "--" so nothing after it can be an option. dig +short output
+    // is stored and diffed by cron/domain_refresher.php, so it is kept rather than reformatted from dns_get_record().
+    $records['a'] = trim(strip_tags((string) shell_exec('dig +short ' . escapeshellarg($domain))));
+    $records['ns'] = trim(strip_tags((string) shell_exec('dig +short NS ' . escapeshellarg($domain))));
+    $records['mx'] = trim(strip_tags((string) shell_exec('dig +short MX ' . escapeshellarg($domain))));
+    $records['txt'] = trim(strip_tags((string) shell_exec('dig +short TXT ' . escapeshellarg($domain))));
+    // First 30 lines with runs of three spaces removed (formerly `| head -30 | sed 's/   //g'`, now done in PHP: no shell pipeline).
+    $whois = implode("\n", array_slice(explode("\n", (string) shell_exec('whois -H -- ' . escapeshellarg($domain))), 0, 30));
+    $records['whois'] = substr(trim(strip_tags(str_replace('   ', '', $whois))), 0, 254);
 
     // Sort A records (if multiple records exist)
     if (!empty($records['a'])) {
@@ -2640,6 +2645,42 @@ function cleanInput($input) {
 }
 
 
+/**
+ * ORDER BY column for list pages (?sort=, read by includes/filter_header.php).
+ *
+ * A column name cannot be a bound parameter, so the requested value is accepted only when it is an identifier
+ * ([a-z_], optionally qualified by a table or alias) whose column part is a real column of this database or one of the
+ * SELECT aliases list pages sort by. Anything else returns false and the page keeps its default sort. Before this the
+ * value was only character-filtered, so any column of any joined table could be named, and an unknown one made the
+ * query fail.
+ */
+function sortColumnAllowed($mysqli, string $sort): bool {
+    // SELECT aliases (not table columns) that list pages offer as sort links.
+    static $aliases = ['dnshost_name', 'mailhost_name', 'product_qty', 'registrar_name', 'task_count', 'tech_name',
+        'transfer_account_from', 'transfer_account_to', 'transfer_amount', 'transfer_date', 'webhost_name'];
+    static $known = [];
+
+    if (preg_match('/^[a-z_]+(\.[a-z_]+)?$/', $sort) !== 1) {
+        return false;
+    }
+    $parts = explode('.', $sort);
+    $column = end($parts);
+    if (in_array($column, $aliases, true)) {
+        return true;
+    }
+    if (!array_key_exists($column, $known)) {
+        $stmt = mysqli_prepare($mysqli, "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = ? LIMIT 1");
+        if (!$stmt) {
+            return false;
+        }
+        mysqli_stmt_bind_param($stmt, 's', $column);
+        mysqli_stmt_execute($stmt);
+        $known[$column] = mysqli_fetch_row(mysqli_stmt_get_result($stmt)) !== null;
+        mysqli_stmt_close($stmt);
+    }
+    return $known[$column];
+}
+
 function sanitizeForEmail($data)
 {
     $sanitized = htmlspecialchars($data);
@@ -3416,9 +3457,14 @@ function fetchUpdates() {
 }
 
 function getDomainExpirationDate($domain) {
-    // Execute the whois command
-    $result = shell_exec("whois " . escapeshellarg($domain));
-    if (!$result || !checkdnsrr($domain, 'SOA')) {
+    // Only a real hostname reaches whois: escapeshellarg() stops shell injection but not option injection, so a domain name such as
+    // "--version" or "-hHOST" was read by whois as an option. "--" ends option parsing as a second guard.
+    $domain = (string) $domain;
+    if (!filter_var($domain, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) || !checkdnsrr($domain, 'SOA')) {
+        return null;
+    }
+    $result = shell_exec('whois -- ' . escapeshellarg($domain));
+    if (!$result) {
         return null; // Return null if WHOIS query fails
     }
 
@@ -3763,22 +3809,23 @@ function logAction($type, $action, $description, $client_id = 0, $entity_id = 0)
         $session_user_id = 0;
     }
 
-    // Only 1 of ~900 call sites across the app pre-escapes its $description (most
-    // just interpolate a client/product/ticket name straight in) - any dynamic
-    // value containing a single quote (e.g. "O'Brien", an item name with an
-    // apostrophe) previously broke the INSERT with a SQL syntax fatal. Escaping
-    // here, once, covers every caller instead of requiring each of the ~900 to
-    // remember to do it themselves.
+    // ~900 call sites interpolate names, subjects etc. straight into $description, so every value is bound here, once, rather
+    // than trusting each caller to escape. (Before this the values were escaped and interpolated; the stored text is the same.)
     $raw_log_type = (string) $type;
     $raw_log_action = (string) $action;
     $raw_log_description = (string) $description;
-    $type = mysqli_real_escape_string($mysqli, substr($type, 0, 200));
-    $action = mysqli_real_escape_string($mysqli, substr($action, 0, 255));
-    $description = mysqli_real_escape_string($mysqli, substr($description, 0, 1000));
-    $session_ip_esc = mysqli_real_escape_string($mysqli, (string) $session_ip);
-    $session_user_agent_esc = mysqli_real_escape_string($mysqli, (string) $session_user_agent);
+    $type = substr($raw_log_type, 0, 200);
+    $action = substr($raw_log_action, 0, 255);
+    $description = substr($raw_log_description, 0, 1000);
+    $log_ip = (string) $session_ip;
+    $log_user_agent = (string) $session_user_agent;
 
-    mysqli_query($mysqli, "INSERT INTO logs SET log_type = '$type', log_action = '$action', log_description = '$description', log_ip = '$session_ip_esc', log_user_agent = '$session_user_agent_esc', log_client_id = $client_id, log_user_id = $session_user_id, log_entity_id = $entity_id");
+    $stmt = mysqli_prepare($mysqli, "INSERT INTO logs SET log_type = ?, log_action = ?, log_description = ?, log_ip = ?, log_user_agent = ?, log_client_id = ?, log_user_id = ?, log_entity_id = ?");
+    if ($stmt) {
+        mysqli_stmt_bind_param($stmt, 'sssssiii', $type, $action, $description, $log_ip, $log_user_agent, $client_id, $session_user_id, $entity_id);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+    }
 
     // RivetCore audit trail (structured, append-only). Logins plus administrative/security actions (see CoreBridge::AUDITED_TYPES); OFF unless
     // settings.config_core_audit_enabled = 1, and fail-safe: it can never break a log call or a sign-in.
@@ -4865,9 +4912,14 @@ function redirect($url = null, $permanent = false) {
         header('Location: ' . $url, true, $permanent ? 301 : 302);
         exit;
     } else {
-        // Fallback for headers already sent
+        // Fallback for headers already sent. The URL goes into a script, so it is JSON-encoded with <, >, &, ' and " hex-escaped
+        // (addslashes() let "</script>" end the script block), and only an http(s) or relative URL is followed, never javascript:/data:.
         global $csp_nonce;
-        echo "<script nonce=\"" . htmlspecialchars($csp_nonce ?? '') . "\">window.location.href = '" . addslashes($url) . "';</script>";
+        $url = (string) $url;
+        if (preg_match('/^([a-z][a-z0-9+.\-]*):/i', preg_replace('/[\x00-\x20]+/', '', $url), $m) && !in_array(strtolower($m[1]), ['http', 'https'], true)) {
+            $url = 'index.php';
+        }
+        echo "<script nonce=\"" . htmlspecialchars($csp_nonce ?? '') . "\">window.location.href = " . json_encode($url, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES) . ";</script>";
         echo '<noscript><meta http-equiv="refresh" content="0;url=' . htmlspecialchars($url) . '"></noscript>';
         exit;
     }

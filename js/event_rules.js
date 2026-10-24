@@ -277,7 +277,7 @@
         post('duplicate', { rule_id: id }).then(function (r) {
           btn.disabled = false;
           if (!r.ok) { toast(r.error || 'Could not copy the rule.', 'danger'); return; }
-          window.location = 'event_rules.php?done=copied&rule=' + r.id;
+          window.location = 'event_rules.php?done=copied&rule=' + encodeURIComponent(r.id);
         });
       } else if ((btn = e.target.closest('[data-er-delete]'))) {
         if (!(await RivetDialog.confirm('Delete the rule "' + title + '"?\n\nIts past runs stay in the audit trail.'))) return;
@@ -695,7 +695,7 @@
         toast('Rule saved.');
         openTest(testOpts($('[data-er-submit="save_test"]', form)));
       } else {
-        window.location = 'event_rules.php?done=saved&rule=' + r.id;
+        window.location = 'event_rules.php?done=saved&rule=' + encodeURIComponent(r.id);
       }
     });
   });

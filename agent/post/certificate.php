@@ -24,17 +24,18 @@ if (isset($_POST['add_certificate'])) {
         $public_key_obj = openssl_x509_parse($_POST['public_key']);
         if ($public_key_obj) {
             $expire = date('Y-m-d', $public_key_obj['validTo_time_t']);
-            $issued_by = sanitizeInput($public_key_obj['issuer']['O']);
+            $issued_by = cleanInput($public_key_obj['issuer']['O']);
         }
     }
 
     if (empty($expire)) {
-        $expire = "NULL";
-    } else {
-        $expire = "'" . $expire . "'";
+        $expire = null;
     }
 
-    mysqli_query($mysqli,"INSERT INTO certificates SET certificate_name = '$name', certificate_description = '$description', certificate_domain = '$domain', certificate_issued_by = '$issued_by', certificate_expire = $expire, certificate_public_key = '$public_key', certificate_notes = '$notes', certificate_domain_id = $domain_id, certificate_client_id = $client_id");
+    $stmt = mysqli_prepare($mysqli, "INSERT INTO certificates SET certificate_name = ?, certificate_description = ?, certificate_domain = ?, certificate_issued_by = ?, certificate_expire = ?, certificate_public_key = ?, certificate_notes = ?, certificate_domain_id = ?, certificate_client_id = ?");
+    mysqli_stmt_bind_param($stmt, 'sssssssii', $name, $description, $domain, $issued_by, $expire, $public_key, $notes, $domain_id, $client_id);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
 
     $certificate_id = mysqli_insert_id($mysqli);
 
@@ -66,48 +67,55 @@ if (isset($_POST['edit_certificate'])) {
         $public_key_obj = openssl_x509_parse($_POST['public_key']);
         if ($public_key_obj) {
             $expire = date('Y-m-d', $public_key_obj['validTo_time_t']);
-            $issued_by = sanitizeInput($public_key_obj['issuer']['O']);
+            $issued_by = cleanInput($public_key_obj['issuer']['O']);
         }
     }
 
     if (empty($expire)) {
-        $expire = "NULL";
-    } else {
-        $expire = "'" . $expire . "'";
+        $expire = null;
     }
 
-    // Get current certificate info
-    $original_certificate_info = mysqli_fetch_assoc(mysqli_query($mysqli,"
+    // Current certificate info (compared with the updated row below for the change history)
+    $certificate_info_sql = "
         SELECT
             certificates.*,
             domains.domain_name
         FROM certificates
         LEFT JOIN domains ON certificate_domain_id = domain_id
-        WHERE certificate_id = $certificate_id
-    "));
+        WHERE certificate_id = ?
+    ";
+    $stmt = mysqli_prepare($mysqli, $certificate_info_sql);
+    mysqli_stmt_bind_param($stmt, 'i', $certificate_id);
+    mysqli_stmt_execute($stmt);
+    $original_certificate_info = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
 
     // Update certificate
-    mysqli_query($mysqli,"UPDATE certificates SET certificate_name = '$name', certificate_description = '$description', certificate_domain = '$domain', certificate_issued_by = '$issued_by', certificate_expire = $expire, certificate_public_key = '$public_key', certificate_notes = '$notes', certificate_domain_id = '$domain_id' WHERE certificate_id = $certificate_id");
+    $stmt = mysqli_prepare($mysqli, "UPDATE certificates SET certificate_name = ?, certificate_description = ?, certificate_domain = ?, certificate_issued_by = ?, certificate_expire = ?, certificate_public_key = ?, certificate_notes = ?, certificate_domain_id = ? WHERE certificate_id = ?");
+    mysqli_stmt_bind_param($stmt, 'sssssssii', $name, $description, $domain, $issued_by, $expire, $public_key, $notes, $domain_id, $certificate_id);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
 
     // Fetch the updated info
-    $new_certificate_info = mysqli_fetch_assoc(mysqli_query($mysqli,"
-        SELECT
-            certificates.*,
-            domains.domain_name
-        FROM certificates
-        LEFT JOIN domains ON certificate_domain_id = domain_id
-        WHERE certificate_id = $certificate_id
-    "));
+    $stmt = mysqli_prepare($mysqli, $certificate_info_sql);
+    mysqli_stmt_bind_param($stmt, 'i', $certificate_id);
+    mysqli_stmt_execute($stmt);
+    $new_certificate_info = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
 
     // Compare/log changes between old/new info
     $ignored_columns = ["certificate_public_key", "certificate_updated_at", "certificate_accessed_at", "certificate_domain_id"];
     foreach ($original_certificate_info as $column => $old_value) {
         $new_value = $new_certificate_info[$column];
         if ($old_value != $new_value && !in_array($column, $ignored_columns)) {
-            $column = sanitizeInput($column);
-            $old_value = sanitizeInput($old_value);
-            $new_value = sanitizeInput($new_value);
-            mysqli_query($mysqli,"INSERT INTO certificate_history SET certificate_history_column = '$column', certificate_history_old_value = '$old_value', certificate_history_new_value = '$new_value', certificate_history_certificate_id = $certificate_id");
+            // Old/new values are stored text read back from the database: bind them, never interpolate them.
+            $column = cleanInput($column);
+            $old_value = cleanInput($old_value);
+            $new_value = cleanInput($new_value);
+            $stmt = mysqli_prepare($mysqli, "INSERT INTO certificate_history SET certificate_history_column = ?, certificate_history_old_value = ?, certificate_history_new_value = ?, certificate_history_certificate_id = ?");
+            mysqli_stmt_bind_param($stmt, 'sssi', $column, $old_value, $new_value, $certificate_id);
+            mysqli_stmt_execute($stmt);
+            mysqli_stmt_close($stmt);
         }
     }
 
@@ -128,14 +136,20 @@ if (isset($_GET['archive_certificate'])) {
     $certificate_id = intval($_GET['archive_certificate']);
 
     // Get Certificate Name and Client ID for logging and alert message
-    $sql = mysqli_query($mysqli,"SELECT certificate_name, certificate_client_id FROM certificates WHERE certificate_id = $certificate_id");
-    $row = mysqli_fetch_assoc($sql);
+    $stmt = mysqli_prepare($mysqli, "SELECT certificate_name, certificate_client_id FROM certificates WHERE certificate_id = ?");
+    mysqli_stmt_bind_param($stmt, 'i', $certificate_id);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
     $certificate_name = sanitizeInput($row['certificate_name']);
     $client_id = intval($row['certificate_client_id']);
 
     enforceClientAccess();
 
-    mysqli_query($mysqli,"UPDATE certificates SET certificate_archived_at = NOW() WHERE certificate_id = $certificate_id");
+    $stmt = mysqli_prepare($mysqli, "UPDATE certificates SET certificate_archived_at = NOW() WHERE certificate_id = ?");
+    mysqli_stmt_bind_param($stmt, 'i', $certificate_id);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
 
     logAction("Certificate", "Archive", "$session_name archived certificate $certificate_name", $client_id, $certificate_id);
 
@@ -154,14 +168,20 @@ if (isset($_GET['restore_certificate'])) {
     $certificate_id = intval($_GET['restore_certificate']);
 
     // Get Certificate Name and Client ID for logging and alert message
-    $sql = mysqli_query($mysqli,"SELECT certificate_name, certificate_client_id FROM certificates WHERE certificate_id = $certificate_id");
-    $row = mysqli_fetch_assoc($sql);
+    $stmt = mysqli_prepare($mysqli, "SELECT certificate_name, certificate_client_id FROM certificates WHERE certificate_id = ?");
+    mysqli_stmt_bind_param($stmt, 'i', $certificate_id);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
     $certificate_name = sanitizeInput($row['certificate_name']);
     $client_id = intval($row['certificate_client_id']);
 
     enforceClientAccess();
 
-    mysqli_query($mysqli,"UPDATE certificates SET certificate_archived_at = NULL WHERE certificate_id = $certificate_id");
+    $stmt = mysqli_prepare($mysqli, "UPDATE certificates SET certificate_archived_at = NULL WHERE certificate_id = ?");
+    mysqli_stmt_bind_param($stmt, 'i', $certificate_id);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
 
     logAction("Certificate", "Restore", "$session_name restored certificate $certificate_name", $client_id, $certificate_id);
 
@@ -180,14 +200,20 @@ if (isset($_GET['delete_certificate'])) {
     $certificate_id = intval($_GET['delete_certificate']);
 
     // Get Certificate Name and Client ID for logging and alert message
-    $sql = mysqli_query($mysqli,"SELECT certificate_name, certificate_client_id FROM certificates WHERE certificate_id = $certificate_id");
-    $row = mysqli_fetch_assoc($sql);
+    $stmt = mysqli_prepare($mysqli, "SELECT certificate_name, certificate_client_id FROM certificates WHERE certificate_id = ?");
+    mysqli_stmt_bind_param($stmt, 'i', $certificate_id);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
     $certificate_name = sanitizeInput($row['certificate_name']);
     $client_id = intval($row['certificate_client_id']);
 
     enforceClientAccess();
 
-    mysqli_query($mysqli,"DELETE FROM certificates WHERE certificate_id = $certificate_id");
+    $stmt = mysqli_prepare($mysqli, "DELETE FROM certificates WHERE certificate_id = ?");
+    mysqli_stmt_bind_param($stmt, 'i', $certificate_id);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
 
     logAction("Certificate", "Delete", "$session_name deleted certificate $name", $client_id);
 
@@ -214,14 +240,20 @@ if (isset($_POST['bulk_delete_certificates'])) {
             $certificate_id = intval($certificate_id);
 
             // Get Certificate Name and Client ID for logging and alert message
-            $sql = mysqli_query($mysqli,"SELECT certificate_name, certificate_client_id FROM certificates WHERE certificate_id = $certificate_id");
-            $row = mysqli_fetch_assoc($sql);
+            $stmt = mysqli_prepare($mysqli, "SELECT certificate_name, certificate_client_id FROM certificates WHERE certificate_id = ?");
+            mysqli_stmt_bind_param($stmt, 'i', $certificate_id);
+            mysqli_stmt_execute($stmt);
+            $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+            mysqli_stmt_close($stmt);
             $certificate_name = sanitizeInput($row['certificate_name']);
             $client_id = intval($row['certificate_client_id']);
 
             enforceClientAccess();
 
-            mysqli_query($mysqli, "DELETE FROM certificates WHERE certificate_id = $certificate_id AND certificate_client_id = $client_id");
+            $stmt = mysqli_prepare($mysqli, "DELETE FROM certificates WHERE certificate_id = ? AND certificate_client_id = ?");
+            mysqli_stmt_bind_param($stmt, 'ii', $certificate_id, $client_id);
+            mysqli_stmt_execute($stmt);
+            mysqli_stmt_close($stmt);
 
             logAction("Certificate", "Delete", "$session_name deleted certificate $certificate_name", $client_id);
 

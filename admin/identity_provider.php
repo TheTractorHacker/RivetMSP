@@ -43,8 +43,9 @@ require_once "includes/inc_all_admin.php";
                     <div class="input-group-prepend">
                         <span class="input-group-text"><i class="fa fa-fw fa-key"></i></span>
                     </div>
-                    <input type="password" class="form-control" name="azure_client_secret" placeholder="Auto-generated from App Registration" value="<?php echo nullable_htmlentities($config_azure_client_secret); ?>" autocomplete="new-password">
+                    <input type="password" class="form-control" name="azure_client_secret" placeholder="<?php echo $config_azure_client_secret !== '' ? 'A secret is already set - leave blank to keep it' : 'Auto-generated from App Registration'; ?>" value="" autocomplete="new-password">
                 </div>
+                <?php if ($config_azure_client_secret !== '') { ?><div class="form-text">A secret is saved. It is never shown again here; enter a new one only to replace it.</div><?php } ?>
             </div>
 
             <hr>

@@ -845,7 +845,7 @@ async function dashAlertTicket(id, btn) {
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: 'csrf_token=' + CSRF + '&action=create_ticket&alert_id=' + id
     }).then(r => r.json()).then(d => {
-        if (d.success && d.redirect) { window.location.href = d.redirect; }
+        if (d.success && d.redirect && /^\/agent\/ticket\.php\?ticket_id=\d+$/.test(d.redirect)) { window.location.href = d.redirect; }
         else { RivetDialog.alert(d.error || 'Failed'); btn.disabled = false; }
     });
 }

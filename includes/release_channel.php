@@ -47,12 +47,28 @@ function releaseChannelFromBranch(string $branch): string
     return $branch === RELEASE_BRANCH_BETA ? 'beta' : 'production';
 }
 
-/** Run a git command in $dir. @return array{0:int,1:list<string>} exit code and output lines */
-function releaseGit(string $dir, string $args): array
+/**
+ * The shell command line for `git -C $dir <args>`. Every argument is passed separately and escaped here, so callers never build
+ * shell fragments themselves (a raw string of arguments was one forgotten escapeshellarg() away from command injection).
+ *
+ * @param list<string> $args
+ */
+function releaseGitCommand(string $dir, array $args): string
+{
+    return 'git -C ' . escapeshellarg($dir) . ($args ? ' ' . implode(' ', array_map(static fn($a) => escapeshellarg((string) $a), $args)) : '');
+}
+
+/**
+ * Run a git command in $dir.
+ *
+ * @param list<string> $args one element per argument, e.g. ['rev-parse', '--verify', '--quiet', $ref]
+ * @return array{0:int,1:list<string>} exit code and output lines
+ */
+function releaseGit(string $dir, array $args): array
 {
     $out = [];
     $code = 1;
-    exec('git -C ' . escapeshellarg($dir) . ' ' . $args . ' 2>&1', $out, $code);
+    exec(releaseGitCommand($dir, $args) . ' 2>&1', $out, $code);
 
     return [$code, $out];
 }
@@ -64,12 +80,12 @@ function releaseGit(string $dir, string $args): array
  */
 function releaseResetGeneratedFiles(string $dir): void
 {
-    releaseGit($dir, "checkout -- ':/vendor/composer'");
+    releaseGit($dir, ['checkout', '--', ':/vendor/composer']);
 }
 
 function releaseCurrentBranch(string $dir): string
 {
-    [$code, $out] = releaseGit($dir, 'rev-parse --abbrev-ref HEAD');
+    [$code, $out] = releaseGit($dir, ['rev-parse', '--abbrev-ref', 'HEAD']);
 
     return $code === 0 ? trim((string) ($out[0] ?? '')) : '';
 }
@@ -107,14 +123,14 @@ function releaseChannelStatus(string $dir, string $channel): array
     $st = ['channel' => $channel, 'branch' => $branch, 'current_branch' => $current, 'ref' => $ref, 'ref_exists' => false,
         'same_branch' => $current === $branch, 'behind' => 0, 'ahead' => 0, 'can_switch' => false, 'reason' => ''];
 
-    [$code] = releaseGit($dir, 'rev-parse --verify --quiet ' . escapeshellarg($ref . '^{commit}'));
+    [$code] = releaseGit($dir, ['rev-parse', '--verify', '--quiet', $ref . '^{commit}']);
     if ($code !== 0) {
         $st['reason'] = "The $ref branch is not available yet (the server could not reach the repository, or the channel has no releases).";
 
         return $st;
     }
     $st['ref_exists'] = true;
-    [$code, $out] = releaseGit($dir, 'rev-list --left-right --count HEAD...' . escapeshellarg($ref));
+    [$code, $out] = releaseGit($dir, ['rev-list', '--left-right', '--count', 'HEAD...' . $ref]);
     if ($code === 0 && preg_match('/^(\d+)\s+(\d+)/', (string) ($out[0] ?? ''), $m)) {
         $st['ahead'] = (int) $m[1];   // commits here that the channel does not have
         $st['behind'] = (int) $m[2];  // commits the channel has that this server does not
@@ -144,19 +160,18 @@ function releaseChannelEnsureBranch(string $dir, string $channel): array
         return ['ok' => false, 'switched' => false, 'message' => $st['reason']];
     }
     releaseResetGeneratedFiles($dir);
-    $branch = escapeshellarg($st['branch']);
-    [$exists] = releaseGit($dir, 'rev-parse --verify --quiet ' . escapeshellarg('refs/heads/' . $st['branch']));
+    [$exists] = releaseGit($dir, ['rev-parse', '--verify', '--quiet', 'refs/heads/' . $st['branch']]);
     [$code, $out] = $exists === 0
-        ? releaseGit($dir, 'checkout ' . $branch)
-        : releaseGit($dir, 'checkout -b ' . $branch . ' --track ' . escapeshellarg($st['ref']));
+        ? releaseGit($dir, ['checkout', $st['branch']])
+        : releaseGit($dir, ['checkout', '-b', $st['branch'], '--track', $st['ref']]);
     if ($code !== 0) {
         return ['ok' => false, 'switched' => false, 'message' => 'Could not switch to the ' . $st['branch'] . ' branch: ' . trim(implode(' ', array_slice(array_filter(array_map('trim', $out)), 0, 2)))];
     }
     // An existing local branch can be behind the channel: bring it level straight away so the server is never left on older code.
     if ($exists === 0) {
-        [$code, $out] = releaseGit($dir, 'merge --ff-only ' . escapeshellarg($st['ref']));
+        [$code, $out] = releaseGit($dir, ['merge', '--ff-only', $st['ref']]);
         if ($code !== 0) {
-            releaseGit($dir, 'checkout ' . escapeshellarg($st['current_branch']));
+            releaseGit($dir, ['checkout', $st['current_branch']]);
 
             return ['ok' => false, 'switched' => false, 'message' => 'The local ' . $st['branch'] . ' branch could not be brought up to date, so nothing was changed: ' . trim(implode(' ', array_slice(array_filter(array_map('trim', $out)), 0, 2)))];
         }
