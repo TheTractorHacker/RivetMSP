@@ -19,7 +19,7 @@ if (isset($_POST['add_credential'])) {
 
     enforceClientAccess();
 
-    mysqli_query($mysqli,"INSERT INTO credentials SET credential_name = '$name', credential_description = '$description', credential_uri = '$uri', credential_uri_2 = '$uri_2', credential_username = '$username', credential_password = '$password', credential_otp_secret = '$otp_secret', credential_note = '$note', credential_favorite = $favorite, credential_folder_id = $folder_id, credential_contact_id = $contact_id, credential_asset_id = $asset_id, credential_client_id = $client_id");
+    mysqli_query($mysqli,"INSERT INTO credentials SET credential_name = '$name', credential_description = '$description', credential_uri = '$uri', credential_uri_2 = '$uri_2', credential_username = '$username', credential_password = '$password', credential_otp_secret = '$otp_secret', credential_note = '$note', credential_favorite = $favorite, credential_rotation_due_at = $rotation_due_at, credential_folder_id = $folder_id, credential_contact_id = $contact_id, credential_asset_id = $asset_id, credential_client_id = $client_id");
 
     $credential_id = mysqli_insert_id($mysqli);
     \RivetMSP\Crypto\VaultV3::finalizeCredential($mysqli, $credential_id);   // vault v3 on: the fields just written become v3 (no-op otherwise)
@@ -55,13 +55,14 @@ if (isset($_POST['edit_credential'])) {
     enforceClientAccess();
 
     // Snapshot old values before update (for history tracking)
-    $old_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT credential_name, credential_description, credential_uri, credential_username, credential_password, credential_note FROM credentials WHERE credential_id = $credential_id"));
+    $old_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT credential_name, credential_description, credential_uri, credential_username, credential_password, credential_note, credential_rotation_due_at FROM credentials WHERE credential_id = $credential_id"));
     $old_name_h        = $old_row['credential_name'];
     $old_description_h = $old_row['credential_description'];
     $old_uri_h         = $old_row['credential_uri'];
     $old_username_h    = decryptCredentialEntry($old_row['credential_username'], $credential_id, 'username');
     $old_password_h    = decryptCredentialEntry($old_row['credential_password'], $credential_id, 'password');
     $old_note_h        = $old_row['credential_note'];
+    $old_rotation_due_h = (string) $old_row['credential_rotation_due_at'];
 
     // Determine if the password has actually changed (salt is rotated on all updates, so have to dencrypt both and compare)
     $current_password = $old_password_h;
@@ -72,7 +73,7 @@ if (isset($_POST['edit_credential'])) {
     }
 
     // Update the credential entry with the new details
-    mysqli_query($mysqli,"UPDATE credentials SET credential_name = '$name', credential_description = '$description', credential_uri = '$uri', credential_uri_2 = '$uri_2', credential_username = '$username', credential_password = '$password', credential_otp_secret = '$otp_secret', credential_note = '$note', credential_favorite = $favorite, credential_contact_id = $contact_id, credential_asset_id = $asset_id WHERE credential_id = $credential_id");
+    mysqli_query($mysqli,"UPDATE credentials SET credential_name = '$name', credential_description = '$description', credential_uri = '$uri', credential_uri_2 = '$uri_2', credential_username = '$username', credential_password = '$password', credential_otp_secret = '$otp_secret', credential_note = '$note', credential_favorite = $favorite, credential_rotation_due_at = $rotation_due_at, credential_contact_id = $contact_id, credential_asset_id = $asset_id WHERE credential_id = $credential_id");
     \RivetMSP\Crypto\VaultV3::finalizeCredential($mysqli, $credential_id);   // vault v3 on: the fields just written become v3 (no-op otherwise)
 
     // Record history for each changed field
@@ -83,6 +84,7 @@ if (isset($_POST['edit_credential'])) {
         ['URL',         $old_uri_h,          $uri],
         ['Username',    $old_username_h,     $new_username_plain],
         ['Note',        $old_note_h,         $note],
+        ['Rotation Due', $old_rotation_due_h, $rotation_due_at_raw],
     ];
     foreach ($history_changes as [$field, $old_val, $new_val]) {
         if ($old_val !== $new_val) {

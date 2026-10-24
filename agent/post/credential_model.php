@@ -14,3 +14,7 @@ $note = sanitizeInput($_POST['note']);
 $favorite = intval($_POST['favorite'] ?? 0);
 $contact_id = intval($_POST['contact'] ?? 0);
 $asset_id = intval($_POST['asset'] ?? 0);
+// A plain reminder date, same NULL-vs-quoted-literal pattern as domain_expire (agent/post/domain_model.php) - never
+// rotated automatically (out of scope per the issue), so no validation beyond "is this a real date" is needed.
+$rotation_due_at_raw = sanitizeInput($_POST['rotation_due_at'] ?? '');
+$rotation_due_at = strtotime($rotation_due_at_raw) ? "'" . $rotation_due_at_raw . "'" : 'NULL';

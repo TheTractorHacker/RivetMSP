@@ -35,6 +35,14 @@ $credential_password_display = $credential_has_password
 $credential_otp_secret   = nullable_htmlentities($row['credential_otp_secret'] ?? '');
 $credential_note         = nullable_htmlentities($row['credential_note']);
 $credential_created_at   = nullable_htmlentities($row['credential_created_at']);
+// Same "reminder only" badge as agent/credentials.php's list row.
+$credential_rotation_due_at = $row['credential_rotation_due_at'] ?? null;
+$credential_rotation_display = '<span class="text-muted">—</span>';
+if ($credential_rotation_due_at) {
+    $rotation_days = (strtotime($credential_rotation_due_at) - time()) / 86400;
+    $rotation_class = $rotation_days <= 0 ? 'text-bg-danger' : ($rotation_days <= 14 ? 'text-bg-warning' : 'text-bg-success');
+    $credential_rotation_display = nullable_htmlentities($credential_rotation_due_at) . " <span class='badge $rotation_class ms-1'>" . ($rotation_days <= 0 ? 'Overdue' : ($rotation_days <= 14 ? 'Due soon' : 'OK')) . '</span>';
+}
 
 if (empty($credential_otp_secret)) {
     $otp_display = '<span class="text-muted">—</span>';
@@ -116,6 +124,11 @@ ob_start();
                 <td style="white-space:pre-wrap;"><?= $credential_note ?></td>
             </tr>
             <?php } ?>
+
+            <tr>
+                <td class="text-muted"><i class="fas fa-fw fa-history me-1"></i>Rotation Due</td>
+                <td><?= $credential_rotation_display ?></td>
+            </tr>
 
             <tr>
                 <td class="text-muted"><i class="fas fa-fw fa-calendar-alt me-1"></i>Created</td>

@@ -505,6 +505,18 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                             $credential_created_at = nullable_htmlentities($row['credential_created_at']);
                             $credential_archived_at = nullable_htmlentities($row['credential_archived_at']);
                             $credential_favorite = intval($row['credential_favorite']);
+                            // A reminder only - nothing here rotates anything automatically (out of scope per the roadmap item).
+                            // text-bg-* (not bare bg-*) is load-bearing, same reasoning as the certificate/domain expiry badges.
+                            $credential_rotation_due_at = $row['credential_rotation_due_at'];
+                            $credential_rotation_badge = '';
+                            if ($credential_rotation_due_at) {
+                                $rotation_days = (strtotime($credential_rotation_due_at) - time()) / 86400;
+                                if ($rotation_days <= 0) {
+                                    $credential_rotation_badge = "<span class='badge text-bg-danger ms-1' title='Rotation due " . nullable_htmlentities($credential_rotation_due_at) . "'>Rotation overdue</span>";
+                                } elseif ($rotation_days <= 14) {
+                                    $credential_rotation_badge = "<span class='badge text-bg-warning ms-1' title='Rotation due " . nullable_htmlentities($credential_rotation_due_at) . "'>Rotation due soon</span>";
+                                }
+                            }
                             $credential_contact_id = intval($row['credential_contact_id']);
                             $contact_name = nullable_htmlentities($row['contact_name']);
                             $credential_asset_id = intval($row['credential_asset_id']);
@@ -592,7 +604,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                         <div class="media">
                                             <i class="fa fa-fw fa-2x fa-key me-3"></i>
                                             <div class="media-body">
-                                                <div><?php echo $credential_name; ?> <?php if ($credential_favorite) { echo "<i class='fas fa-fw fa-star text-warning' title='Favorite'></i>"; } ?></div>
+                                                <div><?php echo $credential_name; ?> <?php if ($credential_favorite) { echo "<i class='fas fa-fw fa-star text-warning' title='Favorite'></i>"; } echo $credential_rotation_badge; ?></div>
                                                 <div><small class="text-secondary"><?php echo $credential_description; ?></small></div>
                                                 <?php
                                                 if (!empty($credential_tags_display)) { ?>
