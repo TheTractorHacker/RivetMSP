@@ -230,6 +230,30 @@ $ok(!str_contains($js, 'localStorage') && !str_contains($js, 'sessionStorage') &
 $list = file_get_contents("$root/agent/credentials.php");
 $ok(!str_contains($list, 'decryptCredentialEntry') && !str_contains($list, 'credential_id_with_secret'), 'agent/credentials.php no longer decrypts anything');
 
+// ------------------------------------------------------------------ the credential detail modal: same reveal mechanism, not a separate bypass
+// (agent/modals/credential/credential_view.php is reached from agent/credentials.php's own "view details" link, agent/client_overview.php,
+// and the KB credential-reference embed (src/Knowledge/CredentialReferenceRenderer.php) - any one of those three is a bypass of the audited,
+// rate-limited, step-up-protected vaultReveal() path if this modal decrypts on its own.)
+$viewSrc = file_get_contents("$root/agent/modals/credential/credential_view.php");
+$ok(!str_contains($viewSrc, 'decryptCredentialEntry') && !str_contains($viewSrc, 'decryptOtpSecret'), 'the detail modal no longer decrypts username, password or TOTP itself');
+$ok(str_contains($viewSrc, "id=\"credential-vault-list\"") && str_contains($viewSrc, 'credential_vault_list.js'), 'it carries the same reveal-button wiring as the list page');
+$q("DELETE FROM logs WHERE log_type='Credential'");
+[$c, $body] = sec_web($base, 'GET', '/agent/modals/credential/credential_view.php?id=' . $cA, $sid, [], $ck);
+$ok($c === 200 && !str_contains($body, 'S3cret-Pass-AAA') && !str_contains($body, 'alice@example.test'), 'the detail modal renders with no plaintext secret in the HTML');
+$ok(substr_count($body, 'js-cred-reveal') >= 2 && str_contains($body, "data-field='password'") && str_contains($body, "data-field='username'"), 'with the same masked value and reveal/copy buttons for username and password');
+$ok(count($lg('Reveal')) === 0, 'merely opening the detail modal reveals (and logs) nothing, exactly like the list page');
+[$c, $body] = sec_web($base, 'POST', '/agent/credential_reveal.php', $sid, ['credential_id' => $cA, 'field' => 'password', 'mode' => 'reveal', 'csrf_token' => $csrf], $ck);
+$ok($c === 200 && (json_decode($body, true)['value'] ?? '') === 'S3cret-Pass-AAA!' && count($lg('Reveal')) === 1, 'its reveal button, once clicked, goes through the real audited endpoint');
+
+// ------------------------------------------------------------------ the edit modal: a genuine reveal (the form pre-fills the real values), now logged
+$q("DELETE FROM logs WHERE log_type='Credential'");
+[$c, $body] = sec_web($base, 'GET', '/agent/modals/credential/credential_edit.php?id=' . $cA, $sid, [], $ck);
+$ok($c === 200 && str_contains($body, 'S3cret-Pass-AAA!'), 'fixture: the edit form really does pre-fill the current password (so this reveal needs its own audit line)');
+$ok(count($lg('Reveal')) === 1 && (int) $lg('Reveal')[0]['log_user_id'] === 701 && (int) $lg('Reveal')[0]['log_entity_id'] === $cA && (int) $lg('Reveal')[0]['log_client_id'] === 801, 'opening the edit form writes exactly one Credential Reveal log entry, attributed correctly');
+$ok(!str_contains(json_encode($lg('Reveal')), 'S3cret-Pass-AAA'), 'the log entry never contains the value itself');
+[$c, $body] = sec_web($base, 'GET', '/agent/modals/credential/credential_edit.php?id=' . $cEmpty, $sid, [], $ck);
+$ok($c === 200 && count($lg('Reveal')) === 1, 'opening the edit form for a credential with nothing to reveal logs nothing new');
+
 // cleanup
 $q("DELETE FROM credentials WHERE credential_name LIKE 'sec-vault-%'");
 $q("DELETE FROM audit_events WHERE event_type LIKE 'credential.%'");

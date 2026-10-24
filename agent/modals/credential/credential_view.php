@@ -15,10 +15,24 @@ $credential_uri          = nullable_htmlentities($row['credential_uri']);
 $credential_uri_2        = nullable_htmlentities($row['credential_uri_2']);
 $credential_uri_link     = sanitize_url($row['credential_uri']);
 $credential_uri_2_link   = sanitize_url($row['credential_uri_2']);
-$credential_username     = nullable_htmlentities(decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username'));
-$credential_password_raw = decryptCredentialEntry($row['credential_password'], $row['credential_id'] ?? null, 'password');
-$credential_password     = nullable_htmlentities($credential_password_raw);
-$credential_otp_secret   = nullable_htmlentities(decryptOtpSecret($row['credential_otp_secret'] ?? '', $row['credential_id'] ?? null));
+// Nothing here is decrypted into the page. Username and password are drawn masked; the eye and copy buttons fetch one
+// field on demand from credential_reveal.php, which audits every reveal/copy and enforces the per-user rate limit and
+// password step-up (includes/vault_reveal.php) - the same mechanism agent/credentials.php uses, never a separate path.
+$credential_has_username = !empty($row['credential_username']);
+$credential_has_password = !empty($row['credential_password']);
+$credential_username_display = $credential_has_username
+    ? "<span class='cred-cell'><span class='cred-mask js-cred-value' data-masked='1'>&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>"
+        . "<button class='btn btn-sm cred-btn js-cred-reveal' type='button' title='Show username' aria-label='Show username' data-credential-id='$credential_id' data-field='username'><i class='far fa-eye text-secondary'></i></button>"
+        . "<button class='btn btn-sm cred-btn js-cred-copy' type='button' title='Copy username' aria-label='Copy username' data-credential-id='$credential_id' data-field='username'><i class='far fa-copy text-secondary'></i></button></span>"
+    : '';
+$credential_password_display = $credential_has_password
+    ? "<span class='cred-cell'><span class='cred-mask js-cred-value' data-masked='1'>&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>"
+        . "<button class='btn btn-sm cred-btn js-cred-reveal' type='button' title='Show password' aria-label='Show password' data-credential-id='$credential_id' data-field='password'><i class='far fa-eye text-secondary'></i></button>"
+        . "<button class='btn btn-sm cred-btn js-cred-copy' type='button' title='Copy password' aria-label='Copy password' data-credential-id='$credential_id' data-field='password'><i class='far fa-copy text-secondary'></i></button></span>"
+    : '';
+// Same as agent/credentials.php: only the ciphertext's presence is checked here, never decrypted - the hover trigger
+// below fetches the live code from agent/ajax.php's get_totp_token_via_id, which is the audited path (logAction "View TOTP").
+$credential_otp_secret   = nullable_htmlentities($row['credential_otp_secret'] ?? '');
 $credential_note         = nullable_htmlentities($row['credential_note']);
 $credential_created_at   = nullable_htmlentities($row['credential_created_at']);
 
@@ -54,10 +68,7 @@ ob_start();
             <tr>
                 <td class="text-muted" style="width:130px;white-space:nowrap;"><i class="fas fa-fw fa-user me-1"></i>Username</td>
                 <td>
-                    <?php if ($credential_username) { ?>
-                        <span id="cred-username-<?= $credential_id ?>"><?= $credential_username ?></span>
-                        <button class="btn btn-sm clipboardjs ms-1" type="button" title="Copy username" data-clipboard-text="<?= $credential_username ?>"><i class="far fa-copy text-secondary"></i></button>
-                    <?php } else { ?>
+                    <?php if ($credential_has_username) { echo $credential_username_display; } else { ?>
                         <span class="text-muted">—</span>
                     <?php } ?>
                 </td>
@@ -66,15 +77,7 @@ ob_start();
             <tr>
                 <td class="text-muted"><i class="fas fa-fw fa-lock me-1"></i>Password</td>
                 <td>
-                    <?php if ($credential_password_raw) { ?>
-                        <span id="cred-pw-<?= $credential_id ?>"
-                            data-pw="<?= htmlspecialchars($credential_password_raw, ENT_QUOTES, 'UTF-8') ?>"
-                            style="font-family:monospace;letter-spacing:.1em;">••••••••</span>
-                        <button id="cred-pw-toggle-<?= $credential_id ?>" class="btn btn-sm ms-1" type="button" title="Show / hide">
-                            <i class="far fa-eye text-secondary"></i>
-                        </button>
-                        <button class="btn btn-sm clipboardjs" type="button" title="Copy password" data-clipboard-text="<?= $credential_password ?>"><i class="far fa-copy text-secondary"></i></button>
-                    <?php } else { ?>
+                    <?php if ($credential_has_password) { echo $credential_password_display; } else { ?>
                         <span class="text-muted">—</span>
                     <?php } ?>
                 </td>
@@ -134,20 +137,10 @@ ob_start();
     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-1"></i>Close</button>
 </div>
 
+<div id="credential-vault-list" hidden data-csrf="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES) ?>" data-reveal-url="credential_reveal.php"></div>
 <script src="js/credential_show_otp_via_id.js"></script>
-<?php if ($credential_password_raw) { ?>
-<script nonce="<?= htmlspecialchars($csp_nonce ?? '', ENT_QUOTES) ?>">
-(function () {
-    var toggleBtn = document.getElementById('cred-pw-toggle-<?= $credential_id ?>');
-    var pwSpan = document.getElementById('cred-pw-<?= $credential_id ?>');
-    if (toggleBtn && pwSpan) {
-        toggleBtn.addEventListener('click', function () {
-            var hidden = pwSpan.textContent !== '••••••••';
-            pwSpan.textContent = hidden ? '••••••••' : pwSpan.dataset.pw;
-        });
-    }
-})();
-</script>
+<?php if ($credential_has_username || $credential_has_password) { ?>
+<script src="js/credential_vault_list.js"></script>
 <?php } ?>
 
 <?php

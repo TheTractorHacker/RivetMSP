@@ -36,6 +36,13 @@ while ($row = mysqli_fetch_assoc($sql_credential_tags)) {
 
 enforceClientAccess();
 
+// The edit form pre-fills the current username/password/TOTP so they can be reviewed or changed - this IS a reveal
+// (the value reaches the page, same as agent/credential_reveal.php's "Reveal" mode) and gets the same Credential log
+// line vaultReveal() writes, so the vault's reveal trail covers every way a secret leaves the vault, not just the list.
+if ($credential_username || $credential_password || $credential_otp_secret) {
+    logAction('Credential', 'Reveal', "$session_name opened the edit form for credential $credential_name (username/password/TOTP shown)", $client_id, $credential_id);
+}
+
 // Generate the HTML form content using output buffering.
 ob_start();
 ?>

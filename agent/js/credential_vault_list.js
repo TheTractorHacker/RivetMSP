@@ -3,8 +3,13 @@
 // per-user limit and may ask for the password again (step-up). Nothing is cached: a revealed value is masked again
 // after a short time, and a copy goes straight to the clipboard.
 (function () {
+    // Loaded a second time (e.g. agent/modals/credential/credential_view.php re-includes this script when opened on a
+    // page that already has it, such as agent/credentials.php) - bind the document-wide click listener only once, or
+    // every click would fire two reveal/copy requests and double the audit trail and rate-limit cost for one click.
+    if (window.__rivetCredVaultListBound) { return; }
     var root = document.getElementById('credential-vault-list');
     if (!root) { return; }
+    window.__rivetCredVaultListBound = true;
     var csrf = root.getAttribute('data-csrf') || '';
     var url = root.getAttribute('data-reveal-url') || 'credential_reveal.php';
     var SHOW_MS = 20000;
