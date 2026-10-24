@@ -28,7 +28,9 @@ $ok(str_contains($sqlText, "`client_decision` enum('pending','approved','rejecte
 $verBefore = (string) $one('SELECT config_current_database_version FROM settings LIMIT 1');
 $q("UPDATE settings SET config_current_database_version = '2.6.109'");
 [, $updOut] = sec_sh('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db');
-$ok(str_contains($updOut, '2.6.110') && (string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === LATEST_DATABASE_VERSION, 'the updater reaches 2.6.110');
+// Not pinned to the literal "2.6.110" text: a later migration chains straight through in the same run (and may
+// not print every intermediate version in its summary), same staleness class fixed in tests/credential_rotation.php.
+$ok(str_contains($updOut, '2.6.109') && (string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === LATEST_DATABASE_VERSION, 'the updater advances past 2.6.109 to the latest version');
 [, $updOut2] = sec_sh('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db');
 $ok(str_contains($updOut2, 'already at the latest'), 'running it again is a no-op, not an error');
 $q("UPDATE settings SET config_current_database_version = '" . $esc($verBefore) . "'");

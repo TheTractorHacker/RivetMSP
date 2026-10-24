@@ -3,7 +3,7 @@
         "php": ">=8.5",
         "predis/predis": "^3.7",
         "aws/aws-sdk-php": "^3.395",
-        "rivet/rivet-core": "^1.0.0-rc.31"
+        "rivet/rivet-core": "1.0.0-rc.37"
     },
     "repositories": [
         {

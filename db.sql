@@ -1680,6 +1680,7 @@ CREATE TABLE `endpoint_agent_devices` (
   `revoked_at` datetime DEFAULT NULL,
   `revoked_reason` varchar(100) DEFAULT NULL,
   `retired_at` datetime DEFAULT NULL,
+  `device_automation_disabled` tinyint(1) NOT NULL DEFAULT 0,
   `enrolled_via_token_id` int(11) DEFAULT NULL,
   `enroll_count` int(11) NOT NULL DEFAULT 1,
   `first_seen_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -1701,6 +1702,8 @@ CREATE TABLE `endpoint_agent_devices` (
   `clock_skew_event_at` datetime DEFAULT NULL,
   `last_reject_reason` varchar(200) DEFAULT NULL,
   `last_reject_at` datetime DEFAULT NULL,
+  `kind` varchar(10) NOT NULL DEFAULT 'agent',
+  `contact_id` int(11) DEFAULT NULL,
   PRIMARY KEY (`device_id`),
   UNIQUE KEY `uniq_install` (`install_id`),
   KEY `idx_token_hash` (`token_hash`),
@@ -1745,8 +1748,38 @@ CREATE TABLE `endpoint_agent_enrollment_tokens` (
   `last_used_at` datetime DEFAULT NULL,
   `created_by` int(11) NOT NULL DEFAULT 0,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `kind` varchar(10) NOT NULL DEFAULT 'agent',
+  `contact_id` int(11) DEFAULT NULL,
   PRIMARY KEY (`token_id`),
   UNIQUE KEY `uniq_selector` (`token_selector`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `panel_client_settings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `panel_client_settings` (
+  `client_id` int(11) NOT NULL,
+  `allow_client_level_tickets` tinyint(1) NOT NULL DEFAULT 0,
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_by` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`client_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `panel_ticket_owner`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `panel_ticket_owner` (
+  `owner_id` int(11) NOT NULL AUTO_INCREMENT,
+  `ticket_id` int(11) DEFAULT NULL,
+  `device_id` int(11) NOT NULL,
+  `client_id` int(11) NOT NULL,
+  `contact_id` int(11) DEFAULT NULL,
+  `request_id` char(36) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`owner_id`),
+  UNIQUE KEY `uniq_ticket` (`ticket_id`),
+  UNIQUE KEY `uniq_device_request` (`device_id`,`request_id`),
+  KEY `idx_device_created` (`device_id`,`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `endpoint_agent_build_chunks`;
@@ -5082,6 +5115,7 @@ CREATE TABLE `settings` (
   `config_core_workflow_enabled` tinyint(1) NOT NULL DEFAULT 1,
   `config_core_automation_enabled` tinyint(1) NOT NULL DEFAULT 1,
   `config_core_health_enabled` tinyint(1) NOT NULL DEFAULT 1,
+  `config_core_panel_enabled` tinyint(1) NOT NULL DEFAULT 0,
   `config_compliance_profile` varchar(20) NOT NULL DEFAULT 'none',
   `config_release_channel` varchar(12) NOT NULL DEFAULT 'production',
   `config_redis_host` varchar(255) NOT NULL DEFAULT '',
