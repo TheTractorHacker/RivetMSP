@@ -307,13 +307,17 @@ $t = $mkTicket();
 $agentPost(['bulk_ticket_reply' => '1', 'ticket_ids' => [(string) $t], 'bulk_reply_details' => '<p>Bulk hello</p>', 'bulk_status' => '2', 'time' => '00:05:00']);
 $checkMail('bulk reply -> ticket_reply (Status no longer blank)', $mails($t)[0] ?? [], $full('ticket_reply', $ticketFacts($t, ['ticket_status_name' => 'Open', 'ticket_reply' => '<p>Bulk hello</p>'])));
 // recurring: the agent's "create now" and the cron (their old "(scheduled)" / "automatically created" copy converges on the canonical one)
+// This fixture's company is on config_timezone = 'UTC' (set above), and cron.php (includes/inc_set_timezone.php) switches ITS OWN session to
+// that configured zone before it ever evaluates CURDATE() against recurring_ticket_next_run. This connection never does that switch (it stays
+// on the server's SYSTEM zone), so writing CURDATE() here would use the *server's local* date - wrong whenever local and UTC straddle midnight
+// (i.e. for several hours a day on a server west of UTC). Use UTC_DATE() so the row is stamped with the date cron.php will actually compare against.
 $q("INSERT INTO recurring_tickets SET recurring_ticket_subject = 'Monthly patch check', recurring_ticket_details = '<p>Check updates</p>', recurring_ticket_priority = 'Low', recurring_ticket_frequency = 'Monthly',
-    recurring_ticket_start_date = CURDATE(), recurring_ticket_next_run = CURDATE(), recurring_ticket_created_by = 1, recurring_ticket_client_id = 1, recurring_ticket_contact_id = 1");
+    recurring_ticket_start_date = UTC_DATE(), recurring_ticket_next_run = UTC_DATE(), recurring_ticket_created_by = 1, recurring_ticket_client_id = 1, recurring_ticket_contact_id = 1");
 $rt = (int) $db->insert_id;
 $agentGet("force_recurring_ticket=$rt", 'recurring_tickets.php');
 $t = (int) $one("SELECT ticket_id FROM tickets WHERE ticket_recurring_ticket_id = $rt ORDER BY ticket_id DESC LIMIT 1");
 $checkMail('recurring "create now" -> ticket_created (company name/phone no longer blank)', $mails($t)[0] ?? [], $full('ticket_created', $ticketFacts($t, ['ticket_status' => 'Open', 'ticket_details' => '<p>Check updates</p>'])));
-$q("UPDATE recurring_tickets SET recurring_ticket_next_run = CURDATE() WHERE recurring_ticket_id = $rt");
+$q("UPDATE recurring_tickets SET recurring_ticket_next_run = UTC_DATE() WHERE recurring_ticket_id = $rt");
 $q("UPDATE settings SET config_enable_cron = 1 WHERE company_id = 1");
 shell_exec('cd ' . escapeshellarg("$root/cron") . ' && RIVETMSP_REDIS_HOST=127.0.0.1 RIVETMSP_REDIS_PORT=' . escapeshellarg((string) getenv('RIVETMSP_REDIS_PORT')) . ' RIVETMSP_REDIS_ENV_FILE=/dev/null php cron.php </dev/null 2>&1');
 $q("UPDATE settings SET config_enable_cron = 0 WHERE company_id = 1");
