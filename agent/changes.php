@@ -29,14 +29,25 @@ if (isset($_GET['risk']) && $_GET['risk'] !== '') {
     $risk_query = '';
 }
 
+// A change with no client (client_id = 0) is internal and stays visible to every technician regardless of
+// per-client restrictions - $access_permission_query (clients.client_id IN (...)) would hide it instead, since a
+// LEFT-joined internal row has no clients.client_id to match. Only a change that actually belongs to a client is
+// restricted to the clients this user may see.
+$changes_access_query = '';
+if ($client_access_string && !$session_is_admin) {
+    $changes_access_query = "AND (changes.client_id = 0 OR changes.client_id IN ($client_access_string))";
+}
+
 $sql = mysqli_query(
     $mysqli,
-    "SELECT SQL_CALC_FOUND_ROWS changes.*, u.user_name AS created_by_name
+    "SELECT SQL_CALC_FOUND_ROWS changes.*, u.user_name AS created_by_name, clients.client_name
      FROM changes
      LEFT JOIN users u ON u.user_id = changes.created_by
+     LEFT JOIN clients ON clients.client_id = changes.client_id
      WHERE (changes.title LIKE '%$q%' OR changes.reason LIKE '%$q%')
      $status_query
      $risk_query
+     $changes_access_query
      ORDER BY $sort $order LIMIT $record_from, $record_to"
 );
 
@@ -108,6 +119,7 @@ $change_risk_badge = [
                             Title <?php if ($sort == 'changes.title') { echo $order_icon; } ?>
                         </a>
                     </th>
+                    <th>Client</th>
                     <th>Risk</th>
                     <th>Status</th>
                     <th>Scheduled</th>
@@ -128,6 +140,7 @@ $change_risk_badge = [
                     ?>
                     <tr>
                         <td><a class="text-dark" href="change_details.php?id=<?= $change_id ?>"><?= nullable_htmlentities($row['title']) ?></a></td>
+                        <td><?= $row['client_id'] ? '<a href="clients.php?client_id=' . intval($row['client_id']) . '">' . nullable_htmlentities($row['client_name']) . '</a>' : '<span class="text-muted">Internal</span>' ?></td>
                         <td><span class="badge <?= $risk_badge ?>"><?= ucfirst($row['risk']) ?></span></td>
                         <td><span class="badge <?= $status_badge ?>"><?= ucwords(str_replace('_', ' ', $row['status'])) ?></span></td>
                         <td><?= $row['scheduled_at'] ? nullable_htmlentities($row['scheduled_at']) : '<span class="text-muted">&mdash;</span>' ?></td>

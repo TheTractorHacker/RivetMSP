@@ -24,7 +24,10 @@ $ok(str_contains($sqlText, '`credential_rotation_due_at` date DEFAULT NULL'), 'd
 $verBefore = (string) $one('SELECT config_current_database_version FROM settings LIMIT 1');
 $q("UPDATE settings SET config_current_database_version = '2.6.108'");
 [, $updOut] = sec_sh('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db');
-$ok(str_contains($updOut, '2.6.109') && (string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === LATEST_DATABASE_VERSION, 'the updater reaches 2.6.109');
+// Not pinned to the literal "2.6.109" text: a later migration (e.g. 2.6.110) chains straight through in the same
+// run, so the printed summary may name the final version only, not every intermediate step - the real proof is
+// that credential_rotation_due_at exists (checked above) and the version actually advanced from 2.6.108.
+$ok(str_contains($updOut, '2.6.108') && (string) $one('SELECT config_current_database_version FROM settings LIMIT 1') === LATEST_DATABASE_VERSION, 'the updater advances past 2.6.108 to the latest version');
 [, $updOut2] = sec_sh('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db');
 $ok(str_contains($updOut2, 'already at the latest'), 'running it again is a no-op, not an error');
 $q("UPDATE settings SET config_current_database_version = '" . $esc($verBefore) . "'");

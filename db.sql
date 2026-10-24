@@ -661,8 +661,14 @@ CREATE TABLE `changes` (
   `status` enum('draft','awaiting_approval','approved','scheduled','in_progress','successful','failed','rolled_back','cancelled') NOT NULL DEFAULT 'draft',
   `created_by` int(11) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `client_id` int(11) NOT NULL DEFAULT 0,
+  `requires_client_approval` tinyint(1) NOT NULL DEFAULT 0,
+  `client_decision` enum('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+  `client_decided_at` datetime DEFAULT NULL,
+  `url_key` varchar(32) DEFAULT NULL,
   PRIMARY KEY (`change_id`),
-  KEY `idx_changes_status` (`status`)
+  KEY `idx_changes_status` (`status`),
+  KEY `idx_changes_client_id` (`client_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `client_notes`;

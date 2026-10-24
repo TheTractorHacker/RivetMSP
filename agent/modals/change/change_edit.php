@@ -10,6 +10,11 @@ if (!$change) {
     echo json_encode(['error' => 'Change not found.']);
     exit;
 }
+// Internal changes (client_id = 0) are not client-scoped at all, so enforceClientAccess() - which treats a missing/
+// empty client_id as "deny" - must only run once this change actually belongs to a client.
+if ((int) $change['client_id'] > 0) {
+    enforceClientAccess((int) $change['client_id']);
+}
 
 ob_start();
 ?>
@@ -25,6 +30,30 @@ ob_start();
         <div class="form-group">
             <label>Title <strong class="text-danger">*</strong></label>
             <input type="text" class="form-control" name="title" value="<?= nullable_htmlentities($change['title']) ?>" maxlength="255" required autofocus>
+        </div>
+        <div class="form-group">
+            <label>Client <span class="text-secondary">(optional)</span></label>
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fa fa-fw fa-user"></i></span>
+                </div>
+                <select class="form-control select2" name="client_id">
+                    <option value="0">- Internal, no client -</option>
+                    <?php
+                    $sql = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients WHERE client_archived_at IS NULL $access_permission_query ORDER BY client_name ASC");
+                    while ($row = mysqli_fetch_assoc($sql)) {
+                        $client_id_select = intval($row['client_id']);
+                        $client_name_select = nullable_htmlentities($row['client_name']); ?>
+                        <option <?php if ((int) $change['client_id'] === $client_id_select) { echo "selected"; } ?> value="<?= $client_id_select ?>"><?= $client_name_select ?></option>
+                    <?php } ?>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="change_edit_requires_client_approval" name="requires_client_approval" value="1" <?= $change['requires_client_approval'] ? 'checked' : '' ?>>
+                <label class="form-check-label" for="change_edit_requires_client_approval">Requires the client's own sign-off before it can proceed</label>
+            </div>
         </div>
         <div class="form-group">
             <label>Risk <strong class="text-danger">*</strong></label>

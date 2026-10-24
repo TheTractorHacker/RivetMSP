@@ -7566,3 +7566,22 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         mysqli_query($mysqli, "ALTER TABLE `credentials` ADD COLUMN IF NOT EXISTS `credential_rotation_due_at` DATE DEFAULT NULL");
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.109'");
     }
+
+    if ($rivetit_db_version() == '2.6.109') {
+        // DB 2.6.110: client-facing change approval (GitHub roadmap #5). RivetCore's ChangeService is deliberately
+        // lightweight ("no separate approver/CAB model" - vendor/rivet/rivet-core/src/ITSM/ChangeService.php) and a
+        // change has no client at all today, so this is a RivetMSP-only layer entirely on top of it, not a Core
+        // change: a change OPTIONALLY belongs to a client (0 = internal, same convention as every other optional-
+        // client column in this codebase) and, when it does, can be marked as needing the CLIENT's own sign-off -
+        // distinct from and additional to Core's existing agent-side 'approved' status. client_decision tracks that
+        // sign-off; url_key is the same guest-link-token shape ticket/quote guest pages already use (randomString(32)),
+        // generated only once a client AND requires_client_approval are both set.
+        mysqli_query($mysqli, "ALTER TABLE `changes`
+            ADD COLUMN IF NOT EXISTS `client_id` INT(11) NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `requires_client_approval` TINYINT(1) NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `client_decision` ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+            ADD COLUMN IF NOT EXISTS `client_decided_at` DATETIME DEFAULT NULL,
+            ADD COLUMN IF NOT EXISTS `url_key` VARCHAR(32) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `changes` ADD INDEX IF NOT EXISTS `idx_changes_client_id` (`client_id`)");
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.110'");
+    }

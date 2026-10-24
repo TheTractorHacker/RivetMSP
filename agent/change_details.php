@@ -13,9 +13,10 @@ $change_id = intval($_GET['id'] ?? 0);
 
 $change = mysqli_fetch_assoc(mysqli_query(
     $mysqli,
-    "SELECT changes.*, u.user_name AS created_by_name
+    "SELECT changes.*, u.user_name AS created_by_name, clients.client_name
      FROM changes
      LEFT JOIN users u ON u.user_id = changes.created_by
+     LEFT JOIN clients ON clients.client_id = changes.client_id
      WHERE changes.change_id = $change_id"
 ));
 
@@ -24,6 +25,18 @@ if (!$change) {
     require_once "../includes/footer.php";
     exit;
 }
+
+// Internal changes (client_id = 0) are not client-scoped, same reasoning as every other optional-client entity.
+$change_client_id = (int) $change['client_id'];
+if ($change_client_id > 0) {
+    enforceClientAccess($change_client_id);
+}
+
+$client_decision_badge = [
+    'pending' => 'text-bg-warning',
+    'approved' => 'text-bg-success',
+    'rejected' => 'text-bg-danger',
+][$change['client_decision']] ?? 'text-bg-secondary';
 
 $change_status_badge = [
     'draft' => 'text-bg-secondary',
@@ -78,6 +91,9 @@ $linked_problems = mysqli_query(
                     <?= nullable_htmlentities($change['title']) ?>
                     <span class="badge <?= $change_risk_badge[$change['risk']] ?? 'text-bg-secondary' ?> ms-2"><?= ucfirst($change['risk']) ?> Risk</span>
                     <span class="badge <?= $change_status_badge[$change['status']] ?? 'text-bg-secondary' ?> ms-1"><?= ucwords(str_replace('_', ' ', $change['status'])) ?></span>
+                    <?php if ($change['requires_client_approval']) { ?>
+                        <span class="badge <?= $client_decision_badge ?> ms-1">Client: <?= ucfirst($change['client_decision']) ?></span>
+                    <?php } ?>
                 </h3>
                 <button type="button" class="btn btn-sm btn-default ajax-modal" data-modal-url="modals/change/change_edit.php?id=<?= $change_id ?>"><i class="fas fa-edit me-1"></i>Edit</button>
             </div>
@@ -136,6 +152,44 @@ $linked_problems = mysqli_query(
     </div>
 
     <div class="col-md-4">
+        <?php if ($change_client_id > 0) { ?>
+        <div class="card card-dark mb-3">
+            <div class="card-header py-2">
+                <h5 class="card-title mb-0"><i class="fas fa-user me-2"></i>Client</h5>
+            </div>
+            <div class="card-body">
+                <a href="clients.php?client_id=<?= $change_client_id ?>"><?= nullable_htmlentities($change['client_name']) ?></a>
+                <?php if ($change['requires_client_approval']) { ?>
+                    <hr class="my-2">
+                    <div class="small text-muted mb-2">
+                        This change needs the client's own sign-off.
+                        <?php if ($change['client_decided_at']) { ?>
+                            They <strong><?= nullable_htmlentities($change['client_decision']) ?></strong> it on <?= nullable_htmlentities($change['client_decided_at']) ?>.
+                        <?php } else { ?>
+                            Awaiting their decision.
+                        <?php } ?>
+                    </div>
+                    <?php if ($change['url_key']) { ?>
+                        <div class="input-group input-group-sm mb-2">
+                            <input type="text" class="form-control" readonly value="https://<?= nullable_htmlentities($config_base_url) ?>/guest/guest_view_change.php?change_id=<?= $change_id ?>&url_key=<?= nullable_htmlentities($change['url_key']) ?>">
+                            <button class="btn btn-outline-secondary clipboardjs" type="button" title="Copy link" data-clipboard-text="https://<?= nullable_htmlentities($config_base_url) ?>/guest/guest_view_change.php?change_id=<?= $change_id ?>&url_key=<?= nullable_htmlentities($change['url_key']) ?>"><i class="far fa-copy"></i></button>
+                        </div>
+                    <?php } ?>
+                    <form action="post.php" method="post">
+                        <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                        <input type="hidden" name="change_id" value="<?= $change_id ?>">
+                        <button type="submit" name="send_change_approval_request" class="btn btn-sm btn-outline-primary w-100"><i class="fas fa-paper-plane me-1"></i><?= $change['url_key'] ? 'Resend' : 'Send' ?> Approval Request</button>
+                    </form>
+                <?php } else { ?>
+                    <form action="post.php" method="post" class="mt-2">
+                        <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                        <input type="hidden" name="change_id" value="<?= $change_id ?>">
+                        <button type="submit" name="send_change_approval_request" class="btn btn-sm btn-outline-primary w-100"><i class="fas fa-paper-plane me-1"></i>Request Client Approval</button>
+                    </form>
+                <?php } ?>
+            </div>
+        </div>
+        <?php } ?>
         <div class="card card-dark">
             <div class="card-header py-2">
                 <h5 class="card-title mb-0"><i class="fas fa-exclamation-circle me-2"></i>Linked Problems</h5>
