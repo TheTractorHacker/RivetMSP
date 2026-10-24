@@ -4,6 +4,7 @@ require_once '../../../includes/modal_header.php';
 enforceUserPermission('module_support', 2);
 
 $linked_problem_id = intval($_GET['problem_id'] ?? 0);
+$client_id = intval($_GET['client_id'] ?? 0);
 
 ob_start();
 ?>
@@ -21,6 +22,30 @@ ob_start();
         <div class="form-group">
             <label>Title <strong class="text-danger">*</strong></label>
             <input type="text" class="form-control" name="title" placeholder="e.g. Migrate file server to new hardware" maxlength="255" required autofocus>
+        </div>
+        <div class="form-group">
+            <label>Client <span class="text-secondary">(optional - leave as Internal for a change with no client-facing side)</span></label>
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fa fa-fw fa-user"></i></span>
+                </div>
+                <select class="form-control select2" name="client_id">
+                    <option value="0">- Internal, no client -</option>
+                    <?php
+                    $sql = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients WHERE client_archived_at IS NULL $access_permission_query ORDER BY client_name ASC");
+                    while ($row = mysqli_fetch_assoc($sql)) {
+                        $client_id_select = intval($row['client_id']);
+                        $client_name_select = nullable_htmlentities($row['client_name']); ?>
+                        <option <?php if ($client_id === $client_id_select) { echo "selected"; } ?> value="<?= $client_id_select ?>"><?= $client_name_select ?></option>
+                    <?php } ?>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="change_add_requires_client_approval" name="requires_client_approval" value="1">
+                <label class="form-check-label" for="change_add_requires_client_approval">Requires the client's own sign-off before it can proceed (a guest link is generated once this change is awaiting approval)</label>
+            </div>
         </div>
         <div class="form-group">
             <label>Risk <strong class="text-danger">*</strong></label>

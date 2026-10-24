@@ -3,6 +3,7 @@
 require_once "../config.php";
 require_once "../functions.php";
 require_once "../includes/load_global_settings.php";
+require_once "../includes/event_bus.php";   // rivetAudit() - the approve_change/reject_change handlers below record a structured audit event
 
 session_start();
 
@@ -147,6 +148,72 @@ if (isset($_POST['decline_quote'], $_POST['url_key'])) {
         echo "Invalid!!";
     }
 
+}
+
+// Client-facing change approval (GitHub roadmap #5) - same token-only pattern as accept_quote/decline_quote above:
+// the url_key IS the authorization, no CSRF token or login involved (there is no session to carry one in).
+if (isset($_POST['approve_change'], $_POST['url_key'])) {
+
+    $change_id = intval($_POST['approve_change']);
+    $url_key = sanitizeInput($_POST['url_key']);
+
+    $sql = mysqli_query($mysqli, "SELECT changes.*, clients.client_name FROM changes LEFT JOIN clients ON clients.client_id = changes.client_id
+        WHERE changes.change_id = $change_id AND changes.url_key = '$url_key' AND changes.requires_client_approval = 1 AND changes.client_id > 0");
+
+    if (mysqli_num_rows($sql) == 1) {
+        $row = mysqli_fetch_assoc($sql);
+        $change_title = sanitizeInput($row['title']);
+        $client_id = intval($row['client_id']);
+        $client_name = sanitizeInput($row['client_name']);
+
+        if ($row['client_decision'] !== 'pending' || in_array($row['status'], ['successful', 'failed', 'rolled_back', 'cancelled'], true)) {
+            flash_alert("This change can no longer be decided", 'danger');
+            redirect();
+        }
+
+        mysqli_query($mysqli, "UPDATE changes SET client_decision = 'approved', client_decided_at = NOW() WHERE change_id = $change_id");
+
+        appNotify("Change Approved", "Change \"$change_title\" has been approved by $client_name", "/agent/change_details.php?id=$change_id", $client_id);
+        logAction("Support", "Edit", "$client_name approved change \"$change_title\" via guest link", $client_id, $change_id);
+        rivetAudit('change.client_approved', null, 'change', $change_id, 'client_approved', "$client_name approved change \"$change_title\" via guest link");
+
+        flash_alert("Change Approved", 'success');
+        redirect();
+    } else {
+        echo "Invalid!!";
+    }
+}
+
+if (isset($_POST['reject_change'], $_POST['url_key'])) {
+
+    $change_id = intval($_POST['reject_change']);
+    $url_key = sanitizeInput($_POST['url_key']);
+
+    $sql = mysqli_query($mysqli, "SELECT changes.*, clients.client_name FROM changes LEFT JOIN clients ON clients.client_id = changes.client_id
+        WHERE changes.change_id = $change_id AND changes.url_key = '$url_key' AND changes.requires_client_approval = 1 AND changes.client_id > 0");
+
+    if (mysqli_num_rows($sql) == 1) {
+        $row = mysqli_fetch_assoc($sql);
+        $change_title = sanitizeInput($row['title']);
+        $client_id = intval($row['client_id']);
+        $client_name = sanitizeInput($row['client_name']);
+
+        if ($row['client_decision'] !== 'pending' || in_array($row['status'], ['successful', 'failed', 'rolled_back', 'cancelled'], true)) {
+            flash_alert("This change can no longer be decided", 'danger');
+            redirect();
+        }
+
+        mysqli_query($mysqli, "UPDATE changes SET client_decision = 'rejected', client_decided_at = NOW() WHERE change_id = $change_id");
+
+        appNotify("Change Rejected", "Change \"$change_title\" has been rejected by $client_name", "/agent/change_details.php?id=$change_id", $client_id);
+        logAction("Support", "Edit", "$client_name rejected change \"$change_title\" via guest link", $client_id, $change_id);
+        rivetAudit('change.client_rejected', null, 'change', $change_id, 'client_rejected', "$client_name rejected change \"$change_title\" via guest link");
+
+        flash_alert("Change Rejected", 'danger');
+        redirect();
+    } else {
+        echo "Invalid!!";
+    }
 }
 
 if (isset($_POST['reopen_ticket'], $_POST['url_key'])) {
