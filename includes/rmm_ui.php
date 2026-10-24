@@ -350,15 +350,23 @@ function rivetRmmUiPerformance(\mysqli $mysqli, int $assetId, int $now): ?array
  * What the device reported about its MeshCentral agent (RivetCore 1.0.0-rc.12; Core adds `mesh_agent` to a device's detail only once the device has reported one), as the
  * pages show it. Null when it never reported one (nothing is rendered for those devices). The node id is for administrators only, like the mapping form it belongs to.
  *
+ * `needs_approval` (RivetCore 1.0.0-rc.31, review F1): the device reported a node nobody has approved, so Core did NOT map it; an administrator checks it in MeshCentral
+ * and maps it. Core stores that state at the device's report and only rewrites it at the next report, so right after an administrator mapped exactly the reported node
+ * it still reads `needs_approval`. `$mappedNode` (the device's current mapping, `mesh.node_id` of Core's device detail) settles that: the reported node already being
+ * the mapping is shown as `mapped`, the state Core itself records at the next report. Any other unknown value is dropped (shown as "not mapped", as Core asks).
+ *
  * @param array<string,mixed>|null $ma
  * @return array{installed:bool,version:?string,node_id:string,error:?string,map_state:?string,conflict_device_id:?int,first_installed_at:?string,reported_at:?string}|null
  */
-function rivetRmmUiMeshAgent(?array $ma, bool $admin): ?array
+function rivetRmmUiMeshAgent(?array $ma, bool $admin, ?string $mappedNode = null): ?array
 {
     if ($ma === null) {
         return null;
     }
-    $state = isset($ma['map_state']) && in_array($ma['map_state'], ['mapped', 'conflict', 'kept_manual'], true) ? (string) $ma['map_state'] : null;
+    $state = isset($ma['map_state']) && in_array($ma['map_state'], ['mapped', 'conflict', 'kept_manual', 'needs_approval'], true) ? (string) $ma['map_state'] : null;
+    if ($state === 'needs_approval' && $mappedNode !== null && $mappedNode !== '' && $mappedNode === (string) ($ma['node_id'] ?? '')) {
+        $state = 'mapped';
+    }
 
     return ['installed' => !empty($ma['installed']), 'version' => isset($ma['version']) && $ma['version'] !== '' ? (string) $ma['version'] : null,
         'node_id' => $admin ? (string) ($ma['node_id'] ?? '') : '', 'error' => isset($ma['error']) && $ma['error'] !== '' ? (string) $ma['error'] : null, 'map_state' => $state,
@@ -665,7 +673,7 @@ function rivetRmmUiPanel(\mysqli $mysqli, int $assetId, int $userId, ?int $devic
         'jobs' => (array) ($view['jobs'] ?? []),
         'mesh' => ['mapped' => !empty($view['mesh']['mapped']), 'source' => $view['mesh']['source'] ?? null, 'node_id' => $perm['admin'] ? ($view['mesh']['node_id'] ?? '') : '',
             'configured' => $meshConfigured, 'header' => $remoteHeader],
-        'mesh_agent' => rivetRmmUiMeshAgent(is_array($view['mesh_agent'] ?? null) ? $view['mesh_agent'] : null, (bool) $perm['admin']),
+        'mesh_agent' => rivetRmmUiMeshAgent(is_array($view['mesh_agent'] ?? null) ? $view['mesh_agent'] : null, (bool) $perm['admin'], isset($view['mesh']['node_id']) ? (string) $view['mesh']['node_id'] : null),
         // RivetCore 1.0.0-rc.16: present in Core's device detail only while the pushed Mesh install is available (Mesh enabled, https address, device group); null otherwise.
         'mesh_install' => rivetRmmUiMeshInstall(is_array($view['mesh_install'] ?? null) ? $view['mesh_install'] : null),
         // RivetCore 1.0.0-rc.27: present only for a device whose enrollment token asked "also install the MeshCentral agent (after the device is approved)"; null otherwise.

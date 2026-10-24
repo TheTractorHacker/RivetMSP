@@ -191,7 +191,7 @@ $ts = static fn($iso) => $iso ? htmlspecialchars(rivetRmmTime($iso, true, true, 
 <?php if (!empty($view['mesh_agent'])) { // RivetCore 1.0.0-rc.12: present only once the device reported a Mesh agent
     require_once dirname(__DIR__) . '/includes/rmm_ui_render.php'; ?>
 <div class="card mb-3"><div class="card-header"><h5 class="card-title mb-0">MeshCentral agent</h5></div>
-    <?= rivetRmmUiMeshAgentHtml(rivetRmmUiMeshAgent((array) $view['mesh_agent'], (bool) $is_admin), (bool) $is_admin) ?>
+    <?= rivetRmmUiMeshAgentHtml(rivetRmmUiMeshAgent((array) $view['mesh_agent'], (bool) $is_admin, isset($view['mesh']['node_id']) ? (string) $view['mesh']['node_id'] : null), (bool) $is_admin) ?>
 </div>
 <?php } ?>
 <?php if ($is_admin) { ?>
@@ -199,7 +199,7 @@ $ts = static fn($iso) => $iso ? htmlspecialchars(rivetRmmTime($iso, true, true, 
     <form id="ea-mesh-form" class="row g-2 align-items-end">
         <input type="hidden" name="csrf_token" value="<?= $h($_SESSION['csrf_token']) ?>"><input type="hidden" name="device_id" value="<?= $device_id ?>">
         <div class="col-lg-8"><label class="form-label small" for="ea-node">MeshCentral node id</label><input class="form-control form-control-sm font-monospace" id="ea-node" name="mesh_node_id" maxlength="2048" value="<?= $h($mesh['mesh_node_id'] ?? '') ?>" placeholder="node//... or the MeshCentral address of the device" aria-describedby="ea-node-help"><div class="form-text" id="ea-node-help">In MeshCentral open the device and copy the address bar, or paste the node id. Any form is accepted and shown as <code>node//</code> plus 64 characters.</div></div>
-        <div class="col-lg-4"><button class="btn btn-sm btn-primary" type="submit">Save mapping</button> <span class="small text-muted">Leave empty to clear. An id set here is kept when the Mesh agent reports a different one, unless the MeshCentral setting that lets the agent\'s node replace it is on.</span></div>
+        <div class="col-lg-4"><button class="btn btn-sm btn-primary" type="submit">Save mapping</button> <span class="small text-muted">Leave empty to clear. An id set here is kept when the Mesh agent reports a different one: a node the agent reports is used only once an administrator maps it.</span></div>
     </form>
 </div></div>
 <?php } ?>
@@ -252,6 +252,21 @@ $ts = static fn($iso) => $iso ? htmlspecialchars(rivetRmmTime($iso, true, true, 
     document.querySelectorAll('.ea-cancel').forEach(function (b) { b.addEventListener('click', function () { post('cancel_job', {job_id: b.dataset.job}).then(function (d) { if (d.success) { location.reload(); } else { msg(d.error, false); } }); }); });
     var mf = document.getElementById('ea-mesh-form');
     if (mf) mf.addEventListener('submit', function (e) { e.preventDefault(); post('set_mesh_node', {mesh_node_id: document.getElementById('ea-node').value}).then(function (d) { msg(d.success ? 'Mapping saved.' : d.error, !!d.success); if (d.success) { window.setTimeout(function () { location.reload(); }, 700); } }); });
+    // RivetCore 1.0.0-rc.31 needs_approval: "Approve and map this node" posts the same 'set_mesh_node' action with the node id shown (same wiring as js/rmm_panel.js).
+    document.querySelectorAll('.rmm-mesh-approve').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var node = b.getAttribute('data-rmm-mesh-approve') || '';
+            RivetDialog.confirm('Map MeshCentral node ' + node + ' to this device?\n\nOnly approve it after checking in MeshCentral that this node really is this machine: Remote opens whatever node is mapped here. A node mapped to this device now is replaced.',
+                {title: 'Approve MeshCentral node', okText: 'Approve and map'}).then(function (yes) {
+                if (!yes) { return; }
+                b.disabled = true;
+                post('set_mesh_node', {mesh_node_id: node}).then(function (d) {
+                    msg(d.success ? 'Mapping saved.' : (d.error || 'Not saved.'), !!d.success);
+                    if (d.success) { window.setTimeout(function () { location.reload(); }, 700); } else { b.disabled = false; }
+                }).catch(function () { b.disabled = false; msg('Network error.', false); });
+            });
+        });
+    });
 })();
 </script>
 <?php require_once "../includes/footer.php"; ?>

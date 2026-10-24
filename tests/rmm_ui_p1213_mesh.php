@@ -3,7 +3,8 @@ if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests 
 /*
  * Fragment of tests/rmm_ui.php (RivetCore 1.0.0-rc.12, the optional MeshCentral agent, migration 0023): the install settings on Administration > Endpoint agent (group id, certificate
  * pin and the "read it from the server" button that never saves, the overwrite switch, the advanced corrections), the device's Mesh agent state in the Remote card (installed,
- * failed, mapped, conflict, kept_manual) driven by REAL check-ins, the events in the shared picker, and the module-off path. Shares that file's variables.
+ * failed, needs_approval and its Approve button (RivetCore 1.0.0-rc.31, review F1), mapped, conflict, kept_manual) driven by REAL check-ins, the events in the shared picker, and
+ * the module-off path. Shares that file's variables.
  *
  * Everything is driven through the product: the real admin handler (admin/post.php, CSRF, Referer dispatch) over HTTP, the real pages, the real check-in endpoint. The pin probe talks
  * to a local TLS server (tests/support/MockTlsServer.php). There is NO real MeshCentral server behind any of this (see docs/RMM_MODULE.md): what is proven is RivetMSP's side.
@@ -312,19 +313,72 @@ $evBefore = count(array_filter($mEvents(), fn ($e) => str_starts_with($e, 'rmm.m
 $ok($c === 200 && !str_contains($body, 'data-rmm-mesh-agent') && str_contains($body, 'id="rmm-remote"'), 'a device that never reported a Mesh agent: the Remote card has no Mesh agent block');
 $ok(!array_key_exists('mesh_agent', $rmm->readModel()->deviceView($mDev['MA1'], false, 5) ?? []), 'and Core\'s device view has no mesh_agent member for it');
 
-// installed and mapped
+// installed, and its node WAITING FOR APPROVAL (RivetCore 1.0.0-rc.31, review F1): the node id is only what the device says, so a report alone never maps it
+$mappedAudit0 = $mAudit('Mesh Node Mapped'); $needsAudit0 = $mAudit('Mesh Node Needs Approval');
 [$c] = $mReport('MA1', ['installed' => true, 'version' => '1.1.60', 'node_id' => $mNodeA]);
 $ok($c === 200, 'check-in with a Mesh agent report: 200');
+$ok($one('SELECT COUNT(*) FROM endpoint_agent_mesh_nodes WHERE device_id = ' . $mDev['MA1']) === '0' && $one('SELECT COUNT(*) FROM endpoint_agent_mesh_nodes WHERE mesh_node_id = "' . $esc($mNodeA) . '"') === '0',
+    'F1 regression: a node id NOBODY has mapped is not mapped to the device that reports it (no mapping row at all)');
+$ok((string) $one('SELECT map_state FROM endpoint_agent_mesh_agents WHERE device_id = ' . $mDev['MA1']) === 'needs_approval', 'Core records the claim as needs_approval');
+$r = $rmm->technician()->launchRemote($admin, $mDev['MA1'], true, '127.0.0.1', 'test');
+$ok(!$r->ok && $r->code === 'unmapped', 'Remote does not open the claimed node: Core answers unmapped (' . $r->code . ')');
+$ok($mAudit('Mesh Agent Installed') >= 1 && $mAudit('Mesh Node Needs Approval') === $needsAudit0 + 1 && $mAudit('Mesh Node Mapped') === $mappedAudit0, 'audit: Mesh Agent Installed and Mesh Node Needs Approval, no Mesh Node Mapped');
+$mReport('MA1', ['installed' => true, 'version' => '1.1.60', 'node_id' => $mNodeA]);
+$ok($mAudit('Mesh Node Needs Approval') === $needsAudit0 + 1 && $one('SELECT COUNT(*) FROM endpoint_agent_mesh_nodes WHERE device_id = ' . $mDev['MA1']) === '0', 'a repeated report writes no second audit row and still maps nothing');
 [$c, $body] = $mPage('admin', 'MA1');
-$ok(str_contains($body, 'data-rmm-mesh-agent="installed"') && str_contains($body, 'data-rmm-mesh-map="mapped"') && str_contains($body, 'MeshCentral agent installed') && str_contains($body, 'version 1.1.60'), 'MA1 (administrator): installed, version, mapped');
-$ok(str_contains($body, htmlspecialchars($mNodeA, ENT_QUOTES)) && str_contains($body, 'mapped to this device'), 'the administrator sees the node id that was mapped');
+$hNodeA = htmlspecialchars($mNodeA, ENT_QUOTES);
+$ok(str_contains($body, 'data-rmm-mesh-agent="installed"') && str_contains($body, 'data-rmm-mesh-map="needs_approval"') && str_contains($body, 'MeshCentral agent installed') && str_contains($body, 'version 1.1.60'),
+    'MA1 (administrator): installed, version, needs_approval (the state is not dropped by the view-model)');
+$ok(str_contains($body, 'data-rmm-mesh-hint="needs_approval"') && str_contains($body, 'Node not approved yet.') && str_contains($body, 'you check this node in MeshCentral, then map it') && str_contains($body, $hNodeA),
+    'a visible hint, like conflict and kept_manual: check this node in MeshCentral, then map it (with the node id for the administrator)');
+$ok(substr_count($body, 'data-rmm-mesh-approve="' . $hNodeA . '"') === 2 && substr_count($body, 'class="btn btn-sm btn-outline-primary rmm-mesh-approve"') === 1 && str_contains($body, 'id="rmm-act-remote-approve"'),
+    'an administrator gets "Approve" carrying the reported node id: in the Remote access card and in the device header');
+require_once "$root/includes/rmm_rem_ui.php";
+$remNa = rivetRmmRemMeshHtml(['mesh' => ['configured' => true, 'mapped' => false, 'views' => []], 'mesh_agent' => rivetRmmUiMeshAgent($rmm->readModel()->deviceView($mDev['MA1'], false, 5)['mesh_agent'], true), 'admin' => true, 'offline' => false]);
+$ok(str_contains($remNa, 'data-rmm-mesh-hint="needs_approval"') && str_contains($remNa, 'data-rmm-mesh-approve="' . $hNodeA . '"') && str_contains($remNa, 'not mapped to a MeshCentral node yet'), 'the Remote tab\'s Mesh card carries the same hint and Approve button');
+$ok(str_contains($body, 'waiting for approval: check it in MeshCentral, then map it.') && !str_contains($body, 'restart the RivetIT agent'), 'the header says the node waits for approval instead of Core\'s "restart the agent" hint');
+$ok(!str_contains($body, 'mapped to this device'), 'nothing claims the node is mapped');
+[$c, $body] = $mPage('tech', 'MA1');
+$ok($c === 200 && str_contains($body, 'data-rmm-mesh-hint="needs_approval"') && str_contains($body, 'an administrator checks the node in MeshCentral and maps it') && !str_contains($body, $hNodeA) && !str_contains($body, 'rmm-mesh-approve'),
+    'a technician sees the hint but never the node id and gets no Approve button');
+$ok(rivetRmmUiMeshAgent(['installed' => true, 'map_state' => 'needs_approval', 'node_id' => $mNodeA], true)['map_state'] === 'needs_approval'
+    && rivetRmmUiMeshAgent(['installed' => true, 'map_state' => 'needs_approval', 'node_id' => $mNodeA], true, $mNodeB)['map_state'] === 'needs_approval'
+    && rivetRmmUiMeshAgent(['installed' => true, 'map_state' => 'needs_approval', 'node_id' => $mNodeA], true, $mNodeA)['map_state'] === 'mapped',
+    'view-model: needs_approval is kept, except when exactly that node is already the mapping (an administrator approved it before the next report)');
+$hostile = 'node//"><script>alert(1)</script>';
+$hh = rivetRmmUiMeshAgentHtml(rivetRmmUiMeshAgent(['installed' => true, 'map_state' => 'needs_approval', 'node_id' => $hostile], true), true);
+$ok(!str_contains($hh, '<script>alert(1)</script>') && str_contains($hh, 'data-rmm-mesh-approve="node//&quot;&gt;&lt;script&gt;'), 'the node id is escaped in the hint and in the Approve button\'s attribute');
+
+// the Approve button is the manual mapping: its node id goes to the same 'set_mesh_node' action as the mapping form, and only someone who may manage the device can use it
+$apPost = fn (string $who, string $node, ?int $dev = null) => web($wb, 'POST', '/agent/post/rmm_agent.php', $SS[$who], ['action' => 'set_mesh_node', 'mesh_node_id' => $node, 'csrf_token' => 'csrftok1', 'device_id' => $dev ?? $mDev['MA1']]);
+preg_match('/id="rmm-act-remote-approve" data-rmm-mesh-approve="([^"]*)"/', $mPage('admin', 'MA1')[1], $apM);
+$apNode = html_entity_decode($apM[1] ?? '', ENT_QUOTES);
+$ok($apNode === $mNodeA, 'the Approve button carries exactly the node id the device reported');
+$js = (string) file_get_contents("$root/js/rmm_panel.js");
+$ok(preg_match("/querySelectorAll\\('\\.rmm-mesh-approve'\\).*?RivetDialog\\.confirm\\(.*?post\\('set_mesh_node', \\{ mesh_node_id: node \\}\\)/s", $js) === 1 && str_contains($js, "document.querySelectorAll('.rmm-mesh-approve')") && !preg_match('/[^.]\bconfirm\(/', str_replace('RivetDialog.confirm(', '', $js)),
+    'js/rmm_panel.js: every .rmm-mesh-approve on the page (the header is outside #rmm-panel) asks in a RivetDialog, then posts set_mesh_node with the button\'s node id; no native dialog');
+[$c, $b] = $apPost('viewer', $apNode);
+$ok($c === 403 && $one('SELECT COUNT(*) FROM endpoint_agent_mesh_nodes WHERE device_id = ' . $mDev['MA1']) === '0', 'a viewer (cannot manage devices) is refused server-side (' . $c . ') and nothing is mapped');
+[$c, $b] = $apPost('clientb', $apNode);
+$ok(in_array($c, [403, 404], true) && $one('SELECT COUNT(*) FROM endpoint_agent_mesh_nodes WHERE device_id = ' . $mDev['MA1']) === '0', 'a technician limited to Client B (and without device management) is refused server-side (' . $c . ') and nothing is mapped');
+[$c, $b] = web($wb, 'POST', '/agent/post/rmm_agent.php', $SS['admin'], ['action' => 'set_mesh_node', 'mesh_node_id' => $apNode, 'device_id' => $mDev['MA1']]);
+$ok($c === 403 && $one('SELECT COUNT(*) FROM endpoint_agent_mesh_nodes WHERE device_id = ' . $mDev['MA1']) === '0', 'without the CSRF token nothing is mapped (' . $c . ')');
+[$c, $b] = $apPost('admin', $apNode);
 $mapRow = $rows('SELECT mesh_node_id, source FROM endpoint_agent_mesh_nodes WHERE device_id = ' . $mDev['MA1']);
-$ok(count($mapRow) === 1 && $mapRow[0]['mesh_node_id'] === $mNodeA && $mapRow[0]['source'] === 'agent', 'the node was mapped automatically (source agent)');
+$ok($c === 200 && (json_decode($b, true)['success'] ?? false) === true && count($mapRow) === 1 && $mapRow[0]['mesh_node_id'] === $mNodeA && $mapRow[0]['source'] === 'manual',
+    'administrator approves: mapped by hand (source manual), exactly the reported node (' . $c . ')');
+$ok($mAudit('Mesh Node Mapped') === $mappedAudit0 + 1, 'audit: Mesh Node Mapped, once');
+[$c, $body] = $mPage('admin', 'MA1');
+$ok(str_contains($body, 'data-rmm-mesh-map="mapped"') && !str_contains($body, 'data-rmm-mesh-hint') && !str_contains($body, 'rmm-mesh-approve') && str_contains($body, 'mapped to this device'),
+    'right after the approval (before the device reports again) the page shows the node mapped, with no hint and no Approve button');
+$ok((string) $one('SELECT map_state FROM endpoint_agent_mesh_agents WHERE device_id = ' . $mDev['MA1']) === 'needs_approval', '(Core\'s stored state still reads needs_approval until the next report: that is what the view-model settles)');
+$mReport('MA1', ['installed' => true, 'version' => '1.1.60', 'node_id' => $mNodeA]);
+$ok((string) $one('SELECT map_state FROM endpoint_agent_mesh_agents WHERE device_id = ' . $mDev['MA1']) === 'mapped' && $mAudit('Mesh Node Needs Approval') === $needsAudit0 + 1, 'the next report: Core records mapped, no new approval request');
+$ok(str_contains($body, htmlspecialchars($mNodeA, ENT_QUOTES)), 'the administrator sees the node id that was mapped');
 [$c, $body] = $mPage('tech', 'MA1');
 $ok($c === 200 && str_contains($body, 'data-rmm-mesh-agent="installed"') && !str_contains($body, htmlspecialchars($mNodeA, ENT_QUOTES)), 'a technician sees the state but never the node id');
-$ok($mAudit('Mesh Agent Installed') >= 1 && $mAudit('Mesh Node Mapped') >= 1, 'audit: Mesh Agent Installed and Mesh Node Mapped');
 [$c, $body] = $mPage('admin', 'MA1');
-$ok(preg_match('/id="rmm-mesh-node"[^>]*value="' . preg_quote(htmlspecialchars($mNodeA, ENT_QUOTES), '/') . '"/', $body) === 1, 'the existing mapping form shows the automatically found node');
+$ok(preg_match('/id="rmm-mesh-node"[^>]*value="' . preg_quote(htmlspecialchars($mNodeA, ENT_QUOTES), '/') . '"/', $body) === 1, 'the existing mapping form shows the approved node');
 
 // a failed install
 [$c] = $mReport('MA2', ['installed' => false, 'error' => 'download failed: <script>alert(1)</script> certificate mismatch']);
@@ -351,18 +405,20 @@ $ok(!str_contains($conflictBody, 'device_id=' . $mDev['MA1']), 'a user limited t
 $rmm->technician()->setMeshNode($admin, $mDev['MA4'], $mNodeB);
 $mReport('MA4', ['installed' => true, 'version' => '1.1.60', 'node_id' => $mNodeC]);
 [$c, $body] = $mPage('admin', 'MA4');
-$ok(str_contains($body, 'data-rmm-mesh-hint="kept_manual"') && str_contains($body, 'Your mapping was kept') && str_contains($body, 'Administration &gt; Endpoint agent &gt; MeshCentral'), 'MA4 (administrator): the manual mapping was kept, with the way to change it');
+$ok(str_contains($body, 'data-rmm-mesh-hint="kept_manual"') && str_contains($body, 'Your mapping was kept') && str_contains($body, 'To use the reported node, check it in MeshCentral, then map it below.') && !str_contains($body, 'rmm-mesh-approve'), 'MA4 (administrator): the manual mapping was kept, with the way to change it');
 $ok((string) $one('SELECT mesh_node_id FROM endpoint_agent_mesh_nodes WHERE device_id = ' . $mDev['MA4']) === $mNodeB, 'the node mapped by hand is still there');
 [$c, $body] = $mPage('tech', 'MA4');
-$ok(str_contains($body, 'data-rmm-mesh-hint="kept_manual"') && str_contains($body, 'An administrator can change the mapping') && !str_contains($body, 'Administration &gt; Endpoint agent &gt; MeshCentral') && !str_contains($body, htmlspecialchars($mNodeC, ENT_QUOTES)), 'a technician is told to ask an administrator and sees no node id');
+$ok(str_contains($body, 'data-rmm-mesh-hint="kept_manual"') && str_contains($body, 'An administrator can change the mapping') && !str_contains($body, 'check it in MeshCentral, then map it below') && !str_contains($body, htmlspecialchars($mNodeC, ENT_QUOTES)), 'a technician is told to ask an administrator and sees no node id');
 $ok($mAudit('Mesh Node Differs') === 1, 'audit: Mesh Node Differs once');
 $mAdm($full + ['mesh_group_id' => $mGroup, 'mesh_server_cert_pin' => '', 'mesh_auto_map_overwrite' => '1']);
 $mCfg()->refresh();
 $ok($mCfg()->get()['auto_map_overwrite'] === true, 'the overwrite switch turned on from the page');
 $mReport('MA4', ['installed' => true, 'version' => '1.1.61', 'node_id' => $mNodeC]);
 [$c, $body] = $mPage('admin', 'MA4');
-$ok(str_contains($body, 'data-rmm-mesh-map="mapped"') && !str_contains($body, 'data-rmm-mesh-hint') && (string) $one('SELECT mesh_node_id FROM endpoint_agent_mesh_nodes WHERE device_id = ' . $mDev['MA4']) === $mNodeC, 'with the switch on the reported node replaces the manual one and the hint is gone');
-$ok($mAudit('Mesh Node Mapped') >= 2, 'audit: Mesh Node Mapped again for the replacement');
+$ok(str_contains($body, 'data-rmm-mesh-hint="needs_approval"') && str_contains($body, 'data-rmm-mesh-approve="' . htmlspecialchars($mNodeC, ENT_QUOTES) . '"') && (string) $one('SELECT mesh_node_id FROM endpoint_agent_mesh_nodes WHERE device_id = ' . $mDev['MA4']) === $mNodeB,
+    'F1 regression: with the switch on the reported node does NOT replace the manual one any more; it waits for approval (hint and Approve button)');
+$ok($mAudit('Mesh Node Mapped') === $mappedAudit0 + 2 && $mAudit('Mesh Node Needs Approval') === $needsAudit0 + 2, 'audit: no Mesh Node Mapped for MA4\'s report (only the earlier mapping by hand), a Mesh Node Needs Approval instead');
+$ok(str_contains($mPg()[1], 'Offer the agent\'s node for approval when it differs from a node an administrator mapped by hand') && str_contains($mPg()[1], 'A node the agent reports never replaces a mapping by itself.'), 'the switch\'s label and help say what it does now');
 $mAdm($full + ['mesh_group_id' => $mGroup, 'mesh_server_cert_pin' => '']);
 $mCfg()->refresh();
 $ok($mCfg()->get()['auto_map_overwrite'] === false, 'and the switch turned off again');
@@ -371,7 +427,13 @@ $ok($mCfg()->get()['auto_map_overwrite'] === false, 'and the switch turned off a
 $mReportTok = fn (string $tok, $report) => ea_checkin($tok, ['capabilities' => ['job:collect', 'mesh:nodeid'], 'mesh_agent' => $report]);
 [$c] = $mReportTok($S['token']['PEND'], ['installed' => true, 'version' => '1.1.60', 'node_id' => $mNodeC . 'x']);
 [$c, $body] = web($wb, 'GET', '/agent/rmm_agent_device.php?device_id=' . $D['PEND'], $SS['admin']);
-$ok($c === 200 && str_contains($body, 'MeshCentral agent') && str_contains($body, 'data-rmm-mesh-agent="installed"') && str_contains($body, 'unless the MeshCentral setting that lets the agent'), 'an unlinked device\'s own page shows the Mesh agent state and the overwrite hint (' . $c . ')');
+$ok($c === 200 && str_contains($body, 'MeshCentral agent') && str_contains($body, 'data-rmm-mesh-agent="installed"') && str_contains($body, 'a node the agent reports is used only once an administrator maps it'), 'an unlinked device\'s own page shows the Mesh agent state and the mapping hint (' . $c . ')');
+$mNodeD = 'node//PpOoIiUuYyTtRrEeWwQqLlKkJjHhGgFfDdSsAa9988@$PpOoIiUuYyTtRrEeWwQqLlKkJjHhGgFfDdSs';
+$mReportTok($S['token']['PEND'], ['installed' => true, 'version' => '1.1.60', 'node_id' => $mNodeD]);
+[$c, $body] = web($wb, 'GET', '/agent/rmm_agent_device.php?device_id=' . $D['PEND'], $SS['admin']);
+$ok($c === 200 && str_contains($body, 'data-rmm-mesh-hint="needs_approval"') && str_contains($body, 'data-rmm-mesh-approve="' . htmlspecialchars($mNodeD, ENT_QUOTES) . '"') && preg_match("/querySelectorAll\\('\\.rmm-mesh-approve'\\).*?RivetDialog\\.confirm\\(.*?post\\('set_mesh_node', \\{mesh_node_id: node\\}\\)/s", $body) === 1,
+    'the device\'s own page: the same hint and Approve button, wired to a RivetDialog and the page\'s set_mesh_node post');
+$ok($one('SELECT COUNT(*) FROM endpoint_agent_mesh_nodes WHERE device_id = ' . (int) $D['PEND']) === '0', 'and the pending device\'s claimed node is not mapped');
 
 // the Remote tab shows the same state (the view it is drawn from)
 $remView = ['mesh' => ['configured' => true, 'mapped' => true, 'views' => ['desktop']], 'mesh_agent' => rivetRmmUiMeshAgent($rmm->readModel()->deviceView($mDev['MA3'], false, 5)['mesh_agent'], true), 'admin' => true, 'offline' => false];

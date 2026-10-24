@@ -565,7 +565,7 @@ $ok(count($mails($t)) === 1, 'before the step: a real ticket email is still sent
 $ok(substr_count($body, 'class="card mb-3 mail-template-card"') === 7, 'before the step: the admin page still opens (shows the defaults)');
 $upd = shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1');
 require_once "$root/includes/database_version.php";
-$ok($one('SELECT config_current_database_version FROM settings WHERE company_id = 1') === LATEST_DATABASE_VERSION && LATEST_DATABASE_VERSION === '2.6.107', 'the updater runs 2.6.106 -> 2.6.107 (' . str_replace("\n", ' ', trim((string) $upd)) . ')');
+$ok($one('SELECT config_current_database_version FROM settings WHERE company_id = 1') === LATEST_DATABASE_VERSION && version_compare(LATEST_DATABASE_VERSION, '2.6.107', '>='), 'the updater runs 2.6.106 -> 2.6.107 and on to the latest (' . str_replace("\n", ' ', trim((string) $upd)) . ')');
 $seeded = $rows('SELECT mail_template_event, mail_template_subject, mail_template_body, mail_template_enabled, mail_template_updated_by FROM mail_templates ORDER BY mail_template_id');
 $allDefault = count($seeded) === 7;
 foreach ($seeded as $s) { $allDefault = $allDefault && $s['mail_template_subject'] === $mtDefault($s['mail_template_event'])['subject'] && $s['mail_template_body'] === $mtDefault($s['mail_template_event'])['body'] && $s['mail_template_enabled'] === '1' && $s['mail_template_updated_by'] === '0'; }
@@ -580,7 +580,7 @@ $ok(str_contains($dbsql, "  `config_mail_template_header_html` mediumtext DEFAUL
 // re-run is harmless; an old default text on an untouched row is re-synced, a customized row never
 $q("UPDATE settings SET config_current_database_version = '2.6.106' WHERE company_id = 1");
 shell_exec('cd ' . escapeshellarg("$root/scripts") . ' && php update_cli.php --update_db </dev/null 2>&1');
-$ok((int) $one('SELECT COUNT(*) FROM mail_templates') === 7 && $one('SELECT config_current_database_version FROM settings WHERE company_id = 1') === '2.6.107', 'running the step twice: still seven rows, version 2.6.107');
+$ok((int) $one('SELECT COUNT(*) FROM mail_templates') === 7 && $one('SELECT config_current_database_version FROM settings WHERE company_id = 1') === LATEST_DATABASE_VERSION, 'running the step twice: still seven rows, back at the latest version');
 $q("UPDATE mail_templates SET mail_template_body = 'OLD DEFAULT TEXT', mail_template_subject = 'OLD' WHERE mail_template_event = 'ticket_reply'");
 $q("UPDATE mail_templates SET mail_template_body = 'ADMIN TEXT', mail_template_subject = 'ADMIN', mail_template_updated_by = 1 WHERE mail_template_event = 'ticket_closed'");
 $q("UPDATE mail_templates SET mail_template_subject = LOWER(mail_template_subject) WHERE mail_template_event = 'ticket_created'");

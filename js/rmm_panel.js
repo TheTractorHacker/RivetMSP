@@ -288,13 +288,15 @@
         var b = document.getElementById(id);
         if (b) { b.addEventListener('click', function () { openRemote(false, b.getAttribute('data-rmm-remote-view')); }); }
     });
-    Array.prototype.forEach.call(panel.querySelectorAll('.rmm-act-remote-view'), function (b) {
+    // the header strip (and so this dropdown) is rendered above #rmm-panel (agent/asset_details.php): look in the whole document
+    Array.prototype.forEach.call(document.querySelectorAll('.rmm-act-remote-view'), function (b) {
         b.addEventListener('click', function () { openRemote(false, b.getAttribute('data-rmm-remote-view')); });
     });
 
     // ---- MeshCentral node mapping (administrators): the Remote tab's inline copy and the header's "Map Mesh node" modal copy (RivetCore 1.0.0-rc.28
     // device header view-model) share the same .rmm-mesh-map-form class and 'set_mesh_node' POST action instead of a single #rmm-mesh-form id.
-    Array.prototype.forEach.call(panel.querySelectorAll('.rmm-mesh-map-form'), function (mf) {
+    // Looked up in the whole document, not in #rmm-panel: the header strip and its modal are rendered above the panel (agent/asset_details.php).
+    Array.prototype.forEach.call(document.querySelectorAll('.rmm-mesh-map-form'), function (mf) {
         mf.addEventListener('submit', function (e) {
             e.preventDefault();
             var nodeField = mf.querySelector('input[name="mesh_node_id"]');
@@ -302,6 +304,22 @@
                 say(d.success ? 'Mapping saved.' : (d.error || 'Not saved.'), !!d.success);
                 if (d.success) { window.setTimeout(function () { window.location.reload(); }, 700); }
             }).catch(function () { say('Network error.', false); });
+        });
+    });
+    // "Approve and map this node" on a node the device reported but nobody approved (RivetCore 1.0.0-rc.31 needs_approval): the same 'set_mesh_node' action
+    // as the form above, with the node id the administrator was shown, after a confirmation that says what approving means. The header strip has one too.
+    Array.prototype.forEach.call(document.querySelectorAll('.rmm-mesh-approve'), function (b) {
+        b.addEventListener('click', function () {
+            var node = b.getAttribute('data-rmm-mesh-approve') || '';
+            RivetDialog.confirm('Map MeshCentral node ' + node + ' to this device?\n\nOnly approve it after checking in MeshCentral that this node really is this machine: Remote opens whatever node is mapped here. A node mapped to this device now is replaced.',
+                { title: 'Approve MeshCentral node', okText: 'Approve and map' }).then(function (yes) {
+                if (!yes) { return; }
+                b.disabled = true;
+                post('set_mesh_node', { mesh_node_id: node }).then(function (d) {
+                    say(d.success ? 'Mapping saved.' : (d.error || 'Not saved.'), !!d.success);
+                    if (d.success) { window.setTimeout(function () { window.location.reload(); }, 700); } else { b.disabled = false; }
+                }).catch(function () { b.disabled = false; say('Network error.', false); });
+            });
         });
     });
 
