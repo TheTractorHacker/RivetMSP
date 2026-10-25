@@ -1762,6 +1762,16 @@ if ($config_module_enable_accounting) {
 
 /*
  * ###############################################################################################################
+ *  PAX8 COST SYNC (roadmap #25 - pull-only, no module-enable setting; gated on its own
+ *  pax8_integrations.enabled flag the same way unifi_integrations rows are, and on its own
+ *  24h internal throttle - see cron/pax8_sync.php)
+ * ###############################################################################################################
+ */
+
+require_once dirname(__DIR__) . '/cron/pax8_sync.php';
+
+/*
+ * ###############################################################################################################
  *  ANALYTICS DELIVERY (daily metrics rollup + scheduled/emailed reports)
  * ###############################################################################################################
  */

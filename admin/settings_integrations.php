@@ -83,6 +83,9 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
     <li class="nav-item">
         <a class="nav-link" href="settings_accounting.php"><i class="fas fa-file-invoice-dollar me-1"></i>Accounting</a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link" href="settings_pax8.php"><i class="fas fa-cloud-download-alt me-1"></i>Pax8</a>
+    </li>
 </ul>
 
 <div class="tab-content">
