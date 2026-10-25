@@ -2606,6 +2606,8 @@ if (isset($_GET['ticket_id'])) {
 
         </div> <!-- End .ticket-alga-theme -->
 
+<?php $rel_type = 'ticket'; $rel_id = $ticket_id; require __DIR__ . '/../includes/relationships_card.php'; ?>
+
 <script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
 function initWsSig(wsId, fId) {
     var c = document.getElementById('sig_c_' + wsId + '_' + fId);

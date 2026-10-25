@@ -297,6 +297,16 @@ $ok($c === 200 && str_contains($body, 'id="relationships-card"') && !str_contain
 $ok($c === 200 && str_contains($body, 'id="relationships-card"') && str_contains($body, 'srv-a'), 'document page: the card shows the asset that points at it');
 [$c, $body] = $wr($wb, 'GET', '/agent/kb_article.php?id=601', $S['admin']);
 $ok($c === 200 && str_contains($body, 'id="relationships-card"') && str_contains($body, 'data-rel-type="kb_article"'), 'KB article page: the Relationships card');
+// roadmap #23: 'ticket' was already registered in EntityTypes (and every other page that has one already shows
+// the card - asset/document/kb_article above, vendor/software/credential/service/network/location/certificate/
+// domain all wired below or via the generic modal), but agent/ticket.php itself never rendered it - the one
+// real gap. The ticket:1/credential:701 link from the earlier impact-walk section was wiped by this section's
+// own "DELETE FROM entity_links" reset above, so a fresh link is created here through the real service, same
+// as every other fixture in this section.
+$svc->create($admin, 'ticket', 1, 'credential', 701, 'depends_on');
+[$c, $body] = $wr($wb, 'GET', '/agent/ticket.php?ticket_id=1', $S['admin']);
+$ok($c === 200 && str_contains($body, 'id="relationships-card"') && str_contains($body, 'data-rel-type="ticket"'), 'ticket page: the Relationships card now renders (roadmap #23)');
+$ok(str_contains($body, 'data-rel-row="link"'), 'ticket page: the linked credential shows as a real link row');
 [$c, $body] = $wr($wb, 'GET', '/agent/modals/vendor/vendor_details.php?id=503', $S['admin']);
 $j = json_decode($body, true);
 $ok($c === 200 && str_contains((string) ($j['content'] ?? ''), 'data-rel-type=\"vendor\"') || str_contains((string) ($j['content'] ?? ''), 'data-rel-type="vendor"'), 'vendor details pop-up: the Relationships card');
