@@ -26,6 +26,7 @@ renderAdminDirectory('Maintenance', 'Check scheduled work, review activity, and 
         'title' => 'Server', 'icon' => 'fa-server',
         'description' => 'Check the health of this server.',
         'items' => [
+            ['Server status', 'CPU, memory and disk, plus the application and database basics.', 'server_status.php', 'fa-server'],
             ['Redis', 'Connection, memory and cache controls.', 'settings_redis.php', 'fa-bolt'],
         ],
     ],
