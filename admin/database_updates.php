@@ -7615,3 +7615,29 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.112'");
     }
+
+    if ($rivetit_db_version() == '2.6.112') {
+        // Roadmap #7 (slice 1 of "KB v2"): article version history (a full-content snapshot taken automatically
+        // every time an article is edited or restored, with a Restore action) and a review-due schedule (a due
+        // date + reviewer, surfaced as a "Needs Review" badge/filter once the date passes) - ported from RivetIT's
+        // kb_article_versions table and the kb_article_review_due_at/kb_article_reviewer_user_id columns. Media and
+        // embeds (the rest of "KB v2") are a separate, larger, security-sensitive port and deliberately not part of
+        // this step.
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `kb_article_versions` (
+            `kb_article_version_id` int(11) NOT NULL AUTO_INCREMENT,
+            `kb_article_version_kb_article_id` int(11) NOT NULL,
+            `kb_article_version_content` mediumtext DEFAULT NULL,
+            `kb_article_version_content_raw` mediumtext DEFAULT NULL,
+            `kb_article_version_edited_by` int(11) DEFAULT NULL,
+            `kb_article_version_edited_at` datetime DEFAULT current_timestamp(),
+            `kb_article_version_number` int(11) NOT NULL DEFAULT 1,
+            PRIMARY KEY (`kb_article_version_id`),
+            KEY `kb_article_version_kb_article_id` (`kb_article_version_kb_article_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "ALTER TABLE `kb_articles`
+            ADD COLUMN IF NOT EXISTS `kb_article_review_due_at` date DEFAULT NULL AFTER `kb_article_category_id`,
+            ADD COLUMN IF NOT EXISTS `kb_article_reviewer_user_id` int(11) DEFAULT NULL AFTER `kb_article_review_due_at`");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.113'");
+    }
