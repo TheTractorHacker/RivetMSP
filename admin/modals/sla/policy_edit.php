@@ -9,12 +9,14 @@ if (!$row) { exit('Policy not found'); }
 $policy_name = nullable_htmlentities($row['policy_name']);
 $policy_calendar_id = intval($row['policy_calendar_id']);
 $policy_is_default = intval($row['policy_is_default']);
+$policy_client_id = intval($row['policy_client_id'] ?? 0);
 $pause_ids = array_filter(array_map('intval', explode(',', (string)$row['policy_pause_status_ids'])));
 
 $val = function ($v) { return ($v === null || $v === '') ? '' : intval($v); };
 
 $calendars = mysqli_query($mysqli, "SELECT calendar_id, calendar_name FROM sla_business_hours ORDER BY calendar_name");
 $statuses  = mysqli_query($mysqli, "SELECT ticket_status_id, ticket_status_name FROM ticket_statuses WHERE ticket_status_active = 1 ORDER BY ticket_status_order, ticket_status_name");
+$clients   = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients WHERE client_archived_at IS NULL ORDER BY client_name");
 
 ob_start();
 ?>
@@ -51,6 +53,23 @@ ob_start();
                     <?php while ($c = mysqli_fetch_assoc($calendars)) { $cid = intval($c['calendar_id']); ?>
                         <option value="<?php echo $cid; ?>" <?php if ($cid === $policy_calendar_id) { echo 'selected'; } ?>>
                             <?php echo nullable_htmlentities($c['calendar_name']); ?>
+                        </option>
+                    <?php } ?>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Client <small class="text-secondary">(leave as Company-wide to apply this policy as the default for every client that has no policy of its own)</small></label>
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fa fa-fw fa-building"></i></span>
+                </div>
+                <select class="form-control select2" name="policy_client_id">
+                    <option value="0" <?php if ($policy_client_id <= 0) { echo 'selected'; } ?>>Company-wide (no specific client)</option>
+                    <?php while ($cl = mysqli_fetch_assoc($clients)) { $clid = intval($cl['client_id']); ?>
+                        <option value="<?php echo $clid; ?>" <?php if ($clid === $policy_client_id) { echo 'selected'; } ?>>
+                            <?php echo nullable_htmlentities($cl['client_name']); ?>
                         </option>
                     <?php } ?>
                 </select>

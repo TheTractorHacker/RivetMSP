@@ -163,12 +163,50 @@ function automationExecuteAction($mysqli, array $action, array &$context, array 
             logAction("Automation", "Update", "Rule '$rule_name': set status=$sid on ticket $tid", $client_id, $tid);
             return "set status=$sid on ticket #$tid";
 
+        case 'set_category':
+            // Roadmap #18 vocabulary gap: category-change action. Value is a
+            // category_id; validated against non-archived Ticket categories so a
+            // stale/typo'd id (e.g. the category was later archived) is a silent
+            // no-op rather than writing a dangling reference.
+            if (!$tid) return null;
+            $cat_id = intval($aval);
+            if ($cat_id <= 0) return null;
+            $cat_row = mysqli_fetch_assoc(mysqli_query($mysqli,
+                "SELECT category_id FROM categories WHERE category_id = $cat_id AND category_type = 'Ticket' AND category_archived_at IS NULL LIMIT 1"));
+            if (!$cat_row) return null;
+            mysqli_query($mysqli, "UPDATE tickets SET ticket_category = $cat_id WHERE ticket_id = $tid");
+            logAction("Automation", "Update", "Rule '$rule_name': set category=$cat_id on ticket $tid", $client_id, $tid);
+            return "set category=$cat_id on ticket #$tid";
+
+        case 'add_tag':
+            // Roadmap #18 vocabulary gap: tag action. Value is a tag_id; validated
+            // against non-archived tags of type 6 (ticket tags - same scoping
+            // agent/modals/ticket/ticket_tags.php uses). ticket_tags' PK is
+            // (ticket_id, tag_id), so INSERT IGNORE makes re-adding an already-
+            // present tag a harmless no-op instead of a duplicate-key error.
+            if (!$tid) return null;
+            $tag_id = intval($aval);
+            if ($tag_id <= 0) return null;
+            $tag_row = mysqli_fetch_assoc(mysqli_query($mysqli,
+                "SELECT tag_id, tag_name FROM tags WHERE tag_id = $tag_id AND tag_type = 6 AND tag_archived_at IS NULL LIMIT 1"));
+            if (!$tag_row) return null;
+            mysqli_query($mysqli, "INSERT IGNORE INTO ticket_tags (ticket_tag_ticket_id, ticket_tag_tag_id) VALUES ($tid, $tag_id)");
+            $tag_name = $tag_row['tag_name'];
+            logAction("Automation", "Update", "Rule '$rule_name': added tag '$tag_name' to ticket $tid", $client_id, $tid);
+            return "added tag '$tag_name' to ticket #$tid";
+
         case 'add_note':
+            // Pre-existing bug fixed in passing: ticket_reply_by is NOT NULL with no
+            // default, so this INSERT fatals under strict SQL mode (confirmed via a
+            // real 'schedule'-trigger cron run against the scratch DB while verifying
+            // #17/#18 - the add_note action had apparently never been exercised
+            // end-to-end against a strict-mode server before). 0 = system/automation,
+            // matching the ai_triage case's own note insert just above.
             if (!$tid) return null;
             $note = mysqli_real_escape_string($mysqli, "🤖 Automation: $aval");
             mysqli_query($mysqli,
-                "INSERT INTO ticket_replies (ticket_reply, ticket_reply_type, ticket_reply_ticket_id, ticket_reply_created_at)
-                 VALUES ('$note', 'Automation', $tid, NOW())"
+                "INSERT INTO ticket_replies (ticket_reply, ticket_reply_type, ticket_reply_ticket_id, ticket_reply_by, ticket_reply_created_at)
+                 VALUES ('$note', 'Automation', $tid, 0, NOW())"
             );
             return "added note to ticket #$tid";
 

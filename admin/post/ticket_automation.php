@@ -11,7 +11,7 @@ if (isset($_POST['add_rule'])) {
     $trigger = mysqli_real_escape_string($mysqli, $_POST['rule_trigger'] ?? 'schedule');
     $order   = intval($_POST['rule_order'] ?? 0);
 
-    $valid_triggers = ['schedule', 'rmm_alert', 'asset_offline', 'asset_online', 'ticket_created'];
+    $valid_triggers = ['schedule', 'rmm_alert', 'asset_offline', 'asset_online', 'ticket_created', 'ticket_updated'];
     if (!in_array($_POST['rule_trigger'] ?? '', $valid_triggers, true)) {
         $trigger = 'schedule';
     }
@@ -48,7 +48,7 @@ if (isset($_POST['add_rule'])) {
         ];
     }
 
-    if ($name && !empty($actions) && (!empty($conditions) || $trigger === 'ticket_created')) {
+    if ($name && !empty($actions) && (!empty($conditions) || $trigger === 'ticket_created' || $trigger === 'ticket_updated')) {
         $conditions_json = mysqli_real_escape_string($mysqli, json_encode($conditions));
         $actions_json    = mysqli_real_escape_string($mysqli, json_encode($actions));
 
@@ -87,7 +87,7 @@ if (isset($_POST['edit_rule'])) {
     $trigger = mysqli_real_escape_string($mysqli, $_POST['rule_trigger'] ?? 'schedule');
     $order   = intval($_POST['rule_order'] ?? 0);
 
-    $valid_triggers = ['schedule', 'rmm_alert', 'asset_offline', 'asset_online', 'ticket_created'];
+    $valid_triggers = ['schedule', 'rmm_alert', 'asset_offline', 'asset_online', 'ticket_created', 'ticket_updated'];
     if (!in_array($_POST['rule_trigger'] ?? '', $valid_triggers, true)) {
         $trigger = 'schedule';
     }
@@ -124,7 +124,7 @@ if (isset($_POST['edit_rule'])) {
         ];
     }
 
-    if ($rule_id && $name && !empty($actions) && (!empty($conditions) || $trigger === 'ticket_created')) {
+    if ($rule_id && $name && !empty($actions) && (!empty($conditions) || $trigger === 'ticket_created' || $trigger === 'ticket_updated')) {
         $conditions_json = mysqli_real_escape_string($mysqli, json_encode($conditions));
         $actions_json    = mysqli_real_escape_string($mysqli, json_encode($actions));
 

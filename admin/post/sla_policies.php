@@ -22,6 +22,12 @@ function slaCalendarIdSql($value): string {
     return $i > 0 ? (string) $i : 'NULL';
 }
 
+// SQL literal for the policy's client scope: 0 or blank => NULL (company-wide).
+function slaClientIdSql($value): string {
+    $i = intval($value);
+    return $i > 0 ? (string) $i : 'NULL';
+}
+
 // Build a sanitized, comma-joined list of pause status ids, or NULL.
 function slaPauseIdsSql($mysqli, $ids): string {
     if (!is_array($ids)) return 'NULL';
@@ -41,6 +47,7 @@ if (isset($_POST['add_sla_policy'])) {
 
     $policy_name = sanitizeInput($_POST['policy_name']);
     $calendar_sql = slaCalendarIdSql($_POST['policy_calendar_id'] ?? 0);
+    $client_sql = slaClientIdSql($_POST['policy_client_id'] ?? 0);
     $pause_sql = slaPauseIdsSql($mysqli, $_POST['policy_pause_status_ids'] ?? []);
     $low_resp  = slaNullableInt($_POST['policy_low_response'] ?? '');
     $low_reso  = slaNullableInt($_POST['policy_low_resolution'] ?? '');
@@ -57,6 +64,7 @@ if (isset($_POST['add_sla_policy'])) {
     mysqli_query($mysqli, "INSERT INTO sla_policies SET
         policy_name = '$policy_name',
         policy_calendar_id = $calendar_sql,
+        policy_client_id = $client_sql,
         policy_pause_status_ids = $pause_sql,
         policy_low_response = $low_resp,
         policy_low_resolution = $low_reso,
@@ -79,6 +87,7 @@ if (isset($_POST['edit_sla_policy'])) {
     $policy_id = intval($_POST['policy_id']);
     $policy_name = sanitizeInput($_POST['policy_name']);
     $calendar_sql = slaCalendarIdSql($_POST['policy_calendar_id'] ?? 0);
+    $client_sql = slaClientIdSql($_POST['policy_client_id'] ?? 0);
     $pause_sql = slaPauseIdsSql($mysqli, $_POST['policy_pause_status_ids'] ?? []);
     $low_resp  = slaNullableInt($_POST['policy_low_response'] ?? '');
     $low_reso  = slaNullableInt($_POST['policy_low_resolution'] ?? '');
@@ -95,6 +104,7 @@ if (isset($_POST['edit_sla_policy'])) {
     mysqli_query($mysqli, "UPDATE sla_policies SET
         policy_name = '$policy_name',
         policy_calendar_id = $calendar_sql,
+        policy_client_id = $client_sql,
         policy_pause_status_ids = $pause_sql,
         policy_low_response = $low_resp,
         policy_low_resolution = $low_reso,

@@ -26,9 +26,17 @@ while ($s = mysqli_fetch_assoc($sql_scripts)) {
     $rmm_script_names[intval($s['id'])] = $s['name'];
 }
 
+// Pre-load ticket tag names for display (add_tag action)
+$ticket_tag_names = [];
+$sql_tags = mysqli_query($mysqli, "SELECT tag_id, tag_name FROM tags WHERE tag_type = 6 AND tag_archived_at IS NULL");
+while ($tg = mysqli_fetch_assoc($sql_tags)) {
+    $ticket_tag_names[intval($tg['tag_id'])] = $tg['tag_name'];
+}
+
 $trigger_labels = [
     'schedule'       => 'Scheduled check',
     'ticket_created' => 'Ticket created',
+    'ticket_updated' => 'Ticket updated',
     'rmm_alert'      => 'New RMM alert',
     'asset_offline'  => 'Asset offline',
     'asset_online'   => 'Asset online',
@@ -63,6 +71,8 @@ $action_labels = [
     'set_priority'             => 'Set priority',
     'assign_to'                => 'Assign to user ID',
     'set_status'               => 'Set status ID',
+    'set_category'             => 'Set ticket category',
+    'add_tag'                  => 'Add tag',
     'add_note'                 => 'Add automation note',
     'ai_triage'                => 'AI triage (suggest)',
     'notify_assignee'          => 'Notify assigned tech',
@@ -180,6 +190,12 @@ function ticket_automation_actions(array $rule): array {
                             }
                             if ($action === 'run_script' && isset($rmm_script_names[intval($act['value'] ?? 0)])) {
                                 $display_aval = nullable_htmlentities($rmm_script_names[intval($act['value'])]);
+                            }
+                            if ($action === 'set_category' && isset($category_names[intval($act['value'] ?? 0)])) {
+                                $display_aval = nullable_htmlentities($category_names[intval($act['value'])]);
+                            }
+                            if ($action === 'add_tag' && isset($ticket_tag_names[intval($act['value'] ?? 0)])) {
+                                $display_aval = nullable_htmlentities($ticket_tag_names[intval($act['value'])]);
                             }
                         ?>
                             <div class="mb-1">

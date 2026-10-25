@@ -3,6 +3,7 @@ require_once '../../../includes/modal_header.php';
 
 $calendars = mysqli_query($mysqli, "SELECT calendar_id, calendar_name, calendar_is_default FROM sla_business_hours ORDER BY calendar_name");
 $statuses  = mysqli_query($mysqli, "SELECT ticket_status_id, ticket_status_name FROM ticket_statuses WHERE ticket_status_active = 1 ORDER BY ticket_status_order, ticket_status_name");
+$clients   = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients WHERE client_archived_at IS NULL ORDER BY client_name");
 
 ob_start();
 ?>
@@ -39,6 +40,21 @@ ob_start();
                         <option value="<?php echo intval($c['calendar_id']); ?>" <?php if (intval($c['calendar_is_default'])) { echo 'selected'; } ?>>
                             <?php echo nullable_htmlentities($c['calendar_name']); ?><?php if (intval($c['calendar_is_default'])) { echo ' (default)'; } ?>
                         </option>
+                    <?php } ?>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Client <small class="text-secondary">(leave as Company-wide to apply this policy as the default for every client that has no policy of its own)</small></label>
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fa fa-fw fa-building"></i></span>
+                </div>
+                <select class="form-control select2" name="policy_client_id">
+                    <option value="0">Company-wide (no specific client)</option>
+                    <?php while ($cl = mysqli_fetch_assoc($clients)) { ?>
+                        <option value="<?php echo intval($cl['client_id']); ?>"><?php echo nullable_htmlentities($cl['client_name']); ?></option>
                     <?php } ?>
                 </select>
             </div>

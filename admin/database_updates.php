@@ -7615,3 +7615,23 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.112'");
     }
+
+    if ($rivetit_db_version() == '2.6.112') {
+        // NOTE: this step number collides with several other in-flight branches that
+        // each independently claimed 2.6.113 from the same beta tip (msp-port-kb-v2,
+        // msp-port-intune-per-client, msp-port-oidc-portal, msp-recurring-invoice-
+        // contracts, msp-structured-docs) - same renumbering-on-merge situation as the
+        // documented 26.10.43/26.10.43 precedent (commit d8e047b42). Whichever of these
+        // merges first keeps 2.6.113; the rest get bumped at merge time.
+        //
+        // Roadmap #17 (SLA engine): per-client SLA policy override. includes/sla_functions.
+        // php's slaGetPolicyForTicket() already had forward-compatible, existence-checked
+        // logic for a client-level policy override ("guarded by existence checks and simply
+        // skipped today") - this is the one column it was waiting on. A client with its own
+        // non-archived policy (highest-priority if more than one, tie-broken by policy_id)
+        // gets that policy's calendar/targets instead of the single company-wide default.
+        mysqli_query($mysqli, "ALTER TABLE `sla_policies` ADD COLUMN IF NOT EXISTS `policy_client_id` int(11) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `sla_policies` ADD INDEX IF NOT EXISTS `idx_sla_policies_client_id` (`policy_client_id`)");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.113'");
+    }
