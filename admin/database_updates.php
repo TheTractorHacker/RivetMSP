@@ -7615,3 +7615,32 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.112'");
     }
+
+    if ($rivetit_db_version() == '2.6.112') {
+        // NOTE: deliberately skipping 2.6.113 for this step (several other in-flight branches already
+        // claim it from the same beta tip - see the documented 26.10.43 renumbering precedent, commit
+        // d8e047b42) - picking 2.6.114 instead to reduce how many branches collide on one number.
+        //
+        // RivetCore 1.0.0-rc.37 -> 1.0.0-rc.41 (staged adoption: rc.38 security hardening/migration 0041,
+        // rc.39 RMM data store interface/migration 0042 - no behaviour change, rc.40 PostgreSQL data store
+        // phase 2/migration 0043, rc.41 data store setting+migration command/migration 0044 - see
+        // vendor/rivet/rivet-core/UPGRADING.md's "Adopting ..." sections for rc.38/39/40/41 and
+        // docs/design/rmm-data-store*.md). One migration-runner pass picks up all four in order (0041
+        // through 0044); idempotent either way, and safe to deploy before or after this edition's own
+        // code changes (Core's own stores detect a missing client_id/data_store column and fall back to
+        // the pre-migration statements - see Migration0043's and routedMetrics()'s own doc comments).
+        //
+        // Nothing here switches anything on: data_store defaults to 'mariadb' and RmmSettings::update()
+        // still refuses 'postgres' - PostgreSQL is only ever used once an admin completes the Data Store
+        // settings card (admin/settings_endpoint_agent.php) AND the edition's own pdo_pgsql extension is
+        // installed (never done by this migration, never by this agent - see the release notes for the
+        // exact commands to hand the operator).
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+        }
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.114'");
+    }

@@ -97,8 +97,19 @@ use RivetCore\Rmm\Metrics\CompositeMetricSink;
 use RivetCore\Rmm\Metrics\ExternalMetricSink;
 use RivetCore\Rmm\Capacity\HerdControl;
 use RivetCore\Rmm\Capacity\RedisTokenBucketStore;
-use RivetCore\Rmm\Storage\MetricRollup;
 use RivetCore\Rmm\Storage\PartitionMaintenance;
+use RivetCore\Rmm\Store\DataStoreUnavailableException;
+use RivetCore\Rmm\Store\LazyMetricStore;
+use RivetCore\Rmm\Store\Postgres\Guard\HotStoreFaults;
+use RivetCore\Rmm\Store\Postgres\Guard\WriteBehind;
+use RivetCore\Rmm\Store\MetricStore;
+use RivetCore\Rmm\Store\Postgres\Pdo\PdoPostgresConnection;
+use RivetCore\Rmm\Store\Postgres\PostgresConfig;
+use RivetCore\Rmm\Store\Postgres\PostgresConnectionInterface;
+use RivetCore\Rmm\Store\Postgres\UnconfiguredPostgresConnection;
+use RivetCore\Rmm\Store\RmmDataStoreFactory;
+use RivetCore\Rmm\Store\RmmDataStoreKind;
+use RivetCore\Rmm\Store\RmmDataStores;
 use RivetCore\Rmm\Storage\StorageMaintenance;
 use RivetCore\Rmm\Support\DatabaseMetricSink;
 use RivetCore\Rmm\Support\RmmCache;
@@ -108,6 +119,7 @@ use RivetCore\Rmm\Support\NullRmmEvents;
 use RivetCore\Rmm\Support\NullRmmMetricSink;
 use RivetCore\Rmm\Support\RmmEventPublisher;
 use RivetCore\Rmm\Support\Sql;
+use RivetCore\Rmm\Support\TrackedDatabase;
 use RivetCore\Rmm\Tags\GroupService;
 use RivetCore\Rmm\Tags\TagService;
 use RivetCore\Rmm\Technician\FieldActions;
@@ -153,7 +165,11 @@ final class RmmModule
     private ?IngestQueue $ingestQueue = null;
     private ?LoadShedder $shedder = null;
     private ?CapacityReport $capacity = null;
-    private ?StorageMaintenance $storage = null;
+    private ?RmmDataStores $dataStores = null;
+    private ?RmmDataStores $resolvedStores = null;
+    private ?HotStoreFaults $hotFaults = null;
+    private ?PostgresConnectionInterface $pgConnection = null;
+    private ?\RivetCore\Rmm\Store\DataStoreSwitch $dataStoreSwitch = null;
     private ?RmmCache $cache = null;
     private ?HerdControl $herd = null;
     private ?PartitionMaintenance $partitions = null;
@@ -245,12 +261,18 @@ final class RmmModule
     private ?\RivetCore\Rmm\Hypervisor\HypervisorActions $hypervisorActions = null;
     private ?\RivetCore\Rmm\Http\HypervisorApi $hypervisorApi = null;
 
+    /** The control database as the services use it: reports its transactions to {@see WriteBehind}, which holds a PostgreSQL store's history writes until the commit. */
+    private readonly DatabaseInterface $tracked;
+    private readonly WriteBehind $writeBehind;
     private readonly RmmAuditInterface $audit;
+    /** What the services ingest into and read from: the metric sink the edition passed, routed to the store the `rmm_data_store` setting chose ({@see routedMetrics()}). */
     private readonly RmmMetricSinkInterface $metrics;
+    /** The metric sink exactly as the edition passed it. */
+    private readonly RmmMetricSinkInterface $baseMetrics;
     private readonly RmmEventsInterface $events;
 
     /**
-     * @param array{binary_dir?:?string,transfer_dir?:?string,allow_insecure_http?:bool,allow_linux?:bool,host_fallback?:?string,integration_name?:string,installer_prefix?:string,max_upload_bytes?:?int,hosted_max_bytes?:?int,client_label?:string,denial_reasons?:array<string,string>,escalation?:RmmEscalationInterface,threshold_resolver?:ThresholdResolverInterface,cache?:\Psr\SimpleCache\CacheInterface,redis?:\RivetCore\Redis\RedisClientProviderInterface,metric_reader?:RmmMetricReaderInterface,starter_packs?:list<string>} $options
+     * @param array{binary_dir?:?string,transfer_dir?:?string,allow_insecure_http?:bool,allow_linux?:bool,host_fallback?:?string,integration_name?:string,installer_prefix?:string,max_upload_bytes?:?int,hosted_max_bytes?:?int,client_label?:string,denial_reasons?:array<string,string>,escalation?:RmmEscalationInterface,threshold_resolver?:ThresholdResolverInterface,cache?:\Psr\SimpleCache\CacheInterface,redis?:\RivetCore\Redis\RedisClientProviderInterface,metric_reader?:RmmMetricReaderInterface,starter_packs?:list<string>,postgres?:PostgresConnectionInterface|PostgresConfig|\Closure():(PostgresConnectionInterface|PostgresConfig|null)|null} $options
      */
     public function __construct(
         private readonly DatabaseInterface $database,
@@ -268,8 +290,11 @@ final class RmmModule
         private readonly ?UrlPolicy $urlPolicy = null,
         ?RmmEventsInterface $events = null,
     ) {
+        $this->writeBehind = new WriteBehind();
+        $this->tracked = new TrackedDatabase($this->database, $this->writeBehind);
         $this->audit = $audit ?? new NullRmmAudit();
-        $this->metrics = $metrics ?? new NullRmmMetricSink();
+        $this->baseMetrics = $metrics ?? new NullRmmMetricSink();
+        $this->metrics = $this->routedMetrics($this->baseMetrics);
         $this->events = $events ?? new NullRmmEvents();
     }
 
@@ -286,7 +311,7 @@ final class RmmModule
 
     public function sql(): Sql
     {
-        return $this->sql ??= new Sql($this->database, $this->clock);
+        return $this->sql ??= new Sql($this->tracked, $this->clock);
     }
 
     public function settings(): RmmSettings
@@ -384,7 +409,7 @@ final class RmmModule
     /** Queue a (gated) patch install and apply its result. */
     public function patchInstalls(): PatchInstallService
     {
-        return $this->patchInstalls ??= new PatchInstallService($this->sql(), $this->settings(), $this->jobs(), $this->patchScans(), $this->patchPolicies(), $this->eventPublisher(), $this->patchCompliance());
+        return $this->patchInstalls ??= new PatchInstallService($this->sql(), $this->settings(), $this->jobs(), $this->patchScans(), $this->patchPolicies(), $this->eventPublisher(), $this->patchCompliance(), $this->dataStores()->patchHistory());
     }
 
     /** Approve, decline, approval rules and automatic approval. */
@@ -402,7 +427,7 @@ final class RmmModule
     /** Patch reads: one device, the fleet's compliance. */
     public function patchReader(): PatchReader
     {
-        return $this->patchReader ??= new PatchReader($this->sql(), $this->settings(), $this->patchPolicies(), $this->tenancy);
+        return $this->patchReader ??= new PatchReader($this->sql(), $this->settings(), $this->patchPolicies(), $this->tenancy, $this->dataStores()->patchHistory());
     }
 
     /** What technicians do with patching (shared by the REST API and the edition's pages). */
@@ -445,13 +470,13 @@ final class RmmModule
     /** Change rules: a matching change raises an alert through the check evaluator. */
     public function changeRules(): \RivetCore\Rmm\Change\ChangeRuleService
     {
-        return $this->changeRules ??= new \RivetCore\Rmm\Change\ChangeRuleService($this->sql(), $this->settings(), $this->checks(), $this->devices(), $this->eventPublisher());
+        return $this->changeRules ??= new \RivetCore\Rmm\Change\ChangeRuleService($this->sql(), $this->settings(), $this->checks(), $this->devices(), $this->eventPublisher(), $this->dataStores()->changes());
     }
 
     /** Recorded changes: ingest, search, the timeline, retention. */
     public function changeService(): \RivetCore\Rmm\Change\ChangeService
     {
-        return $this->changeService ??= new \RivetCore\Rmm\Change\ChangeService($this->sql(), $this->changeSettings(), $this->changeRules(), $this->eventPublisher());
+        return $this->changeService ??= new \RivetCore\Rmm\Change\ChangeService($this->sql(), $this->changeSettings(), $this->changeRules(), $this->eventPublisher(), $this->dataStores()->changes(), $this->dataStores()->softwareHistory());
     }
 
     /** Reading changes and managing change monitoring (shared by the REST API and the edition's pages). */
@@ -477,13 +502,13 @@ final class RmmModule
     /** Hypervisor ingest: validate a report and store hosts, VMs, storage and the state history; also the retention clean-up. */
     public function hypervisorService(): \RivetCore\Rmm\Hypervisor\HypervisorService
     {
-        return $this->hypervisorService ??= new \RivetCore\Rmm\Hypervisor\HypervisorService($this->sql(), $this->settings(), $this->hypervisorAlerts());
+        return $this->hypervisorService ??= new \RivetCore\Rmm\Hypervisor\HypervisorService($this->sql(), $this->settings(), $this->hypervisorAlerts(), $this->dataStores()->hypervisorHistory());
     }
 
     /** The hypervisor read model: hosts with VM counts, one host, the VM search, one VM with its history. */
     public function hypervisorReader(): \RivetCore\Rmm\Hypervisor\HypervisorReader
     {
-        return new \RivetCore\Rmm\Hypervisor\HypervisorReader($this->sql(), $this->settings());
+        return new \RivetCore\Rmm\Hypervisor\HypervisorReader($this->sql(), $this->settings(), $this->dataStores()->hypervisorHistory());
     }
 
     /** Asset suggestions for a VM (hints only: the edition links, Core never auto-creates). */
@@ -549,7 +574,7 @@ final class RmmModule
     public function deployService(): \RivetCore\Rmm\Deploy\DeployService
     {
         if ($this->deployService === null) {
-            $this->deployService = new \RivetCore\Rmm\Deploy\DeployService($this->sql(), $this->settings(), $this->jobs(), $this->packageCatalog(), $this->deployExpectations(), $this->eventPublisher(), $this->packageParams(), $this->hostedFiles());
+            $this->deployService = new \RivetCore\Rmm\Deploy\DeployService($this->sql(), $this->settings(), $this->jobs(), $this->packageCatalog(), $this->deployExpectations(), $this->eventPublisher(), $this->packageParams(), $this->hostedFiles(), $this->dataStores()->deploymentHistory());
             // The result of an install job also settles the matching row of "install apps when the agent installs".
             $this->deployService->onInstallApplied(function (int $deviceId, int $packageId, array $parsed, string $mode, bool $lost): void {
                 /** @var array{ok:bool,result:string,code:string,detail:string,version:string,reboot_required:bool} $parsed */
@@ -591,7 +616,7 @@ final class RmmModule
     /** Deployment reads: one device, the fleet report. */
     public function deployReader(): \RivetCore\Rmm\Deploy\DeployReader
     {
-        return $this->deployReader ??= new \RivetCore\Rmm\Deploy\DeployReader($this->sql(), $this->settings());
+        return $this->deployReader ??= new \RivetCore\Rmm\Deploy\DeployReader($this->sql(), $this->settings(), $this->dataStores()->deploymentHistory());
     }
 
     /** What technicians do with software deployment (shared by the REST API and the edition's pages). */
@@ -616,7 +641,7 @@ final class RmmModule
     public function deployScheduler(): \RivetCore\Rmm\Deploy\DeployScheduler
     {
         return $this->deployScheduler ??= new \RivetCore\Rmm\Deploy\DeployScheduler($this->sql(), $this->settings(), $this->devices(), $this->deployService(), $this->deployExpectations(),
-            $this->scheduleGate ?? new MaintenanceScheduleGate($this->maintenance(), $this->settings()), $this->autoInstall(), $this->hostedFiles());
+            $this->scheduleGate ?? new MaintenanceScheduleGate($this->maintenance(), $this->settings()), $this->autoInstall(), $this->hostedFiles(), $this->dataStores()->deploymentHistory());
     }
 
     /** What technicians and administrators do with auto-install (shared by the REST API and the edition's pages). */
@@ -645,12 +670,12 @@ final class RmmModule
     public function patchScheduler(): PatchScheduler
     {
         return $this->patchScheduler ??= new PatchScheduler($this->sql(), $this->settings(), $this->devices(), $this->patchScans(), $this->patchInstalls(), $this->patchApprovals(), $this->patchCompliance(), $this->patchPolicies(), $this->maintenance(),
-            $this->scheduleGate ?? new MaintenanceScheduleGate($this->maintenance(), $this->settings()));
+            $this->scheduleGate ?? new MaintenanceScheduleGate($this->maintenance(), $this->settings()), $this->dataStores()->patchHistory());
     }
 
     public function checks(): CheckEvaluator
     {
-        return $this->checks ??= new CheckEvaluator($this->sql(), $this->settings(), $this->bridge, $this->devices(), $this->eventPublisher(), $this->alertingEngine());
+        return $this->checks ??= new CheckEvaluator($this->sql(), $this->settings(), $this->bridge, $this->devices(), $this->eventPublisher(), $this->alertingEngine(), $this->dataStores()->checkHistory());
     }
 
     // ------------------------------------------------------------------ Phases 6 and 8: remote tools and log collection
@@ -675,13 +700,13 @@ final class RmmModule
     /** Log rules: a match raises an alert through the check evaluator (and so through the Phase 3 alerting engine). */
     public function logRules(): LogRuleService
     {
-        return $this->logRuleService ??= new LogRuleService($this->sql(), $this->settings(), $this->checks(), $this->devices(), $this->eventPublisher());
+        return $this->logRuleService ??= new LogRuleService($this->sql(), $this->settings(), $this->checks(), $this->devices(), $this->eventPublisher(), $this->dataStores()->logs());
     }
 
     /** Collected logs: ingest, search, retention. */
     public function logService(): LogService
     {
-        return $this->logService ??= new LogService($this->sql(), $this->remoteSettings(), $this->logRules());
+        return $this->logService ??= new LogService($this->sql(), $this->remoteSettings(), $this->logRules(), $this->dataStores()->logs());
     }
 
     /** Service and process managers, file transfer, Mesh view information and the remote-tools settings (shared by the REST API and the edition's pages). */
@@ -777,7 +802,7 @@ final class RmmModule
     public function enrollment(): EnrollmentService
     {
         if ($this->enrollment === null) {
-            $this->enrollment = new EnrollmentService($this->sql(), $this->settings(), $this->assets, $this->tenancy, $this->linker(), $this->audit, $this->attempts(), $this->options['allow_linux'] ?? false, $this->clientLabel(), $this->eventPublisher(), $this->cache(), $this->herd());
+            $this->enrollment = new EnrollmentService($this->sql(), $this->settings(), $this->assets, $this->tenancy, $this->linker(), $this->audit, $this->attempts(), $this->options['allow_linux'] ?? false, $this->clientLabel(), $this->eventPublisher(), $this->cache(), $this->herd(), $this->dataStores());
             // Install apps when the agent installs: plan the catalog apps of a device that has just enrolled (a no-op while `software_deploy` is off).
             $this->enrollment->onEnrolled(function (int $deviceId, int $tokenId, string $event): void {
                 if ($this->settings()->featureOn(DeployProtocol::FEATURE) && ($dev = $this->devices()->find($deviceId)) !== null) {
@@ -800,7 +825,7 @@ final class RmmModule
 
     public function deviceService(): DeviceService
     {
-        return new DeviceService($this->sql(), $this->devices(), $this->settings(), $this->jobs(), $this->checks(), $this->linker(), $this->bridge, $this->assets, $this->tenancy, $this->audit, $this->enrollment(), $this->cache());
+        return new DeviceService($this->sql(), $this->devices(), $this->settings(), $this->jobs(), $this->checks(), $this->linker(), $this->bridge, $this->assets, $this->tenancy, $this->audit, $this->enrollment(), $this->cache(), $this->dataStores());
     }
 
     public function checkin(): CheckinService
@@ -826,7 +851,7 @@ final class RmmModule
     /** The software inventory: apply a report, current state, change log. */
     public function software(): SoftwareService
     {
-        return $this->software ??= new SoftwareService($this->sql(), $this->deviceState(), $this->eventPublisher());
+        return $this->software ??= new SoftwareService($this->sql(), $this->deviceState(), $this->eventPublisher(), $this->dataStores()->softwareHistory());
     }
 
     /** Tags on devices. */
@@ -850,7 +875,7 @@ final class RmmModule
     /** Queued ingest (`rmm.ingest` jobs on Core's JobQueue): enqueue, batch worker, backlog metric. */
     public function ingestQueue(): IngestQueue
     {
-        return $this->ingestQueue ??= new IngestQueue(new JobQueue($this->database), $this->database, $this->checkin(), $this->metrics, $this->settings(), $this->state());
+        return $this->ingestQueue ??= new IngestQueue(new JobQueue($this->tracked), $this->tracked, $this->checkin(), $this->metrics, $this->settings(), $this->state());
     }
 
     /** The staged load shedder (cron: {@see LoadShedder::evaluate()}; request path: {@see LoadShedder::tick()}). */
@@ -862,7 +887,8 @@ final class RmmModule
     /** Data of the "Performance and capacity" panel. */
     public function capacity(): CapacityReport
     {
-        return $this->capacity ??= new CapacityReport($this->sql(), $this->settings(), $this->ingestQueue(), $this->state(), $this->shedder(), $this->cache(), $this->herd(), $this->externalSink());
+        return $this->capacity ??= new CapacityReport($this->sql(), $this->settings(), $this->ingestQueue(), $this->state(), $this->shedder(), $this->cache(), $this->herd(), $this->externalSink(), $this->dataStores()->maintenance(), $this->dataStores()->changes(), $this->hotStoreFaults(), fn (): string => $this->dataStores()->kind(),
+            fn (): ?\RivetCore\Rmm\Store\StoreSizes => $this->dataStores()->kind() === RmmDataStoreKind::POSTGRES ? new \RivetCore\Rmm\Store\Sizes\PostgresStoreSizes(fn (): PostgresConnectionInterface => $this->pgConnection ?? $this->postgresConnection() ?? new UnconfiguredPostgresConnection('no PostgreSQL connection is configured')) : null);
     }
 
     /**
@@ -917,19 +943,168 @@ final class RmmModule
     public function housekeeping(): Housekeeping
     {
         return new Housekeeping($this->sql(), $this->settings(), $this->bridge, $this->jobs(), null, $this->shedder(), $this->ingestQueue(), $this->eventPublisher(), $this->deviceState(),
-            $this->databaseSink(), $this->scheduleRunner(), $this->approvals(), $this->approvedRunExecutor(), $this->jobExtras(), $this->policyStore(),
-            new AlertingHousekeeping($this->maintenance(), $this->escalation(), $this->alerts(), $this->storm(), $this->checkEval()), $this->storage(), $this->cache(), $this->externalSink(),
-            $this->logService(), $this->logRules(), $this->transfers(), $this->patchScheduler(), $this->deployScheduler(), $this->changeService(), $this->changeRules(), $this->hypervisorService());
+            null, $this->scheduleRunner(), $this->approvals(), $this->approvedRunExecutor(), $this->jobExtras(), $this->policyStore(),
+            new AlertingHousekeeping($this->maintenance(), $this->escalation(), $this->alerts(), $this->storm(), $this->checkEval()), null, $this->cache(), $this->externalSink(),
+            $this->logService(), $this->logRules(), $this->transfers(), $this->patchScheduler(), $this->deployScheduler(), $this->changeService(), $this->changeRules(), $this->hypervisorService(),
+            $this->dataStores()->checkHistory(), $this->dataStores()->softwareHistory(), $this->metricStore(), $this->dataStores()->maintenance(), $this->dataStores());
     }
 
-    /** The database metric sink, whether it was passed as the sink or inside a {@see CompositeMetricSink}. */
-    private function databaseSink(): ?DatabaseMetricSink
+    /**
+     * A database metric sink (a {@see MetricStore}) is replaced by a lazy store that asks the `rmm_data_store` setting on first use, so one wiring serves MariaDB (the sink
+     * the edition passed, unchanged) and PostgreSQL. Any other sink, and a composite without a database sink, is used as it is.
+     */
+    private function routedMetrics(RmmMetricSinkInterface $sink): RmmMetricSinkInterface
     {
-        if ($this->metrics instanceof DatabaseMetricSink) {
+        $lazy = new LazyMetricStore(fn (): RmmDataStores => $this->resolvedDataStores());
+        if ($sink instanceof MetricStore) {
+            return $lazy;
+        }
+
+        return $sink instanceof CompositeMetricSink && $sink->find(MetricStore::class) !== null ? $sink->replacing(MetricStore::class, $lazy) : $sink;
+    }
+
+    /** The metric store the edition passed (a {@see MetricStore}; Core's {@see DatabaseMetricSink} is the MariaDB one), whether it was passed as the sink or inside a {@see CompositeMetricSink}. */
+    private function baseMetricStore(): ?MetricStore
+    {
+        if ($this->baseMetrics instanceof MetricStore) {
+            return $this->baseMetrics;
+        }
+
+        return $this->baseMetrics instanceof CompositeMetricSink ? $this->baseMetrics->find(MetricStore::class) : null;
+    }
+
+    /** The metric store the services use (the routed one, see {@see routedMetrics()}), whether it is the sink itself or inside a {@see CompositeMetricSink}. */
+    private function metricStore(): ?MetricStore
+    {
+        if ($this->metrics instanceof MetricStore) {
             return $this->metrics;
         }
 
-        return $this->metrics instanceof CompositeMetricSink ? $this->metrics->find(DatabaseMetricSink::class) : null;
+        return $this->metrics instanceof CompositeMetricSink ? $this->metrics->find(MetricStore::class) : null;
+    }
+
+    /**
+     * The HOT RMM stores, chosen by the `rmm_data_store` setting (docs/design/rmm-data-store.md). Phase 1 of #89 has one implementation, MariaDB / MySQL, which runs
+     * exactly the statements the services ran before the stores existed. The stores resolve on first use, so building the module still reads nothing from the
+     * database (an off module answers from its state file with zero queries). A setting this release cannot run (a hand-edited `postgres`) is logged and answered
+     * with MariaDB, which is where the data is: the module never refuses check-ins over it.
+     */
+    public function dataStores(): RmmDataStores
+    {
+        return $this->dataStores ??= RmmDataStores::lazy(fn (): RmmDataStores => $this->resolvedDataStores(), $this->metricStore());
+    }
+
+    private function resolvedDataStores(): RmmDataStores
+    {
+        if ($this->resolvedStores === null) {
+            $kind = $this->settings()->dataStore();
+            $pg = $kind === RmmDataStoreKind::POSTGRES ? $this->postgresConnection() : null;   // MariaDB never builds, let alone opens, the PostgreSQL connection
+            $this->pgConnection = $pg;
+            try {
+                $this->resolvedStores = RmmDataStoreFactory::create($kind, $this->sql(), $this->baseMetricStore(), $this->partitions(), $pg, $this->hotStoreFaults(), $this->writeBehind);
+            } catch (DataStoreUnavailableException $e) {
+                // The administrator chose PostgreSQL but the edition gave no connection (or the setting is unknown). The data is not in MariaDB, so using it would hide the problem:
+                // run the PostgreSQL stores on a connection that fails with this message. Check-ins keep working, history writes are dropped and counted, see HotStoreGuard.
+                error_log('rmm data store: ' . $e->getMessage());
+                $this->resolvedStores = RmmDataStoreFactory::create(RmmDataStoreKind::POSTGRES, $this->sql(), $this->baseMetricStore(), $this->partitions(), new UnconfiguredPostgresConnection($e->getMessage()), $this->hotStoreFaults(), $this->writeBehind);
+            }
+            $this->resolvedStores = $this->withMigration($this->resolvedStores, $kind);
+        }
+
+        return $this->resolvedStores;
+    }
+
+    /**
+     * While a data store migration runs (the settings row says `copy:<store>` or `dual:<store>`, migration 0044) retention is paused on the active store and, in the dual-write
+     * phase, every write also goes to the other store (docs/design/rmm-data-store.md section 13.4). The phase is read with the settings row the module reads anyway.
+     */
+    private function withMigration(RmmDataStores $stores, string $kind): RmmDataStores
+    {
+        $phase = $this->settings()->get()['data_store_phase'] ?? null;
+        if (!is_string($phase) || preg_match('/^(copy|dual):(mariadb|postgres)$/D', $phase, $m) !== 1) {
+            return $stores;
+        }
+        $second = null;
+        if ($m[1] === 'dual' && $m[2] !== $kind) {
+            try {
+                $second = RmmDataStoreFactory::createUnguarded($m[2], $this->sql(), $this->baseMetricStore(), $this->partitions(), $m[2] === RmmDataStoreKind::POSTGRES ? $this->postgresConnection() : null);
+            } catch (\Throwable $e) {
+                error_log('rmm data store migration: the second store cannot be built, writes go to the active store only (the catch-up pass will repair it): ' . $e->getMessage());
+                try {
+                    $this->sql()->run('UPDATE rmm_store_migration SET dual_faults = dual_faults + 1, last_error = ? WHERE dual_write = 1', [mb_substr($e->getMessage(), 0, 480)]);
+                } catch (\Throwable) {
+                }
+            }
+        }
+
+        return \RivetCore\Rmm\Store\Migration\DualWrite\DualWriteStores::wrap($stores, $second, $this->sql(), $this->writeBehind, $m[2] === RmmDataStoreKind::POSTGRES);
+    }
+
+    /**
+     * The PostgreSQL connection: the `postgres` option the edition passed (a {@see PostgresConnectionInterface}, a closure that returns one, called once on first use so nothing
+     * connects while the store is MariaDB, or a {@see PostgresConfig}), otherwise the connection stored by the data store setting ({@see DataStoreSwitch}, password sealed).
+     * Null when there is none.
+     */
+    private function postgresConnection(): ?PostgresConnectionInterface
+    {
+        $given = $this->options['postgres'] ?? null;
+        try {
+            if ($given instanceof \Closure) {
+                $given = $given();
+            }
+            if ($given === null) {
+                $given = $this->dataStoreSwitch()->postgresConfig();
+            }
+            if ($given instanceof PostgresConfig) {
+                $given = PdoPostgresConnection::fromConfig($given);
+            }
+        } catch (\Throwable $e) {
+            error_log('rmm data store: the PostgreSQL connection could not be built: ' . get_class($e) . ': ' . mb_substr($e->getMessage(), 0, 200));
+
+            return new UnconfiguredPostgresConnection('The "postgres" module option could not be turned into a connection: ' . mb_substr($e->getMessage(), 0, 200));
+        }
+
+        return $given instanceof PostgresConnectionInterface ? $given : null;
+    }
+
+    /**
+     * Moves the RMM history between the stores, verifies it, cuts over, rolls back and purges ({@see \RivetCore\Rmm\Store\Migration\RmmStoreMigrator}). The PostgreSQL
+     * connection is the `postgres` option or the one the data store setting stored. Runs in a command or a background job, not in a web request.
+     */
+    public function storeMigrator(): \RivetCore\Rmm\Store\Migration\RmmStoreMigrator
+    {
+        return new \RivetCore\Rmm\Store\Migration\RmmStoreMigrator($this->sql(), $this->settings(), fn (): ?PostgresConnectionInterface => $this->postgresConnection(), $this->audit);
+    }
+
+    /**
+     * Choose the RMM data store: connection settings (password sealed), connection test, schema, the setting. The one supported way to select PostgreSQL
+     * ({@see RmmSettings::update()} still refuses it). See docs/rmm/POSTGRES.md.
+     */
+    public function dataStoreSwitch(): \RivetCore\Rmm\Store\DataStoreSwitch
+    {
+        return $this->dataStoreSwitch ??= new \RivetCore\Rmm\Store\DataStoreSwitch($this->sql(), $this->settings(), $this->box, $this->audit);
+    }
+
+    /** The record of what the hot store could not do (empty on MariaDB), shown in the capacity panel. */
+    private function hotStoreFaults(): HotStoreFaults
+    {
+        return $this->hotFaults ??= new HotStoreFaults($this->sql());
+    }
+
+    /**
+     * Where the hot tables live and what could not be written there: the figures of the capacity panel's "data store" block ({@see CapacityReport::dataStore()}).
+     *
+     * @return array{kind:string,dropped:int,errors:int,first_at:?string,last_at:?string,last_error:string,stores:array<string,array{dropped:int,errors:int,last_at:string,last_error:string}>}
+     */
+    public function dataStoreHealth(): array
+    {
+        return $this->capacity()->dataStore();
+    }
+
+    /** Forget the recorded hot store faults (an administrator fixed the cause and acknowledged the warning). */
+    public function clearDataStoreFaults(): void
+    {
+        $this->hotStoreFaults()->clear();
     }
 
     /** The buffer in front of an external metric store (scaling item S4), whether it was passed as the sink or inside a {@see CompositeMetricSink}. */
@@ -956,7 +1131,7 @@ final class RmmModule
             return $this->metrics;
         }
 
-        return $this->databaseSink();
+        return $this->metricStore();
     }
 
     /**
@@ -965,7 +1140,12 @@ final class RmmModule
      */
     public function storage(): StorageMaintenance
     {
-        return $this->storage ??= new StorageMaintenance($this->partitions(), $this->databaseSink() !== null ? new MetricRollup($this->sql()) : null);
+        $maintenance = $this->resolvedDataStores()->maintenance();
+        if (!$maintenance instanceof StorageMaintenance) {
+            throw new \LogicException('storage() is the MariaDB maintenance; use dataStores()->maintenance() with other stores.');
+        }
+
+        return $maintenance;
     }
 
     /**
@@ -1163,7 +1343,8 @@ final class RmmModule
     {
         return $this->readModel ??= new RmmReadModel($this->sql(), $this->settings(), $this->devices(), $this->updates(), $this->binaryStore(),
             $this->assets instanceof RmmAssetNamesInterface ? $this->assets : null, $this->clientLabel(),
-            $this->policy === null ? null : $this->authorizer(), $this->tags(), $this->groups(), $this->metricReader(), $this->automationReader(), $this->cache(), $this->logService(), $this->transfers(), $this->meshAgents(), $this->patchReader(), $this->deployReader(), $this->changeService(), $this->meshAfterApproval());
+            $this->policy === null ? null : $this->authorizer(), $this->tags(), $this->groups(), $this->metricReader(), $this->automationReader(), $this->cache(), $this->logService(), $this->transfers(), $this->meshAgents(), $this->patchReader(), $this->deployReader(), $this->changeService(), $this->meshAfterApproval(),
+            $this->dataStores()->checkHistory(), $this->dataStores()->softwareHistory());
     }
 
     /** Hosted agent binaries: validate, store, publish, serve. */

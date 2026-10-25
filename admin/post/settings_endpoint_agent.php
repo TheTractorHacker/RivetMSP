@@ -1152,6 +1152,18 @@ if (isset($_POST['save_scale_settings'])) {
 
 // ---------------------------------------------------------------- Partitioning
 
+// MariaDB-only (RivetCore 1.0.0-rc.39/40 UPGRADING.md): PostgreSQL manages its own partitions via
+// housekeeping, so probing/converting/disabling MariaDB's time-partitioning tool makes no sense once the
+// hot tables are on PostgreSQL. Refused here, not just hidden in the UI (a stale page tab, or anyone who
+// crafts the POST directly, must not be able to run a MariaDB-specific DDL tool against the wrong store).
+if (isset($_POST['partition_probe']) || isset($_POST['partition_enable']) || isset($_POST['partition_disable'])) {
+    if ($rmm->settings()->dataStore() !== \RivetCore\Rmm\Store\RmmDataStoreKind::MARIADB) {
+        validateCSRFToken($_POST['csrf_token']);
+        rivetRmmScaleMsg('partitioning', 'error', 'The data store is PostgreSQL - MariaDB\'s own partitioning tool does not apply. PostgreSQL manages its own partitions.');
+        ea_scale_back('partitioning');
+    }
+}
+
 if (isset($_POST['partition_probe'])) {
     validateCSRFToken($_POST['csrf_token']);
     ea_scale_require_admin($rmm, (int) $session_user_id, 'partitioning');

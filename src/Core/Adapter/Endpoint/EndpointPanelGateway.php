@@ -27,6 +27,9 @@ final class EndpointPanelGateway implements PanelTicketGatewayInterface
     /** Reply types visible to a requester (client-level or contact) - never 'Internal', 'Labor' or 'System'. */
     private const VISIBLE_REPLY_TYPES = ['Public', 'Client'];
 
+    /** Cached by mysqlUtcOffsetSeconds() - see that method's doc comment. */
+    private ?int $mysqlUtcOffsetSeconds = null;
+
     public function __construct(private \mysqli $mysqli)
     {
     }
@@ -340,17 +343,46 @@ final class EndpointPanelGateway implements PanelTicketGatewayInterface
         return html_entity_decode(strip_tags((string) $text), ENT_QUOTES, 'UTF-8');
     }
 
+    /**
+     * Seconds to ADD to a raw `NOW()`-stamped MySQL datetime string to get UTC, cached for the
+     * life of this gateway instance (one request). Asked of the database itself
+     * (TIMESTAMPDIFF(SECOND, NOW(), UTC_TIMESTAMP())) rather than trusted from PHP's own
+     * `date.timezone` ini setting: the panel API's unauthenticated device-token routes never run
+     * includes/inc_set_timezone.php (that only happens on a logged-in user's session), so
+     * `ini_get('date.timezone')` here is whatever php.ini's bare default is - which is NOT
+     * guaranteed to match the timezone MySQL's own NOW() wall clock actually runs on (this
+     * install's PHP and MySQL happen to agree today; a differently configured server, or PHP and
+     * MySQL on separate hosts, would not). RivetCore 1.0.0-rc.38 conformance
+     * (testTimestampsAreUtcAndCurrent()) is what caught this - fixed by asking MySQL for its own
+     * real offset instead of assuming PHP's ini state describes it.
+     */
+    private function mysqlUtcOffsetSeconds(): int
+    {
+        if ($this->mysqlUtcOffsetSeconds === null) {
+            $res = mysqli_query($this->mysqli, 'SELECT TIMESTAMPDIFF(SECOND, NOW(), UTC_TIMESTAMP())');
+            $row = $res ? mysqli_fetch_row($res) : null;
+            $this->mysqlUtcOffsetSeconds = $row ? (int) $row[0] : 0;
+        }
+
+        return $this->mysqlUtcOffsetSeconds;
+    }
+
     private function toUtc(string $datetime): string
     {
-        try {
-            $tz = new \DateTimeZone(ini_get('date.timezone') ?: 'UTC');
-            $dt = new \DateTime($datetime, $tz);
-            $dt->setTimezone(new \DateTimeZone('UTC'));
-
-            return $dt->format('Y-m-d H:i:s');
-        } catch (\Throwable) {
+        // DateTime::createFromFormat(..., new DateTimeZone('UTC')) takes the string's wall-clock
+        // digits AS WRITTEN, tagged with a fixed, explicit zone object - unlike strtotime()/`new
+        // DateTime($datetime)`, which (with no offset in the string) apply PHP's AMBIENT default
+        // timezone during parsing. Using strtotime() here was tried and is exactly the double-
+        // offset bug this method exists to avoid: it would already convert the naive string via
+        // PHP's ini timezone (right by coincidence when that happens to equal MySQL's own, as it
+        // does on this install today) and THEN get mysqlUtcOffsetSeconds() added on top.
+        $dt = \DateTime::createFromFormat('Y-m-d H:i:s', $datetime, new \DateTimeZone('UTC'));
+        if ($dt === false) {
             return $datetime;
         }
+        $dt->modify($this->mysqlUtcOffsetSeconds() . ' seconds');
+
+        return $dt->format('Y-m-d H:i:s');
     }
 
     private function safeAttachmentName(string $name): string

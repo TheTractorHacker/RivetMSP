@@ -22,7 +22,13 @@ use RivetCore\Rmm\Remote\TransferService;
 use RivetCore\Rmm\RmmEvent;
 use RivetCore\Rmm\Metrics\ExternalMetricSink;
 use RivetCore\Rmm\Settings\RmmSettings;
+use RivetCore\Rmm\Store\CheckHistoryStore;
+use RivetCore\Rmm\Store\MariaDb\MariaDbCheckHistoryStore;
+use RivetCore\Rmm\Store\MariaDb\MariaDbSoftwareHistoryStore;
+use RivetCore\Rmm\Store\MetricStore;
+use RivetCore\Rmm\Store\SoftwareHistoryStore;
 use RivetCore\Rmm\Storage\StorageMaintenance;
+use RivetCore\Rmm\Store\StoreMaintenance;
 use RivetCore\Rmm\Support\DatabaseMetricSink;
 use RivetCore\Rmm\Support\RmmCache;
 use RivetCore\Rmm\Support\RmmEventPublisher;
@@ -47,6 +53,11 @@ final class Housekeeping
 
     /** @var \Closure(int):void */
     private \Closure $pause;
+    private readonly CheckHistoryStore $checkHistory;
+    private readonly SoftwareHistoryStore $softwareHistory;
+    /** The metric store in use: the one passed as $metricStore (any implementation), else the legacy $metricSink argument. */
+    private readonly ?MetricStore $metrics;
+    private readonly ?StoreMaintenance $maintenance;
 
     /**
      * @param (\Closure(int):void)|null $pause called between delete batches with the microseconds to wait (default usleep)
@@ -79,7 +90,16 @@ final class Housekeeping
         private readonly ?\RivetCore\Rmm\Change\ChangeService $changes = null,
         private readonly ?\RivetCore\Rmm\Change\ChangeRuleService $changeRules = null,
         private readonly ?\RivetCore\Rmm\Hypervisor\HypervisorService $hypervisor = null,
+        ?CheckHistoryStore $checkHistory = null,
+        ?SoftwareHistoryStore $softwareHistory = null,
+        ?MetricStore $metricStore = null,
+        ?StoreMaintenance $storeMaintenance = null,
+        private readonly ?\RivetCore\Rmm\Store\RmmDataStores $stores = null,
     ) {
+        $this->metrics = $metricStore ?? $metricSink;
+        $this->maintenance = $storeMaintenance ?? $storage;
+        $this->checkHistory = $checkHistory ?? new MariaDbCheckHistoryStore($sql);
+        $this->softwareHistory = $softwareHistory ?? new MariaDbSoftwareHistoryStore($sql);
         $this->pause = $pause ?? static function (int $us): void {
             usleep($us);
         };
@@ -105,11 +125,14 @@ final class Housekeeping
         $out['pruned_attempts'] = $this->prune('endpoint_agent_enroll_attempts', 'attempted_at < ?', [$this->sql->utcAt(-self::ATTEMPT_RETENTION_DAYS * 86400)]);
         $out['pruned_jobs'] = $this->prune('endpoint_agent_jobs', "state IN ('succeeded','failed','timed_out','cancelled','expired') AND finished_at < ?",
             [$this->sql->utcAt(-(int) $cfg['job_retention_days'] * 86400)]);
+        if ($this->stores !== null && $this->stores->kind() !== \RivetCore\Rmm\Store\RmmDataStoreKind::MARIADB) {
+            $out['client_moves_retried'] = (new \RivetCore\Rmm\Store\ClientMoves($this->sql, $this->stores))->retryPending();   // device moves the hot store could not take when they happened
+        }
         $limits = $this->settings->limits();
         // Scale S5: roll days up and keep the time partitions; a partitioned table is pruned by dropping partitions, every other one by batched DELETE as before.
         $partitioned = [];
-        if ($this->storage !== null) {
-            $st = $this->storage->run($limits, $this->settings->explicitLimits(), $this->metricSink?->retentionDays() ?? 14, $this->metricSink?->dailyRetentionDays() ?? 400);
+        if ($this->maintenance !== null) {
+            $st = $this->maintenance->run($limits, $this->settings->explicitLimits(), $this->metrics?->retentionDays() ?? 14, $this->metrics?->dailyRetentionDays() ?? 400);
             $partitioned = $st['partitioned'];
             $out['rollup_days'] = (int) ($st['rollup']['days'] ?? 0);
             $out['rollup_behind_days'] = (int) ($st['rollup']['behind_days'] ?? 0);
@@ -117,13 +140,13 @@ final class Housekeeping
             $out['partitions_dropped'] = array_sum(array_column($st['partitions'], 'dropped'));
         }
         $out['pruned_check_history'] = in_array('endpoint_agent_check_history', $partitioned, true) ? 0
-            : $this->prune('endpoint_agent_check_history', 'reported_at < ?', [$this->sql->utcAt(-max(1, $limits['check_history_days']) * 86400)]);
+            : $this->pruneStore(fn (int $n): int => $this->checkHistory->deleteOlderThan($this->sql->utcAt(-max(1, $limits['check_history_days']) * 86400), $n));
         $softwareBefore = $this->sql->utcAt(-$limits['software_history_days'] * 86400);
-        $out['pruned_software_history'] = $this->prune('rmm_software_history', 'occurred_at < ?', [$softwareBefore]);
+        $out['pruned_software_history'] = $this->pruneStore(fn (int $n): int => $this->softwareHistory->deleteOlderThan($softwareBefore, $n));
         $out['pruned_software_removed'] = $this->prune('rmm_device_software', 'removed_at IS NOT NULL AND removed_at < ?', [$softwareBefore]);
-        if ($this->metricSink !== null) {
+        if ($this->metrics !== null) {
             $explicit = $this->settings->explicitLimits();
-            $out['pruned_metrics'] = $this->metricSink->prune(self::PRUNE_RUN_CAP, $this->pause, $explicit['metric_hourly_days'] ?? null, $explicit['metric_daily_days'] ?? null, $partitioned);
+            $out['pruned_metrics'] = $this->metrics->prune(self::PRUNE_RUN_CAP, $this->pause, $explicit['metric_hourly_days'] ?? null, $explicit['metric_daily_days'] ?? null, $partitioned);
         }
         if ($this->cache !== null) {
             $out['pruned_cache'] = $this->cache->prune();
@@ -160,7 +183,7 @@ final class Housekeeping
         // Change monitoring: retention and caps, and the recovery of change-rule alerts. Runs while the switch is on or records / rules still exist (so turning it off still cleans up).
         if ($this->changes !== null) {
             try {
-                if ($this->settings->featureOn('change_monitor') || (int) $this->sql->val('SELECT COUNT(*) FROM endpoint_agent_change_state') > 0) {
+                if ($this->settings->featureOn('change_monitor') || $this->changes->hasRecorded()) {
                     foreach ($this->changes->prune($this->pause) as $k => $v) {
                         $out['pruned_changes_' . $k] = $v;
                     }
@@ -322,9 +345,19 @@ final class Housekeeping
     /** @param list<mixed> $params */
     private function prune(string $table, string $where, array $params): int
     {
+        return $this->pruneStore(fn (int $n): int => $this->sql->run("DELETE FROM `$table` WHERE $where LIMIT " . $n, $params));
+    }
+
+    /**
+     * Delete in batches until a batch comes back short or the run cap is reached, pausing between batches.
+     *
+     * @param \Closure(int):int $deleteBatch deletes at most the given number of rows and returns how many it deleted
+     */
+    private function pruneStore(\Closure $deleteBatch): int
+    {
         $total = 0;
         while ($total < self::PRUNE_RUN_CAP) {
-            $n = $this->sql->run("DELETE FROM `$table` WHERE $where LIMIT " . self::PRUNE_BATCH, $params);
+            $n = $deleteBatch(self::PRUNE_BATCH);
             $total += $n;
             if ($n < self::PRUNE_BATCH) {
                 break;

@@ -625,9 +625,14 @@ $scaleCtx['transfer'] = rivetRmmTransferDirStatus((int) $scaleCtx['rs']['limits'
 $__lim = $rmm->settings()->limits();
 $scaleCtx['scale'] = ['limits' => $__lim, 'ingest_mode' => (string) ($rmm->settings()->get()['ingest_mode'] ?? 'sync'), 'cache_shared' => $rmm->cache()->shared(),
     'bucket_suggestion' => rivetRmmScaleBucketSuggestion($mysqli, (int) ($rmm->settings()->get()['check_in_interval_s'] ?? 300))];
-// Partitioning: the last probe (kept by Core), and for the three history tables Core can split (RivetMSP writes all three) their partitions, size estimate and retention.
+// Partitioning: MariaDB-only (RivetCore 1.0.0-rc.39/40 UPGRADING.md - "the partition tool pages describe
+// MariaDB... moving those pages is phase 4"; PostgreSQL's own housekeeping manages its partitions, there is
+// nothing here to probe or convert). $__dataStoreIsMariaDb also gates the "Convert" action itself in
+// admin/post/settings_endpoint_agent.php.
+$__dataStoreIsMariaDb = $rmm->settings()->dataStore() === \RivetCore\Rmm\Store\RmmDataStoreKind::MARIADB;
 $__probe = null;
 $__probeAt = null;
+if ($__dataStoreIsMariaDb) {
 try {
     $__ps = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT detail, updated_at FROM rmm_storage_state WHERE name = 'partition_probe'"));
     $__d = $__ps && is_string($__ps['detail']) ? json_decode($__ps['detail'], true) : null;
@@ -660,6 +665,17 @@ foreach (array_keys(RIVET_RMM_PARTITION_TABLES) as $__t) {
     } catch (\Throwable) {
     }
     $scaleCtx['partition']['tables'][$__t] = ['partitions' => $__parts, 'rows' => $__rows[$__t] ?? 0, 'retention_days' => (int) ($__stor['tables'][$__t]['retention_days'] ?? 0)];
+}
+} else {
+    // PostgreSQL: no partition probe/convert (there is nothing to convert), but still show the retention
+    // tiers through the store-API-aware accessor so the page is not simply blank.
+    $__tiers = [];
+    try {
+        $__tiers = $rmm->dataStores()->maintenance()->tiers($__lim, []);
+    } catch (\Throwable) {
+    }
+    $scaleCtx['partition'] = ['words' => null, 'probe_at' => null, 'tables' => [], 'rollup' => ['watermark' => null, 'behind_days' => 0],
+        'not_applicable' => true, 'tiers' => $__tiers];
 }
 $__flags = rivetRmmExtStoreFlags($mysqli);
 $__buf = ['batches' => 0, 'points' => 0, 'oldest' => null, 'max_attempts' => 0, 'last_error' => null];

@@ -10,6 +10,9 @@ use RivetCore\Rmm\Crypto\Signer;
 use RivetCore\Rmm\Checks\CheckCatalog;
 use RivetCore\Rmm\Checks\RmmChecks;
 use RivetCore\Rmm\RmmProtocol;
+use RivetCore\Rmm\Store\DataStoreUnavailableException;
+use RivetCore\Rmm\Store\RmmDataStoreFactory;
+use RivetCore\Rmm\Store\RmmDataStoreKind;
 use RivetCore\Rmm\Support\Sql;
 
 /**
@@ -22,7 +25,7 @@ use RivetCore\Rmm\Support\Sql;
  */
 final class RmmSettings
 {
-    /** Columns {@see set()} may write. Key material is written only by {@see generateSigningKey()}. */
+    /** Columns {@see set()} may write. Key material is written only by {@see generateSigningKey()}. Frozen: later additions go in {@see WRITABLE_ADDED}. */
     public const WRITABLE = [
         'enabled', 'service_url', 'check_in_interval_s', 'collect_interval_s', 'offline_after_s', 'stale_after_s',
         'failure_debounce', 'recovery_debounce', 'retention_days', 'job_retention_days', 'job_output_max_bytes',
@@ -31,6 +34,17 @@ final class RmmSettings
         'mesh_policy', 'mesh_token_ttl_s', 'coexistence_policy', 'integration_id', 'ca_pem',
         'features_json', 'limits_json', 'shed_level', 'ingest_mode', 'max_devices',
     ];
+
+    /**
+     * Writable columns added after 1.0.0-rc.38, so that {@see WRITABLE} keeps its value (the backward-compatibility check treats a changed constant value as a break).
+     * {@see set()} accepts both lists; use {@see writableColumns()} when you need the full set.
+     *
+     * @internal grows with every additive setting
+     */
+    public const WRITABLE_ADDED = ['data_store'];
+
+    /** Writable columns added in 1.0.0-rc.41 (kept apart so that {@see WRITABLE_ADDED} keeps its value). @internal */
+    public const WRITABLE_ADDED_RC41 = ['data_store_phase'];
 
     /**
      * Server-side bounds for the intervals agents are told to use (design 13.3). The two floors are a DELIBERATE change from RivetIT's
@@ -224,6 +238,41 @@ final class RmmSettings
         'hypervisor_alert_quorum' => 1,
     ];
 
+    /**
+     * Limits added in 1.0.0-rc.41 (the RMM data store: when to recommend PostgreSQL, how long the old store is kept after a migration, how fast the migration copies), kept apart
+     * so that {@see self::LIMIT_KEYS} keeps its value for the backward-compatibility check. Use {@see limitKeys()} for the full table.
+     *
+     * @internal
+     * @var array<string,array{0:int,1:int}>
+     */
+    public const LIMIT_KEYS_RC41 = [
+        'rmm_pg_recommend_devices' => [1, 10000000],
+        'rmm_pg_recommend_hot_mb' => [0, 100000000],
+        'rmm_store_rollback_days' => [0, 365],
+        'rmm_store_migrate_batch' => [100, 50000],
+        'rmm_store_migrate_pause_ms' => [0, 60000],
+    ];
+    /** The defaults of {@see self::LIMIT_KEYS_RC41}. @internal */
+    public const LIMIT_DEFAULTS_RC41 = [
+        'rmm_pg_recommend_devices' => 5000,
+        'rmm_pg_recommend_hot_mb' => 51200,
+        'rmm_store_rollback_days' => 7,
+        'rmm_store_migrate_batch' => 2000,
+        'rmm_store_migrate_pause_ms' => 100,
+    ];
+
+    /** @return array<string,array{0:int,1:int}> every limit with its bounds */
+    public static function limitKeys(): array
+    {
+        return self::LIMIT_KEYS + self::LIMIT_KEYS_RC41;
+    }
+
+    /** @return array<string,int> every limit with its default */
+    public static function limitDefaults(): array
+    {
+        return self::LIMIT_DEFAULTS + self::LIMIT_DEFAULTS_RC41;
+    }
+
     /** @var array<string,mixed>|null */
     private ?array $cache = null;
 
@@ -269,6 +318,17 @@ final class RmmSettings
         return $this->cache;
     }
 
+    /**
+     * Where the HOT RMM tables live: one of {@see RmmDataStoreKind::ALL}. `mariadb` when the column does not exist yet (migration 0042 not applied) or holds
+     * anything else. Only a value this release can run is ever saved by {@see update()}.
+     */
+    public function dataStore(): string
+    {
+        $v = $this->get()['data_store'] ?? RmmDataStoreKind::MARIADB;
+
+        return is_string($v) && in_array($v, RmmDataStoreKind::ALL, true) ? $v : RmmDataStoreKind::MARIADB;
+    }
+
     public function refresh(): void
     {
         $this->cache = null;
@@ -277,6 +337,12 @@ final class RmmSettings
     public function enabled(): bool
     {
         return (int) ($this->get()['enabled'] ?? 0) === 1;
+    }
+
+    /** @return list<string> every column {@see set()} may write */
+    public static function writableColumns(): array
+    {
+        return [...self::WRITABLE, ...self::WRITABLE_ADDED, ...self::WRITABLE_ADDED_RC41];
     }
 
     /**
@@ -288,7 +354,7 @@ final class RmmSettings
         $sets = [];
         $params = [];
         foreach ($values as $k => $v) {
-            if (!in_array($k, self::WRITABLE, true)) {
+            if (!in_array($k, self::writableColumns(), true)) {
                 throw new \InvalidArgumentException("unknown setting $k");
             }
             $sets[] = "`$k` = ?";
@@ -355,6 +421,17 @@ final class RmmSettings
                 $err[] = 'The ingest mode must be sync or queued.';
             } else {
                 $out['ingest_mode'] = $in['ingest_mode'];
+            }
+        }
+        if (array_key_exists('data_store', $in)) {
+            $kind = is_string($in['data_store']) ? $in['data_store'] : '';
+            try {
+                RmmDataStoreFactory::assertSelectable($kind);
+                if (array_key_exists('data_store', $this->get())) {   // an install that has not run migration 0042 yet is on mariadb already: nothing to write
+                    $out['data_store'] = $kind;
+                }
+            } catch (DataStoreUnavailableException $e) {
+                $err[] = $e->getMessage();
             }
         }
         if (array_key_exists('checks_json', $in)) {
@@ -495,9 +572,9 @@ final class RmmSettings
     {
         $raw = $this->get()['limits_json'] ?? null;
         $stored = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
-        $out = self::LIMIT_DEFAULTS;
+        $out = self::limitDefaults();
         if (is_array($stored)) {
-            foreach (self::LIMIT_KEYS as $k => [$min, $max]) {
+            foreach (self::limitKeys() as $k => [$min, $max]) {
                 if (isset($stored[$k]) && is_int($stored[$k]) && $stored[$k] >= $min && $stored[$k] <= $max) {
                     $out[$k] = $stored[$k];
                 }
@@ -519,7 +596,7 @@ final class RmmSettings
         $stored = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
         $out = [];
         if (is_array($stored)) {
-            foreach (self::LIMIT_KEYS as $k => [$min, $max]) {
+            foreach (self::limitKeys() as $k => [$min, $max]) {
                 if (isset($stored[$k]) && is_int($stored[$k]) && $stored[$k] >= $min && $stored[$k] <= $max) {
                     $out[$k] = $stored[$k];
                 }
@@ -570,10 +647,10 @@ final class RmmSettings
         $out = [];
         foreach ($d as $k => $v) {
             $k = (string) $k;
-            if (!isset(self::LIMIT_KEYS[$k])) {
+            if (!isset(self::limitKeys()[$k])) {
                 return [null, "Unknown limit $k."];
             }
-            [$min, $max] = self::LIMIT_KEYS[$k];
+            [$min, $max] = self::limitKeys()[$k];
             if (!is_int($v) || $v < $min || $v > $max) {
                 return [null, "Limit $k must be a whole number from $min to $max."];
             }
