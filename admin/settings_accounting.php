@@ -105,6 +105,7 @@ if (isset($_POST['save_accounting_settings'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
+    $provider    = ($_POST['accounting_provider'] ?? 'quickbooks_online') === 'xero' ? 'xero' : 'quickbooks_online';
     $client_id   = sanitizeInput(trim($_POST['accounting_client_id'] ?? ''));
     $client_secret_raw = (string) ($_POST['accounting_client_secret'] ?? '');
     $environment = ($_POST['accounting_environment'] ?? 'production') === 'sandbox' ? 'sandbox' : 'production';
@@ -112,6 +113,7 @@ if (isset($_POST['save_accounting_settings'])) {
     $auto_push   = isset($_POST['accounting_auto_push']) ? 1 : 0;
     $enabled     = isset($_POST['accounting_enabled']) ? 1 : 0;
 
+    $provider_esc    = mysqli_real_escape_string($mysqli, $provider);
     $client_id_esc   = mysqli_real_escape_string($mysqli, $client_id);
     $environment_esc = mysqli_real_escape_string($mysqli, $environment);
     $income_acct_esc = mysqli_real_escape_string($mysqli, $income_acct);
@@ -120,7 +122,7 @@ if (isset($_POST['save_accounting_settings'])) {
         // First-time save - create the single integration row.
         $secret_esc = mysqli_real_escape_string($mysqli, encryptSetting($client_secret_raw));
         mysqli_query($mysqli, "INSERT INTO accounting_integrations SET
-            accounting_provider = 'quickbooks_online',
+            accounting_provider = '$provider_esc',
             accounting_client_id = '$client_id_esc',
             accounting_client_secret = '$secret_esc',
             accounting_environment = '$environment_esc',
@@ -136,18 +138,34 @@ if (isset($_POST['save_accounting_settings'])) {
             $secret_esc = mysqli_real_escape_string($mysqli, encryptSetting($client_secret_raw));
             $secret_sql = "accounting_client_secret = '$secret_esc', ";
         }
+        // Roadmap #20: switching provider while still "connected" to the old one would leave
+        // a stale realm/tenant id and tokens from the WRONG provider sitting on the row - clear
+        // the connection fields in the same statement whenever the provider actually changes,
+        // same as an explicit Disconnect, so there is never a tokens-for-one/provider-set-to-
+        // another inconsistent state.
+        $prior_provider = (string) ($integration['accounting_provider'] ?? 'quickbooks_online');
+        $provider_changed_sql = '';
+        if ($provider !== $prior_provider) {
+            $provider_changed_sql = "accounting_realm_id = NULL, accounting_access_token = NULL, accounting_refresh_token = NULL, accounting_token_expires_at = NULL, accounting_enabled = 0, accounting_connected_at = NULL, ";
+            $enabled = 0;
+        }
         mysqli_query($mysqli, "UPDATE accounting_integrations SET
+            accounting_provider = '$provider_esc',
             accounting_client_id = '$client_id_esc',
             {$secret_sql}
+            {$provider_changed_sql}
             accounting_environment = '$environment_esc',
             accounting_default_income_account_id = '$income_acct_esc',
             accounting_auto_push = $auto_push,
             accounting_enabled = $enabled
             WHERE accounting_id = $save_accounting_id
         ");
+        if ($provider_changed_sql !== '') {
+            accountingLog($mysqli, $save_accounting_id, 'integration', $save_accounting_id, 'disconnected', "Provider changed from $prior_provider to $provider by $session_name - previous connection cleared");
+        }
     }
 
-    logAction("Settings", "Edit", "$session_name edited QuickBooks / accounting integration settings");
+    logAction("Settings", "Edit", "$session_name edited accounting integration settings ($provider)");
     flash_alert("Accounting settings saved");
     redirect($connection_path);
 }
@@ -159,6 +177,7 @@ if (isset($_GET['disconnect'])) {
 
     if ($integration) {
         $disc_accounting_id = intval($integration['accounting_id']);
+        $disc_provider_label = ($integration['accounting_provider'] ?? 'quickbooks_online') === 'xero' ? 'Xero' : 'QuickBooks Online';
         mysqli_query($mysqli, "UPDATE accounting_integrations SET
             accounting_realm_id = NULL,
             accounting_access_token = NULL,
@@ -168,11 +187,13 @@ if (isset($_GET['disconnect'])) {
             accounting_connected_at = NULL
             WHERE accounting_id = $disc_accounting_id
         ");
-        accountingLog($mysqli, $disc_accounting_id, 'integration', $disc_accounting_id, 'disconnected', "Disconnected from QuickBooks by $session_name");
-        logAction("Settings", "Edit", "$session_name disconnected QuickBooks Online");
+        accountingLog($mysqli, $disc_accounting_id, 'integration', $disc_accounting_id, 'disconnected', "Disconnected from $disc_provider_label by $session_name");
+        logAction("Settings", "Edit", "$session_name disconnected $disc_provider_label");
+    } else {
+        $disc_provider_label = 'Accounting integration';
     }
 
-    flash_alert("QuickBooks Online disconnected");
+    flash_alert("$disc_provider_label disconnected");
     redirect($connection_path);
 }
 
@@ -198,7 +219,7 @@ if (($_POST['action'] ?? '') === 'search_qbo_customers') {
     }
 
     try {
-        $qbo       = new QboClient($mysqli, $integration);
+        $qbo       = makeAccountingClient($mysqli, $integration);
         $customers = $qbo->searchCustomers(trim((string) ($_POST['q'] ?? '')));
         echo json_encode(['ok' => true, 'customers' => $customers]);
     } catch (Throwable $e) {
@@ -258,7 +279,7 @@ if (isset($_POST['create_qbo_customer'])) {
     }
 
     try {
-        $qbo = new QboClient($mysqli, $integration);
+        $qbo = makeAccountingClient($mysqli, $integration);
 
         // Avoid QBO's "duplicate DisplayName" fault: reuse an existing customer
         // with the same name/email if one is already in the books.
@@ -341,7 +362,7 @@ if (($_POST['action'] ?? '') === 'search_qbo_items') {
     }
 
     try {
-        $qbo   = new QboClient($mysqli, $integration);
+        $qbo   = makeAccountingClient($mysqli, $integration);
         $items = $qbo->searchItems(trim((string) ($_POST['q'] ?? '')));
         echo json_encode(['ok' => true, 'items' => $items]);
     } catch (Throwable $e) {
@@ -439,7 +460,7 @@ if (isset($_POST['import_all_qbo_items'])) {
     $imported = 0;
     $failed   = 0;
     try {
-        $qbo_bulk = new QboClient($mysqli, $integration);
+        $qbo_bulk = makeAccountingClient($mysqli, $integration);
         $existing_remote_ids = [];
         foreach (getAllItemMappings($mysqli, $accounting_id) as $m) {
             if (!empty($m['map_remote_id'])) {
@@ -489,7 +510,7 @@ if (isset($_POST['create_qbo_item'])) {
     }
 
     try {
-        $qbo = new QboClient($mysqli, $integration);
+        $qbo = makeAccountingClient($mysqli, $integration);
 
         // Avoid QBO's "duplicate Name" fault: reuse an existing item with the
         // same name if one is already in the books.
@@ -701,10 +722,10 @@ if (($_POST['action'] ?? '') === 'run_sync_step') {
     }
 
     try {
-        $qbo = new QboClient($mysqli, $integration);
+        $qbo = makeAccountingClient($mysqli, $integration);
         $qbo->getAccessToken();
         $integration = getAccountingIntegration($mysqli); // refresh rotated tokens
-        $qbo = new QboClient($mysqli, $integration);
+        $qbo = makeAccountingClient($mysqli, $integration);
     } catch (Throwable $e) {
         echo json_encode(['ok' => false, 'error' => 'QuickBooks auth failed: ' . $e->getMessage()]);
         exit;
@@ -1152,7 +1173,7 @@ if (isset($_POST['import_qbo_invoice'])) {
         redirect($sync_status_path);
     }
     try {
-        $qbo_pull = new QboClient($mysqli, $integration);
+        $qbo_pull = makeAccountingClient($mysqli, $integration);
         $found = null;
         foreach ($qbo_pull->searchInvoices(1000) as $qi) {
             if ((string) $qi['Id'] === $remote_id) { $found = $qi; break; }
@@ -1188,7 +1209,7 @@ if (isset($_POST['import_all_qbo_invoices'])) {
     }
     $imported = 0; $skipped = 0; $failed = 0;
     try {
-        $qbo_bulk = new QboClient($mysqli, $integration);
+        $qbo_bulk = makeAccountingClient($mysqli, $integration);
         $existing = getRemoteToLocalMap($mysqli, $accounting_id, 'invoice');
         $remote_to_local_client = getRemoteToLocalMap($mysqli, $accounting_id, 'client');
         $remote_to_local_item   = getRemoteToLocalMap($mysqli, $accounting_id, 'item');
@@ -1223,7 +1244,7 @@ if (isset($_POST['import_qbo_quote'])) {
         redirect($sync_status_path);
     }
     try {
-        $qbo_pull = new QboClient($mysqli, $integration);
+        $qbo_pull = makeAccountingClient($mysqli, $integration);
         $found = null;
         foreach ($qbo_pull->searchEstimates(1000) as $qe) {
             if ((string) $qe['Id'] === $remote_id) { $found = $qe; break; }
@@ -1259,7 +1280,7 @@ if (isset($_POST['import_all_qbo_quotes'])) {
     }
     $imported = 0; $skipped = 0; $failed = 0;
     try {
-        $qbo_bulk = new QboClient($mysqli, $integration);
+        $qbo_bulk = makeAccountingClient($mysqli, $integration);
         $existing = getRemoteToLocalMap($mysqli, $accounting_id, 'quote');
         $remote_to_local_client = getRemoteToLocalMap($mysqli, $accounting_id, 'client');
         $remote_to_local_item   = getRemoteToLocalMap($mysqli, $accounting_id, 'item');
@@ -1294,7 +1315,7 @@ if (isset($_POST['import_qbo_payment'])) {
         redirect($sync_status_path);
     }
     try {
-        $qbo_pull = new QboClient($mysqli, $integration);
+        $qbo_pull = makeAccountingClient($mysqli, $integration);
         $found = null;
         foreach ($qbo_pull->searchPayments(1000) as $qp) {
             if ((string) $qp['Id'] === $remote_id) { $found = $qp; break; }
@@ -1329,7 +1350,7 @@ if (isset($_POST['import_all_qbo_payments'])) {
     }
     $imported = 0; $skipped = 0; $failed = 0;
     try {
-        $qbo_bulk = new QboClient($mysqli, $integration);
+        $qbo_bulk = makeAccountingClient($mysqli, $integration);
         $existing = getRemoteToLocalMap($mysqli, $accounting_id, 'payment');
         $remote_to_local_invoice = getRemoteToLocalMap($mysqli, $accounting_id, 'invoice');
         $default_account_id = ass_default_account_id($mysqli);
@@ -1363,6 +1384,8 @@ $active_tab = in_array($_GET['tab'] ?? '', ['connection', 'client_mapping', 'ite
     : 'connection';
 
 // ── Connection tab data ───────────────────────────────────────────────────────
+$acc_provider    = ($integration['accounting_provider'] ?? 'quickbooks_online') === 'xero' ? 'xero' : 'quickbooks_online';
+$acc_provider_label = $acc_provider === 'xero' ? 'Xero' : 'QuickBooks Online';
 $acc_client_id   = $integration['accounting_client_id'] ?? '';
 $acc_environment = $integration['accounting_environment'] ?? 'production';
 $acc_income_acct = $integration['accounting_default_income_account_id'] ?? '';
@@ -1446,7 +1469,7 @@ if ($is_connected) {
         }
     }
     try {
-        $qbo_for_pull = new QboClient($mysqli, $integration);
+        $qbo_for_pull = makeAccountingClient($mysqli, $integration);
         foreach ($qbo_for_pull->searchItems('', 1000) as $qi) {
             if (!isset($mapped_remote_ids[(string) $qi['Id']])) {
                 $qbo_unmapped_items[] = $qi;
@@ -1632,7 +1655,7 @@ $qbo_unmapped_payments = [];
 $qbo_payment_pull_error = '';
 if ($is_connected) {
     try {
-        $qbo_for_pull = new QboClient($mysqli, $integration);
+        $qbo_for_pull = makeAccountingClient($mysqli, $integration);
         foreach ($qbo_for_pull->searchInvoices(1000) as $qi) {
             if (!isset($inv_map_by_remote[(string) $qi['Id']])) {
                 $qbo_unmapped_invoices[] = $qi;
@@ -1642,7 +1665,7 @@ if ($is_connected) {
         $qbo_invoice_pull_error = $e->getMessage();
     }
     try {
-        $qbo_for_pull = new QboClient($mysqli, $integration);
+        $qbo_for_pull = makeAccountingClient($mysqli, $integration);
         foreach ($qbo_for_pull->searchEstimates(1000) as $qe) {
             if (!isset($quote_map_by_remote[(string) $qe['Id']])) {
                 $qbo_unmapped_quotes[] = $qe;
@@ -1652,7 +1675,7 @@ if ($is_connected) {
         $qbo_quote_pull_error = $e->getMessage();
     }
     try {
-        $qbo_for_pull = new QboClient($mysqli, $integration);
+        $qbo_for_pull = makeAccountingClient($mysqli, $integration);
         foreach ($qbo_for_pull->searchPayments(1000) as $qp) {
             if (!isset($pay_map_by_remote[(string) $qp['Id']])) {
                 $qbo_unmapped_payments[] = $qp;
@@ -1728,8 +1751,11 @@ $money = static function ($v, $ccy) use ($currency_format) {
         <div class="card-body">
             <?php if ($is_connected): ?>
                 <ul class="list-unstyled mb-3">
-                    <li><strong>QBO Company (Realm) ID:</strong> <?php echo nullable_htmlentities($acc_realm); ?></li>
+                    <li><strong>Provider:</strong> <?php echo nullable_htmlentities($acc_provider_label); ?></li>
+                    <li><strong><?php echo $acc_provider === 'xero' ? 'Xero Tenant ID' : 'QBO Company (Realm) ID'; ?>:</strong> <?php echo nullable_htmlentities($acc_realm); ?></li>
+                    <?php if ($acc_provider !== 'xero') { ?>
                     <li><strong>Environment:</strong> <?php echo nullable_htmlentities(ucfirst($acc_environment)); ?></li>
+                    <?php } ?>
                     <li><strong>Connected at:</strong> <?php echo nullable_htmlentities($acc_connected_at); ?></li>
                     <li><strong>Access token expires:</strong> <?php echo nullable_htmlentities($acc_expires); ?> <small class="text-muted">(auto-refreshed)</small></li>
                     <li><strong>Auto-push:</strong> <?php echo $acc_auto_push ? 'On' : 'Off'; ?></li>
@@ -1740,7 +1766,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
                     <span class="badge text-bg-success">Delivered: <?php echo intval($conn_counts['delivered']); ?></span>
                     <span class="badge text-bg-danger">Failed: <?php echo intval($conn_counts['failed']); ?></span>
                 </div>
-                <a href="oauth_quickbooks_connect.php" class="btn btn-outline-primary btn-sm">
+                <a href="<?php echo $acc_provider === 'xero' ? 'oauth_xero_connect.php' : 'oauth_quickbooks_connect.php'; ?>" class="btn btn-outline-primary btn-sm">
                     <i class="fas fa-sync me-1"></i>Reconnect
                 </a>
                 <a href="settings_accounting.php?disconnect=1&csrf_token=<?php echo urlencode($_SESSION['csrf_token']); ?>"
@@ -1756,15 +1782,24 @@ $money = static function ($v, $ccy) use ($currency_format) {
                 <a href="settings_accounting.php?tab=sync_status" class="btn btn-outline-info btn-sm">
                     <i class="fas fa-sync-alt me-1"></i>Sync Status
                 </a>
+                <?php if ($acc_provider === 'xero') { ?>
+                    <div class="alert alert-warning mt-3 mb-0">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        Xero support is new: pushing customers, items, invoices, quotes and payments is covered, but
+                        bulk "pull existing records from Xero" (the Sync Status tab's import buttons) is not supported
+                        yet - push them from RivetMSP instead. This integration has also only been tested against a
+                        local test double, never Xero's real servers.
+                    </div>
+                <?php } ?>
             <?php else: ?>
-                <p class="text-muted">Save your QuickBooks app credentials below, then connect. One-way sync pushes RivetMSP customers, items, invoices and payments to QuickBooks Online.</p>
+                <p class="text-muted">Save your app credentials below, then connect. One-way sync pushes RivetMSP customers, items, invoices and payments to QuickBooks Online or Xero.</p>
                 <?php if (!empty($acc_client_id) && $has_secret): ?>
-                    <a href="oauth_quickbooks_connect.php" class="btn btn-success">
-                        <i class="fas fa-plug me-1"></i>Connect to QuickBooks
+                    <a href="<?php echo $acc_provider === 'xero' ? 'oauth_xero_connect.php' : 'oauth_quickbooks_connect.php'; ?>" class="btn btn-success">
+                        <i class="fas fa-plug me-1"></i>Connect to <?php echo nullable_htmlentities($acc_provider_label); ?>
                     </a>
                 <?php else: ?>
                     <button type="button" class="btn btn-success" disabled>
-                        <i class="fas fa-plug me-1"></i>Connect to QuickBooks
+                        <i class="fas fa-plug me-1"></i>Connect to <?php echo nullable_htmlentities($acc_provider_label); ?>
                     </button>
                     <small class="d-block text-muted mt-1">Enter and save a Client ID and Client Secret to enable connecting.</small>
                 <?php endif; ?>
@@ -1774,26 +1809,41 @@ $money = static function ($v, $ccy) use ($currency_format) {
 
     <div class="card mb-3">
         <div class="card-header py-2">
-            <h3 class="card-title"><i class="fas fa-fw fa-key me-2"></i>QuickBooks App Credentials</h3>
+            <h3 class="card-title"><i class="fas fa-fw fa-key me-2"></i><?php echo nullable_htmlentities($acc_provider_label); ?> App Credentials</h3>
         </div>
         <div class="card-body">
             <form action="settings_accounting.php" method="post" autocomplete="off">
                 <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
 
                 <div class="form-group">
+                    <label>Accounting Provider</label>
+                    <select class="form-control" name="accounting_provider" <?php echo $is_connected ? 'disabled' : ''; ?>>
+                        <option value="quickbooks_online" <?php echo $acc_provider === 'quickbooks_online' ? 'selected' : ''; ?>>QuickBooks Online</option>
+                        <option value="xero" <?php echo $acc_provider === 'xero' ? 'selected' : ''; ?>>Xero</option>
+                    </select>
+                    <?php if ($is_connected) { ?>
+                        <input type="hidden" name="accounting_provider" value="<?php echo nullable_htmlentities($acc_provider); ?>">
+                        <small class="form-text text-muted">Disconnect before switching providers.</small>
+                    <?php } else { ?>
+                        <small class="form-text text-muted">Switching providers while not connected clears any previously-saved connection state for this row.</small>
+                    <?php } ?>
+                </div>
+
+                <div class="form-group">
                     <label>Client ID</label>
                     <input type="text" class="form-control" name="accounting_client_id"
                            value="<?php echo nullable_htmlentities($acc_client_id); ?>"
-                           placeholder="Intuit app Client ID">
+                           placeholder="<?php echo $acc_provider === 'xero' ? 'Xero app Client ID' : 'Intuit app Client ID'; ?>">
                 </div>
 
                 <div class="form-group">
                     <label>Client Secret</label>
                     <input type="password" class="form-control" name="accounting_client_secret"
-                           placeholder="<?php echo $has_secret ? 'Stored - leave blank to keep current' : 'Intuit app Client Secret'; ?>">
+                           placeholder="<?php echo $has_secret ? 'Stored - leave blank to keep current' : ($acc_provider === 'xero' ? 'Xero app Client Secret' : 'Intuit app Client Secret'); ?>">
                     <small class="form-text text-muted">Stored encrypted. Leave blank to keep the existing secret.</small>
                 </div>
 
+                <?php if ($acc_provider !== 'xero') { ?>
                 <div class="form-group">
                     <label>Environment</label>
                     <select class="form-control" name="accounting_environment">
@@ -1801,13 +1851,18 @@ $money = static function ($v, $ccy) use ($currency_format) {
                         <option value="sandbox" <?php echo $acc_environment === 'sandbox' ? 'selected' : ''; ?>>Sandbox</option>
                     </select>
                 </div>
+                <?php } ?>
 
                 <div class="form-group">
-                    <label>Default Income Account ID <small class="text-muted">(optional)</small></label>
+                    <label><?php echo $acc_provider === 'xero' ? 'Default Bank Account Code' : 'Default Income Account ID'; ?> <small class="text-muted">(optional)</small></label>
                     <input type="text" class="form-control" name="accounting_default_income_account_id"
                            value="<?php echo nullable_htmlentities($acc_income_acct); ?>"
-                           placeholder="QBO income account Id used for new items">
+                           placeholder="<?php echo $acc_provider === 'xero' ? 'Xero bank Account Code used for recorded payments' : 'QBO income account Id used for new items'; ?>">
+                    <?php if ($acc_provider === 'xero') { ?>
+                    <small class="form-text text-muted">Used when recording a payment in Xero (Xero requires a bank account reference). If blank, the first active Bank account is used.</small>
+                    <?php } else { ?>
                     <small class="form-text text-muted">Used when creating new QuickBooks items. If blank, the first active Income account is used.</small>
+                    <?php } ?>
                 </div>
 
                 <div class="form-group">

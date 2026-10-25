@@ -7615,3 +7615,27 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.112'");
     }
+
+    if ($rivetit_db_version() == '2.6.112') {
+        // NOTE: this step number collides with several other in-flight branches that each
+        // independently claimed 2.6.113 from the same beta tip - same renumbering-on-merge
+        // situation as the documented 26.10.43/26.10.43 precedent (commit d8e047b42).
+        //
+        // Roadmap #20 (Xero) incidental fix: includes/accounting_functions.php's
+        // getAllClientMappings()/getClientMapping()/setClientMapping() and
+        // getAllItemMappings()/getItemMapping()/setItemMapping() all already SELECT/INSERT
+        // map_remote_name, and the Item-mapping trio also reference map_local_subtype - neither
+        // column has ever existed on accounting_entity_map. This is a genuine pre-existing bug
+        // (confirmed while testing this item, unrelated to Xero itself): any accounting_id > 0
+        // fatals under strict SQL mode the moment admin/settings_accounting.php's Client or Item
+        // Mapping tab loads (getAllClientMappings()/getAllItemMappings() are called
+        // unconditionally once connected), and the manual-link actions (setClientMapping()/
+        // setItemMapping()) would fatal too. The automatic push-sync pipeline
+        // (accountingSyncProcessJob() -> setAccountingMap()) was unaffected - that function
+        // never references either column - which is why this went unnoticed: the core QBO sync
+        // worked, only the manual mapping-picker UI was broken.
+        mysqli_query($mysqli, "ALTER TABLE `accounting_entity_map` ADD COLUMN IF NOT EXISTS `map_remote_name` varchar(255) DEFAULT NULL AFTER `map_remote_id`");
+        mysqli_query($mysqli, "ALTER TABLE `accounting_entity_map` ADD COLUMN IF NOT EXISTS `map_local_subtype` varchar(20) DEFAULT NULL AFTER `map_remote_name`");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.113'");
+    }

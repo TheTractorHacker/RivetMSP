@@ -10,11 +10,21 @@
  *
  * Tokens are stored encrypted via encryptSetting()/decryptSetting() (defined in
  * functions.php) - this class only CALLS them, it never redefines them.
+ *
+ * Roadmap #20 (Xero): this class now implements AccountingClientInterface
+ * (includes/interface_accounting_client.php) - a pure extraction of its existing public
+ * method surface, no behavior change to any method body below. The only other change is the
+ * optional 4th constructor parameter $url_overrides, added purely for test injectability
+ * (tests/accounting_interface_refactor.php points it at a loopback fake-QBO server instead of
+ * the real Intuit endpoints); every real caller omits it and gets the exact same TOKEN_URL /
+ * API_BASE_* constants as before.
  */
 
-class QboException extends Exception {}
+require_once __DIR__ . '/interface_accounting_client.php';
 
-class QboClient {
+class QboException extends AccountingClientException {}
+
+class QboClient implements AccountingClientInterface {
 
     // Intuit OAuth2 token endpoint (same for production and sandbox).
     const TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
@@ -39,7 +49,11 @@ class QboClient {
     private $environment;
     private $access_token;
 
-    public function __construct(mysqli $mysqli, array $integration) {
+    // Test-injectability only (see class header) - null means "use the real constants".
+    private $token_url_override;
+    private $api_base_override;
+
+    public function __construct(mysqli $mysqli, array $integration, array $url_overrides = []) {
         $this->mysqli        = $mysqli;
         $this->integration   = $integration;
         $this->accounting_id = intval($integration['accounting_id']);
@@ -48,9 +62,18 @@ class QboClient {
         $this->client_secret = decryptSetting((string) ($integration['accounting_client_secret'] ?? ''));
         $this->environment   = (string) ($integration['accounting_environment'] ?? 'production');
         $this->access_token  = '';
+        $this->token_url_override = $url_overrides['token_url'] ?? null;
+        $this->api_base_override  = $url_overrides['api_base'] ?? null;
+    }
+
+    private function tokenUrl(): string {
+        return $this->token_url_override ?? self::TOKEN_URL;
     }
 
     private function apiBase(): string {
+        if ($this->api_base_override !== null) {
+            return $this->api_base_override;
+        }
         return $this->environment === 'sandbox' ? self::API_BASE_SANDBOX : self::API_BASE_PRODUCTION;
     }
 
@@ -84,7 +107,7 @@ class QboClient {
             throw new QboException('QBO not connected: missing client credentials or refresh token.');
         }
 
-        $ch = curl_init(self::TOKEN_URL);
+        $ch = curl_init($this->tokenUrl());
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_USERPWD, $this->client_id . ':' . $this->client_secret);
