@@ -101,6 +101,19 @@ if (isset($_POST['add_ticket'])) {
 
     $ticket_id = mysqli_insert_id($mysqli);
 
+    // Roadmap #21: optional parent ticket (child tickets). Validated against a real,
+    // non-archived ticket belonging to the SAME client before being stored - a
+    // cross-client or stale id is a silent no-op rather than a dangling reference.
+    $parent_ticket_id_raw = intval($_POST['parent_ticket_id'] ?? 0);
+    if ($parent_ticket_id_raw > 0 && $parent_ticket_id_raw !== $ticket_id) {
+        $parent_ok = mysqli_fetch_assoc(mysqli_query($mysqli,
+            "SELECT ticket_id FROM tickets WHERE ticket_id = $parent_ticket_id_raw AND ticket_client_id = $client_id AND ticket_archived_at IS NULL LIMIT 1"
+        ));
+        if ($parent_ok) {
+            mysqli_query($mysqli, "UPDATE tickets SET ticket_parent_id = $parent_ticket_id_raw WHERE ticket_id = $ticket_id");
+        }
+    }
+
     // Apply the SLA engine (policy-aware; falls back to the legacy contract-hour
     // values just inserted when no policy target applies).
     recalculateTicketSla($mysqli, $ticket_id);
@@ -292,6 +305,24 @@ if (isset($_POST['edit_ticket'])) {
         : '';
 
     mysqli_query($mysqli, "UPDATE tickets SET ticket_category = $category_id, ticket_subject = '$ticket_subject', ticket_priority = '$ticket_priority', ticket_billable = $billable, ticket_details = '$details', ticket_due_at = $due, ticket_vendor_ticket_number = '$vendor_ticket_number', ticket_contact_id = $contact_id, ticket_assigned_to = $assigned_to, ticket_vendor_id = $vendor_id, ticket_location_id = $location_id, ticket_asset_id = $asset_id, ticket_project_id = $project_id$delivery_method_sql_fragment WHERE ticket_id = $ticket_id");
+
+    // Roadmap #21: optional parent ticket (child tickets). Only touched when the
+    // field is present in the request at all - the real edit modal's picker always
+    // sends it (0 = "- None -" = clear), but older/partial callers that omit the key
+    // entirely (e.g. edit_ticket_priority-style narrow POSTs, or this handler's own
+    // other narrower edit_* actions elsewhere in this file) must not accidentally wipe
+    // an existing link. Same cross-client / self-reference validation as add_ticket.
+    if (array_key_exists('parent_ticket_id', $_POST)) {
+        $parent_ticket_id_raw = intval($_POST['parent_ticket_id']);
+        if ($parent_ticket_id_raw > 0 && $parent_ticket_id_raw !== $ticket_id) {
+            $parent_ok = mysqli_fetch_assoc(mysqli_query($mysqli,
+                "SELECT ticket_id FROM tickets WHERE ticket_id = $parent_ticket_id_raw AND ticket_client_id = $client_id AND ticket_archived_at IS NULL AND (ticket_parent_id IS NULL OR ticket_parent_id != $ticket_id) LIMIT 1"
+            ));
+            mysqli_query($mysqli, "UPDATE tickets SET ticket_parent_id = " . ($parent_ok ? $parent_ticket_id_raw : 'NULL') . " WHERE ticket_id = $ticket_id");
+        } else {
+            mysqli_query($mysqli, "UPDATE tickets SET ticket_parent_id = NULL WHERE ticket_id = $ticket_id");
+        }
+    }
 
     recalculateTicketSla($mysqli, $ticket_id);
 

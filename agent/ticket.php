@@ -146,6 +146,11 @@ if (isset($_GET['ticket_id'])) {
         $ticket_closed_at_ago = timeAgo($row['ticket_closed_at']);
         $ticket_closed_date = date('Y-m-d', strtotime($ticket_closed_at));
         $ticket_closed_by = intval($row['ticket_closed_by']);
+        // Roadmap #21 (child tickets): captured here, not later, because $row is
+        // reused as a loop variable repeatedly further down this file (e.g. the
+        // additional-assets loop) and would no longer hold the ticket's own row by
+        // the time the Parent/Child Tickets card renders.
+        $ticket_parent_id = intval($row['ticket_parent_id'] ?? 0);
 
         $ticket_assigned_to = intval($row['ticket_assigned_to']);
         if (empty($ticket_assigned_to)) {
@@ -1367,6 +1372,55 @@ if (isset($_GET['ticket_id'])) {
                         </div>
                     </div>
                 <?php } // End if asset_id ?>
+
+                <?php
+                // Roadmap #21: child tickets. Both queries are scoped to this ticket's own
+                // client as a defense-in-depth belt-and-suspenders check (agent/post/ticket.php
+                // already rejects cross-client links before they are ever stored).
+                $parent_ticket_row = null;
+                if ($ticket_parent_id > 0) {
+                    $parent_ticket_row = mysqli_fetch_assoc(mysqli_query($mysqli,
+                        "SELECT ticket_id, ticket_prefix, ticket_number, ticket_subject FROM tickets WHERE ticket_id = $ticket_parent_id AND ticket_client_id = $client_id LIMIT 1"
+                    ));
+                }
+                $sql_child_tickets = mysqli_query($mysqli,
+                    "SELECT t.ticket_id, t.ticket_prefix, t.ticket_number, t.ticket_subject, t.ticket_closed_at, ts.ticket_status_name
+                     FROM tickets t LEFT JOIN ticket_statuses ts ON t.ticket_status = ts.ticket_status_id
+                     WHERE t.ticket_parent_id = $ticket_id AND t.ticket_client_id = $client_id AND t.ticket_archived_at IS NULL
+                     ORDER BY t.ticket_id DESC"
+                );
+                $child_ticket_count = mysqli_num_rows($sql_child_tickets);
+                if ($parent_ticket_row || $child_ticket_count > 0) {
+                ?>
+                    <div class="card mt-3">
+                        <div class="card-header px-3 py-2">
+                            <h5 class="card-title mt-1"><i class="fas fa-fw fa-sitemap me-2"></i>Parent / Child Tickets</h5>
+                        </div>
+                        <div class="card-body p-3">
+                            <?php if ($parent_ticket_row) { ?>
+                                <div class="mb-2">
+                                    <span class="text-secondary small">Parent ticket:</span><br>
+                                    <a href="ticket.php?ticket_id=<?= intval($parent_ticket_row['ticket_id']) ?>">
+                                        <i class="fa fa-fw fa-level-up-alt text-secondary me-2"></i><?= nullable_htmlentities($parent_ticket_row['ticket_prefix'] . $parent_ticket_row['ticket_number']) ?> - <?= nullable_htmlentities($parent_ticket_row['ticket_subject']) ?>
+                                    </a>
+                                </div>
+                            <?php } ?>
+                            <?php if ($child_ticket_count > 0) { ?>
+                                <div class="<?= $parent_ticket_row ? 'mt-2 pt-2 border-top' : '' ?>">
+                                    <span class="text-secondary small">Child tickets (<?= $child_ticket_count ?>):</span>
+                                    <?php while ($child = mysqli_fetch_assoc($sql_child_tickets)) { ?>
+                                        <div class="mt-1">
+                                            <a href="ticket.php?ticket_id=<?= intval($child['ticket_id']) ?>">
+                                                <i class="fa fa-fw fa-level-down-alt text-secondary me-2"></i><?= nullable_htmlentities($child['ticket_prefix'] . $child['ticket_number']) ?> - <?= nullable_htmlentities($child['ticket_subject']) ?>
+                                            </a>
+                                            <span class="badge <?= $child['ticket_closed_at'] ? 'text-bg-secondary' : 'text-bg-info' ?> ms-1"><?= nullable_htmlentities($child['ticket_status_name'] ?? '') ?></span>
+                                        </div>
+                                    <?php } ?>
+                                </div>
+                            <?php } ?>
+                        </div>
+                    </div>
+                <?php } ?>
                 <!-- End Asset card -->
 
             </div>

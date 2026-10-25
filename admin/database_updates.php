@@ -7615,3 +7615,20 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.112'");
     }
+
+    if ($rivetit_db_version() == '2.6.112') {
+        // NOTE: this step number collides with several other in-flight branches that
+        // each independently claimed 2.6.113 from the same beta tip (msp-port-kb-v2,
+        // msp-port-intune-per-client, msp-port-oidc-portal, msp-recurring-invoice-
+        // contracts, msp-structured-docs, msp-sla-automation-gaps) - same renumbering-
+        // on-merge situation as the documented 26.10.43/26.10.43 precedent (commit
+        // d8e047b42). Whichever merges first keeps 2.6.113; the rest get bumped.
+        //
+        // Roadmap #21 (child tickets): a ticket may optionally belong to a parent
+        // ticket of the same client. agent/post/ticket.php validates the link
+        // (same client, not itself, not a one-level cycle) before ever storing it.
+        mysqli_query($mysqli, "ALTER TABLE `tickets` ADD COLUMN IF NOT EXISTS `ticket_parent_id` int(11) DEFAULT NULL AFTER `ticket_merged_into_id`");
+        mysqli_query($mysqli, "ALTER TABLE `tickets` ADD INDEX IF NOT EXISTS `idx_tickets_parent_id` (`ticket_parent_id`)");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.113'");
+    }

@@ -31,6 +31,7 @@ $asset_id = intval($row['ticket_asset_id']);
 $location_id = intval($row['ticket_location_id']);
 $vendor_id = intval($row['ticket_vendor_id']);
 $project_id = intval($row['ticket_project_id']);
+$parent_ticket_id = intval($row['ticket_parent_id'] ?? 0);
 
 // Additional Assets Selected
 $additional_assets_array = array();
@@ -307,6 +308,31 @@ ob_start();
                                 ?>
                                 <option <?php if ($location_id == $location_id_select) { echo "selected"; } ?> value="<?php echo $location_id_select; ?>"><?php echo $location_name_select; ?></option>
 
+                                <?php
+                            }
+                            ?>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Parent Ticket <small class="text-secondary">(roadmap #21: makes this a child ticket)</small></label>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="fa fa-fw fa-sitemap"></i></span>
+                        </div>
+                        <select class="form-control select2" name="parent_ticket_id">
+                            <option value="0">- None -</option>
+                            <?php
+                            // Excludes this ticket itself and any of its own children (a ticket cannot become its own
+                            // parent or grandparent via a simple one-level cycle; agent/post/ticket.php validates this
+                            // again server-side regardless of what this list offers).
+                            $sql_parent_tickets = mysqli_query($mysqli, "SELECT ticket_id, ticket_prefix, ticket_number, ticket_subject FROM tickets WHERE ticket_client_id = $client_id AND ticket_id != $ticket_id AND (ticket_parent_id IS NULL OR ticket_parent_id != $ticket_id) AND ticket_archived_at IS NULL ORDER BY ticket_id DESC LIMIT 200");
+                            while ($row = mysqli_fetch_assoc($sql_parent_tickets)) {
+                                $parent_ticket_id_select = intval($row['ticket_id']);
+                                $parent_ticket_label = nullable_htmlentities($row['ticket_prefix'] . $row['ticket_number'] . ' - ' . $row['ticket_subject']);
+                                ?>
+                                <option <?php if ($parent_ticket_id == $parent_ticket_id_select) { echo "selected"; } ?> value="<?php echo $parent_ticket_id_select; ?>"><?php echo $parent_ticket_label; ?></option>
                                 <?php
                             }
                             ?>

@@ -5851,6 +5851,7 @@ CREATE TABLE `tickets` (
   `ticket_assigned_to` int(11) NOT NULL DEFAULT 0,
   `ticket_closed_by` int(11) NOT NULL DEFAULT 0,
   `ticket_merged_into_id` int(11) DEFAULT NULL,
+  `ticket_parent_id` int(11) DEFAULT NULL,
   `ticket_vendor_id` int(11) NOT NULL DEFAULT 0,
   `ticket_client_id` int(11) NOT NULL DEFAULT 0,
   `ticket_contact_id` int(11) NOT NULL DEFAULT 0,
@@ -5883,7 +5884,8 @@ CREATE TABLE `tickets` (
   PRIMARY KEY (`ticket_id`),
   KEY `idx_tickets_client_archived_updated` (`ticket_client_id`,`ticket_archived_at`,`ticket_updated_at`),
   KEY `idx_tickets_problem` (`ticket_problem_id`),
-  KEY `idx_ticket_mail_message_id` (`ticket_mail_message_id`)
+  KEY `idx_ticket_mail_message_id` (`ticket_mail_message_id`),
+  KEY `idx_tickets_parent_id` (`ticket_parent_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `transfers`;

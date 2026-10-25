@@ -422,6 +422,26 @@ ob_start();
                         </div>
                     </div>
 
+                    <div class="form-group">
+                        <label>Parent Ticket <small class="text-secondary">(roadmap #21: makes this a child ticket)</small></label>
+                        <div class="input-group">
+                            <div class="input-group-prepend">
+                                <span class="input-group-text"><i class="fa fa-fw fa-sitemap"></i></span>
+                            </div>
+                            <select class="form-control select2" name="parent_ticket_id">
+                                <option value="0">- None -</option>
+                                <?php
+                                $sql_parent_tickets = mysqli_query($mysqli, "SELECT ticket_id, ticket_prefix, ticket_number, ticket_subject FROM tickets WHERE ticket_client_id = $client_id AND ticket_archived_at IS NULL ORDER BY ticket_id DESC LIMIT 200");
+                                while ($row = mysqli_fetch_assoc($sql_parent_tickets)) {
+                                    $parent_ticket_id_select = intval($row['ticket_id']);
+                                    $parent_ticket_label = nullable_htmlentities($row['ticket_prefix'] . $row['ticket_number'] . ' - ' . $row['ticket_subject']);
+                                ?>
+                                    <option value="<?php echo $parent_ticket_id_select; ?>"><?php echo $parent_ticket_label; ?></option>
+                                <?php } ?>
+                            </select>
+                        </div>
+                    </div>
+
                     <div class="row">
 
                         <div class="col">
