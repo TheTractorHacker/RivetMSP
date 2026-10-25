@@ -74,6 +74,9 @@ final class ColumnRegistry
         }
         $specs[] = new ColumnSpec('rmm_job_extra', 'job_id', 'secret_params_enc', 'settings', false, false);
         $specs[] = new ColumnSpec('rmm_custom_field_values', 'field_id', 'value_enc', 'settings', false, true, null, 'scope_id');
+        // Roadmap #22 (structured documentation field builder) - password-type field values, same
+        // (table, pk, pk2) -> value_enc shape as rmm_custom_field_values just above.
+        $specs[] = new ColumnSpec('structured_document_values', 'doc_id', 'value_enc', 'settings', false, true, null, 'field_id');
         // The license keys were cleartext on old installs; every reader goes through decryptSetting().
         $specs[] = new ColumnSpec('software', 'software_id', 'software_key', 'settings', $wrap('software', 'software_key'));
         $specs[] = new ColumnSpec('software_keys', 'software_key_id', 'software_key', 'settings', $wrap('software_keys', 'software_key'));

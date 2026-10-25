@@ -5230,6 +5230,72 @@ CREATE TABLE `sla_policies` (
   PRIMARY KEY (`policy_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `structured_doc_types`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `structured_doc_types` (
+  `type_id` int(11) NOT NULL AUTO_INCREMENT,
+  `type_name` varchar(100) NOT NULL,
+  `type_icon` varchar(40) NOT NULL DEFAULT 'fa-file-alt',
+  `type_order` int(11) NOT NULL DEFAULT 0,
+  `type_created_by` int(11) NOT NULL DEFAULT 0,
+  `type_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `type_archived_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`type_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `structured_doc_fields`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `structured_doc_fields` (
+  `field_id` int(11) NOT NULL AUTO_INCREMENT,
+  `field_type_id` int(11) NOT NULL,
+  `field_key` varchar(60) NOT NULL,
+  `field_label` varchar(150) NOT NULL,
+  `field_kind` varchar(20) NOT NULL DEFAULT 'text',
+  `field_options_json` text DEFAULT NULL,
+  `field_required` tinyint(1) NOT NULL DEFAULT 0,
+  `field_order` int(11) NOT NULL DEFAULT 0,
+  `field_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `field_archived_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`field_id`),
+  UNIQUE KEY `uniq_field_type_key` (`field_type_id`, `field_key`),
+  KEY `idx_field_type_id` (`field_type_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `structured_documents`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `structured_documents` (
+  `doc_id` int(11) NOT NULL AUTO_INCREMENT,
+  `doc_type_id` int(11) NOT NULL,
+  `doc_client_id` int(11) NOT NULL DEFAULT 0,
+  `doc_name` varchar(200) NOT NULL,
+  `doc_favorite` tinyint(1) NOT NULL DEFAULT 0,
+  `doc_created_by` int(11) NOT NULL DEFAULT 0,
+  `doc_updated_by` int(11) NOT NULL DEFAULT 0,
+  `doc_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `doc_updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
+  `doc_archived_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`doc_id`),
+  KEY `idx_doc_client_id` (`doc_client_id`),
+  KEY `idx_doc_type_id` (`doc_type_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `structured_document_values`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `structured_document_values` (
+  `doc_id` int(11) NOT NULL,
+  `field_id` int(11) NOT NULL,
+  `value_text` varchar(2000) DEFAULT NULL,
+  `value_enc` text DEFAULT NULL,
+  `updated_by` int(11) NOT NULL DEFAULT 0,
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`doc_id`, `field_id`),
+  KEY `idx_sdv_field_id` (`field_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `software`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;

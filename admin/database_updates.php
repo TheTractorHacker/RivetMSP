@@ -7615,3 +7615,74 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.112'");
     }
+
+    if ($rivetit_db_version() == '2.6.112') {
+        // Roadmap #22: structured documentation with a field builder (Hudu/IT Glue "flexible assets" style -
+        // an admin defines a document TYPE's own field layout once, e.g. "Firewall": WAN IP, management URL,
+        // admin credential note; every document of that type then has the same fields to fill in). Neither
+        // edition had this (checked RivetIT: no equivalent exists there either - new work, not a port).
+        // RivetMSP's existing `custom_fields` table is a dead stub (see project memory) - deliberately not
+        // built on; this is its own dedicated module instead, modeled on the (field_id, scope_id) -> value
+        // shape RivetCore's own rmm_custom_fields/rmm_custom_field_values already use for RMM, including
+        // encrypted values for password-type fields via the same encryptSetting() mechanism.
+        //
+        // NOTE for whoever merges this: this branch and the other four worktrees queued this session
+        // (msp-port-kb-v2, msp-port-intune-per-client, msp-port-oidc-portal, msp-recurring-invoice-contracts)
+        // all branched from 2.6.112 and each claims "2.6.113" for its own step - chain in whatever order they
+        // actually land (commit d8e047b42 is the precedent for this exact situation).
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `structured_doc_types` (
+            `type_id` int(11) NOT NULL AUTO_INCREMENT,
+            `type_name` varchar(100) NOT NULL,
+            `type_icon` varchar(40) NOT NULL DEFAULT 'fa-file-alt',
+            `type_order` int(11) NOT NULL DEFAULT 0,
+            `type_created_by` int(11) NOT NULL DEFAULT 0,
+            `type_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+            `type_archived_at` datetime DEFAULT NULL,
+            PRIMARY KEY (`type_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `structured_doc_fields` (
+            `field_id` int(11) NOT NULL AUTO_INCREMENT,
+            `field_type_id` int(11) NOT NULL,
+            `field_key` varchar(60) NOT NULL,
+            `field_label` varchar(150) NOT NULL,
+            `field_kind` varchar(20) NOT NULL DEFAULT 'text',
+            `field_options_json` text DEFAULT NULL,
+            `field_required` tinyint(1) NOT NULL DEFAULT 0,
+            `field_order` int(11) NOT NULL DEFAULT 0,
+            `field_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+            `field_archived_at` datetime DEFAULT NULL,
+            PRIMARY KEY (`field_id`),
+            UNIQUE KEY `uniq_field_type_key` (`field_type_id`, `field_key`),
+            KEY `idx_field_type_id` (`field_type_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `structured_documents` (
+            `doc_id` int(11) NOT NULL AUTO_INCREMENT,
+            `doc_type_id` int(11) NOT NULL,
+            `doc_client_id` int(11) NOT NULL DEFAULT 0,
+            `doc_name` varchar(200) NOT NULL,
+            `doc_favorite` tinyint(1) NOT NULL DEFAULT 0,
+            `doc_created_by` int(11) NOT NULL DEFAULT 0,
+            `doc_updated_by` int(11) NOT NULL DEFAULT 0,
+            `doc_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+            `doc_updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
+            `doc_archived_at` datetime DEFAULT NULL,
+            PRIMARY KEY (`doc_id`),
+            KEY `idx_doc_client_id` (`doc_client_id`),
+            KEY `idx_doc_type_id` (`doc_type_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `structured_document_values` (
+            `doc_id` int(11) NOT NULL,
+            `field_id` int(11) NOT NULL,
+            `value_text` varchar(2000) DEFAULT NULL,
+            `value_enc` text DEFAULT NULL,
+            `updated_by` int(11) NOT NULL DEFAULT 0,
+            `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
+            PRIMARY KEY (`doc_id`, `field_id`),
+            KEY `idx_sdv_field_id` (`field_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.113'");
+    }
