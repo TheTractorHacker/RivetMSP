@@ -62,6 +62,7 @@ $op_labels = [
 $action_labels = [
     'set_priority'             => 'Set priority',
     'assign_to'                => 'Assign to user ID',
+    'dispatch_assign'          => 'Auto-dispatch (skill + workload match)',
     'set_status'               => 'Set status ID',
     'add_note'                 => 'Add automation note',
     'ai_triage'                => 'AI triage (suggest)',

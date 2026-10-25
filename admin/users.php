@@ -199,6 +199,10 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                    data-modal-url="modals/user/user_edit.php?id=<?= $user_id ?>">
                                     <i class="fas fa-fw fa-user-edit me-1"></i>Edit
                                 </a>
+                                <a class="btn btn-secondary btn-sm me-1 ajax-modal" href="#"
+                                   data-modal-url="modals/user/user_skills.php?id=<?= $user_id ?>" title="Skill tags (roadmap #29: used by auto-dispatch to match technicians to ticket categories)">
+                                    <i class="fas fa-fw fa-tags me-1"></i>Skills
+                                </a>
                                 <?php if ($user_id !== $session_user_id) { // Disable/archive not allowed on self ?>
                                 <div class="dropdown dropleft">
                                     <button class="btn btn-secondary btn-sm" type="button" data-bs-toggle="dropdown">

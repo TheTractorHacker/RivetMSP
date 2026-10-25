@@ -58,6 +58,22 @@ $category_types_array = ['Expense', 'Income', 'Referral', 'Ticket'];
         <input type="hidden" name="category_parent" value="0">
         <?php } ?>
 
+        <?php if ($category === 'Ticket') { ?>
+        <div class="form-group">
+            <label>Required Skill <small class="text-muted">(optional — roadmap #29: auto-dispatch matches tickets in this category to a technician holding this skill tag)</small></label>
+            <div class="input-group">
+                <div class="input-group-prepend"><span class="input-group-text"><i class="fa fa-fw fa-tags"></i></span></div>
+                <select class="form-control select2" name="required_skill_tag_id">
+                    <option value="0">— None (workload balance only) —</option>
+                    <?php
+                    $sql_skill_tags = mysqli_query($mysqli, "SELECT tag_id, tag_name FROM tags WHERE tag_type = 7 ORDER BY tag_name");
+                    while ($st = mysqli_fetch_assoc($sql_skill_tags)) echo "<option value=\"{$st['tag_id']}\">" . nullable_htmlentities($st['tag_name']) . "</option>";
+                    ?>
+                </select>
+            </div>
+        </div>
+        <?php } ?>
+
         <div class="form-group">
             <label>Name <strong class="text-danger">*</strong></label>
             <div class="input-group">

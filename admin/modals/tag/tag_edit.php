@@ -28,6 +28,8 @@ if ($tag_type == 1) {
     $tag_type_display = "Asset";
 } elseif ( $tag_type == 6) {
     $tag_type_display = "Ticket";
+} elseif ( $tag_type == 7) {
+    $tag_type_display = "Technician";
 } else {
     $tag_type_display = "Unknown";
 }

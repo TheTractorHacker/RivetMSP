@@ -603,6 +603,7 @@ CREATE TABLE `categories` (
   `category_icon` varchar(200) DEFAULT NULL,
   `category_order` int(11) NOT NULL DEFAULT 0,
   `category_parent` int(11) DEFAULT 0,
+  `category_required_skill_tag_id` int(11) DEFAULT NULL,
   `category_created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `category_updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
   `category_archived_at` datetime DEFAULT NULL,
@@ -5716,6 +5717,18 @@ CREATE TABLE `ticket_tags` (
   KEY `fk_ticket_tag_tag` (`ticket_tag_tag_id`),
   CONSTRAINT `fk_ticket_tag_tag` FOREIGN KEY (`ticket_tag_tag_id`) REFERENCES `tags` (`tag_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_ticket_tag_ticket` FOREIGN KEY (`ticket_tag_ticket_id`) REFERENCES `tickets` (`ticket_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `user_tags`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `user_tags` (
+  `user_tag_user_id` int(11) NOT NULL,
+  `user_tag_tag_id` int(11) NOT NULL,
+  PRIMARY KEY (`user_tag_user_id`,`user_tag_tag_id`),
+  KEY `fk_user_tag_tag` (`user_tag_tag_id`),
+  CONSTRAINT `fk_user_tag_tag` FOREIGN KEY (`user_tag_tag_id`) REFERENCES `tags` (`tag_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_user_tag_user` FOREIGN KEY (`user_tag_user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `ticket_techs`;

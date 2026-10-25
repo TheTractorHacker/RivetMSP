@@ -181,6 +181,7 @@ ob_start();
     var ACTION_OPTIONS = [
         ['set_priority',           'Set ticket priority (low / medium / high / critical)'],
         ['assign_to',               'Assign ticket to user ID'],
+        ['dispatch_assign',         'Auto-dispatch (match technician skill tag, workload-balance tiebreak)'],
         ['escalate',                'Escalate ticket (reassign + bump priority: userID:priority)'],
         ['set_status',               'Set ticket status ID'],
         ['add_note',                 'Add automation note to ticket'],
@@ -193,7 +194,7 @@ ob_start();
         ['acknowledge_alert',         'Acknowledge RMM alert'],
     ];
 
-    var NO_VALUE_ACTIONS = ['notify_assignee', 'close_ticket', 'create_ticket_from_alert', 'acknowledge_alert', 'ai_triage'];
+    var NO_VALUE_ACTIONS = ['notify_assignee', 'close_ticket', 'create_ticket_from_alert', 'acknowledge_alert', 'ai_triage', 'dispatch_assign'];
 
     var trigger  = document.getElementById('ruleTrigger');
     var hint     = document.getElementById('triggerHint');

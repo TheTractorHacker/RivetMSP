@@ -9,6 +9,33 @@ defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 require_once __DIR__ . '/../../includes/security_policy.php';
 require_once __DIR__ . '/../../includes/security_sessions.php';
 
+if (isset($_POST['update_user_skills'])) {
+
+    validateCSRFToken($_POST['csrf_token']);
+
+    $user_id = intval($_POST['user_id']);
+
+    // Mirrors agent/post/ticket.php's update_ticket_tags (delete-all-then-reinsert); only tag_type = 7
+    // ("Technician") rows can ever be linked here, same scoping agent/modals/ticket/ticket_tags.php
+    // applies with tag_type = 6 ("Ticket").
+    mysqli_query($mysqli, "DELETE FROM user_tags WHERE user_tag_user_id = $user_id");
+
+    if (isset($_POST['tags'])) {
+        foreach ($_POST['tags'] as $tag) {
+            $tag_id = intval($tag);
+            $valid_tag = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT tag_id FROM tags WHERE tag_id = $tag_id AND tag_type = 7 LIMIT 1"));
+            if ($valid_tag) {
+                mysqli_query($mysqli, "INSERT INTO user_tags SET user_tag_user_id = $user_id, user_tag_tag_id = $tag_id");
+            }
+        }
+    }
+
+    logAction("User", "Edit", "$session_name updated skill tags", 0, 0);
+    flash_alert("Skills updated");
+    redirect();
+
+}
+
 if (isset($_POST['add_user'])) {
 
     validateCSRFToken($_POST['csrf_token']);

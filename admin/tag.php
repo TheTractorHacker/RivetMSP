@@ -24,6 +24,8 @@ if ($type_filter == 1) {
     $tag_type_display = "Asset";
 } elseif ( $type_filter == 6) {
     $tag_type_display = "Ticket";
+} elseif ( $type_filter == 7) {
+    $tag_type_display = "Technician";
 } else {
     $tag_type_display = "Unknown";
 }
@@ -98,6 +100,12 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                            } else {
                                echo 'btn-default';
                            } ?>">Ticket</a>
+                        <a href="?type=7"
+                           class="btn <?php if ($type_filter == 7) {
+                               echo 'btn-primary';
+                           } else {
+                               echo 'btn-default';
+                           } ?>">Technician</a>
                         <a href="?<?= $url_query_strings_sort ?>&archived=1"
                             class="btn <?php if (isset($_GET['archived'])) {
                                 echo 'btn-primary';
