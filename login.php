@@ -97,6 +97,8 @@ $config_login_key_required = $row['config_login_key_required'];
 $config_login_key_secret   = decryptSetting((string) ($row['config_login_key_secret'] ?? ''));
 
 $azure_client_id = $row['config_azure_client_id'] ?? null;
+$oidc_portal_ready = (int) ($row['config_oidc_enabled'] ?? 0) === 1
+    && !empty($row['config_oidc_issuer']) && !empty($row['config_oidc_client_id']) && !empty($row['config_oidc_client_secret']);
 
 $config_theme = nullable_htmlentities($row['config_theme'] ?? 'teal');
 
@@ -1079,6 +1081,16 @@ $show_login_form = (!$show_role_choice && !$show_mfa_form);
                             <button type="button" class="btn btn-secondary">Login with Microsoft Entra</button>
                         </a>
                     </div>
+                <?php } ?>
+                <?php if ($oidc_portal_ready) { ?>
+                    <div class="col text-center mt-2">
+                        <a href="client/login_oidc.php">
+                            <button type="button" class="btn btn-secondary">Single Sign-On</button>
+                        </a>
+                    </div>
+                <?php } ?>
+                <?php if (isset($_GET['sso_error'])) { ?>
+                    <p class="text-center text-danger small mt-2 mb-0">Single sign-on could not complete. Please try again or contact your administrator.</p>
                 <?php } ?>
             <?php } ?>
 

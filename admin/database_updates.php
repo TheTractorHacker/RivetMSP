@@ -7615,3 +7615,46 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.112'");
     }
+
+    if ($rivetit_db_version() == '2.6.112') {
+        // Roadmap #14: generalize Client Portal SSO beyond Microsoft Entra to any standards-compliant OpenID
+        // Connect provider (Authentik, Keycloak, Ory Hydra, Okta, Entra ID itself via its own OIDC endpoint, ...),
+        // with a real authorization-code + PKCE + nonce flow and JWKS-verified ID tokens - ported from RivetIT's
+        // includes/oidc_portal.php / client/login_oidc.php. Scoped to the CLIENT PORTAL only, matching this
+        // roadmap issue's own title and body ("Port: OpenID Connect portal sign-in... Map to client contacts") -
+        // RivetIT's agent/staff SSO variant (config_oidc_agent_enabled, agentOidc*()) is a related but separate
+        // feature, deliberately not ported here. The existing Microsoft Entra path (config_azure_client_id/
+        // _secret, client/login_microsoft.php) is left exactly as it is - this adds a second, general option
+        // alongside it on admin/identity_provider.php, which already had "Google (WIP)"/"Custom SSO (WIP)"
+        // placeholder entries in its identity-provider dropdown anticipating exactly this.
+        //
+        // NOTE for whoever merges this: msp-port-oidc-portal, msp-port-kb-v2 and msp-port-intune-per-client all
+        // branched from 2.6.112 and each claims "2.6.113" for its own step, touching entirely different tables.
+        // Whichever merges SECOND and THIRD need their own steps renumbered (2.6.114, 2.6.115) to chain in
+        // whatever order they actually land - same renumbering already done once before (commit d8e047b42).
+        mysqli_query($mysqli, "ALTER TABLE `settings`
+            ADD COLUMN IF NOT EXISTS `config_oidc_enabled` TINYINT(1) NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `config_oidc_issuer` VARCHAR(255) DEFAULT NULL,
+            ADD COLUMN IF NOT EXISTS `config_oidc_client_id` VARCHAR(255) DEFAULT NULL,
+            ADD COLUMN IF NOT EXISTS `config_oidc_client_secret` TEXT DEFAULT NULL,
+            ADD COLUMN IF NOT EXISTS `config_oidc_link_by_email` TINYINT(1) NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `config_oidc_require_verified_email` TINYINT(1) NOT NULL DEFAULT 1");
+
+        // The provider subject this login is bound to, once set, is what every later sign-in is checked
+        // against - never the email again. A (issuer, subject) pair can belong to at most one login: the
+        // UNIQUE key stops two different blank-subject logins from ever ending up claimed by the same external
+        // identity (NULLs are exempt in MySQL's unique-index semantics, so ordinary local/azure logins with no
+        // OIDC binding at all are unaffected). CHARACTER SET ... COLLATE utf8mb4_bin (case-sensitive) is
+        // deliberate, not the table's default utf8mb4_general_ci: RivetIT shipped this column case-INSENSITIVE
+        // first and had to fix it in a later migration (its own 2.6.143->2.6.144, see tests/oidc_identity_collation.php
+        // there) because two different provider subjects differing only by case - e.g. "Abc" vs "aBC", both
+        // syntactically valid per the OIDC spec, which treats `sub` as an opaque, case-sensitive string - would
+        // otherwise collide in both the UNIQUE key and every WHERE ... = lookup, misidentifying one user's
+        // session as another's. Starting case-sensitive here avoids ever needing that second fix.
+        mysqli_query($mysqli, "ALTER TABLE `users`
+            ADD COLUMN IF NOT EXISTS `user_oidc_issuer` VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+            ADD COLUMN IF NOT EXISTS `user_oidc_subject` VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `users` ADD UNIQUE KEY IF NOT EXISTS `uniq_user_oidc` (`user_oidc_issuer`, `user_oidc_subject`)");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.113'");
+    }

@@ -53,6 +53,58 @@ require_once "includes/inc_all_admin.php";
             <button type="submit" name="edit_identity_provider" class="btn btn-primary text-bold"><i class="fa fa-check me-2"></i>Save</button>
 
         </form>
+
+        <hr class="my-4">
+
+        <form action="post.php" method="post" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+            <h4>OpenID Connect for Client Portal</h4>
+            <p class="text-muted">Connect any standards-compliant provider - Authentik, Keycloak, Ory Hydra, Okta, Entra ID via its own OIDC endpoint, and more. Register <code>https://<?= nullable_htmlentities($config_base_url) ?>/client/login_oidc.php</code> as the exact redirect URI. Set a contact's Client Portal login to OpenID Connect in their contact record (Clients &gt; (client) &gt; Contacts &gt; Edit); link it to the provider subject automatically on first sign-in below, or set the subject directly.</p>
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="oidc_enabled" name="oidc_enabled" value="1" <?= $config_oidc_enabled ? 'checked' : '' ?>>
+                <label class="form-check-label" for="oidc_enabled">Enable Client Portal SSO</label>
+            </div>
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="oidc_link_by_email" name="oidc_link_by_email" value="1" <?= $config_oidc_link_by_email ? 'checked' : '' ?>>
+                <label class="form-check-label" for="oidc_link_by_email">Link logins on first sign-in by email</label>
+                <small class="form-text text-muted d-block">Optional. For a contact login set to OpenID Connect with no subject linked yet, the first sign-in is linked to the provider account when the email matches exactly one such login. After that only the provider's subject is used, so later email changes never matter.</small>
+            </div>
+            <div class="form-check mb-3 ms-4">
+                <input class="form-check-input" type="checkbox" id="oidc_require_verified_email" name="oidc_require_verified_email" value="1" <?= $config_oidc_require_verified_email ? 'checked' : '' ?>>
+                <label class="form-check-label" for="oidc_require_verified_email">Require the provider to confirm the email is verified</label>
+                <small class="form-text text-muted d-block">Recommended. Turn this off only if your provider does not send a verified flag and only administrators can create contacts or change email addresses there. With it off, anyone who can set their provider email to a blank login's email can claim that login on first sign-in.</small>
+            </div>
+            <div class="form-group">
+                <label for="oidc_issuer">Issuer URL</label>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text"><i class="fa fa-fw fa-globe"></i></span>
+                    </div>
+                    <input class="form-control" type="url" id="oidc_issuer" name="oidc_issuer" value="<?= nullable_htmlentities($config_oidc_issuer) ?>" placeholder="https://login.example.org/application/o/rivetmsp" maxlength="255">
+                </div>
+                <small class="form-text text-muted">Use the exact issuer from the provider's OpenID discovery document (<code>.well-known/openid-configuration</code>). HTTPS is required.</small>
+            </div>
+            <div class="form-group">
+                <label for="oidc_client_id">Client ID</label>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text"><i class="fa fa-fw fa-user"></i></span>
+                    </div>
+                    <input class="form-control" id="oidc_client_id" name="oidc_client_id" value="<?= nullable_htmlentities($config_oidc_client_id) ?>" maxlength="255">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="oidc_client_secret">Client secret</label>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text"><i class="fa fa-fw fa-key"></i></span>
+                    </div>
+                    <input class="form-control" type="password" id="oidc_client_secret" name="oidc_client_secret" autocomplete="new-password" placeholder="<?= $config_oidc_secret_saved ? 'Saved - leave blank to keep current' : 'Client secret' ?>">
+                </div>
+                <?php if ($config_oidc_secret_saved) { ?><div class="form-text">A secret is saved. It is never shown again here; enter a new one only to replace it.</div><?php } ?>
+            </div>
+            <button type="submit" name="edit_oidc_provider" class="btn btn-primary"><i class="fa fa-check me-2"></i>Save OpenID Connect</button>
+        </form>
     </div>
 </div>
 

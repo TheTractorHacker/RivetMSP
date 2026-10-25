@@ -24,6 +24,17 @@ DEFINE("CURRENT_DATABASE_VERSION", $row['config_current_database_version']);
 $config_azure_client_id = $row['config_azure_client_id'];
 $config_azure_client_secret = decryptSetting($row['config_azure_client_secret'] ?? '');
 
+// Generic OpenID Connect (Client Portal SSO, roadmap #14 - any standards-compliant provider, not just Microsoft).
+// Only a "is one saved" flag is kept globally, never the decrypted secret itself - admin/identity_provider.php
+// is the only page that needs to know a secret is set (to show "leave blank to keep it"), and client/login_oidc.php
+// decrypts the real value itself, on demand, only when actually completing a sign-in.
+$config_oidc_enabled = intval($row['config_oidc_enabled'] ?? 0);
+$config_oidc_issuer = $row['config_oidc_issuer'] ?? '';
+$config_oidc_client_id = $row['config_oidc_client_id'] ?? '';
+$config_oidc_secret_saved = !empty($row['config_oidc_client_secret']);
+$config_oidc_link_by_email = intval($row['config_oidc_link_by_email'] ?? 0);
+$config_oidc_require_verified_email = intval($row['config_oidc_require_verified_email'] ?? 1);
+
 // Outlook Calendar Sync
 $config_outlook_cal_client_id     = $row['config_outlook_cal_client_id'] ?? '';
 $config_outlook_cal_client_secret = decryptSetting($row['config_outlook_cal_client_secret'] ?? '');
