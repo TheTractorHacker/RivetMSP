@@ -17,6 +17,7 @@ $recurring_invoice_next_date = nullable_htmlentities($row['recurring_invoice_nex
 $recurring_invoice_discount = floatval($row['recurring_invoice_discount_amount']);
 $category_id = intval($row['recurring_invoice_category_id']);
 $client_id = intval($row['recurring_invoice_client_id']);
+$contract_id = intval($row['recurring_invoice_contract_id'] ?? 0);
 enforceClientAccess($client_id);
 
 // Generate the HTML form content using output buffering.
@@ -107,6 +108,30 @@ ob_start();
                 </div>
                 <input type='text' class='form-control' inputmode="decimal" pattern="-?[0-9]*\.?[0-9]{0,2}" name='recurring_invoice_discount' placeholder='0.00' value="<?php echo number_format($recurring_invoice_discount, 2, '.', ''); ?>">
             </div>
+        </div>
+
+        <!-- roadmap #24: link to a contract so this recurring invoice pauses automatically if the contract
+             is marked Expired/Cancelled or deleted. -->
+        <div class="form-group">
+            <label>Contract <small class="text-secondary">(optional)</small></label>
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fa fa-fw fa-file-contract"></i></span>
+                </div>
+                <select class="form-control select2" name="contract_id">
+                    <option value="">- No contract -</option>
+                    <?php
+                    $sql_contracts = mysqli_query($mysqli, "SELECT contract_id, contract_name, contract_status FROM contracts WHERE contract_client_id = $client_id AND contract_archived_at IS NULL ORDER BY contract_name ASC");
+                    while ($c = mysqli_fetch_assoc($sql_contracts)) {
+                        $cid = intval($c['contract_id']);
+                        $cname = nullable_htmlentities($c['contract_name']);
+                        $cstatus = nullable_htmlentities($c['contract_status']);
+                    ?>
+                        <option <?php if ($contract_id === $cid) { echo "selected"; } ?> value="<?php echo $cid; ?>"><?php echo "$cname ($cstatus)"; ?></option>
+                    <?php } ?>
+                </select>
+            </div>
+            <small class="form-text text-muted">If this contract is later set to Expired or Cancelled (or deleted), this recurring invoice is paused automatically.</small>
         </div>
 
         <div class="form-group">

@@ -7615,3 +7615,18 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.112'");
     }
+
+    if ($rivetit_db_version() == '2.6.112') {
+        // Roadmap #24: link a recurring invoice to a contract so it pauses/stops when the contract does -
+        // neither edition had this (checked RivetIT: no equivalent column or hook exists there either, so
+        // this is new work, not a port). No hard FK (recurring_invoice_category_id, the closest existing
+        // column, has none either - this table's own convention), just a plain nullable column + index.
+        //
+        // NOTE for whoever merges this: this branch and msp-port-kb-v2/msp-port-intune-per-client/
+        // msp-port-oidc-portal all branched from 2.6.112 and each claims "2.6.113" for its own step - chain
+        // in whatever order they actually land (see commit d8e047b42 for the precedent).
+        mysqli_query($mysqli, "ALTER TABLE `recurring_invoices` ADD COLUMN IF NOT EXISTS `recurring_invoice_contract_id` int(11) DEFAULT NULL AFTER `recurring_invoice_client_id`");
+        mysqli_query($mysqli, "ALTER TABLE `recurring_invoices` ADD INDEX IF NOT EXISTS `idx_recurring_invoice_contract_id` (`recurring_invoice_contract_id`)");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.113'");
+    }

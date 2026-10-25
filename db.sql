@@ -3369,7 +3369,9 @@ CREATE TABLE `recurring_invoices` (
   `recurring_invoice_archived_at` datetime DEFAULT NULL,
   `recurring_invoice_category_id` int(11) NOT NULL,
   `recurring_invoice_client_id` int(11) NOT NULL,
-  PRIMARY KEY (`recurring_invoice_id`)
+  `recurring_invoice_contract_id` int(11) DEFAULT NULL,
+  PRIMARY KEY (`recurring_invoice_id`),
+  KEY `idx_recurring_invoice_contract_id` (`recurring_invoice_contract_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `recurring_payments`;
