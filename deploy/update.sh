@@ -233,6 +233,28 @@ run_composer_install() {
         die "composer install failed (see its output above). Code and database are already updated — PHP dependencies may now be out of sync with the code. Investigate before running the app."
     fi
     success "composer dependencies refreshed."
+    sync_rmm_postgres_cli_scripts
+}
+
+# sync_rmm_postgres_cli_scripts(): rivet/rivet-core's own .gitattributes marks /scripts/* export-ignore (reported upstream:
+# github.com/TheTractorHacker/rivet-core#90), which strips the 5 RMM PostgreSQL operator scripts (rmm-postgres.php,
+# rmm-store-migrate.php, rmm-store-verify.php, rmm-postgres-backup.sh, rmm-postgres-restore.sh) that docs/rmm/POSTGRES.md tells
+# this edition to run straight out of vendor/rivet/rivet-core/scripts/ - every composer install/update of that package
+# (just above) silently deletes them again. This recovers them (scripts/vendor-fixups/sync-rmm-postgres-cli-scripts.sh clones
+# the exact installed commit and copies only those 5 files back in, verified against vendor/composer/installed.json). A
+# failure here is NOT fatal to the update (composer itself already succeeded; the RMM data store is optional and most
+# installs run MariaDB only) - it is reported so a PostgreSQL install does not silently lose these scripts on the next update.
+sync_rmm_postgres_cli_scripts() {
+    local sync_script="${APP_DIR}/scripts/vendor-fixups/sync-rmm-postgres-cli-scripts.sh"
+    if [[ ! -f "${sync_script}" ]]; then
+        return 0   # an older checkout, or an edition without this script: nothing to do
+    fi
+    announce "Restoring the RMM PostgreSQL operator scripts rivet-core's dist install strips (github.com/TheTractorHacker/rivet-core#90)."
+    if sudo -u "${OWNER}" bash "${sync_script}"; then
+        success "RMM PostgreSQL operator scripts restored."
+    else
+        warn "scripts/vendor-fixups/sync-rmm-postgres-cli-scripts.sh failed (see its output above). If this install uses the PostgreSQL RMM data store, run it by hand before relying on Administration > RMM > Data store > Migrate data."
+    fi
 }
 
 reload_php_fpm() {
