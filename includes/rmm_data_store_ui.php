@@ -11,6 +11,89 @@
 
 require_once __DIR__ . '/rmm_ui_render.php';
 
+/**
+ * Latest PostgreSQL credential rotation record (edition-owned table, DB 2.6.115 `rmm_pg_credential_rotations` - never Core's own
+ * `rmm_data_store_connection`, which is RivetCore\Rmm\Store\DataStoreSwitch's to evolve). Never the password or the sealed value,
+ * only who changed it and when, for the Data store card's "Credential last changed" line and its 90-day warning.
+ * Null when the table is missing (an older database before 2.6.115) or the credential has never been recorded.
+ */
+function rivetRmmPgCredentialLastChanged(\mysqli $mysqli): ?string
+{
+    $res = @mysqli_query($mysqli, 'SELECT MAX(rotated_at) AS t FROM rmm_pg_credential_rotations');
+    if ($res === false) {
+        return null;
+    }
+    $row = mysqli_fetch_assoc($res);
+
+    return is_array($row) && $row['t'] !== null ? (string) $row['t'] : null;
+}
+
+/**
+ * Records WHO changed the stored PostgreSQL connection's password and WHEN - never the value itself. Called only after
+ * DataStoreSwitch::saveConnection() already succeeded with a tested password (admin/post/settings_endpoint_agent.php's
+ * rmm_ds_rotate_password handler), so a failure here never undoes a real rotation; it only means the card cannot show
+ * "last changed" for this one until the table exists (an older database before DB 2.6.115).
+ */
+function rivetRmmPgCredentialRecordRotation(\mysqli $mysqli, string $actor, string $note): void
+{
+    $stmt = @mysqli_prepare($mysqli, 'INSERT INTO rmm_pg_credential_rotations (rotated_at, rotated_by, note) VALUES (?, ?, ?)');
+    if ($stmt === false) {
+        return;
+    }
+    $now = gmdate('Y-m-d H:i:s');
+    mysqli_stmt_bind_param($stmt, 'sss', $now, $actor, $note);
+    @mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+}
+
+/** Whole days since $lastChanged (a UTC "Y-m-d H:i:s" string), or null when it is null / unparseable. */
+function rivetRmmPgCredentialAgeDays(?string $lastChanged): ?int
+{
+    if ($lastChanged === null) {
+        return null;
+    }
+    $then = strtotime($lastChanged . ' UTC');
+
+    return $then === false ? null : (int) floor((time() - $then) / 86400);
+}
+
+/**
+ * The "Change password" sub-card: the exact ALTER ROLE statement (an obvious placeholder, never a real value) for the administrator to
+ * run in PostgreSQL first, a password field that is TESTED against the real stored connection before it replaces anything
+ * (admin/post/settings_endpoint_agent.php's rmm_ds_rotate_password; DataStoreSwitch::saveConnection() is never called with an untested
+ * password from here), and "Credential last changed" with a visible warning once it is over 90 days old.
+ *
+ * @param ?array<string,mixed> $conn DataStoreSwitch::status()['connection']
+ */
+function rivetRmmUiDsCredentialHtml(string $csrf, ?array $conn, ?string $lastChanged): string
+{
+    $hasConn = $conn !== null && (string) $conn['database'] !== '';
+    $age = rivetRmmPgCredentialAgeDays($lastChanged);
+    $lastHtml = $lastChanged === null
+        ? '<span class="text-muted">never recorded</span>'
+        : rmmH(rivetRmmTime($lastChanged)) . ($age !== null ? ' (' . $age . ' day' . ($age === 1 ? '' : 's') . ' ago)' : '');
+    $warn = $age !== null && $age > 90
+        ? '<div class="alert alert-warning py-2 mt-2 mb-0" role="alert"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>This credential has not been changed in over 90 days. Rotate it below.</div>'
+        : '';
+    $roleHint = $hasConn ? (string) $conn['user'] : 'the_role';
+    $alterSql = 'ALTER ROLE "' . $roleHint . '" PASSWORD \'REPLACE-WITH-A-NEW-LONG-RANDOM-PASSWORD\';';
+    $disabled = $hasConn ? '' : ' disabled';
+
+    return '<h5 class="mt-4">Change password</h5>'
+        . '<p class="small text-muted mb-1">Change it in PostgreSQL first, as the <code>postgres</code> superuser (never typed here):</p>'
+        . '<pre class="small bg-light p-2 rounded">' . rmmH($alterSql) . '</pre>'
+        . '<p class="small text-muted">Then type the SAME new password below. It is tested against the real connection (same host, port, role, database, schema already stored) '
+        . 'BEFORE it replaces the stored one - a failed test changes nothing and the old password keeps working.</p>'
+        . '<form method="post" action="post.php" class="row g-3 mb-2">'
+        . '<input type="hidden" name="csrf_token" value="' . rmmH($csrf) . '"><input type="hidden" name="ea_tab" value="inventory">'
+        . '<div class="col-sm-6 col-lg-4"><label class="form-label" for="ds_rotate_password">New password</label>'
+        . '<input type="password" class="form-control" id="ds_rotate_password" name="rotate_password" value="" autocomplete="new-password"' . $disabled . '>'
+        . '<div class="form-text">' . ($hasConn ? 'Required - this action never stores a blank password.' : 'Save a connection above first.') . '</div></div>'
+        . '<div class="col-12"><button type="submit" name="rmm_ds_rotate_password" value="1" class="btn btn-outline-primary"' . $disabled . '><i class="fas fa-key me-1" aria-hidden="true"></i>Test &amp; save new password</button></div>'
+        . '</form>'
+        . '<div class="small">Credential last changed: ' . $lastHtml . '</div>' . $warn;
+}
+
 /** host:port/database as user, or "not set yet". */
 function rivetRmmDsConnSummary(?array $c): string
 {
@@ -31,7 +114,7 @@ function rivetRmmDsRunLabel(array $m): string
 }
 
 /**
- * @param array{csrf:string,msg:?array,old:array<string,mixed>,status:array<string,mixed>,migrating:bool} $ctx
+ * @param array{csrf:string,msg:?array,old:array<string,mixed>,status:array<string,mixed>,migrating:bool,last_changed?:?string} $ctx
  */
 function rivetRmmUiDataStoreCard(array $ctx): string
 {
@@ -41,6 +124,17 @@ function rivetRmmUiDataStoreCard(array $ctx): string
     $kind = (string) $st['data_store'];
     $isPg = $kind === \RivetCore\Rmm\Store\RmmDataStoreKind::POSTGRES;
     $conn = $st['connection'] ?? null;
+    // Recommended, no-password setup (same server, unix socket, peer authentication - docs/rmm/POSTGRES.md section 3/5): the
+    // edition never runs this SQL (no PostgreSQL access from this process either way, and it is system-level setup the
+    // administrator runs as the "postgres" superuser), it only shows the exact commands. The "www-data" role is shared across
+    // every edition on the server, so each one needs its OWN database - the placeholder makes that explicit.
+    $recommendedHtml = '<div class="alert alert-info py-2 mb-3" role="alert"><strong>Recommended for a single-server install:</strong> '
+        . 'PostgreSQL on this same machine, reached over its unix socket with peer authentication - no password is ever stored. Run once, as the <code>postgres</code> superuser '
+        . '(pick a database name used by NO other edition on this server - every edition here shares the <code>www-data</code> role, but each one needs its own database):'
+        . '<pre class="small bg-light p-2 rounded mb-2 mt-1">CREATE ROLE "www-data" LOGIN;'
+        . "\n" . 'CREATE DATABASE "rivet_rmm_&lt;edition&gt;" OWNER "www-data" ENCODING \'UTF8\' TEMPLATE template0;</pre>'
+        . 'Then below: Host <code>/var/run/postgresql</code>, Role <code>www-data</code>, Database the name just created, Password left BLANK, SSL mode <code>disable</code>. '
+        . 'A database on a different host from this web/cron user needs a password instead (sealed, never stored in the clear) and <code>verify-full</code> SSL mode - see "Change password" below.</div>';
     $field = static function (string $name, string $label, string $type, $value, string $help = '', array $attrs = []) use ($old): string {
         $v = array_key_exists($name, $old) ? (string) $old[$name] : (string) $value;
         $extra = '';
@@ -67,7 +161,7 @@ function rivetRmmUiDataStoreCard(array $ctx): string
         . $field('port', 'Port', 'number', $conn['port'] ?? 5432, '', ['min' => 1, 'max' => 65535])
         . $field('database', 'Database', 'text', $conn['database'] ?? '')
         . $field('user', 'Role', 'text', $conn['user'] ?? '')
-        . $field('password', 'Password', 'password', '', $conn !== null && $conn['password_set'] ? 'Leave blank to keep the stored password. Changing the host, port, role or database requires typing it again.' : 'Required the first time.', ['autocomplete' => 'new-password'])
+        . $field('password', 'Password', 'password', '', $conn !== null && $conn['password_set'] ? 'Leave blank to keep the stored password. Changing the host, port, role or database requires typing it again. To ROTATE the password for the same target, use "Change password" below instead - it tests the new value first.' : 'Leave blank for peer authentication over a unix socket (recommended above) - required otherwise.', ['autocomplete' => 'new-password'])
         . $selSsl('prefer')
         . $field('schema', 'Schema', 'text', $conn['schema'] ?? 'public')
         . '<div class="col-12"><div data-rmm-scale-live aria-live="polite"></div></div>'
@@ -136,8 +230,10 @@ function rivetRmmUiDataStoreCard(array $ctx): string
     }
 
     $body = ($ctx['msg'] !== null ? rivetRmmScaleMsgHtml($ctx['msg']) : '') . $leftBehindHtml
+        . $recommendedHtml
         . '<h5>Connection</h5>' . $connForm
         . '<h5>Status</h5><div class="rmm-scale-dl mb-3">' . rivetRmmUiDl($statusRows) . '</div>'
+        . rivetRmmUiDsCredentialHtml($csrf, $conn, $ctx['last_changed'] ?? null)
         . $switchBlock
         . $migrateHtml;
 

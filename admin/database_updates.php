@@ -7644,3 +7644,25 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         }
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.114'");
     }
+
+    if ($rivetit_db_version() == '2.6.114') {
+        // DB 2.6.115: RMM PostgreSQL data store credential hardening (follow-up to 2.6.114's rc.41 adoption).
+        // An EDITION-OWNED table for the Data store card's "Change password" action (includes/rmm_data_store_ui.php,
+        // admin/post/settings_endpoint_agent.php): who rotated the stored PostgreSQL password and when, so the card
+        // can show "credential last changed <date>" and warn once it is over 90 days old. Deliberately NOT a column
+        // on RivetCore\Rmm\Store\DataStoreSwitch's own `rmm_data_store_connection` table - that table is Core's to
+        // evolve (migration 0044), and this is edition state about it, not part of the connection itself. Never
+        // holds the password or the sealed value, only who/when - the same thing EndpointAudit already writes to
+        // the activity log, kept here too in a small dedicated table so the card can read "last changed" without
+        // parsing free-text log descriptions.
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `rmm_pg_credential_rotations` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `rotated_at` datetime NOT NULL,
+            `rotated_by` varchar(100) NOT NULL DEFAULT '',
+            `note` varchar(255) NOT NULL DEFAULT '',
+            PRIMARY KEY (`id`),
+            KEY `idx_rotated_at` (`rotated_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.115'");
+    }

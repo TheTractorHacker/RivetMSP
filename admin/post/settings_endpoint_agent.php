@@ -1547,6 +1547,45 @@ if (isset($_POST['rmm_ds_save_connection'])) {
     ea_scale_back('data-store');
 }
 
+// "Change password" (the Data store card's dedicated rotation action, separate from the general connection form's password field above):
+// the new password is TESTED against the real, already-stored host/port/role/database/schema BEFORE it ever replaces the stored sealed
+// value - DataStoreSwitch::saveConnection() is only reached once testConnection() has already said ok=true, so a wrong new password
+// never overwrites a working credential. On success, an edition-owned audit row (who, when - never the value) is written so the card
+// can show "Credential last changed" and its 90-day warning (DB 2.6.115, rmm_pg_credential_rotations; never a column on Core's own
+// rmm_data_store_connection table). Never logs or echoes the typed value anywhere.
+if (isset($_POST['rmm_ds_rotate_password'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $newPassword = isset($_POST['rotate_password']) && is_string($_POST['rotate_password']) ? $_POST['rotate_password'] : '';
+    $stored = $rmm->dataStoreSwitch()->connectionSettings();
+    if ($stored === null) {
+        rivetRmmScaleMsg('data-store', 'error', 'Save a connection first.');
+    } elseif ($newPassword === '') {
+        rivetRmmScaleMsg('data-store', 'error', 'Enter the new password. This action never stores a blank password - to switch to no stored password (peer authentication), use the connection form above instead.');
+    } else {
+        // Same target the connection is already stored for: this action rotates the password, never the host/port/role/database/schema
+        // (changing those is still the general "Save connection" form's job, and it already requires retyping the password itself).
+        $testIn = ['host' => $stored['host'], 'port' => $stored['port'], 'database' => $stored['database'], 'user' => $stored['user'], 'sslmode' => $stored['sslmode'], 'schema' => $stored['schema'], 'password' => $newPassword];
+        if ($stored['sslrootcert'] !== null) {
+            $testIn['sslrootcert'] = $stored['sslrootcert'];
+        }
+        $test = $rmm->dataStoreSwitch()->testConnection($testIn);
+        if ($test['ok'] !== true) {
+            $failed = array_values(array_filter($test['checks'], static fn (array $c): bool => !$c['ok']));
+            rivetRmmScaleMsg('data-store', 'error', 'The new password failed its connection test' . ($failed === [] ? '.' : ': ' . $failed[0]['message']) . ' The stored password was NOT changed.');
+        } else {
+            $errs = $rmm->dataStoreSwitch()->saveConnection($testIn);
+            if ($errs !== []) {
+                rivetRmmScaleMsg('data-store', 'error', implode(' ', $errs));
+            } else {
+                rivetRmmPgCredentialRecordRotation($mysqli, (string) $session_name, 'Password rotated via Administration > RMM > Data store.');
+                $rmm->dataStoreSwitch()->testConnection();   // re-stamp tested_at/test_ok/server_version against the now-stored (new) password, so the card's "Last test" reflects it instead of showing stale/none
+                rivetRmmScaleMsg('data-store', 'success', 'The new password was tested and saved.');
+            }
+        }
+    }
+    ea_scale_back('data-store');
+}
+
 if (isset($_POST['rmm_ds_switch_to']) && in_array($_POST['rmm_ds_switch_to'], \RivetCore\Rmm\Store\RmmDataStoreKind::ALL, true)) {
     validateCSRFToken($_POST['csrf_token']);
     $to = (string) $_POST['rmm_ds_switch_to'];

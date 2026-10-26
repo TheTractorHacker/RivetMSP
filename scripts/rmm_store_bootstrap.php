@@ -39,7 +39,17 @@ if (!isset($mysqli) || !($mysqli instanceof \mysqli)) {
 // $GLOBALS directly, so without this they silently fail here even though the exact same config.php works for the web app and
 // every other *_cli.php script (which require it at a real top level, never inside a closure) - found by a real end-to-end run
 // of this bootstrap against a throwaway PostgreSQL container, not by inspection.
-foreach (['mysqli', 'config_settings_enc_key', 'session_user_id', 'session_user_agent', 'session_ip', 'installation_id', 'config_base_url'] as $__g) {
+//
+// config_keyfile, config_crypto_v3_settings and config_crypto_v3_totp belong in this list for the SAME reason and were found the
+// SAME way (RivetMSP\Crypto\KeyStore::load() and SettingsCrypto::v3Enabled()/totpV3Enabled() read them straight from $GLOBALS,
+// never a local variable): without exporting config_keyfile, an install whose config.php points $config_keyfile anywhere other
+// than KeyStore::DEFAULT_PATH (/etc/rivetmsp/keys.json) has this CLI tooling silently read the WRONG key file - on a shared host
+// where that default path happens to exist for an unrelated reason, decryption fails with "a v3 value could not be read
+// (DecryptionFailed)" instead of the real one; on a host where it does not exist, the ring falls back to the legacy
+// config_settings_enc_key cipher instead, which cannot open a v3:-sealed value at all. Either way the stored PostgreSQL password
+// (or any other v3:-sealed secret) becomes unreadable by rmm-store-migrate.php / rmm-store-verify.php even though the exact same
+// value reads back fine from the web app, which uses the real $config_keyfile at a true top-level scope.
+foreach (['mysqli', 'config_settings_enc_key', 'config_keyfile', 'config_crypto_v3_settings', 'config_crypto_v3_totp', 'session_user_id', 'session_user_agent', 'session_ip', 'installation_id', 'config_base_url'] as $__g) {
     if (isset($$__g)) {
         $GLOBALS[$__g] = $$__g;
     }
