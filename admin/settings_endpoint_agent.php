@@ -605,7 +605,7 @@ $hvLimits = (array) $cfg['limits'];
 // Each part is off by default and is guarded so this page still loads on a database that has not been updated yet.
 $rmm_scale_scripts = true;
 $scaleCtx = ['csrf' => $csrf, 'module_on' => $moduleOn, 'features' => (array) $cfg['features'], 'msg' => [], 'old' => []];
-foreach (['remote-tools', 'file-transfer', 'log-collection', 'scale', 'partitioning', 'ext-store'] as $__card) {
+foreach (['remote-tools', 'file-transfer', 'log-collection', 'scale', 'partitioning', 'data-store', 'ext-store'] as $__card) {
     [$scaleCtx['msg'][$__card], $scaleCtx['old'][$__card]] = rivetRmmScaleTake($__card);
 }
 $scaleCtx['rs'] = $rmm->remoteSettings()->summary();
@@ -688,6 +688,10 @@ if ($__flags['enabled']) {
     }
 }
 $scaleCtx['ext'] = ['flags' => $__flags, 'buffer' => $__buf];
+// RivetCore 1.0.0-rc.40/41 RMM data store (phase 4 of #89, docs/rmm/POSTGRES.md section 13-16): Administration > RMM > Data store.
+// DataStoreSwitch::status() degrades gracefully (bare setting only) on a database that has not run migrations 0042-0044 yet.
+require_once dirname(__DIR__) . '/includes/rmm_data_store_ui.php';
+$scaleCtx['ds'] = ['csrf' => $csrf, 'msg' => $scaleCtx['msg']['data-store'], 'old' => $scaleCtx['old']['data-store'], 'status' => $rmm->dataStoreSwitch()->status()];
 foreach (preg_split('/(?=<div class="card mb-3 rmm-scale-card" id=")/', rivetRmmUiScaleCards($scaleCtx), -1, PREG_SPLIT_NO_EMPTY) as $__chunk) {
     $eaTab(preg_match('/id="(remote-tools|file-transfer)"/', $__chunk) ? 'remote' : 'inventory');
     echo $__chunk;

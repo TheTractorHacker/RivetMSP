@@ -9,6 +9,7 @@
 
 require_once __DIR__ . '/rmm_ui_render.php';
 require_once __DIR__ . '/rmm_scale_admin.php';
+require_once __DIR__ . '/rmm_data_store_ui.php';
 
 /** A card shell for the administration page (the same markup the other cards of the page use). */
 function rivetRmmScaleCard(string $id, string $icon, string $title, bool $on, string $body, ?string $pill = null): string
@@ -314,6 +315,11 @@ function rivetRmmUiScaleCards(array $c): string
     $out .= rivetRmmScaleCard('partitioning', 'database', 'Metric storage and partitioning', $anyPart, $body, $anyPart ? 'Partitioned' : 'Off');
 
     rivetRmmScalePartitioningDone:
+
+    // ------------------------------------------------------------------------------------------------------------------ 5b. RMM data store (RivetCore 1.0.0-rc.40/41, phase 4 of #89)
+    if (isset($c['ds'])) {
+        $out .= rivetRmmUiDataStoreCard($c['ds']);
+    }
 
     // ------------------------------------------------------------------------------------------------------------------ 6. External metric store
     $oEx = $o('ext-store');

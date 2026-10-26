@@ -162,7 +162,7 @@ function backup_settings_key_fingerprint(string $key): string {
  * @return array{name: string, path: string} the temp file to add to the zip, and its entry name
  *         (backup-manifest.json.enc, or backup-manifest.json when $passphrase is empty)
  */
-function build_backup_manifest(mysqli $mysqli, string $baseName, ?string $passphrase): array {
+function build_backup_manifest(mysqli $mysqli, string $baseName, ?string $passphrase, ?array $rmmDescriptor = null): array {
     $manifestFile = tempnam(sys_get_temp_dir(), $baseName . '_man_');
     @chmod($manifestFile, 0600);
 
@@ -176,6 +176,15 @@ function build_backup_manifest(mysqli $mysqli, string $baseName, ?string $passph
         'settings_enc_key_fingerprint' => backup_settings_key_fingerprint($settingsKey),
         'backup_timestamp'             => date('YmdHis'),
     ];
+    // RivetCore 1.0.0-rc.40/41 RMM data store (docs/rmm/POSTGRES.md section 8.4): which store this backup's
+    // RMM history is in, and (postgres only) the connection it was dumped from — NEVER the password; a
+    // restore reconnects using whatever connection is stored in the (just-restored) control database.
+    if ($rmmDescriptor !== null) {
+        $data['rmm_data_store'] = $rmmDescriptor['kind'];
+        if ($rmmDescriptor['needs_dump']) {
+            $data['rmm_data_store_connection'] = $rmmDescriptor['connection'];
+        }
+    }
     // The key file's keys by kid and fingerprint (no key material): lets a restore see which key file the secrets in this backup need.
     if (class_exists(\RivetMSP\Crypto\KeyStore::class)) {
         $ks = \RivetMSP\Crypto\KeyStore::load();
@@ -245,6 +254,50 @@ function build_backup(mysqli $mysqli, string $type, string $backupDir): array {
     dump_database_streaming($mysqli, $sqlFile);
     zip_uploads(dirname(__DIR__, 2) . '/uploads', $uploadsZip);
 
+    // RivetCore 1.0.0-rc.40/41 RMM data store, PostgreSQL case only (docs/rmm/POSTGRES.md section 8.4):
+    // a SECOND database, dumped in the same run via RivetCore\Rmm\Store\BackupHook's exact command (never
+    // a password on the command line; PGPASSWORD is set only for this one proc_open, never logged). A
+    // dump failure fails the WHOLE backup (same policy as a failed mysqldump above) rather than silently
+    // shipping a backup that is missing the RMM history.
+    $rmmDescriptor = null;
+    $rmmPgDump     = null;
+    try {
+        require_once dirname(__DIR__, 2) . '/includes/rmm_bootstrap.php';
+        $rmm  = rivetRmmModule($mysqli);
+        $kind = $rmm->settings()->dataStore();
+        if ($kind === \RivetCore\Rmm\Store\RmmDataStoreKind::POSTGRES) {
+            $pgConfig = $rmm->dataStoreSwitch()->postgresConfig();
+            if ($pgConfig === null) {
+                throw new \RuntimeException('the RMM data store is "postgres" but no PostgreSQL connection is stored (Administration > RMM > Data store)');
+            }
+            $rmmDescriptor = \RivetCore\Rmm\Store\BackupHook::describe($kind, $pgConfig);
+            $cmd = \RivetCore\Rmm\Store\BackupHook::command($kind, $pgConfig, dirname(__DIR__, 2) . '/vendor/rivet/rivet-core');
+            $rmmPgDumpScript = (string) $cmd['argv'][0];   // vendor/rivet/rivet-core/scripts/rmm-postgres-backup.sh, resolved by BackupHook — not user input
+            $rmmPgDump = tempnam(sys_get_temp_dir(), $baseName . '_pg_');
+            @chmod($rmmPgDump, 0600);
+            $env = $cmd['env'] + ['PGPASSWORD' => $pgConfig->password(), 'PATH' => getenv('PATH') ?: '/usr/bin:/bin'];
+            // Literal array argv ([$rmmPgDumpScript]): proc_open runs the program directly, no shell (tests/no_unsafe_shell.php).
+            $proc = @proc_open([$rmmPgDumpScript], [0 => ['pipe', 'r'], 1 => ['file', $rmmPgDump, 'w'], 2 => ['pipe', 'w']], $pipes, null, $env);
+            if (!is_resource($proc)) {
+                throw new \RuntimeException('could not start rmm-postgres-backup.sh');
+            }
+            fclose($pipes[0]);
+            $stderr = stream_get_contents($pipes[2]);
+            fclose($pipes[2]);
+            $rc = proc_close($proc);
+            if ($rc !== 0) {
+                throw new \RuntimeException('rmm-postgres-backup.sh failed (exit ' . $rc . '): ' . trim((string) $stderr));
+            }
+        } else {
+            $rmmDescriptor = \RivetCore\Rmm\Store\BackupHook::describe($kind);
+        }
+    } catch (\Throwable $e) {
+        if ($rmmPgDump !== null) { @unlink($rmmPgDump); }
+        error_log('Backup: RMM PostgreSQL dump failed: ' . $e->getMessage());
+        http_response_code(500);
+        exit('Cannot back up the RMM PostgreSQL store (' . $e->getMessage() . '). Fix the connection in Administration > RMM > Data store, or switch back to MariaDB, then retry the backup.');
+    }
+
     $commitHash = trim(@shell_exec('git log -1 --format=%H 2>/dev/null') ?: 'N/A');
     $dbSha      = hash_file('sha256', $sqlFile) ?: 'N/A';
     $upSha      = hash_file('sha256', $uploadsZip) ?: 'N/A';
@@ -258,8 +311,9 @@ function build_backup(mysqli $mysqli, string $type, string $backupDir): array {
     $meta .= "SHA256 db.sql: $dbSha\n";
     $meta .= "SHA256 uploads.zip: $upSha\n";
 
-    $manifest   = build_backup_manifest($mysqli, $baseName, $passphrase);
+    $manifest   = build_backup_manifest($mysqli, $baseName, $passphrase, $rmmDescriptor);
     $meta      .= "Manifest: {$manifest['name']} (encrypted with the saved backup passphrase)\n";
+    if ($rmmPgDump !== null) { $meta .= "RMM data store: postgres (rmm-postgres.dump included)\n"; }
     file_put_contents($versionFile, $meta);
 
     $final = new ZipArchive();
@@ -270,11 +324,13 @@ function build_backup(mysqli $mysqli, string $type, string $backupDir): array {
     $final->addFile($uploadsZip,  'uploads.zip');
     $final->addFile($versionFile, 'version.txt');
     $final->addFile($manifest['path'], $manifest['name']);
+    if ($rmmPgDump !== null) { $final->addFile($rmmPgDump, 'rmm-postgres.dump'); }
     $snapshotFile = \RivetMSP\Recovery\TableSnapshot::attach($final, $mysqli, $baseName);   // restore-drill row counts (no secrets)
     $zipClosed = $final->close();
     @chmod($finalZip, 0640);
 
     @unlink($sqlFile); @unlink($uploadsZip); @unlink($versionFile); @unlink($manifest['path']);
+    if ($rmmPgDump !== null) { @unlink($rmmPgDump); }
     if ($snapshotFile !== null) { @unlink($snapshotFile); }
     \RivetMSP\Recovery\BackupStatus::finishFromZip($mysqli, $statusId, $finalZip, $zipClosed);
 
