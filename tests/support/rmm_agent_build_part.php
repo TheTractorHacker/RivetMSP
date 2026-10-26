@@ -1,4 +1,5 @@
 <?php
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP (nightly MSP-2)
 // Included by tests/rmm_agent_feed.php: "Build a new version" (26.10.31). Uses that file's mock GitHub (tests/support/mock_github.py), scratch database and web server.
 use RivetMsp\AgentFeed\Build;
 use RivetMsp\AgentFeed\Feed as BFeed;
