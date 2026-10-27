@@ -56,8 +56,13 @@ function createTicketFromRmmAlert($mysqli, array $alert, int $created_by, string
     require_once __DIR__ . '/ticket_flags.php';
     $flags_ready = ticketFlagsReady($mysqli);
     $flag_defaults = rmmAlertTicketFlagDefaults($mysqli);
+    // Per-category SLA-exempt (DB 2.6.126) overrides the RMM default SLA-on/off setting: a category the admin has
+    // explicitly marked SLA-exempt never gets a policy/due dates, whatever "RMM tickets count toward SLA" says.
+    require_once __DIR__ . '/ticket_category_rules.php';
+    $category_rules = $placement['category_id'] > 0 ? ticketCategoryRules($mysqli, $placement['category_id']) : ['sla_exempt' => false, 'non_billable' => false];
+    $sla_on = $flag_defaults['sla'] && !$category_rules['sla_exempt'];
     $flags_sql = $flags_ready
-        ? "ticket_rmm_sourced=1, ticket_counts_sla=" . ($flag_defaults['sla'] ? 1 : 0) . ", ticket_send_email=" . ($flag_defaults['email'] ? 1 : 0) . ","
+        ? "ticket_rmm_sourced=1, ticket_counts_sla=" . ($sla_on ? 1 : 0) . ", ticket_send_email=" . ($flag_defaults['email'] ? 1 : 0) . ","
         : '';
 
     // Enrich details with asset/RMM context
@@ -131,8 +136,8 @@ function createTicketFromRmmAlert($mysqli, array $alert, int $created_by, string
     );
     $ticket_id = intval(mysqli_insert_id($mysqli));
 
-    // SLA only when "RMM tickets count toward SLA" is on (with it off the ticket keeps no due dates; recalculateTicketSla() would leave them NULL anyway).
-    if ($flags_ready && $flag_defaults['sla']) {
+    // SLA only when "RMM tickets count toward SLA" is on AND the category isn't SLA-exempt (either way off, the ticket keeps no due dates; recalculateTicketSla() would leave them NULL anyway).
+    if ($flags_ready && $sla_on) {
         require_once __DIR__ . '/sla_functions.php';
         recalculateTicketSla($mysqli, $ticket_id);
     }

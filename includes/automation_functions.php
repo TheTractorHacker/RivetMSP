@@ -187,7 +187,15 @@ function automationExecuteAction($mysqli, array $action, array &$context, array 
             $cat_row = mysqli_fetch_assoc(mysqli_query($mysqli,
                 "SELECT category_id FROM categories WHERE category_id = $cat_id AND category_type = 'Ticket' AND category_archived_at IS NULL LIMIT 1"));
             if (!$cat_row) return null;
+            // Per-category SLA-exempt / Non-billable (DB 2.6.126): snapshot the ticket's OLD category/billable/
+            // override state before the UPDATE, so ticketCategoryApplyOnCategoryChange() can react to the change.
+            require_once __DIR__ . '/ticket_category_rules.php';
+            $old_t = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_category, ticket_billable, ticket_billable_overridden FROM tickets WHERE ticket_id = $tid LIMIT 1"));
+            $old_cat_id = intval($old_t['ticket_category'] ?? 0);
+            $old_billable = intval($old_t['ticket_billable'] ?? 0);
+            $old_billable_overridden = intval($old_t['ticket_billable_overridden'] ?? 0);
             mysqli_query($mysqli, "UPDATE tickets SET ticket_category = $cat_id WHERE ticket_id = $tid");
+            ticketCategoryApplyOnCategoryChange($mysqli, $tid, $old_cat_id, $cat_id, $old_billable, $old_billable, $old_billable_overridden);
             logAction("Automation", "Update", "Rule '$rule_name': set category=$cat_id on ticket $tid", $client_id, $tid);
             return "set category=$cat_id on ticket #$tid";
 

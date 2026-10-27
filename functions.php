@@ -4290,8 +4290,13 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
     // A ticket created from an inbound email ALWAYS sends email (literal 1, never a setting): the customer who wrote in must hear back (DB 2.6.105).
     require_once __DIR__ . '/includes/ticket_flags.php';
     $send_email_sql = ticketFlagsReady($mysqli) ? ' ticket_send_email = 1,' : '';
-    mysqli_query($mysqli, "INSERT INTO tickets SET ticket_mail_message_id = $mail_message_id_sql, ticket_prefix = '$ticket_prefix_esc', ticket_number = $ticket_number, ticket_source = 'Email', ticket_subject = '$subject_esc',$send_email_sql ticket_details = '$message_esc', ticket_priority = 'Low', ticket_status = $ticket_status, ticket_category = $category_id, ticket_billable = $config_ticket_default_billable, ticket_created_by = 0, ticket_contact_id = $contact_id, ticket_url_key = '$url_key', ticket_client_id = $client_id, ticket_mailbox_id = $ticket_mailbox_id_sql, ticket_assigned_to = $resolved_assigned_to");
+    // Per-category Non-billable (DB 2.6.126): forces 0 regardless of config_ticket_default_billable, the same way every other creation path applies it.
+    require_once __DIR__ . '/includes/ticket_category_rules.php';
+    $billable = ticketCategoryBillableForNewTicket($mysqli, $category_id, intval($config_ticket_default_billable));
+    mysqli_query($mysqli, "INSERT INTO tickets SET ticket_mail_message_id = $mail_message_id_sql, ticket_prefix = '$ticket_prefix_esc', ticket_number = $ticket_number, ticket_source = 'Email', ticket_subject = '$subject_esc',$send_email_sql ticket_details = '$message_esc', ticket_priority = 'Low', ticket_status = $ticket_status, ticket_category = $category_id, ticket_billable = $billable, ticket_created_by = 0, ticket_contact_id = $contact_id, ticket_url_key = '$url_key', ticket_client_id = $client_id, ticket_mailbox_id = $ticket_mailbox_id_sql, ticket_assigned_to = $resolved_assigned_to");
     $id = mysqli_insert_id($mysqli);
+    // Per-category SLA-exempt (DB 2.6.126): no policy/due dates for a ticket in an SLA-exempt category.
+    ticketCategoryApplyOnCreate($mysqli, $id, $category_id);
 
     // Logging
     logAction("Ticket", "Create", "Email parser: Client contact $contact_email_esc created ticket $ticket_prefix_esc$ticket_number ($subject) ($id)", $client_id, $id);

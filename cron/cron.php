@@ -404,6 +404,9 @@ if (mysqli_num_rows($sql_recurring_tickets) > 0) {
         $contact_id = intval($row['recurring_ticket_contact_id']);
         $asset_id = intval($row['recurring_ticket_asset_id']);
         $category = resolveTicketCategory(intval($row['recurring_ticket_category']));
+        // Per-category Non-billable (DB 2.6.126): forces 0 regardless of the recurring ticket template's stored billable value.
+        require_once "../includes/ticket_category_rules.php";
+        $billable = ticketCategoryBillableForNewTicket($mysqli, $category, $billable);
         $delivery_method = getTicketDeliveryMethodForCategory($mysqli, $category);
         $delivery_method_sql = $delivery_method !== null ? "'" . mysqli_real_escape_string($mysqli, $delivery_method) . "'" : 'NULL';
         // A guest-link key, as the manual "create now" path (agent/post/recurring_ticket.php) already gives its tickets: without one this
@@ -432,6 +435,8 @@ if (mysqli_num_rows($sql_recurring_tickets) > 0) {
         // Raise the ticket
         mysqli_query($mysqli, "INSERT INTO tickets SET ticket_prefix = '$config_ticket_prefix', ticket_number = $ticket_number, ticket_source = 'Recurring', ticket_subject = '$subject', ticket_details = '$details', ticket_priority = '$priority', ticket_status = '$ticket_status', ticket_billable = $billable, ticket_url_key = '$url_key', ticket_created_by = $created_id, ticket_assigned_to = $assigned_id, ticket_contact_id = $contact_id, ticket_client_id = $client_id, ticket_asset_id = $asset_id, ticket_category = $category, ticket_recurring_ticket_id = $recurring_ticket_id, ticket_delivery_method = $delivery_method_sql");
         $id = mysqli_insert_id($mysqli);
+        // Per-category SLA-exempt (DB 2.6.126): no policy/due dates for a ticket in an SLA-exempt category.
+        ticketCategoryApplyOnCreate($mysqli, $id, $category);
 
         // Copy Additional Assets from Recurring ticket to new ticket
         mysqli_query($mysqli, "INSERT INTO ticket_assets (ticket_id, asset_id)
