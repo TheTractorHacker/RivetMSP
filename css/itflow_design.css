@@ -1,5 +1,5 @@
 /* =============================================================================
-   ITFlow design layer — "MSP ops tool" identity.
+   RivetIT design layer — the internal IT operations identity.
    Loaded LAST (after adminlte4 + bridge + itflow_custom) so it sets the tone.
    Boldness lives in ONE place: the teal accent + IBM Plex type. Everything
    else is kept quiet and precise. Works in light + dark.
@@ -22,7 +22,7 @@
   --if-border: #e3e9ea;
   --if-border-strong: #d3dbdc;
   --if-ink: #16232a;
-  --if-muted: #4b5d64; /* was #5d6f76: 4.19:1 on --if-bg, below WCAG AA 4.5:1 */
+  --if-muted: #4b5d64;
   --if-radius: 12px;
   --if-radius-sm: 8px;
   --if-shadow: 0 1px 2px rgba(20,35,42,.04), 0 3px 10px rgba(20,35,42,.05);
@@ -47,7 +47,7 @@
    (a :root-level alias can't see a child selector's override). Source of
    truth for the actual color stays includes/header.php's per-company inline
    block + itflow_custom.css's body.dark-mode block; this just gives the
-   rest of this file one consistent name for it. */
+   rest of this file (and includes/ui/ components) one consistent name for it. */
 body {
   --if-primary: var(--color-accent, #0d9488);
   --if-primary-hover: var(--color-accent-hover, #0f766e);
@@ -106,6 +106,24 @@ code, kbd, samp, pre, .text-monospace, .font-monospace, .if-mono { font-family: 
    Space the pair instead of giving every card a trailing margin, which would
    also add a stray gap under the last card on every page. */
 .card + .card { margin-top: 1rem; }
+/* ...but NOT inside a .card-group: those siblings sit side-by-side in one flex
+   row (Tabler zeroes the border between them to read as one seamless bar), so
+   the margin-top above was shoving every card but the first down by 1rem and
+   breaking that alignment - e.g. Project Details' name/description | owner |
+   progress row read as three disconnected floating panels instead of one bar. */
+.card-group > .card + .card { margin-top: 0; }
+
+/* Tabler's .card-group gives each child `flex: 1 0 0` (equal grow, no shrink,
+   zero basis) so siblings SHOULD end up equal-width - but it never sets
+   min-width on those children, and a flex item's default min-width is auto
+   (its own content's min-content size), not 0. Project Details' three-up
+   card-group (name/description, owner/dates, ticket+task progress) has
+   real, variable content in each slot - a client name, an assignee name, a
+   due date - and whichever slot's content happens to be widest wins extra
+   width at its siblings' expense instead of the row splitting evenly.
+   min-width: 0 removes that content-driven floor so flex-basis actually
+   governs the split, which is the equal-thirds look .card-group promises. */
+.card-group > .card { min-width: 0; }
 
 /* ---- Buttons: quiet, precise ---- */
 .btn { font-weight: 500; border-radius: var(--if-radius-sm); padding: .4rem .85rem; letter-spacing: -0.01em; }
@@ -180,14 +198,14 @@ code, kbd, samp, pre, .text-monospace, .font-monospace, .if-mono { font-family: 
 
 /* Contextual rows (awaiting reply, overdue, etc.): a muted tint + left accent
    reads as "this needs attention" without Bootstrap's default saturated fill. */
-.table-warning { --bs-table-bg: rgba(217,119,6,.09); box-shadow: inset 3px 0 0 #d97706; }
-.table-danger  { --bs-table-bg: rgba(220,38,38,.08); box-shadow: inset 3px 0 0 #dc2626; }
-.table-success { --bs-table-bg: rgba(5,150,105,.08); box-shadow: inset 3px 0 0 #059669; }
-.table-info    { --bs-table-bg: rgba(13,148,136,.08); box-shadow: inset 3px 0 0 #0d9488; }
-:root[data-bs-theme="dark"] .table-warning { --bs-table-bg: rgba(217,119,6,.14); }
-:root[data-bs-theme="dark"] .table-danger  { --bs-table-bg: rgba(220,38,38,.14); }
-:root[data-bs-theme="dark"] .table-success { --bs-table-bg: rgba(5,150,105,.14); }
-:root[data-bs-theme="dark"] .table-info    { --bs-table-bg: rgba(13,148,136,.14); }
+.table-warning { --bs-table-bg: rgba(217,119,6,.09); --tblr-table-bg: rgba(217,119,6,.09); --bs-table-color: var(--if-ink); --tblr-table-color: var(--if-ink); box-shadow: inset 3px 0 0 #d97706; }
+.table-danger  { --bs-table-bg: rgba(220,38,38,.08); --tblr-table-bg: rgba(220,38,38,.08); --bs-table-color: var(--if-ink); --tblr-table-color: var(--if-ink); box-shadow: inset 3px 0 0 #dc2626; }
+.table-success { --bs-table-bg: rgba(5,150,105,.08); --tblr-table-bg: rgba(5,150,105,.08); --bs-table-color: var(--if-ink); --tblr-table-color: var(--if-ink); box-shadow: inset 3px 0 0 #059669; }
+.table-info    { --bs-table-bg: rgba(13,148,136,.08); --tblr-table-bg: rgba(13,148,136,.08); --bs-table-color: var(--if-ink); --tblr-table-color: var(--if-ink); box-shadow: inset 3px 0 0 #0d9488; }
+:root[data-bs-theme="dark"] .table-warning { --bs-table-bg: rgba(217,119,6,.14); --tblr-table-bg: rgba(217,119,6,.14); }
+:root[data-bs-theme="dark"] .table-danger  { --bs-table-bg: rgba(220,38,38,.14); --tblr-table-bg: rgba(220,38,38,.14); }
+:root[data-bs-theme="dark"] .table-success { --bs-table-bg: rgba(5,150,105,.14); --tblr-table-bg: rgba(5,150,105,.14); }
+:root[data-bs-theme="dark"] .table-info    { --bs-table-bg: rgba(13,148,136,.14); --tblr-table-bg: rgba(13,148,136,.14); }
 
 /* ---- Forms: tidy inputs ---- */
 /* One control height for the whole app. Native inputs and .btn resolved to 40px
@@ -198,6 +216,9 @@ code, kbd, samp, pre, .text-monospace, .font-monospace, .if-mono { font-family: 
   border-color: var(--if-border-strong); border-radius: var(--if-radius-sm);
   background-color: var(--if-surface); color: var(--if-ink); padding: .45rem .7rem;
 }
+.company-logo-preview { max-width: 100%; max-height: 10rem; object-fit: contain; }
+.company-logo-settings .form-group { text-align: left; }
+.company-logo-settings .form-text { line-height: 1.35; }
 .form-control:not(.form-control-sm):not(textarea),
 .form-select:not(.form-select-sm),
 .ts-wrapper:not(.form-control-sm) { min-height: var(--if-control-h); }
@@ -206,7 +227,7 @@ code, kbd, samp, pre, .text-monospace, .font-monospace, .if-mono { font-family: 
   align-items: center;
 }
 /* A single-select control must never reflow the toolbar: at 1280 the widest
-   placeholder ("- All Clients -") wrapped to a second line and grew the
+   placeholder ("- All Departments -") wrapped to a second line and grew the
    control to 58px beside its 37px neighbours. Truncate the selected label the
    way every other one-line control in the app does. */
 .ts-wrapper.single > .ts-control { flex-wrap: nowrap; }
@@ -214,6 +235,38 @@ code, kbd, samp, pre, .text-monospace, .font-monospace, .if-mono { font-family: 
   min-width: 0; max-width: 100%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* "- Department -"-style first options (client_id/location/vendor/category
+   pickers) exist only so a required <select> starts on no real choice - Tom
+   Select's global allowEmptyOption:true (js/app.js) always renders that empty
+   value as a genuine selected item, not as its own placeholder mechanism, so
+   the label showed up as ordinary dark selected text instead of a soft hint.
+   Tom Select does mark the rendered item with data-value="" though, so once
+   the option's own text is trimmed down to a plain label (no more "- -"
+   wrapping - see the option text itself), this alone makes it read exactly
+   like the grey placeholder text in every other input on these same forms. */
+.ts-control .item[data-value=""] { color: var(--if-muted) !important; font-weight: 400; }
+/* The same empty/placeholder row, but inside the OPEN dropdown list rather
+   than the closed control above - it should read as a soft "clear this
+   field" hint there too, not as an ordinary, equally-weighted choice. */
+.ts-dropdown .option[data-value=""] { color: var(--if-muted); font-style: italic; }
+/* A genuinely disabled option (e.g. Network Drive's "C: (system drive)",
+   reserved because it's always the local system drive) needs to visibly read
+   as unavailable. Tom Select's own bootstrap5 theme tries to dim it via
+   opacity on a `[data-disabled]` selector, but a *plain* `.option{opacity:1}`
+   rule immediately after it in that same stylesheet - same specificity, later
+   in source order - wins the cascade and cancels the dimming for every option,
+   disabled or not (measured: a disabled option rendered at full opacity with
+   a normal pointer cursor). Tom Select does mark a disabled option with
+   aria-disabled="true" reliably, so target that directly instead. */
+.ts-dropdown .option[aria-disabled="true"] { color: var(--if-muted); opacity: .55; cursor: not-allowed; }
+/* Country-code inputs ("+1", "+44"...) are capped at 4 characters but were
+   sized with Bootstrap's .col-2 grid class (16.67% of the input-group) - a
+   grid utility repurposed as a "keep it small" hack, and wildly oversized for
+   what it holds. agent/modals/location/*.php had already solved this per-field
+   with an inline flex-grow-0 + width:4.5rem; promoted here into one shared
+   class so every phone/mobile/fax country-code box in the app sizes the same
+   way without repeating the inline style. */
+.form-control.phone-country-code { flex: 0 0 auto; width: 4.5rem; }
 /* Tom Select leaves the original <select> in place as a hidden first child, so
    when the wrapper is alone in an .input-group Bootstrap's "not the first child"
    rule squares off its left corners (and pulls it 1px left to overlap a border
@@ -225,6 +278,27 @@ code, kbd, samp, pre, .text-monospace, .font-monospace, .if-mono { font-family: 
   border-top-left-radius: var(--if-radius-sm) !important;
   border-bottom-left-radius: var(--if-radius-sm) !important;
   margin-left: 0 !important;
+}
+/* Bootstrap sees the hidden original select as a child and misses the visible
+   Tom Select wrapper after a legacy input-group-prepend icon. Keep only the
+   outside corners rounded and join the two borders without a gap. */
+.input-group > .input-group-prepend + .ts-hidden-accessible + .ts-wrapper,
+.input-group > .input-group-prepend + .ts-wrapper {
+  min-width: 0;
+  flex: 1 1 auto;
+  margin-left: -1px;
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+.input-group > .input-group-prepend + .ts-hidden-accessible + .ts-wrapper > .ts-control,
+.input-group > .input-group-prepend + .ts-wrapper > .ts-control {
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+.input-group > .input-group-prepend:has(+ .ts-hidden-accessible + .ts-wrapper) > .input-group-text,
+.input-group > .input-group-prepend:has(+ .ts-wrapper) > .input-group-text {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
 }
 /* Focus vs. invalid must not look alike. A soft coloured halo around a coloured
    border IS Bootstrap's :invalid look, and on an install whose accent happens to
@@ -253,6 +327,44 @@ code, kbd, samp, pre, .text-monospace, .font-monospace, .if-mono { font-family: 
 .form-label, label { font-weight: 500; color: var(--if-ink); margin-bottom: .3rem; }
 .input-group-text { background-color: var(--if-bg); border-color: var(--if-border-strong); color: var(--if-muted); }
 
+/* ---- Sidebar: a teal rail marks the active item (quiet elsewhere) ---- */
+.app-sidebar .sidebar-menu .nav-link, .main-sidebar .nav-link { border-radius: 8px; font-weight: 450; }
+
+/* Group-header links (the ones that toggle a nested .nav-treeview) get a
+   touch more weight and brightness than plain single-destination links, so
+   "this is a category" reads differently from "this goes straight to a page"
+   at a glance - without them the whole menu was one visually flat list where
+   nothing signalled which rows expand and which just navigate. */
+.app-sidebar .sidebar-menu > .nav-item:has(> .nav-treeview) > .nav-link {
+  font-weight: 600;
+  color: #eef1f4 !important;
+}
+.app-sidebar .sidebar-menu > .nav-item:has(> .nav-treeview) > .nav-link .nav-icon {
+  color: #eef1f4 !important;
+}
+.app-sidebar .sidebar-menu > .nav-item:has(> .nav-treeview) > .nav-link .nav-arrow {
+  opacity: .6;
+}
+.app-sidebar .sidebar-menu > .nav-item.menu-open:has(> .nav-treeview) > .nav-link .nav-arrow {
+  opacity: 1;
+  color: var(--color-accent);
+}
+/* The chevron is absolutely positioned at the row's right edge; on a group
+   header that also shows a count badge (e.g. "Service Desk 27") the two sit
+   close together in the already-tight ~250px sidebar. Reserving space via
+   padding on the <p> was tried and made it worse - the sidebar is narrow
+   enough that it just pushed the badge itself into the ellipsis truncation
+   instead. Shrinking the badge a touch on these rows buys just enough gap
+   without touching the truncation width at all. */
+.app-sidebar .sidebar-menu > .nav-item:has(> .nav-treeview) > .nav-link .badge {
+  font-size: .65rem;
+  padding: .25em .45em;
+}
+.app-sidebar .sidebar-menu .nav-link.active, .main-sidebar .nav-link.active { position: relative; font-weight: 600; }
+.app-sidebar .sidebar-menu .nav-link.active::before, .main-sidebar .nav-link.active::before {
+  content:""; position:absolute; left:-.5rem; top:20%; bottom:20%; width:3px; border-radius:0 3px 3px 0; background:#fff;
+}
+.app-sidebar .nav-header, .main-sidebar .nav-header { font-size:.68rem; letter-spacing:.08em; }
 
 /* ---- Sidebar, Tabler generation (`aside.navbar-vertical`) ----
    The .app-sidebar/.sidebar-menu rules above were written against AdminLTE 3
@@ -459,74 +571,29 @@ code, kbd, samp, pre, .text-monospace, .font-monospace, .if-mono { font-family: 
 
 .info-box-number { font-family: var(--if-mono); }
 
-/* ---- Ticket list stat-box row (agent/tickets.php): the markup already wired
-   up --stat-color/--stat-color-rgb per box and a plain, non-shrinking .col per
-   box, but no CSS ever consumed those variables - each tile rendered as bare
-   unstyled text (icon + two lines) with nothing to make it wrap on narrower
-   client-context pages, so tiles just got crushed/pushed off the right edge
-   once there wasn't room for all 7 side by side.
-   Distinct from .small-box above: this is agent/tickets.php's own filter-row
-   component, not the AdminLTE info-box/small-box class it also happens to use
-   elsewhere in the app. ---- */
-.ticket-stat-box {
-  display: flex; align-items: center; gap: .65rem;
-  padding: .65rem .85rem;
-  background-color: var(--if-surface);
-  border: 1px solid var(--if-border);
-  border-inline-start: 3px solid var(--stat-color, var(--if-border-strong));
-  border-radius: var(--if-radius-sm);
-  box-shadow: var(--if-shadow);
-  text-decoration: none;
-  color: var(--if-ink);
-  transition: transform .1s ease-out, box-shadow .1s ease-out, background-color .1s ease-out;
-}
-.ticket-stat-box:hover {
-  background-color: rgba(var(--stat-color-rgb, 100,116,139), .08);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px -2px rgba(20,35,42,.12);
-  color: var(--if-ink);
-}
-.ticket-stat-box.active {
-  background-color: rgba(var(--stat-color-rgb, 100,116,139), .12);
-  border-color: var(--stat-color, var(--if-border-strong));
-}
-.ticket-stat-icon {
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  width: 2.1rem; height: 2.1rem;
-  border-radius: 50%;
-  background-color: rgba(var(--stat-color-rgb, 100,116,139), .12);
-  color: var(--stat-color, var(--if-muted));
-  font-size: .9rem;
-}
-.ticket-stat-value {
-  display: block;
-  font-family: var(--if-mono);
-  font-size: 1.15rem;
-  font-weight: 700;
-  line-height: 1.2;
-}
-.ticket-stat-label {
-  display: block;
-  font-size: .68rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .04em;
-  color: var(--if-muted);
-  white-space: nowrap;
-}
-
 /* ---- Modals: match the card language ---- */
-.modal-content { border: 1px solid var(--if-border); border-radius: var(--if-radius); box-shadow: 0 12px 40px rgba(20,35,42,.18); }
-.modal-header { border-bottom: 1px solid var(--if-border); }
+.modal-content {
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius);
+  background: var(--if-surface);
+  box-shadow: 0 12px 40px rgba(20,35,42,.18);
+}
+.modal-header {
+  border-bottom: 1px solid var(--if-border);
+  border-radius: 0;
+}
+/* Dark headers cover the modal's inner top edge so its light body surface cannot
+   show as white crescents. Keep overflow visible for menus and select dropdowns. */
+.modal-header.bg-dark {
+  margin: -1px -1px 0;
+  border-radius: var(--if-radius) var(--if-radius) 0 0;
+}
 .modal-footer { border-top: 1px solid var(--if-border); }
 
-/* ---- Breadcrumbs: unstyled Bootstrap defaults read as an afterthought (tiny,
-   cramped, plain "/" separators) sitting right above each detail page's title
-   card - quiet but legible wayfinding instead. ---- */
+/* ---- Breadcrumbs: readable wayfinding above detail pages. ---- */
 .breadcrumb {
   --bs-breadcrumb-divider: "\2039";
-  font-size: .82rem;
+  font-size: 1rem;
   padding: 0;
   margin-bottom: .6rem;
 }
@@ -615,94 +682,91 @@ a:focus-visible, .btn:focus-visible, .nav-link:focus-visible { outline: 2px soli
 .security-cards { display: flex; flex-direction: column; gap: 1rem; }
 
 /* =============================================================================
-   Knowledge Base (agent/kb_articles.php + kb_article.php, and the matching
-   client-portal pages). Previously zero KB-specific CSS existed anywhere -
-   plain unstyled Bootstrap cards, and the article body had no typography at
-   all (rendered with raw browser defaults). Scoped as new .kb-* classes
-   rather than touching .prettyContent/.card directly - .prettyContent is a
-   shared wrapper used by tickets, documents, mail previews and templates
-   too, so restyling it here would have reached far outside the KB.
+   Reusable UI components (modernization plan §8/§9) — backed by includes/ui/*.php.
+   New, additive, opt-in: nothing above this line is renamed or removed, and no
+   existing page markup is changed by adding these. Purely for pages that adopt
+   the includes/ui/ helpers going forward.
    ============================================================================= */
 
-/* ---- Category "chapter" head: icon badge + name + article count - a
-   library's section divider, and the one deliberately memorable KB motif. ---- */
-.kb-chapter {
-  display: flex; align-items: center; gap: .65rem;
-  margin: 2rem 0 1rem;
-  padding-bottom: .6rem;
-  border-bottom: 1px solid var(--if-border-strong);
+/* ---- Page header ---- */
+.it-page-header { margin-bottom: 1.25rem; }
+.it-page-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.it-page-title { font-size: 1.5rem; font-weight: 650; letter-spacing: -0.02em; margin: 0; color: var(--if-ink); }
+/* Cap the measure: render_page_header() subtitles run to ~200 characters and
+   without a max-width they stretch across the whole content column as one
+   1200px ribbon of 14px text - roughly twice a readable line length. */
+.it-page-subtitle { font-size: .875rem; color: var(--if-muted); margin: .3rem 0 0; max-width: 62ch; }
+.it-page-actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+
+/* ---- Card ---- */
+.it-card { background: var(--if-surface); border: 1px solid var(--if-border); border-radius: var(--if-radius); box-shadow: var(--if-shadow); margin-bottom: 1rem; }
+.it-card-header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .8rem 1rem; border-bottom: 1px solid var(--if-border); font-weight: 600; letter-spacing: -0.01em; }
+.it-card-header:first-child { border-radius: var(--if-radius) var(--if-radius) 0 0; }
+.it-card-body { padding: 1rem 1.1rem; }
+.it-card-body:last-child { border-radius: 0 0 var(--if-radius) var(--if-radius); }
+
+/* ---- Stat cards ---- */
+.it-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
+.it-stat-card {
+  display: flex; align-items: center; gap: .85rem;
+  background: var(--if-surface); border: 1px solid var(--if-border); border-radius: var(--if-radius); box-shadow: var(--if-shadow);
+  padding: 1rem 1.1rem; color: inherit; text-decoration: none !important;
+  transition: box-shadow .15s ease, transform .15s ease;
 }
-.kb-chapter:first-child { margin-top: .25rem; }
-.kb-chapter-icon {
-  display: flex; align-items: center; justify-content: center;
-  width: 2rem; height: 2rem; flex-shrink: 0;
-  border-radius: 50%;
-  background-color: var(--color-accent-soft, rgba(13,148,136,.12));
-  color: var(--color-accent-hover, var(--color-accent));
-  font-size: .85rem;
-}
-.kb-chapter-name { font-size: 1.05rem; font-weight: 700; color: var(--if-ink); letter-spacing: -0.01em; }
-.kb-chapter-count {
-  font-family: var(--if-mono); font-size: .72rem; font-weight: 600;
-  color: var(--if-muted); background: var(--if-bg);
-  border: 1px solid var(--if-border); border-radius: 999px;
-  padding: .1rem .55rem;
+a.it-stat-card:hover, a.it-stat-card:focus-visible { box-shadow: var(--if-shadow-md); transform: translateY(-1px); }
+.it-stat-icon { width: 2.5rem; height: 2.5rem; min-width: 2.5rem; border-radius: var(--if-radius-sm); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+.it-stat-body { min-width: 0; }
+.it-stat-value { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; font-family: var(--if-mono); }
+.it-stat-label { font-size: .78rem; color: var(--if-muted); font-weight: 500; line-height: 1.3; }
+
+/* Semantic tint pairs for .it-stat-icon (background + icon color) — same
+   palette as the existing "contextual rows" / info-box accent colors above,
+   so a stat tile and a table row flagging the same condition read as the
+   same color language app-wide. */
+.it-stat-icon.it-tint-primary { background: var(--if-primary-soft); color: var(--if-primary); }
+.it-stat-icon.it-tint-slate   { background: rgba(100,116,139,.12); color: #64748b; }
+.it-stat-icon.it-tint-success { background: rgba(5,150,105,.12);  color: #059669; }
+.it-stat-icon.it-tint-warning { background: rgba(217,119,6,.12);  color: #d97706; }
+.it-stat-icon.it-tint-danger  { background: rgba(220,38,38,.12);  color: #dc2626; }
+.it-stat-icon.it-tint-info    { background: rgba(8,145,178,.12);  color: #0891b2; }
+.it-stat-icon.it-tint-violet  { background: rgba(139,92,246,.14); color: #7c3aed; }
+
+/* ---- Status / priority pills ----
+   .it-status-pill takes its color inline (style="background:...;color:...")
+   since ticket_statuses.ticket_status_color is a free-form per-row admin
+   setting, not a fixed palette — see includes/ui/status_badge.php. */
+.it-status-pill {
+  display: inline-flex; align-items: center; font-weight: 600; letter-spacing: .01em;
+  border-radius: 999px; padding: .32em .7em; font-size: .72rem; line-height: 1; white-space: nowrap;
 }
 
-/* ---- Article card (list/grid view) ---- */
-.kb-article-card {
-  height: 100%; display: flex; flex-direction: column;
-  border-top: 3px solid var(--color-accent);
-  transition: transform .12s ease-out, box-shadow .12s ease-out;
+/* .it-priority-pill IS a fixed small set (low/medium/high/critical), so it
+   gets real classes instead, reusing the --priority-* tokens already defined
+   in itflow_custom.css for the ticket-list priority dots. */
+.it-priority-pill {
+  display: inline-flex; align-items: center; gap: .4em; font-weight: 600; letter-spacing: .01em;
+  border-radius: 999px; padding: .32em .7em; font-size: .72rem; line-height: 1; white-space: nowrap;
 }
-.kb-article-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 24px -8px rgba(16,24,40,.16), 0 2px 6px -2px rgba(16,24,40,.08);
-}
-.kb-article-card .card-body { flex: 1 1 auto; }
-.kb-article-card .card-title a { color: var(--if-ink); text-decoration: none; font-weight: 650; }
-.kb-article-card .card-title a:hover { color: var(--color-accent); }
-.kb-article-card .card-text { color: var(--if-muted); line-height: 1.55; font-size: .84rem; }
-.kb-article-meta { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; font-size: .72rem; color: var(--if-muted); }
+.it-priority-pill::before { content: ""; width: .5em; height: .5em; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.it-priority-pill.it-priority-low      { background: rgba(23,162,184,.13);  color: #0e7490; }
+.it-priority-pill.it-priority-medium   { background: rgba(255,193,7,.18);   color: #92660a; }
+.it-priority-pill.it-priority-high     { background: rgba(220,53,69,.13);   color: #b02a37; }
+.it-priority-pill.it-priority-critical { background: rgba(220,38,38,.18);   color: #dc2626; }
+:root[data-bs-theme="dark"] .it-priority-pill.it-priority-low      { color: #67e8f9; }
+:root[data-bs-theme="dark"] .it-priority-pill.it-priority-medium   { color: #fde68a; }
+:root[data-bs-theme="dark"] .it-priority-pill.it-priority-high     { color: #fca5a5; }
+:root[data-bs-theme="dark"] .it-priority-pill.it-priority-critical { color: #fca5a5; }
+
+/* ---- Section grouping (e.g. Reports hub "Financial"/"Technical" blocks) ---- */
+.it-section { margin-bottom: 1.5rem; }
+.it-section-header { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--if-muted); margin-bottom: .6rem; }
 
 /* ---- Empty state ---- */
-.kb-empty { text-align: center; padding: 3.5rem 1rem; color: var(--if-muted); }
-.kb-empty i { font-size: 2.25rem; color: var(--if-border-strong); display: block; margin-bottom: .75rem; }
-
-/* ---- Article reading pane: a document, not just another app card - a top
-   accent rule marks it as "the thing you're reading" against the app chrome
-   around it. .kb-prose is the actual prose typography, added alongside
-   (not instead of) .prettyContent so pretty_content.js's table/img-fluid
-   hook keeps working unchanged. ---- */
-.kb-reader-card { border-top: 3px solid var(--color-accent); }
-.kb-reader-meta { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; font-size: .82rem; color: var(--if-muted); margin-top: .35rem; }
-
-.kb-prose { font-size: 1rem; line-height: 1.75; color: var(--if-ink); max-width: 74ch; }
-.kb-prose > *:first-child { margin-top: 0; }
-.kb-prose > *:last-child { margin-bottom: 0; }
-.kb-prose p { margin: 0 0 1.1em; }
-.kb-prose h1, .kb-prose h2, .kb-prose h3, .kb-prose h4, .kb-prose h5, .kb-prose h6 {
-  font-weight: 700; letter-spacing: -0.012em; color: var(--if-ink); margin: 1.7em 0 .6em; line-height: 1.3;
-}
-.kb-prose h1 { font-size: 1.55rem; }
-.kb-prose h2 { font-size: 1.3rem; padding-bottom: .35em; border-bottom: 1px solid var(--if-border); }
-.kb-prose h3 { font-size: 1.1rem; }
-.kb-prose h4, .kb-prose h5, .kb-prose h6 { font-size: 1rem; }
-.kb-prose ul, .kb-prose ol { margin: 0 0 1.1em; padding-left: 1.4em; }
-.kb-prose li { margin-bottom: .35em; }
-.kb-prose li > ul, .kb-prose li > ol { margin-top: .35em; margin-bottom: 0; }
-.kb-prose a { color: var(--color-accent-hover, var(--color-accent)); text-decoration: underline; text-decoration-color: rgba(13,148,136,.35); text-underline-offset: 2px; }
-.kb-prose a:hover { text-decoration-color: currentColor; }
-.kb-prose strong { font-weight: 700; }
-.kb-prose blockquote { margin: 0 0 1.1em; padding: .1em 0 .1em 1em; border-left: 3px solid var(--color-accent); color: var(--if-muted); font-style: italic; }
-.kb-prose code { font-family: var(--if-mono); font-size: .87em; background: var(--if-bg); border: 1px solid var(--if-border); border-radius: 4px; padding: .1em .4em; }
-.kb-prose pre { font-family: var(--if-mono); font-size: .84rem; line-height: 1.6; background: var(--if-ink); color: #e7eeef; border-radius: var(--if-radius-sm); padding: 1rem 1.15rem; margin: 0 0 1.1em; overflow-x: auto; }
-.kb-prose pre code { background: none; border: 0; padding: 0; color: inherit; }
-.kb-prose img { max-width: 100%; height: auto; border-radius: var(--if-radius-sm); margin: .5em 0; }
-.kb-prose hr { border: none; border-top: 1px solid var(--if-border); margin: 1.75em 0; }
-.kb-prose table { width: 100%; border-collapse: collapse; margin: 0 0 1.1em; font-size: .92rem; }
-.kb-prose th, .kb-prose td { border: 1px solid var(--if-border); padding: .5em .7em; text-align: left; }
-.kb-prose th { background: var(--if-bg); font-weight: 600; }
+.it-empty-state { text-align: center; padding: 3rem 1.5rem; }
+.it-empty-icon { font-size: 2.25rem; color: var(--if-border-strong); margin-bottom: .75rem; }
+.it-empty-title { font-size: 1rem; font-weight: 600; color: var(--if-ink); margin: 0 0 .35rem; }
+.it-empty-subtitle { font-size: .875rem; color: var(--if-muted); margin: 0 auto 1rem; max-width: 32rem; }
+.it-empty-actions { display: flex; gap: .5rem; justify-content: center; flex-wrap: wrap; }
 
 /* ---- List-page vertical rhythm ----
    Filter/search toolbars sit directly beneath a card header with no separation, so the
@@ -723,7 +787,7 @@ a:focus-visible, .btn:focus-visible, .nav-link:focus-visible { outline: 2px soli
 
 /* Empty states inside a list card were flush against the toolbar above them. */
 .card-body > .text-center.text-muted:last-child,
-.card-body > .kb-empty:last-child {
+.card-body > .it-empty-state:last-child {
     padding-top: 1.5rem;
 }
 
@@ -750,3 +814,254 @@ a:focus-visible, .btn:focus-visible, .nav-link:focus-visible { outline: 2px soli
 
 :root[data-bs-theme="dark"] .btn-outline-warning, body.dark-mode .btn-outline-warning { color: #f0a500; }
 :root[data-bs-theme="dark"] .btn-outline-info,    body.dark-mode .btn-outline-info    { color: #6cb6f0; }
+
+/* Inline-edit cells on the Assets list (agent/assets.php +
+   agent/js/asset_inline_edit.js). The trigger is a bare button that reads like
+   the plain text/badge it replaced - a caret and a soft hover fill are the only
+   hint it's clickable, so the table doesn't turn into a wall of form controls.
+   The caret stays faintly visible (not hover-only) so it's discoverable on touch. */
+.asset-inline-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    max-width: 100%;
+    margin: -.25rem -.4rem;
+    padding: .25rem .4rem;
+    border: 1px solid transparent;
+    border-radius: var(--if-radius-sm, 8px);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color .12s ease, border-color .12s ease;
+}
+.asset-inline-trigger:hover,
+.asset-inline-trigger:focus-visible {
+    background-color: var(--if-bg, #eef2f2);
+    border-color: var(--if-border-strong, #d3dbdc);
+    outline: none;
+}
+.asset-inline-caret {
+    font-size: .75em;
+    opacity: .35;
+    transition: opacity .12s ease;
+}
+.asset-inline-trigger:hover .asset-inline-caret,
+.asset-inline-trigger:focus-visible .asset-inline-caret {
+    opacity: .85;
+}
+.asset-inline-cell.is-editing .asset-inline-trigger,
+.asset-inline-cell.is-editing .asset-inline-link {
+    display: none;
+}
+/* Contact-card / department link beside a trigger - the navigation the cell
+   had before it became a dropdown. Faint until hovered, like the caret. */
+.asset-inline-link {
+    margin-left: .5rem;
+    color: inherit;
+    opacity: .35;
+    transition: opacity .12s ease;
+}
+.asset-inline-link:hover,
+.asset-inline-link:focus-visible,
+tr:hover .asset-inline-link {
+    opacity: .85;
+}
+/* A fixed width, not the wrapper's default 100%: that let an open editor
+   stretch its whole column and shove the rest of the table sideways. */
+.asset-inline-cell .ts-wrapper {
+    width: 14rem;
+}
+.asset-inline-option {
+    display: flex;
+    align-items: center;
+}
+.asset-inline-check {
+    margin-left: auto;
+    padding-left: .75rem;
+    font-size: .8em;
+    color: var(--if-primary, #0d9488);
+}
+.asset-inline-cell.is-saving .asset-inline-trigger {
+    opacity: .5;
+    pointer-events: none;
+}
+.asset-inline-cell.is-saving .asset-inline-caret::before {
+    content: "\f110"; /* fa-spinner */
+    display: inline-block;
+    animation: asset-inline-spin 1s linear infinite;
+}
+@keyframes asset-inline-spin { to { transform: rotate(360deg); } }
+.asset-inline-dot {
+    display: inline-block;
+    width: .6rem;
+    height: .6rem;
+    margin-right: .5rem;
+    border-radius: 50%;
+    background-color: var(--if-border-strong, #d3dbdc);
+    vertical-align: baseline;
+}
+.asset-inline-saved {
+    animation: asset-inline-saved 1.4s ease-out;
+}
+@keyframes asset-inline-saved {
+    0%   { background-color: rgba(25, 135, 84, .22); }
+    100% { background-color: transparent; }
+}
+tr.asset-inline-moved-out > td {
+    opacity: .45;
+}
+@media (prefers-reduced-motion: reduce) {
+    .asset-inline-saved,
+    .asset-inline-cell.is-saving .asset-inline-caret::before { animation: none; }
+}
+
+/* Contact card modal (agent/modals/contact/contact_details.php) - the quick
+   view opened from contact names/icons across the app (Assets list, etc). */
+.contact-card-avatar {
+    flex: 0 0 auto;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, .25);
+}
+.contact-card-initials {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, .14);
+    color: #fff;
+    font-weight: 600;
+    font-size: .95rem;
+    letter-spacing: .02em;
+}
+.contact-card-subtitle {
+    font-size: .85rem;
+    color: rgba(255, 255, 255, .7);
+}
+.min-w-0 { min-width: 0; }
+/* Wrapping grid of whichever contact fields are filled in - no "-" columns. */
+.contact-card-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: .85rem 1.5rem;
+    padding: .9rem 1rem;
+    border: 1px solid var(--if-border, #e3e9ea);
+    border-radius: var(--if-radius-sm, 8px);
+    background: var(--if-bg, #eef2f2);
+}
+.contact-card-fact { min-width: 0; }
+.contact-card-label {
+    margin-bottom: .15rem;
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--if-muted, #5d6f76);
+}
+.contact-card-tabs .nav-link {
+    padding: .45rem .8rem;
+    white-space: nowrap;
+}
+.contact-card-table > thead th {
+    font-size: .7rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--if-muted, #5d6f76);
+}
+
+/* Skip link + programmatic focus target for <main id="main-content"> */
+.skip-link { position: absolute; left: .5rem; top: -4rem; z-index: 2000; padding: .5rem 1rem; background: var(--if-surface); color: var(--if-ink); border: 2px solid var(--if-primary); border-radius: var(--if-radius-sm); }
+.skip-link:focus { top: .5rem; }
+#main-content:focus { outline: none; }
+
+/* Wide data tables scroll inside their card below 1200px instead of widening the whole page. Bootstrap's
+   .table-responsive-sm only scrolls under 576px, and many lists use bare tables in .card-body. (Desktop is left alone so
+   row-action dropdowns near the bottom of a table are not clipped by an overflow container.) */
+@media (max-width: 1199.98px) {
+    .table-responsive-sm, .table-responsive-md, .table-responsive-lg,
+    .card-body:has(> table), .card-body:has(> .table), .card:has(> table), .card:has(> .table), [class*="col-"]:has(> table), [class*="col-"]:has(> .table) { overflow-x: auto; }
+}
+
+/* A flex child will not shrink below its content: without this a wide .table-responsive pushes the whole page wider
+   than the viewport instead of scrolling inside its own box. */
+.page-wrapper, .page-body, .page-body > main { min-width: 0; }
+
+/* Light-theme helper text: Tabler's success green and muted grey fall under 4.5:1 on white and on the amber/red row tints. */
+:root:not([data-bs-theme="dark"]) .text-success { color: #157a30 !important; }
+:root:not([data-bs-theme="dark"]) .text-secondary, :root:not([data-bs-theme="dark"]) .text-muted { color: #566570 !important; }
+:root:not([data-bs-theme="dark"]) .cred-desc { color: #566570; }
+
+/* Dark theme: helper text, tom-select placeholder and outline-danger buttons were under 4.5:1 on the dark surfaces. */
+:root[data-bs-theme="dark"] .text-secondary, :root[data-bs-theme="dark"] .text-muted { color: #a9b6bb !important; }
+:root[data-bs-theme="dark"] .ts-control input, :root[data-bs-theme="dark"] .ts-control > input::placeholder { color: #a9b6bb; }
+:root[data-bs-theme="dark"] .btn-outline-danger { color: #ff9a9a; border-color: #ff9a9a; }
+:root[data-bs-theme="dark"] .btn-outline-danger:hover { color: #fff; }
+
+
+/* ---- Contrast pass (run 3) -------------------------------------------------------------------------------------
+   Contextual rows: Tabler also colours STRIPED / HOVER / ACTIVE cells from its own --tblr-table-*-color (black) and
+   --tblr-table-striped-bg (cream), so odd rows kept black text on a dark tint. Cover every variant and state. */
+.table-primary, .table-secondary, .table-light, .table-dark { --tblr-table-color: var(--if-ink); --bs-table-color: var(--if-ink); }
+.table-primary   { --tblr-table-bg: rgba(var(--if-primary-rgb), .09); }
+.table-secondary { --tblr-table-bg: rgba(93, 111, 118, .10); }
+.table-light     { --tblr-table-bg: rgba(93, 111, 118, .05); }
+.table-dark      { --tblr-table-bg: rgba(15, 23, 28, .90); --tblr-table-color: #e7eeef; }
+:root[data-bs-theme="dark"] .table-secondary { --tblr-table-bg: rgba(169, 182, 187, .12); }
+:root[data-bs-theme="dark"] .table-light { --tblr-table-bg: rgba(169, 182, 187, .08); }
+.table-warning, .table-danger, .table-success, .table-info, .table-primary, .table-secondary, .table-light {
+    --tblr-table-striped-color: var(--if-ink); --tblr-table-active-color: var(--if-ink); --tblr-table-hover-color: var(--if-ink);
+    --tblr-table-striped-bg: var(--tblr-table-bg); --tblr-table-active-bg: var(--tblr-table-bg); --tblr-table-hover-bg: var(--tblr-table-bg);
+    --tblr-table-color-state: var(--if-ink); --tblr-table-color-type: var(--if-ink);
+}
+.table-warning > *, .table-danger > *, .table-success > *, .table-info > *, .table-primary > *, .table-secondary > *, .table-light > * { color: var(--if-ink); }
+
+/* Dark surfaces that stayed light because a utility hard-codes white */
+:root[data-bs-theme="dark"] .bg-white, :root[data-bs-theme="dark"] .card-footer.bg-white { background-color: var(--if-surface) !important; }
+:root[data-bs-theme="dark"] .bg-light { background-color: color-mix(in srgb, var(--if-surface) 90%, #fff) !important; }
+:root[data-bs-theme="dark"] .text-dark:not(.badge):not([class*="bg-"]) { color: var(--if-ink) !important; }
+:root[data-bs-theme="dark"] .text-danger { color: #ff8585 !important; }
+:root[data-bs-theme="dark"] .nav-tabs .nav-link:not(.active), :root[data-bs-theme="dark"] .nav-pills .nav-link:not(.active) { color: #a9b6bb; }
+:root[data-bs-theme="dark"] .tr-chip[aria-pressed="true"], :root[data-bs-theme="dark"] .trb-node__name { color: #9dbcff; }
+/* (calendar day numbers and headers take their colour from the .cal-surface block in itflow_custom.css) */
+
+/* Filled buttons: white label needs >= 4.5:1 (Tabler's success/info/danger/warning fills do not give it) */
+.btn-danger  { background-color: #c52f2f; border-color: #c52f2f; color: #fff; }
+.btn-success { background-color: #1d7f33; border-color: #1d7f33; color: #fff; }
+.btn-info    { background-color: #2a6cb0; border-color: #2a6cb0; color: #fff; }
+.btn-warning { background-color: #f5a30a; border-color: #f5a30a; color: #1b1b1b; }
+.btn-danger:hover  { background-color: #a82424; border-color: #a82424; }
+.btn-success:hover { background-color: #166628; border-color: #166628; }
+.btn-info:hover    { background-color: #21588f; border-color: #21588f; }
+
+/* Links that sit inside running text must not rely on colour alone */
+main p a:not(.btn), main small a:not(.btn), main .small a:not(.btn), main li > a:not(.btn):not(.nav-link):not(.dropdown-item):not(.list-group-item) { text-decoration: underline; }
+:root[data-bs-theme="dark"] .fc .fc-event .fc-event-time, :root[data-bs-theme="dark"] .fc .fc-event .fc-event-title, :root[data-bs-theme="dark"] .fc .fc-daygrid-dot-event .fc-event-time { color: #e7eeef !important; }
+:root[data-bs-theme="dark"] .trb-node .trb-node__name, :root[data-bs-theme="dark"] .trb-node__open .trb-node__name { color: #9dbcff !important; }
+
+/* Calendar: keyboard focus must be visible on FullCalendar's own links and buttons */
+.fc a:focus-visible, .fc .fc-button:focus-visible, .fc .fc-event:focus-visible { outline: 2px solid var(--if-primary, #0d9488); outline-offset: 2px; }
+
+/* Contrast: accent-filled buttons, the theme toggle's active segment, alerts, settings nav in dark, links inside help text */
+.btn-primary { background-color: color-mix(in srgb, var(--color-accent, #206bc4) 84%, #000); border-color: color-mix(in srgb, var(--color-accent, #206bc4) 84%, #000); }
+.btn-outline-secondary.active, .btn-check:checked + .btn-outline-secondary { background-color: #4a5a63; border-color: #4a5a63; color: #fff; }
+:root:not([data-bs-theme="dark"]) .alert-danger { color: #8f1d1d; }
+:root[data-bs-theme="dark"] a[aria-current="true"]:not(.btn) { color: #9dbcff; }
+main .form-text a, main .text-secondary a, main .text-muted a, main .alert a { text-decoration: underline; }
+.admin-breadcrumb a { text-decoration: underline; }
+
+/* Contrast (RMM pages): help text, tab links, tinted alerts and outline-primary buttons */
+:root:not([data-bs-theme="dark"]) .form-text, :root:not([data-bs-theme="dark"]) .form-hint { color: #566570; }
+:root:not([data-bs-theme="dark"]) .nav-tabs .nav-link:not(.active), :root:not([data-bs-theme="dark"]) .nav-pills .nav-link:not(.active) { color: #4d5b66; }
+:root:not([data-bs-theme="dark"]) .alert-warning { color: #6b4200; }
+:root:not([data-bs-theme="dark"]) .alert-info { color: #1b5a8f; }
+:root:not([data-bs-theme="dark"]) .alert-success { color: #166628; }
+/* Label and icon follow the border (the theme accent), darkened to stay above 4.5:1 on white; a fixed blue here
+   gave a blue label inside an accent-coloured border. */
+:root:not([data-bs-theme="dark"]) .btn-outline-primary { color: color-mix(in srgb, var(--color-accent) 70%, #000); }
+:root[data-bs-theme="dark"] .btn-outline-primary { color: var(--color-accent); }
+:root[data-bs-theme="dark"] .btn-outline-primary:hover, :root[data-bs-theme="dark"] .btn-outline-primary:focus-visible, :root[data-bs-theme="dark"] .btn-outline-primary:active, :root[data-bs-theme="dark"] .btn-outline-primary.active, :root[data-bs-theme="dark"] .btn-check:checked + .btn-outline-primary { color: #fff; }
+:root:not([data-bs-theme="dark"]) .btn-check:checked + .btn-outline-primary, :root:not([data-bs-theme="dark"]) .btn-outline-primary.active, :root:not([data-bs-theme="dark"]) .btn-outline-primary:hover { color: #fff; }

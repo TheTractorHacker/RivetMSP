@@ -1,0 +1,183 @@
+/* =============================================================================
+   RivetMSP edition override for css/itflow_design.css.
+
+   css/itflow_design.css is now RivetCore's shared, unmodified copy (installed
+   byte for byte by vendor/rivet/rivet-core/scripts/install-ui-assets.php; see
+   vendor/rivet/rivet-core/docs/ui/DESIGN_ASSETS.md). Per that doc's "Never
+   edit a shared file in the edition" rule, nothing below may be merged back
+   into itflow_design.css - it lives here instead, loaded immediately after it
+   (includes/header.php).
+
+   This is RivetMSP-only product surface with no RivetIT/Core equivalent
+   (DESIGN_ASSETS.md "RivetMSP migration checklist", section 3, "Lost (MSP-only,
+   50 selectors)"): the ticket-list stat tiles (agent/tickets.php) and the
+   Knowledge Base reader/article-card/chapter styling (agent/kb_articles.php,
+   kb_article.php, and the matching client-portal pages). Core's design.css has
+   no KB feature and no ticket-stat-box feature at all, so there is nothing to
+   "drift" against here - this is durable, not a temporary shim, unlike
+   css/itflow_custom.edition.css.
+
+   Extracted verbatim from RivetMSP's pre-migration css/itflow_design.css
+   (commit 0b044dabf, "Release 26.10.46"), lines 462-517 and 617-705, during
+   the Core UI asset sync (2026-10-27). No declarations were changed. One rule
+   that mixed a KB-only selector with Core's now-generic empty-state selector
+   (`.card-body > .text-center.text-muted:last-child, .card-body > .kb-empty:last-child`)
+   was split: the generic half is already in Core's design.css (as
+   `.card-body > .it-empty-state:last-child`); only the `.kb-empty` half is
+   repeated below.
+   ============================================================================= */
+
+/* ---- Ticket list stat-box row (agent/tickets.php): the markup already wired
+   up --stat-color/--stat-color-rgb per box and a plain, non-shrinking .col per
+   box, but no CSS ever consumed those variables - each tile rendered as bare
+   unstyled text (icon + two lines) with nothing to make it wrap on narrower
+   client-context pages, so tiles just got crushed/pushed off the right edge
+   once there wasn't room for all 7 side by side.
+   Distinct from .small-box above: this is agent/tickets.php's own filter-row
+   component, not the AdminLTE info-box/small-box class it also happens to use
+   elsewhere in the app. ---- */
+.ticket-stat-box {
+  display: flex; align-items: center; gap: .65rem;
+  padding: .65rem .85rem;
+  background-color: var(--if-surface);
+  border: 1px solid var(--if-border);
+  border-inline-start: 3px solid var(--stat-color, var(--if-border-strong));
+  border-radius: var(--if-radius-sm);
+  box-shadow: var(--if-shadow);
+  text-decoration: none;
+  color: var(--if-ink);
+  transition: transform .1s ease-out, box-shadow .1s ease-out, background-color .1s ease-out;
+}
+.ticket-stat-box:hover {
+  background-color: rgba(var(--stat-color-rgb, 100,116,139), .08);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px -2px rgba(20,35,42,.12);
+  color: var(--if-ink);
+}
+.ticket-stat-box.active {
+  background-color: rgba(var(--stat-color-rgb, 100,116,139), .12);
+  border-color: var(--stat-color, var(--if-border-strong));
+}
+.ticket-stat-icon {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  width: 2.1rem; height: 2.1rem;
+  border-radius: 50%;
+  background-color: rgba(var(--stat-color-rgb, 100,116,139), .12);
+  color: var(--stat-color, var(--if-muted));
+  font-size: .9rem;
+}
+.ticket-stat-value {
+  display: block;
+  font-family: var(--if-mono);
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.ticket-stat-label {
+  display: block;
+  font-size: .68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--if-muted);
+  white-space: nowrap;
+}
+
+/* =============================================================================
+   Knowledge Base (agent/kb_articles.php + kb_article.php, and the matching
+   client-portal pages). Previously zero KB-specific CSS existed anywhere -
+   plain unstyled Bootstrap cards, and the article body had no typography at
+   all (rendered with raw browser defaults). Scoped as new .kb-* classes
+   rather than touching .prettyContent/.card directly - .prettyContent is a
+   shared wrapper used by tickets, documents, mail previews and templates
+   too, so restyling it here would have reached far outside the KB.
+   ============================================================================= */
+
+/* ---- Category "chapter" head: icon badge + name + article count - a
+   library's section divider, and the one deliberately memorable KB motif. ---- */
+.kb-chapter {
+  display: flex; align-items: center; gap: .65rem;
+  margin: 2rem 0 1rem;
+  padding-bottom: .6rem;
+  border-bottom: 1px solid var(--if-border-strong);
+}
+.kb-chapter:first-child { margin-top: .25rem; }
+.kb-chapter-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; flex-shrink: 0;
+  border-radius: 50%;
+  background-color: var(--color-accent-soft, rgba(13,148,136,.12));
+  color: var(--color-accent-hover, var(--color-accent));
+  font-size: .85rem;
+}
+.kb-chapter-name { font-size: 1.05rem; font-weight: 700; color: var(--if-ink); letter-spacing: -0.01em; }
+.kb-chapter-count {
+  font-family: var(--if-mono); font-size: .72rem; font-weight: 600;
+  color: var(--if-muted); background: var(--if-bg);
+  border: 1px solid var(--if-border); border-radius: 999px;
+  padding: .1rem .55rem;
+}
+
+/* ---- Article card (list/grid view) ---- */
+.kb-article-card {
+  height: 100%; display: flex; flex-direction: column;
+  border-top: 3px solid var(--color-accent);
+  transition: transform .12s ease-out, box-shadow .12s ease-out;
+}
+.kb-article-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px -8px rgba(16,24,40,.16), 0 2px 6px -2px rgba(16,24,40,.08);
+}
+.kb-article-card .card-body { flex: 1 1 auto; }
+.kb-article-card .card-title a { color: var(--if-ink); text-decoration: none; font-weight: 650; }
+.kb-article-card .card-title a:hover { color: var(--color-accent); }
+.kb-article-card .card-text { color: var(--if-muted); line-height: 1.55; font-size: .84rem; }
+.kb-article-meta { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; font-size: .72rem; color: var(--if-muted); }
+
+/* ---- Empty state ---- */
+.kb-empty { text-align: center; padding: 3.5rem 1rem; color: var(--if-muted); }
+.kb-empty i { font-size: 2.25rem; color: var(--if-border-strong); display: block; margin-bottom: .75rem; }
+
+/* ---- Article reading pane: a document, not just another app card - a top
+   accent rule marks it as "the thing you're reading" against the app chrome
+   around it. .kb-prose is the actual prose typography, added alongside
+   (not instead of) .prettyContent so pretty_content.js's table/img-fluid
+   hook keeps working unchanged. ---- */
+.kb-reader-card { border-top: 3px solid var(--color-accent); }
+.kb-reader-meta { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; font-size: .82rem; color: var(--if-muted); margin-top: .35rem; }
+
+.kb-prose { font-size: 1rem; line-height: 1.75; color: var(--if-ink); max-width: 74ch; }
+.kb-prose > *:first-child { margin-top: 0; }
+.kb-prose > *:last-child { margin-bottom: 0; }
+.kb-prose p { margin: 0 0 1.1em; }
+.kb-prose h1, .kb-prose h2, .kb-prose h3, .kb-prose h4, .kb-prose h5, .kb-prose h6 {
+  font-weight: 700; letter-spacing: -0.012em; color: var(--if-ink); margin: 1.7em 0 .6em; line-height: 1.3;
+}
+.kb-prose h1 { font-size: 1.55rem; }
+.kb-prose h2 { font-size: 1.3rem; padding-bottom: .35em; border-bottom: 1px solid var(--if-border); }
+.kb-prose h3 { font-size: 1.1rem; }
+.kb-prose h4, .kb-prose h5, .kb-prose h6 { font-size: 1rem; }
+.kb-prose ul, .kb-prose ol { margin: 0 0 1.1em; padding-left: 1.4em; }
+.kb-prose li { margin-bottom: .35em; }
+.kb-prose li > ul, .kb-prose li > ol { margin-top: .35em; margin-bottom: 0; }
+.kb-prose a { color: var(--color-accent-hover, var(--color-accent)); text-decoration: underline; text-decoration-color: rgba(13,148,136,.35); text-underline-offset: 2px; }
+.kb-prose a:hover { text-decoration-color: currentColor; }
+.kb-prose strong { font-weight: 700; }
+.kb-prose blockquote { margin: 0 0 1.1em; padding: .1em 0 .1em 1em; border-left: 3px solid var(--color-accent); color: var(--if-muted); font-style: italic; }
+.kb-prose code { font-family: var(--if-mono); font-size: .87em; background: var(--if-bg); border: 1px solid var(--if-border); border-radius: 4px; padding: .1em .4em; }
+.kb-prose pre { font-family: var(--if-mono); font-size: .84rem; line-height: 1.6; background: var(--if-ink); color: #e7eeef; border-radius: var(--if-radius-sm); padding: 1rem 1.15rem; margin: 0 0 1.1em; overflow-x: auto; }
+.kb-prose pre code { background: none; border: 0; padding: 0; color: inherit; }
+.kb-prose img { max-width: 100%; height: auto; border-radius: var(--if-radius-sm); margin: .5em 0; }
+.kb-prose hr { border: none; border-top: 1px solid var(--if-border); margin: 1.75em 0; }
+.kb-prose table { width: 100%; border-collapse: collapse; margin: 0 0 1.1em; font-size: .92rem; }
+.kb-prose th, .kb-prose td { border: 1px solid var(--if-border); padding: .5em .7em; text-align: left; }
+.kb-prose th { background: var(--if-bg); font-weight: 600; }
+
+/* Empty states inside a list card were flush against the toolbar above them.
+   Split from the mixed rule `.card-body > .text-center.text-muted:last-child,
+   .card-body > .kb-empty:last-child` (see header comment above): the generic
+   half is Core's `.card-body > .it-empty-state:last-child`. */
+.card-body > .kb-empty:last-child {
+    padding-top: 1.5rem;
+}
