@@ -6688,7 +6688,7 @@ INSERT INTO `sla_business_hours_periods` VALUES (2,1,2,'09:00:00','17:00:00');
 INSERT INTO `sla_business_hours_periods` VALUES (3,1,3,'09:00:00','17:00:00');
 INSERT INTO `sla_business_hours_periods` VALUES (4,1,4,'09:00:00','17:00:00');
 INSERT INTO `sla_business_hours_periods` VALUES (5,1,5,'09:00:00','17:00:00');
-INSERT INTO `sla_policies` VALUES (1,'Default SLA Policy',1,'3',NULL,NULL,NULL,NULL,NULL,NULL,1,NULL);
+INSERT INTO `sla_policies` VALUES (1,'Default SLA Policy',1,'3',NULL,NULL,NULL,NULL,NULL,NULL,1,NULL,NULL);
 INSERT INTO `ticket_saved_views` VALUES (1,'Default','fa-list','',0,0,'2026-10-05 02:45:50',NULL);
 INSERT INTO `ticket_saved_views` VALUES (2,'On-Site','fa-truck','onsite=1&status=Open',0,1,'2026-10-05 02:45:50',NULL);
 INSERT INTO `ticket_saved_views` VALUES (3,'Assigned to me','fa-user','assigned=me&status=Open',0,2,'2026-10-05 02:45:50',NULL);
