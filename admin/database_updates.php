@@ -7996,3 +7996,19 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.123'");
     }
+
+    if ($rivetit_db_version() == '2.6.123') {
+        // Renumbered during consolidation: originally guarded on 2.6.112, targeting 2.6.113 directly (claimed at
+        // the same beta tip as several other branches). Chains after 2.6.123 now.
+        //
+        // Roadmap #17 (SLA engine): per-client SLA policy override. includes/sla_functions.
+        // php's slaGetPolicyForTicket() already had forward-compatible, existence-checked
+        // logic for a client-level policy override ("guarded by existence checks and simply
+        // skipped today") - this is the one column it was waiting on. A client with its own
+        // non-archived policy (highest-priority if more than one, tie-broken by policy_id)
+        // gets that policy's calendar/targets instead of the single company-wide default.
+        mysqli_query($mysqli, "ALTER TABLE `sla_policies` ADD COLUMN IF NOT EXISTS `policy_client_id` int(11) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `sla_policies` ADD INDEX IF NOT EXISTS `idx_sla_policies_client_id` (`policy_client_id`)");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.124'");
+    }

@@ -5386,8 +5386,10 @@ CREATE TABLE `sla_policies` (
   `policy_high_response` int(11) DEFAULT NULL,
   `policy_high_resolution` int(11) DEFAULT NULL,
   `policy_is_default` tinyint(4) NOT NULL DEFAULT 0,
+  `policy_client_id` int(11) DEFAULT NULL,
   `policy_archived_at` datetime DEFAULT NULL,
-  PRIMARY KEY (`policy_id`)
+  PRIMARY KEY (`policy_id`),
+  KEY `idx_sla_policies_client_id` (`policy_client_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `structured_doc_types`;

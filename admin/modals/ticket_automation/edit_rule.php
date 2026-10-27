@@ -82,6 +82,7 @@ ob_start();
                 <?php $cur_trigger = $rule['rule_trigger'] ?: 'schedule'; ?>
                 <option value="schedule" <?= $cur_trigger === 'schedule' ? 'selected' : '' ?>>Scheduled check (runs every cron pass against open tickets)</option>
                 <option value="ticket_created" <?= $cur_trigger === 'ticket_created' ? 'selected' : '' ?>>Ticket created (runs once as each new ticket is opened)</option>
+                <option value="ticket_updated" <?= $cur_trigger === 'ticket_updated' ? 'selected' : '' ?>>Ticket updated (runs once each time a ticket's fields are saved)</option>
                 <option value="rmm_alert" <?= $cur_trigger === 'rmm_alert' ? 'selected' : '' ?>>New RMM alert received</option>
                 <option value="asset_offline" <?= $cur_trigger === 'asset_offline' ? 'selected' : '' ?>>Asset goes offline</option>
                 <option value="asset_online" <?= $cur_trigger === 'asset_online' ? 'selected' : '' ?>>Asset comes back online</option>
@@ -140,6 +141,15 @@ ob_start();
             ['subject',   'Ticket subject (contains)'],
             ['details',   'Ticket body (contains)'],
         ],
+        ticket_updated: [
+            ['priority',     'Priority'],
+            ['category',     'Ticket category'],
+            ['status_id',    'Status ID'],
+            ['assigned_to',  'Assigned to (user ID)'],
+            ['client_id',    'Client ID'],
+            ['subject',      'Ticket subject (contains)'],
+            ['details',      'Ticket body (contains)'],
+        ],
         rmm_alert: [
             ['severity',       'Alert severity'],
             ['message',        'Alert message (contains)'],
@@ -165,6 +175,7 @@ ob_start();
     var TRIGGER_HINTS = {
         schedule:      'Evaluated against every open ticket on each cron run.',
         ticket_created: 'Evaluated once the moment each new ticket is created (agent, email, API or RMM alert). Leave conditions empty to match every new ticket.',
+        ticket_updated: 'Evaluated once each time a ticket is saved via the agent edit form. Leave conditions empty to match every edit.',
         rmm_alert:     'Evaluated once for each new RMM alert. Use "Create ticket from alert" to open a ticket before running ticket-based actions.',
         asset_offline: 'Evaluated once when an asset\'s RMM status changes to offline.',
         asset_online:  'Evaluated once when an asset\'s RMM status changes to online.',
@@ -183,6 +194,8 @@ ob_start();
         ['assign_to',               'Assign ticket to user ID'],
         ['escalate',                'Escalate ticket (reassign + bump priority: userID:priority)'],
         ['set_status',               'Set ticket status ID'],
+        ['set_category',             'Set ticket category (category ID)'],
+        ['add_tag',                  'Add tag to ticket (tag ID)'],
         ['add_note',                 'Add automation note to ticket'],
         ['ai_triage',                'AI triage — suggest category/priority/assignee (posts a note)'],
         ['notify_assignee',          'Notify assigned technician'],

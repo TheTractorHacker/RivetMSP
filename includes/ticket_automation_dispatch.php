@@ -97,3 +97,86 @@ if (!function_exists('runTicketCreatedAutomation')) {
         }
     }
 }
+
+/*
+ * Ticket-updated automation dispatch (roadmap #18 trigger-vocabulary gap).
+ *
+ * Mirrors runTicketCreatedAutomation() above: fire-and-forget, called immediately
+ * after a ticket's fields are saved via the agent edit-ticket handler. Same
+ * "empty conditions = match every update" convention as ticket_created, so a
+ * rule can be wired up as e.g. "tag every edited ticket" with no dummy condition.
+ */
+if (!function_exists('runTicketUpdatedAutomation')) {
+
+    function runTicketUpdatedAutomation($mysqli, int $ticket_id): void {
+        try {
+            $ticket_id = intval($ticket_id);
+            if ($ticket_id <= 0 || !$mysqli) {
+                return;
+            }
+
+            $t_res = mysqli_query($mysqli,
+                "SELECT ticket_id, ticket_client_id, ticket_subject, ticket_details, ticket_category, ticket_priority, ticket_assigned_to, ticket_status
+                 FROM tickets WHERE ticket_id = $ticket_id LIMIT 1");
+            if (!$t_res) {
+                return;
+            }
+            $t = mysqli_fetch_assoc($t_res);
+            if (!$t) {
+                return;
+            }
+
+            $context = [
+                'tid'         => intval($t['ticket_id']),
+                'client_id'   => intval($t['ticket_client_id']),
+                'subject'     => (string) ($t['ticket_subject'] ?? ''),
+                'details'     => (string) ($t['ticket_details'] ?? ''),
+                'category'    => intval($t['ticket_category']),
+                'priority'    => strtolower((string) ($t['ticket_priority'] ?? '')),
+                'assigned_to' => intval($t['ticket_assigned_to']),
+                'status_id'   => intval($t['ticket_status']),
+            ];
+
+            $rules = mysqli_query($mysqli,
+                "SELECT * FROM ticket_automation_rules
+                 WHERE rule_enabled = 1 AND rule_trigger = 'ticket_updated'
+                 ORDER BY rule_order ASC, rule_id ASC");
+            if (!$rules) {
+                return;
+            }
+
+            while ($rule = mysqli_fetch_assoc($rules)) {
+                try {
+                    $conditions = automationGetConditions($rule);
+                    $matches = empty($conditions)
+                        ? true
+                        : automationConditionsMatch($conditions, $context);
+                    if (!$matches) {
+                        continue;
+                    }
+
+                    $actions   = automationGetActions($rule);
+                    $summaries = [];
+                    foreach ($actions as $action) {
+                        $s = automationExecuteAction($mysqli, $action, $context, $rule);
+                        if ($s !== null) {
+                            $summaries[] = $s;
+                        }
+                    }
+
+                    automationLogRun($mysqli, $rule, 'ticket_updated', $context,
+                        !empty($summaries) ? implode('; ', $summaries) : 'Matched - no action produced a result (check error log)');
+                } catch (\Throwable $e) {
+                    if (function_exists('logApp')) {
+                        logApp('Automation', 'error',
+                            "ticket_updated rule " . intval($rule['rule_id'] ?? 0) . " failed: " . $e->getMessage());
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            if (function_exists('logApp')) {
+                logApp('Automation', 'error', 'runTicketUpdatedAutomation failed: ' . $e->getMessage());
+            }
+        }
+    }
+}

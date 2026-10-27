@@ -419,6 +419,10 @@ if (isset($_POST['edit_ticket'])) {
 
     logAction("Ticket", "Edit", "$session_name edited ticket $ticket_prefix$ticket_number", $client_id, $ticket_id);
 
+    // Roadmap #18: 'ticket_updated' automation trigger (mirrors the ticket_created
+    // dispatch call above - fire-and-forget, never blocks this save).
+    runTicketUpdatedAutomation($mysqli, $ticket_id);
+
     flash_alert("Ticket <strong>$ticket_prefix$ticket_number</strong> updated");
 
     redirect();

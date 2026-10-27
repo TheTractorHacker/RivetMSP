@@ -12,9 +12,10 @@ $archived_clause = $show_archived ? "policy_archived_at IS NOT NULL" : "policy_a
 
 $sql = mysqli_query(
     $mysqli,
-    "SELECT SQL_CALC_FOUND_ROWS p.*, c.calendar_name
+    "SELECT SQL_CALC_FOUND_ROWS p.*, c.calendar_name, cl.client_name
     FROM sla_policies p
     LEFT JOIN sla_business_hours c ON p.policy_calendar_id = c.calendar_id
+    LEFT JOIN clients cl ON p.policy_client_id = cl.client_id
     WHERE p.policy_name LIKE '%$q%' AND $archived_clause
     ORDER BY $sort $order LIMIT $record_from, $record_to"
 );
@@ -71,6 +72,7 @@ while ($sr = mysqli_fetch_assoc($sres)) { $status_names[intval($sr['ticket_statu
                             Name <?php if ($sort == 'policy_name') { echo $order_icon; } ?>
                         </a>
                     </th>
+                    <th>Client</th>
                     <th>Calendar</th>
                     <th>Targets (min: resp / resol)</th>
                     <th>Pause Statuses</th>
@@ -84,6 +86,7 @@ while ($sr = mysqli_fetch_assoc($sres)) { $status_names[intval($sr['ticket_statu
                     $policy_id = intval($row['policy_id']);
                     $policy_name = nullable_htmlentities($row['policy_name']);
                     $calendar_name = $row['calendar_name'] ? nullable_htmlentities($row['calendar_name']) : "<span class='text-secondary'>24/7</span>";
+                    $client_scope = $row['client_name'] ? nullable_htmlentities($row['client_name']) : "<span class='text-secondary'>Company-wide</span>";
                     $policy_is_default = intval($row['policy_is_default']);
                     $is_archived = !empty($row['policy_archived_at']);
 
@@ -105,6 +108,7 @@ while ($sr = mysqli_fetch_assoc($sres)) { $status_names[intval($sr['ticket_statu
                             <a href="#" class="ajax-modal" data-modal-url="modals/sla/policy_edit.php?id=<?= $policy_id ?>"><?php echo $policy_name; ?></a>
                             <?php if ($is_archived) { echo " <span class='badge text-bg-secondary'>Archived</span>"; } ?>
                         </td>
+                        <td><?php echo $client_scope; ?></td>
                         <td><?php echo $calendar_name; ?></td>
                         <td><small><?php echo $targets; ?></small></td>
                         <td><small><?php echo empty($pause_labels) ? "<span class='text-secondary'>None</span>" : implode(', ', $pause_labels); ?></small></td>
