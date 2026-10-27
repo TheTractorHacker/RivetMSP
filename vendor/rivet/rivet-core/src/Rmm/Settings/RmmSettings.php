@@ -276,6 +276,8 @@ final class RmmSettings
     /** @var array<string,mixed>|null */
     private ?array $cache = null;
 
+    private ?RetentionFloorsInterface $floors = null;
+
     /** @var (\Closure(): void)|null called after a write that touches a column the state file mirrors */
     private ?\Closure $stateListener = null;
 
@@ -337,6 +339,21 @@ final class RmmSettings
     public function enabled(): bool
     {
         return (int) ($this->get()['enabled'] ?? 0) === 1;
+    }
+
+    /**
+     * Minimum retention imposed from outside (the selected compliance framework, {@see RetentionFloorsInterface}). With one set, {@see update()} refuses a
+     * retention limit below its floor (and names the framework) and {@see limits()} never answers less than the floor, so housekeeping
+     * cannot delete younger rows ({@see effectiveExplicitLimits()} covers the metric tiers). Null (the default) changes nothing.
+     */
+    public function setRetentionFloors(?RetentionFloorsInterface $floors): void
+    {
+        $this->floors = $floors;
+    }
+
+    public function retentionFloors(): ?RetentionFloorsInterface
+    {
+        return $this->floors;
     }
 
     /** @return list<string> every column {@see set()} may write */
@@ -457,8 +474,17 @@ final class RmmSettings
         }
         if (array_key_exists('limits_json', $in)) {
             [$l, $e] = self::validateLimits($in['limits_json']);
+            if ($e === null && $l !== null && $this->floors !== null) {
+                $below = RetentionClasses::violations((array) json_decode($l, true), RetentionClasses::SOURCE_RMM, $this->floors);
+                if ($below !== []) {
+                    array_push($err, ...$below);
+                    $e = $below[0];
+                }
+            }
             if ($e !== null) {
-                $err[] = $e;
+                if (!in_array($e, $err, true)) {
+                    $err[] = $e;
+                }
             } else {
                 $out['limits_json'] = $l;
             }
@@ -581,7 +607,7 @@ final class RmmSettings
             }
         }
 
-        return $out;
+        return RetentionClasses::raise($out, RetentionClasses::SOURCE_RMM, $this->floors);
     }
 
     /**
@@ -600,6 +626,31 @@ final class RmmSettings
                 if (isset($stored[$k]) && is_int($stored[$k]) && $stored[$k] >= $min && $stored[$k] <= $max) {
                     $out[$k] = $stored[$k];
                 }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * {@see explicitLimits()} as the housekeeping must apply it: with the selected framework's minimums (see {@see setRetentionFloors()}) raised over what is
+     * stored, and over what the metric store keeps when the administrator stored nothing for a metric tier (`$hourlyDefault` / `$dailyDefault` are that store's
+     * own retention). A retention that is already at or above its minimum is left exactly as it was, so without floors this IS {@see explicitLimits()}.
+     *
+     * @return array<string,int>
+     */
+    public function effectiveExplicitLimits(int $hourlyDefault, int $dailyDefault): array
+    {
+        $out = $this->explicitLimits();
+        if ($this->floors === null) {
+            return $out;
+        }
+        $metricDefaults = ['metric_hourly_days' => $hourlyDefault, 'metric_daily_days' => $dailyDefault];
+        foreach (RetentionClasses::classesOf(RetentionClasses::SOURCE_RMM) as $key => $class) {
+            $floor = $this->floors->floorDays($class);
+            $current = $out[$key] ?? $metricDefaults[$key] ?? null;
+            if ($floor > 0 && $current !== null && $current < $floor) {
+                $out[$key] = $floor;
             }
         }
 

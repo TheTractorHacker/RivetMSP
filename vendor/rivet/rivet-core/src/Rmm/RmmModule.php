@@ -170,6 +170,7 @@ final class RmmModule
     private ?HotStoreFaults $hotFaults = null;
     private ?PostgresConnectionInterface $pgConnection = null;
     private ?\RivetCore\Rmm\Store\DataStoreSwitch $dataStoreSwitch = null;
+    private ?\RivetCore\Rmm\Store\DataStoreInfo $dataStoreInfo = null;
     private ?RmmCache $cache = null;
     private ?HerdControl $herd = null;
     private ?PartitionMaintenance $partitions = null;
@@ -272,7 +273,7 @@ final class RmmModule
     private readonly RmmEventsInterface $events;
 
     /**
-     * @param array{binary_dir?:?string,transfer_dir?:?string,allow_insecure_http?:bool,allow_linux?:bool,host_fallback?:?string,integration_name?:string,installer_prefix?:string,max_upload_bytes?:?int,hosted_max_bytes?:?int,client_label?:string,denial_reasons?:array<string,string>,escalation?:RmmEscalationInterface,threshold_resolver?:ThresholdResolverInterface,cache?:\Psr\SimpleCache\CacheInterface,redis?:\RivetCore\Redis\RedisClientProviderInterface,metric_reader?:RmmMetricReaderInterface,starter_packs?:list<string>,postgres?:PostgresConnectionInterface|PostgresConfig|\Closure():(PostgresConnectionInterface|PostgresConfig|null)|null} $options
+     * @param array{binary_dir?:?string,transfer_dir?:?string,allow_insecure_http?:bool,allow_linux?:bool,host_fallback?:?string,integration_name?:string,installer_prefix?:string,max_upload_bytes?:?int,hosted_max_bytes?:?int,client_label?:string,denial_reasons?:array<string,string>,escalation?:RmmEscalationInterface,threshold_resolver?:ThresholdResolverInterface,cache?:\Psr\SimpleCache\CacheInterface,redis?:\RivetCore\Redis\RedisClientProviderInterface,metric_reader?:RmmMetricReaderInterface,starter_packs?:list<string>,retention_floors?:\RivetCore\Rmm\Settings\RetentionFloorsInterface,postgres?:PostgresConnectionInterface|PostgresConfig|\Closure():(PostgresConnectionInterface|PostgresConfig|null)|null} $options
      */
     public function __construct(
         private readonly DatabaseInterface $database,
@@ -318,6 +319,7 @@ final class RmmModule
     {
         if ($this->settings === null) {
             $this->settings = new RmmSettings($this->sql(), $this->box, $this->bridge, $this->options['integration_name'] ?? RmmProtocol::DEFAULT_INTEGRATION_NAME, $this->options['allow_insecure_http'] ?? false);
+            $this->settings->setRetentionFloors($this->options['retention_floors'] ?? null);   // compliance framework minimums (rc.44); absent = unchanged
             // Every change of a mirrored setting rewrites the zero-database state file in the same request.
             $this->settings->onStateChange(function (): void {
                 $this->state()->sync();
@@ -464,7 +466,12 @@ final class RmmModule
     /** The change-monitoring settings and the signed configuration an agent receives. */
     public function changeSettings(): \RivetCore\Rmm\Change\ChangeSettings
     {
-        return $this->changeSettings ??= new \RivetCore\Rmm\Change\ChangeSettings($this->sql(), $this->settings(), $this->changeWatchPolicy ??= new \RivetCore\Rmm\Change\ChangeWatchPolicy());
+        if ($this->changeSettings === null) {
+            $this->changeSettings = new \RivetCore\Rmm\Change\ChangeSettings($this->sql(), $this->settings(), $this->changeWatchPolicy ??= new \RivetCore\Rmm\Change\ChangeWatchPolicy());
+            $this->changeSettings->setRetentionFloors($this->options['retention_floors'] ?? null);
+        }
+
+        return $this->changeSettings;
     }
 
     /** Change rules: a matching change raises an alert through the check evaluator. */
@@ -683,7 +690,12 @@ final class RmmModule
     /** The remote-tools row: allowed transfer folders, log sources and the caps on both. */
     public function remoteSettings(): RemoteSettings
     {
-        return $this->remoteSettings ??= new RemoteSettings($this->sql());
+        if ($this->remoteSettings === null) {
+            $this->remoteSettings = new RemoteSettings($this->sql());
+            $this->remoteSettings->setRetentionFloors($this->options['retention_floors'] ?? null);
+        }
+
+        return $this->remoteSettings;
     }
 
     /**
@@ -1083,6 +1095,37 @@ final class RmmModule
     public function dataStoreSwitch(): \RivetCore\Rmm\Store\DataStoreSwitch
     {
         return $this->dataStoreSwitch ??= new \RivetCore\Rmm\Store\DataStoreSwitch($this->sql(), $this->settings(), $this->box, $this->audit);
+    }
+
+    /**
+     * What to show about the RMM data store on an Update or Server page: the store in use and, for PostgreSQL, its version, mode, schema state and size
+     * ({@see \RivetCore\Rmm\Store\DataStoreInfo::report()}). Never throws; makes no PostgreSQL connection while the store is MariaDB unless asked. See docs/rmm/POSTGRES.md.
+     */
+    public function dataStoreInfo(): \RivetCore\Rmm\Store\DataStoreInfo
+    {
+        return $this->dataStoreInfo ??= new \RivetCore\Rmm\Store\DataStoreInfo($this->dataStoreSwitch(), $this->settings(), fn (): array => $this->infoTarget(),
+            ($this->options['postgres'] ?? null) !== null, $this->cache());
+    }
+
+    /**
+     * The PostgreSQL a status check asks, built only when it is asked: the connection the edition supplied, or the saved one (with its own short timeouts).
+     *
+     * @return array{0:?PostgresConnectionInterface,1:?PostgresConfig}
+     */
+    private function infoTarget(): array
+    {
+        $given = $this->options['postgres'] ?? null;
+        if ($given instanceof \Closure) {
+            $given = $this->pgConnection ?? $given();
+        }
+        if ($given === null) {
+            $given = $this->dataStoreSwitch()->postgresConfig();
+        }
+        if ($given instanceof PostgresConfig) {
+            return [\RivetCore\Rmm\Store\DataStoreInfo::connectionFor($given), $given];
+        }
+
+        return [$given instanceof PostgresConnectionInterface ? $given : null, null];
     }
 
     /** The record of what the hot store could not do (empty on MariaDB), shown in the capacity panel. */

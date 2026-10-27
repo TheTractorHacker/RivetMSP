@@ -854,6 +854,82 @@ CREATE TABLE `compliance_attestations` (
   KEY `idx_compliance_attestations_subject` (`subject_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `compliance_profile_requirements`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compliance_profile_requirements` (
+  `requirement_id` int(11) NOT NULL AUTO_INCREMENT,
+  `version_id` int(11) NOT NULL,
+  `req_type` varchar(40) NOT NULL,
+  `data_class` varchar(40) NOT NULL,
+  `value_int` int(11) NOT NULL,
+  `note` varchar(300) DEFAULT NULL,
+  PRIMARY KEY (`requirement_id`),
+  UNIQUE KEY `uq_compliance_profile_requirements` (`version_id`,`req_type`,`data_class`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `compliance_profile_selection`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compliance_profile_selection` (
+  `selection_id` tinyint(4) NOT NULL,
+  `profile_key` varchar(48) NOT NULL,
+  `selected_by` int(11) DEFAULT NULL,
+  `selected_by_name` varchar(200) NOT NULL,
+  `selected_at` datetime NOT NULL,
+  PRIMARY KEY (`selection_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `compliance_profile_selection_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compliance_profile_selection_log` (
+  `log_id` int(11) NOT NULL AUTO_INCREMENT,
+  `profile_key` varchar(48) DEFAULT NULL,
+  `profile_version` int(11) DEFAULT NULL,
+  `action` varchar(10) NOT NULL,
+  `by_user` int(11) DEFAULT NULL,
+  `by_name` varchar(200) NOT NULL,
+  `at` datetime NOT NULL,
+  PRIMARY KEY (`log_id`),
+  KEY `idx_compliance_selection_log_key` (`profile_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `compliance_profile_versions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compliance_profile_versions` (
+  `version_id` int(11) NOT NULL AUTO_INCREMENT,
+  `profile_id` int(11) NOT NULL,
+  `version` int(11) NOT NULL,
+  `label` varchar(120) NOT NULL,
+  `description` text DEFAULT NULL,
+  `content_hash` char(64) NOT NULL,
+  `change_note` varchar(300) DEFAULT NULL,
+  `changed_by` int(11) DEFAULT NULL,
+  `changed_by_name` varchar(200) NOT NULL,
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`version_id`),
+  UNIQUE KEY `uq_compliance_profile_versions` (`profile_id`,`version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `compliance_profiles`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compliance_profiles` (
+  `profile_id` int(11) NOT NULL AUTO_INCREMENT,
+  `profile_key` varchar(48) NOT NULL,
+  `based_on` varchar(48) DEFAULT NULL,
+  `current_version` int(11) NOT NULL,
+  `status` varchar(10) NOT NULL,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `archived_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`profile_id`),
+  UNIQUE KEY `uq_compliance_profiles_key` (`profile_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `compliance_responsibilities`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -864,6 +940,27 @@ CREATE TABLE `compliance_responsibilities` (
   `updated_by` int(11) DEFAULT NULL,
   `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`assign_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `compliance_restore_tests`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compliance_restore_tests` (
+  `test_id` int(11) NOT NULL AUTO_INCREMENT,
+  `tested_at` datetime NOT NULL,
+  `recorded_at` datetime NOT NULL,
+  `recorded_by` int(11) DEFAULT NULL,
+  `recorded_by_name` varchar(200) NOT NULL,
+  `result` varchar(10) NOT NULL,
+  `stores` varchar(80) NOT NULL,
+  `data_store` varchar(10) NOT NULL,
+  `backup_taken_at` datetime DEFAULT NULL,
+  `duration_s` int(11) DEFAULT NULL,
+  `counts_json` longtext DEFAULT NULL,
+  `verify_json` longtext DEFAULT NULL,
+  `note` text DEFAULT NULL,
+  PRIMARY KEY (`test_id`),
+  KEY `idx_compliance_restore_tests_at` (`tested_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `compliance_shared_report`;

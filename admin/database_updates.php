@@ -8069,3 +8069,33 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.126'");
     }
+
+    if ($rivetit_db_version() == '2.6.126') {
+        // DB 2.6.127: RivetCore 1.0.0-rc.42 -> 1.0.0-rc.44 (M1 stage 2 of the staged rc.47 catch-up). rc.42
+        // (PostgreSQL 18 verified) and rc.43 (DataStoreInfo, RmmModule::dataStoreInfo()) ship no migration of
+        // their own - see vendor/rivet/rivet-core/UPGRADING.md "PostgreSQL 18 verified" and "Showing the data
+        // store on an Update page". rc.44 adds migration 0046 (0046_compliance_framework_profiles): six new
+        // tables for customizable compliance frameworks - compliance_profiles, compliance_profile_versions,
+        // compliance_profile_requirements, compliance_profile_selection, compliance_profile_selection_log,
+        // compliance_restore_tests (all CREATE TABLE IF NOT EXISTS, no foreign keys, no row inserted; see
+        // vendor/rivet/rivet-core/UPGRADING.md "Adopting customizable compliance frameworks"). One
+        // MigrationRunner pass picks up 0046 (and anything still pending before it); idempotent either way.
+        //
+        // Renumbered from the originally-authored 2.6.126 to 2.6.127: beta's tip claimed 2.6.126 first (the
+        // SLA-exempt/Non-billable step immediately above, merged first), so this step - authored on an older
+        // base, not yet merged - moves to the next free number per this session's collision convention.
+        //
+        // Nothing here selects a profile, adds a check or changes retention: RetentionFloors is not wired into
+        // $module options, ProfileChecks is not added to ComplianceAssessor, and no settings UI exists yet for
+        // this table. That is the rest of the compliance-frameworks edition work (M3/R3 prompt, queued after
+        // Blake reviews this stage on beta) - this step only lands Core's own schema so a later step can wire
+        // it in without its own migration.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+        }
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.127'");
+    }
