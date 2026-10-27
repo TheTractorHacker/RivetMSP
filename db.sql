@@ -2404,10 +2404,27 @@ CREATE TABLE `kb_articles` (
   `kb_article_updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
   `kb_article_archived_at` datetime DEFAULT NULL,
   `kb_article_category_id` int(11) NOT NULL DEFAULT 0,
+  `kb_article_review_due_at` date DEFAULT NULL,
+  `kb_article_reviewer_user_id` int(11) DEFAULT NULL,
   PRIMARY KEY (`kb_article_id`),
   KEY `kb_article_client_id` (`kb_article_client_id`),
   KEY `kb_article_category_id` (`kb_article_category_id`),
   FULLTEXT KEY `kb_article_content_raw` (`kb_article_content_raw`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `kb_article_versions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `kb_article_versions` (
+  `kb_article_version_id` int(11) NOT NULL AUTO_INCREMENT,
+  `kb_article_version_kb_article_id` int(11) NOT NULL,
+  `kb_article_version_content` mediumtext DEFAULT NULL,
+  `kb_article_version_content_raw` mediumtext DEFAULT NULL,
+  `kb_article_version_edited_by` int(11) DEFAULT NULL,
+  `kb_article_version_edited_at` datetime DEFAULT current_timestamp(),
+  `kb_article_version_number` int(11) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`kb_article_version_id`),
+  KEY `kb_article_version_kb_article_id` (`kb_article_version_kb_article_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `kb_categories`;

@@ -20,9 +20,10 @@ $kb_article_id = intval($_GET['id']);
 
 $sql = mysqli_query(
     $mysqli,
-    "SELECT kb_articles.*, clients.client_name
+    "SELECT kb_articles.*, clients.client_name, reviewer.user_name AS kb_article_reviewer_name
      FROM kb_articles
      LEFT JOIN clients ON clients.client_id = kb_articles.kb_article_client_id
+     LEFT JOIN users reviewer ON reviewer.user_id = kb_articles.kb_article_reviewer_user_id
      WHERE kb_article_id = $kb_article_id
      LIMIT 1"
 );
@@ -44,6 +45,11 @@ $kb_article_client_name = nullable_htmlentities($row['client_name']);
 $kb_article_client_visible = intval($row['kb_article_client_visible']);
 $kb_article_updated_at = $row['kb_article_updated_at'] ?? $row['kb_article_created_at'];
 $kb_article_archived_at = $row['kb_article_archived_at'];
+// Roadmap #7 ("KB v2" slice 1): review schedule.
+$kb_article_review_due_at = $row['kb_article_review_due_at'] ?? null;
+$kb_article_review_due_at_display = $kb_article_review_due_at ? nullable_htmlentities(date('M d, Y', strtotime($kb_article_review_due_at))) : null;
+$kb_article_needs_review = $kb_article_review_due_at && strtotime($kb_article_review_due_at) < strtotime('today');
+$kb_article_reviewer_name = nullable_htmlentities($row['kb_article_reviewer_name'] ?? null);
 
 if ($kb_article_client_id > 0) {
     enforceClientAccess($kb_article_client_id);
@@ -71,6 +77,9 @@ $sql_attachments = mysqli_query(
             <?php echo $kb_article_title; ?>
             <?php if (!empty($kb_article_archived_at)) { ?>
                 <span class="text-danger ms-2">(Archived)</span>
+            <?php } ?>
+            <?php if ($kb_article_needs_review) { ?>
+                <span class="badge text-bg-warning ms-2" data-bs-toggle="tooltip" title="Review was due <?php echo $kb_article_review_due_at_display; ?>"><i class="fas fa-fw fa-exclamation-triangle"></i> Needs Review</span>
             <?php } ?>
         </li>
     </ol>
@@ -122,11 +131,26 @@ $sql_attachments = mysqli_query(
                         <strong>Last Updated</strong><br>
                         <?php echo nullable_htmlentities(date('M d, Y g:i A', strtotime($kb_article_updated_at))); ?>
                     </p>
+                    <?php if ($kb_article_review_due_at_display) { ?>
+                    <p class="mb-0 mt-2">
+                        <strong>Review Due</strong><br>
+                        <span class="<?php echo $kb_article_needs_review ? 'text-danger' : ''; ?>"><?php echo $kb_article_review_due_at_display; ?></span>
+                        <?php if ($kb_article_reviewer_name) { ?>
+                            <br><span class="text-secondary small">Reviewer: <?php echo $kb_article_reviewer_name; ?></span>
+                        <?php } ?>
+                    </p>
+                    <?php } ?>
                 </div>
                 <div class="card-footer">
                     <button type="button" class="btn btn-primary btn-block ajax-modal mb-2" data-modal-size="lg" data-modal-url="modals/kb_article/kb_article_edit.php?id=<?php echo $kb_article_id; ?>">
                         <i class="fas fa-fw fa-edit me-2"></i>Edit
                     </button>
+                    <button type="button" class="btn btn-secondary btn-block mb-2 ajax-modal" data-modal-url="modals/kb_article/kb_article_review_edit.php?id=<?php echo $kb_article_id; ?>">
+                        <i class="fas fa-fw fa-calendar-check me-2"></i>Review Schedule
+                    </button>
+                    <a class="btn btn-secondary btn-block mb-2" href="kb_article_versions.php?kb_article_id=<?php echo $kb_article_id; ?><?php if (isset($client_id)) { echo "&client_id=$client_id"; } ?>">
+                        <i class="fas fa-fw fa-history me-2"></i>Version History
+                    </a>
                     <a class="btn btn-danger btn-block confirm-link" href="post.php?delete_kb_article=<?php echo $kb_article_id; ?>&csrf_token=<?php echo $_SESSION['csrf_token']; ?>">
                         <i class="fas fa-fw fa-trash-alt me-2"></i>Delete
                     </a>
