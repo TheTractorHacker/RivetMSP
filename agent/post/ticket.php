@@ -37,6 +37,15 @@ if (isset($_POST['add_ticket'])) {
     $use_primary_contact = intval($_POST['use_primary_contact'] ?? 0);
     $ticket_template_id = intval($_POST['ticket_template_id']);
     $billable = intval($_POST['billable'] ?? 0);
+    // Roadmap #6 (Service Catalog): re-read the active item server-side rather than trusting anything the client
+    // posted about it - only the item's own requires_approval flag at the moment of submission decides whether to
+    // hold the ticket afterward (not whatever the form happened to render earlier).
+    $catalog_item_id = intval($_POST['catalog_item_id'] ?? 0);
+    $catalog_item = null;
+    if ($catalog_item_id > 0) {
+        $catalog_item = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT catalog_item_id, requires_approval FROM service_catalog_items WHERE catalog_item_id = $catalog_item_id AND is_active = 1 LIMIT 1"));
+    }
+    $catalog_item_sql = $catalog_item ? intval($catalog_item['catalog_item_id']) : 'NULL';
     // Validate/clean due field
     $dueInput = $_POST['due'] ?? null;
     if ($dueInput === null || trim($dueInput) === '') {
@@ -96,7 +105,7 @@ if (isset($_POST['add_ticket'])) {
     $contract_id_sql = $contract_id > 0 ? $contract_id : 'NULL';
     $delivery_method_sql = $delivery_method !== null ? "'" . mysqli_real_escape_string($mysqli, $delivery_method) . "'" : 'NULL';
 
-    mysqli_query($mysqli, "INSERT INTO tickets SET ticket_prefix = '$config_ticket_prefix', ticket_number = $ticket_number, ticket_source = 'Agent', ticket_category = $category_id, ticket_subject = '$subject', ticket_details = '$details', ticket_priority = '$priority', ticket_billable = '$billable', ticket_status = '$ticket_status', ticket_vendor_ticket_number = '$vendor_ticket_number', ticket_vendor_id = $vendor_id, ticket_location_id = $location_id, ticket_asset_id = $asset_id, ticket_created_by = $session_user_id, ticket_assigned_to = $assigned_to, ticket_contact_id = $contact_id, ticket_url_key = '$url_key', ticket_due_at = $due, ticket_client_id = $client_id, ticket_invoice_id = 0, ticket_project_id = $project_id, ticket_contract_id = $contract_id_sql, ticket_sla_response_due = $sla_response_due, ticket_sla_resolution_due = $sla_resolution_due, ticket_delivery_method = $delivery_method_sql");
+    mysqli_query($mysqli, "INSERT INTO tickets SET ticket_prefix = '$config_ticket_prefix', ticket_number = $ticket_number, ticket_source = 'Agent', ticket_category = $category_id, ticket_subject = '$subject', ticket_details = '$details', ticket_priority = '$priority', ticket_billable = '$billable', ticket_status = '$ticket_status', ticket_vendor_ticket_number = '$vendor_ticket_number', ticket_vendor_id = $vendor_id, ticket_location_id = $location_id, ticket_asset_id = $asset_id, ticket_created_by = $session_user_id, ticket_assigned_to = $assigned_to, ticket_contact_id = $contact_id, ticket_url_key = '$url_key', ticket_due_at = $due, ticket_client_id = $client_id, ticket_invoice_id = 0, ticket_project_id = $project_id, ticket_contract_id = $contract_id_sql, ticket_sla_response_due = $sla_response_due, ticket_sla_resolution_due = $sla_resolution_due, ticket_delivery_method = $delivery_method_sql, ticket_catalog_item_id = $catalog_item_sql");
     $ticket_subject = $subject;   // the e-mail block below reuses $subject; the audit entry at the end needs the ticket's own
 
     $ticket_id = mysqli_insert_id($mysqli);
@@ -104,6 +113,12 @@ if (isset($_POST['add_ticket'])) {
     // Apply the SLA engine (policy-aware; falls back to the legacy contract-hour
     // values just inserted when no policy target applies).
     recalculateTicketSla($mysqli, $ticket_id);
+
+    // Roadmap #6 (Service Catalog): hold the ticket if the item requires approval. Done after the SLA engine above
+    // so this status (and the immediate SLA-pause sync inside it) is the one left standing, not overwritten by it.
+    if ($catalog_item && intval($catalog_item['requires_approval'])) {
+        serviceCatalogHoldTicket($mysqli, $ticket_id);
+    }
 
     // Run ticket_created automation rules (fire-and-forget; never blocks/fails insert)
     runTicketCreatedAutomation($mysqli, $ticket_id);

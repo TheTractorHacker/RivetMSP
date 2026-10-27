@@ -22,6 +22,14 @@ if (isset($_POST['add_ticket'])) {
         $category = getDefaultClientTicketCategoryId($mysqli);
     }
     $asset = intval($_POST['asset'] ?? 0);
+    // Roadmap #6 (Service Catalog): re-read the active item server-side - only its own requires_approval flag at
+    // the moment of submission decides whether to hold the ticket, never anything the client posted about it.
+    $catalog_item_id = intval($_POST['catalog_item_id'] ?? 0);
+    $catalog_item = null;
+    if ($catalog_item_id > 0) {
+        $catalog_item = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT catalog_item_id, requires_approval FROM service_catalog_items WHERE catalog_item_id = $catalog_item_id AND is_active = 1 LIMIT 1"));
+    }
+    $catalog_item_sql = $catalog_item ? intval($catalog_item['catalog_item_id']) : 'NULL';
 
     // Get settings from load_global_settings.php
     $config_ticket_prefix = sanitizeInput($config_ticket_prefix);
@@ -57,8 +65,14 @@ if (isset($_POST['add_ticket'])) {
     $delivery_method = getTicketDeliveryMethodForCategory($mysqli, $category);
     $delivery_method_sql = $delivery_method !== null ? "'" . mysqli_real_escape_string($mysqli, $delivery_method) . "'" : 'NULL';
 
-    mysqli_query($mysqli, "INSERT INTO tickets SET ticket_prefix = '$config_ticket_prefix', ticket_number = $ticket_number, ticket_source = 'Portal', ticket_category = $category, ticket_subject = '$subject', ticket_details = '$details', ticket_priority = '$priority', ticket_status = $ticket_status, ticket_billable = $config_ticket_default_billable, ticket_created_by = $session_user_id, ticket_contact_id = $session_contact_id, ticket_asset_id = $asset, ticket_url_key = '$url_key', ticket_client_id = $session_client_id, ticket_assigned_to = $resolved_assigned_to, ticket_delivery_method = $delivery_method_sql");
+    mysqli_query($mysqli, "INSERT INTO tickets SET ticket_prefix = '$config_ticket_prefix', ticket_number = $ticket_number, ticket_source = 'Portal', ticket_category = $category, ticket_subject = '$subject', ticket_details = '$details', ticket_priority = '$priority', ticket_status = $ticket_status, ticket_billable = $config_ticket_default_billable, ticket_created_by = $session_user_id, ticket_contact_id = $session_contact_id, ticket_asset_id = $asset, ticket_url_key = '$url_key', ticket_client_id = $session_client_id, ticket_assigned_to = $resolved_assigned_to, ticket_delivery_method = $delivery_method_sql, ticket_catalog_item_id = $catalog_item_sql");
     $ticket_id = mysqli_insert_id($mysqli);
+
+    // Roadmap #6 (Service Catalog): hold the ticket if the item requires approval.
+    if ($catalog_item && intval($catalog_item['requires_approval'])) {
+        require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/sla_functions.php';
+        serviceCatalogHoldTicket($mysqli, $ticket_id);
+    }
 
     // Broadcast to active agents so the mobile app gets a push for it too,
     // even when the default-technician setting (Admin > Settings > Tickets)

@@ -4080,6 +4080,84 @@ function resolveTicketCreationStatus(int $assigned_to): int {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// Service catalog (GitHub roadmap #6): "Request Something" - a curated menu of one-click ticket shortcuts. v1 is
+// deliberately a small slice of RivetIT's own, much larger, evolved feature (per-item custom request-form fields,
+// multi-step/role/manager approval chains, risk scoring): see admin/database_updates.php's 2.6.112->2.6.113 step
+// for why. "requires_approval" here just means the ticket is created already held; releasing/rejecting it is an
+// ordinary ticket status change through the existing agent/post/ticket.php status-change action, not a new
+// approve/reject flow.
+
+// The status a held catalog request sits in: "Pending Approval" when one exists (give it the "Pauses SLA" option
+// in Admin > Tickets > Statuses and the SLA clock pauses while held), else "On Hold". 0 = neither configured.
+function serviceCatalogHoldStatusId($mysqli): int {
+    $row = mysqli_fetch_assoc(mysqli_query($mysqli,
+        "SELECT ticket_status_id FROM ticket_statuses WHERE ticket_status_name = 'Pending Approval' AND ticket_status_active = 1 LIMIT 1"));
+    if (!$row) {
+        $row = mysqli_fetch_assoc(mysqli_query($mysqli,
+            "SELECT ticket_status_id FROM ticket_statuses WHERE ticket_status_name = 'On Hold' AND ticket_status_active = 1 LIMIT 1"));
+    }
+    return $row ? intval($row['ticket_status_id']) : 0;
+}
+
+// Called right after a catalog item with requires_approval=1 creates a ticket (agent/post/ticket.php,
+// client/post.php): moves it to the hold status, leaves a System note, and syncs the SLA pause flag immediately
+// (the same per-ticket sync the nightly cron's slaReconcilePauses() would otherwise only pick up on its next run).
+function serviceCatalogHoldTicket($mysqli, int $ticket_id): void {
+    $hold = serviceCatalogHoldStatusId($mysqli);
+    if ($hold > 0) {
+        mysqli_query($mysqli, "UPDATE tickets SET ticket_status = $hold WHERE ticket_id = $ticket_id");
+    }
+    mysqli_query($mysqli, "INSERT INTO ticket_replies SET ticket_reply = 'Held for approval (Service Catalog). A technician releases it by changing its status.', ticket_reply_type = 'System', ticket_reply_by = 0, ticket_reply_ticket_id = $ticket_id");
+    if (function_exists('slaSyncPause')) {
+        slaSyncPause($mysqli, $ticket_id);
+    }
+    if (function_exists('publishTicketEvent')) {
+        publishTicketEvent($ticket_id, 'status_changed', ['ticket_status' => $hold]);
+    }
+}
+
+// "Popular this month": catalog items with the most tickets raised from them in the last $days days.
+// @return array<int,array{catalog_item_id:int,name:string,uses:int}>
+function serviceCatalogTrending($mysqli, int $limit = 5, int $days = 30): array {
+    $rows = [];
+    $res = mysqli_query($mysqli, "
+        SELECT sci.catalog_item_id, sci.name, COUNT(t.ticket_id) AS uses
+        FROM service_catalog_items sci
+        JOIN tickets t ON t.ticket_catalog_item_id = sci.catalog_item_id AND t.ticket_created_at >= NOW() - INTERVAL $days DAY
+        WHERE sci.is_active = 1
+        GROUP BY sci.catalog_item_id, sci.name
+        ORDER BY uses DESC, sci.name ASC
+        LIMIT $limit
+    ");
+    while ($res && ($r = mysqli_fetch_assoc($res))) {
+        $rows[] = ['catalog_item_id' => (int) $r['catalog_item_id'], 'name' => $r['name'], 'uses' => (int) $r['uses']];
+    }
+    return $rows;
+}
+
+// "Recently used by you": this contact's last $limit distinct catalog items raised, most recent first.
+// @return array<int,array{catalog_item_id:int,name:string}>
+function serviceCatalogRecentForContact($mysqli, int $contact_id, int $client_id, int $limit = 5): array {
+    $rows = [];
+    if ($contact_id <= 0 || $client_id <= 0) {
+        return $rows;
+    }
+    $res = mysqli_query($mysqli, "
+        SELECT sci.catalog_item_id, sci.name, MAX(t.ticket_created_at) AS last_used
+        FROM tickets t
+        JOIN service_catalog_items sci ON sci.catalog_item_id = t.ticket_catalog_item_id AND sci.is_active = 1
+        WHERE t.ticket_contact_id = $contact_id AND t.ticket_client_id = $client_id
+        GROUP BY sci.catalog_item_id, sci.name
+        ORDER BY last_used DESC
+        LIMIT $limit
+    ");
+    while ($res && ($r = mysqli_fetch_assoc($res))) {
+        $rows[] = ['catalog_item_id' => (int) $r['catalog_item_id'], 'name' => $r['name']];
+    }
+    return $rows;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Resolution time (dashboard tile, reports, API). Two rules, kept in ONE place so every average agrees:
 //   1. Only RESOLVED tickets count. A ticket that is still open (including one in an "Unresolved" status, or one that was
 //      reopened and not yet resolved again) has no resolution time and is left out of every average.

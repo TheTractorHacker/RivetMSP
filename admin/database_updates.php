@@ -7615,3 +7615,41 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.112'");
     }
+
+    if ($rivetit_db_version() == '2.6.112') {
+        // Roadmap #6: service catalog v1 - curated, one-click ticket templates ("Request Something" on the agent
+        // side and the client portal). Ported from RivetIT's service_catalog_items table and
+        // tickets.ticket_catalog_item_id column, deliberately WITHOUT the rest of RivetIT's now much larger feature
+        // (per-item custom request-form fields with conditional visibility, multi-step/role/manager approval
+        // chains, risk scoring and auto-approve thresholds, a dedicated approvals inbox) - that grew well beyond
+        // the original issue text ("a catalog item should be able to price and create a ticket template") over
+        // many iterations on RivetIT and is a substantial feature in its own right; left as a clearly flagged
+        // follow-up rather than silently half-building it here. "requires_approval" in this edition instead just
+        // means the ticket is created already held at the "Pending Approval" (else "On Hold") status, resolved by
+        // NAME never a literal id - releasing or rejecting it is an ordinary ticket status change, reusing
+        // RivetMSP's own existing status-change code path instead of a new approve/reject state machine.
+        // `price` is a new column RivetIT does not have: a plain informational estimate (not tied to invoicing),
+        // added because the roadmap issue explicitly asked for "price" and RivetIT itself never actually built
+        // that part despite the issue text.
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `service_catalog_items` (
+            `catalog_item_id` int(11) NOT NULL AUTO_INCREMENT,
+            `name` varchar(200) NOT NULL,
+            `description` text DEFAULT NULL,
+            `icon` varchar(100) DEFAULT NULL,
+            `ticket_subject_template` varchar(500) DEFAULT NULL,
+            `ticket_category_id` int(11) DEFAULT NULL,
+            `default_priority` varchar(200) DEFAULT NULL,
+            `price` decimal(10,2) DEFAULT NULL,
+            `is_active` tinyint(1) NOT NULL DEFAULT 1,
+            `sort_order` int(11) NOT NULL DEFAULT 0,
+            `requires_approval` tinyint(1) NOT NULL DEFAULT 0,
+            `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+            `updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
+            PRIMARY KEY (`catalog_item_id`),
+            KEY `ticket_category_id` (`ticket_category_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+        mysqli_query($mysqli, "ALTER TABLE `tickets` ADD COLUMN IF NOT EXISTS `ticket_catalog_item_id` int(11) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `tickets` ADD INDEX IF NOT EXISTS `idx_tickets_catalog_item` (`ticket_catalog_item_id`, `ticket_created_at`)");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.113'");
+    }

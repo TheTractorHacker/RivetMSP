@@ -6,6 +6,19 @@ $client_id = intval($_GET['client_id'] ?? 0);
 $contact_id = intval($_GET['contact_id'] ?? 0);
 $project_id = intval($_GET['project_id'] ?? 0);
 
+/* Opened from Request Something (agent/service_catalog.php): the id rides along as a hidden input. Prefill only -
+   agent/post/ticket.php re-reads the active item itself before deciding whether to hold the ticket. */
+$catalog_item_id = intval($_GET['catalog_item_id'] ?? 0);
+$catalog_needs_approval = false;
+if ($catalog_item_id > 0) {
+    $catalog_item = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT requires_approval FROM service_catalog_items WHERE catalog_item_id = $catalog_item_id AND is_active = 1 LIMIT 1"));
+    if ($catalog_item) {
+        $catalog_needs_approval = (bool) intval($catalog_item['requires_approval']);
+    } else {
+        $catalog_item_id = 0;
+    }
+}
+
 ob_start();
 
 ?>
@@ -24,9 +37,15 @@ ob_start();
     <?php if ($project_id) { ?>
         <input type="hidden" name="project_id" value="<?php echo $project_id; ?>">
     <?php } ?>
+    <?php if ($catalog_item_id) { ?>
+        <input type="hidden" name="catalog_item_id" value="<?php echo $catalog_item_id; ?>">
+    <?php } ?>
     <input type="hidden" name="billable" value="0">
 
     <div class="modal-body">
+        <?php if ($catalog_needs_approval) { ?>
+            <div class="alert alert-warning"><i class="fas fa-fw fa-user-check me-2"></i>This request needs approval - the ticket will be created on hold until a technician releases it.</div>
+        <?php } ?>
 
         <!-- Nav -->
         <ul class="nav nav-pills nav-justified mb-3">

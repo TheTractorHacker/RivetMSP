@@ -9,6 +9,17 @@ require_once 'includes/inc_all.php';
 // Allow clients to select a related asset when raising a ticket
 $sql_assets = mysqli_query($mysqli, "SELECT asset_id, asset_name, asset_type FROM assets WHERE asset_contact_id = $session_contact_id AND asset_client_id = $session_client_id AND asset_archived_at IS NULL ORDER BY asset_name ASC");
 
+// Opened from Request Something (service_catalog.php): prefill only - post.php re-reads the item itself before
+// deciding whether to hold the ticket.
+$catalog_item_id = intval($_GET['catalog_item_id'] ?? 0);
+$catalog_item = null;
+if ($catalog_item_id > 0) {
+    $catalog_item = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM service_catalog_items WHERE catalog_item_id = $catalog_item_id AND is_active = 1 LIMIT 1"));
+    if (!$catalog_item) {
+        $catalog_item_id = 0;
+    }
+}
+
 ?>
 
     <ol class="breadcrumb d-print-none">
@@ -23,9 +34,16 @@ $sql_assets = mysqli_query($mysqli, "SELECT asset_id, asset_name, asset_type FRO
 
     <h3>Raise a new ticket</h3>
 
+    <?php if ($catalog_item && intval($catalog_item['requires_approval'])) { ?>
+        <div class="alert alert-warning">This request needs approval - it will be held until a technician releases it.</div>
+    <?php } ?>
+
     <div class="col-md-8">
         <form action="post.php" method="post">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+            <?php if ($catalog_item_id) { ?>
+                <input type="hidden" name="catalog_item_id" value="<?= $catalog_item_id ?>">
+            <?php } ?>
 
             <div class="form-group">
                 <label>Subject <strong class="text-danger">*</strong></label>
@@ -33,7 +51,7 @@ $sql_assets = mysqli_query($mysqli, "SELECT asset_id, asset_name, asset_type FRO
                     <div class="input-group-prepend">
                         <span class="input-group-text"><i class="fa fa-fw fa-tag"></i></span>
                     </div>
-                    <input type="text" class="form-control" name="subject" placeholder="Subject" required>
+                    <input type="text" class="form-control" name="subject" placeholder="Subject" required value="<?= $catalog_item ? nullable_htmlentities($catalog_item['ticket_subject_template']) : '' ?>">
                 </div>
             </div>
 
@@ -45,10 +63,11 @@ $sql_assets = mysqli_query($mysqli, "SELECT asset_id, asset_name, asset_type FRO
                             <div class="input-group-prepend">
                                 <span class="input-group-text"><i class="fa fa-fw fa-thermometer-half"></i></span>
                             </div>
+                            <?php $catalog_priority = $catalog_item['default_priority'] ?? null; ?>
                             <select class="form-control select2" name="priority" required>
-                                <option>Low</option>
-                                <option>Medium</option>
-                                <option>High</option>
+                                <option <?php if ($catalog_priority === 'Low') { echo 'selected'; } ?>>Low</option>
+                                <option <?php if ($catalog_priority === 'Medium' || !$catalog_priority) { echo 'selected'; } ?>>Medium</option>
+                                <option <?php if ($catalog_priority === 'High') { echo 'selected'; } ?>>High</option>
                             </select>
                         </div>
                     </div>
@@ -61,6 +80,7 @@ $sql_assets = mysqli_query($mysqli, "SELECT asset_id, asset_name, asset_type FRO
                         <div class="input-group-prepend">
                             <span class="input-group-text"><i class="fa fa-fw fa-layer-group"></i></span>
                         </div>
+                        <?php $catalog_category_id = intval($catalog_item['ticket_category_id'] ?? 0); ?>
                         <select class="form-control select2" name="category">
                             <option value="0">- No Category -</option>
                             <?php
@@ -70,7 +90,7 @@ $sql_assets = mysqli_query($mysqli, "SELECT asset_id, asset_name, asset_type FRO
                                 $category_name = nullable_htmlentities($row['category_name']);
 
                                 ?>
-                                <option value="<?php echo $category_id; ?>"><?php echo $category_name; ?></option>
+                                <option value="<?php echo $category_id; ?>" <?php if ($category_id === $catalog_category_id) { echo 'selected'; } ?>><?php echo $category_name; ?></option>
                             <?php } ?>
 
                         </select>

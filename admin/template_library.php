@@ -8,6 +8,7 @@ renderAdminDirectory('Templates', 'Create and manage reusable content.', 'fa-cop
         'description' => 'Standardize tickets, responses, and service requests.',
         'items' => [
             ['Ticket templates', 'Start tickets with a consistent structure.', 'ticket_template.php', 'fa-life-ring', true, ['url' => '/admin/modals/ticket_template/ticket_template_add.php', 'size' => 'lg']],
+            ['Service catalog', 'Manage available request types.', 'service_catalog.php', 'fa-th-large'],
             ['Canned responses', 'Reuse common ticket replies.', 'canned_responses.php', 'fa-comment-dots', true, ['url' => '/admin/modals/canned_response/canned_response_add.php', 'size' => 'lg']],
             ['Worksheet templates', 'Reuse task checklists.', 'worksheet_template.php', 'fa-clipboard-list', true, ['url' => '/admin/modals/worksheet_template/worksheet_template_add.php', 'size' => 'lg']],
         ],

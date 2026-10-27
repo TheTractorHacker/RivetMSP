@@ -4960,6 +4960,27 @@ CREATE TABLE `services` (
   PRIMARY KEY (`service_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `service_catalog_items`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `service_catalog_items` (
+  `catalog_item_id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(200) NOT NULL,
+  `description` text DEFAULT NULL,
+  `icon` varchar(100) DEFAULT NULL,
+  `ticket_subject_template` varchar(500) DEFAULT NULL,
+  `ticket_category_id` int(11) DEFAULT NULL,
+  `default_priority` varchar(200) DEFAULT NULL,
+  `price` decimal(10,2) DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `requires_approval` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
+  PRIMARY KEY (`catalog_item_id`),
+  KEY `ticket_category_id` (`ticket_category_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `settings`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -5880,10 +5901,12 @@ CREATE TABLE `tickets` (
   `ticket_counts_sla` tinyint(1) NOT NULL DEFAULT 1,
   `ticket_send_email` tinyint(1) NOT NULL DEFAULT 1,
   `ticket_sla_started_at` datetime DEFAULT NULL,
+  `ticket_catalog_item_id` int(11) DEFAULT NULL,
   PRIMARY KEY (`ticket_id`),
   KEY `idx_tickets_client_archived_updated` (`ticket_client_id`,`ticket_archived_at`,`ticket_updated_at`),
   KEY `idx_tickets_problem` (`ticket_problem_id`),
-  KEY `idx_ticket_mail_message_id` (`ticket_mail_message_id`)
+  KEY `idx_ticket_mail_message_id` (`ticket_mail_message_id`),
+  KEY `idx_tickets_catalog_item` (`ticket_catalog_item_id`,`ticket_created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `transfers`;
