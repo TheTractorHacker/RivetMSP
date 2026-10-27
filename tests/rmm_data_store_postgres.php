@@ -1,14 +1,20 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }   // never run tests over HTTP
 /*
- * RMM data store, PostgreSQL phase (RivetCore 1.0.0-rc.40/41, phase 4 of #89): the real-connection paths tests/rmm_data_store_ui_smoke.php cannot
+ * RMM data store, PostgreSQL phase (RivetCore 1.0.0-rc.40/41/42, phase 4 of #89): the real-connection paths tests/rmm_data_store_ui_smoke.php cannot
  * cover without pdo_pgsql — connection test success, switching for real, migrating a small synthetic fleet both directions, rollback, and the
- * backup/restore round trip. Runs INSIDE a throwaway PHP 8.5 + pdo_pgsql container (this host's PHP has no pdo_pgsql by design — Part B item 2) against
- * a throwaway Docker PostgreSQL 16 container, on the scratch MariaDB database over TCP (RIVETMSP_TEST_DB_HOST). See the coordinator's final report for
- * the exact docker commands. Never run against anything live.
+ * backup/restore round trip. Against a throwaway Docker PostgreSQL 18 container (the recommended, primary tested version since 1.0.0-rc.42; 16 is
+ * also tested and still supported - see docs/rmm/POSTGRES.md section 2), on the scratch MariaDB database over TCP (RIVETMSP_TEST_DB_HOST). Never run
+ * against anything live.
  *
- *   docker run -d --name rivetmsp-pg-test --network rivetmsp-pg-test-net -p 127.0.0.1:15432:5432 \
- *     -e POSTGRES_PASSWORD=... -e POSTGRES_USER=rivet_rmm -e POSTGRES_DB=rivet_rmm postgres:16
+ * When the PHP running this test already has pdo_pgsql (php -m | grep pdo_pgsql), run it directly - no second container needed:
+ *
+ *   docker run -d --name rivetmsp-pg-test -p 127.0.0.1:15432:5432 -e POSTGRES_PASSWORD=... -e POSTGRES_USER=rivet_rmm -e POSTGRES_DB=rivet_rmm postgres:18
+ *   RIVETMSP_TEST_DB=1 RIVETMSP_TEST_DB_NAME=... RIVETMSP_TEST_DB_USER=... RIVETMSP_TEST_DB_PASS=... RIVETMSP_REDIS_PORT=0 RIVETMSP_REDIS_ENV_FILE=/dev/null \
+ *     RIVETMSP_PG_HOST=127.0.0.1 RIVETMSP_PG_PORT=15432 RIVETMSP_PG_PASSWORD=... php tests/rmm_data_store_postgres.php --phase=<up1|down|up2>
+ *
+ * Otherwise (this host's PHP has no pdo_pgsql), build a throwaway PHP 8.5 + pdo_pgsql image once and run inside it instead:
+ *
  *   docker run --rm --network host -v <repo>:/app -w /app -e RIVETMSP_TEST_DB_HOST=127.0.0.1 \
  *     -e RIVETMSP_TEST_DB=1 -e RIVETMSP_TEST_DB_NAME=... -e RIVETMSP_TEST_DB_USER=... -e RIVETMSP_TEST_DB_PASS=... \
  *     -e RIVETMSP_REDIS_PORT=0 -e RIVETMSP_REDIS_ENV_FILE=/dev/null \
@@ -134,6 +140,14 @@ if ($phase === 'up1') {
     $ok($one("SELECT data_store FROM endpoint_agent_settings WHERE id = 1") === 'postgres', 'after rollback the setting is postgres again');
 
     // ---------------------------------------------------------------------------------------------------- backup / restore round trip (deploy's own pieces)
+    // A few more synthetic rows first, so "preserved the data" means an exact ROW COUNT match, not just "at least one row readable".
+    $pdoForCounts = new \PDO("pgsql:host=$pgHost;port=$pgPort;dbname=rivet_rmm", 'rivet_rmm', $pgPass);
+    for ($i = 5; $i < 20; $i++) {
+        $rmm->logService()->ingest(['device_id' => 90001, 'client_id' => 1], ['events' => [['ts' => ea_ts(-$i), 'level' => 'info', 'source' => 'test', 'event_id' => 1000 + $i, 'message' => "pg log $i"]]]);
+    }
+    $countBefore = (int) $pdoForCounts->query('SELECT COUNT(*) FROM endpoint_agent_log_events')->fetchColumn();
+    $ok($countBefore === 20, 'fixture before backup: exactly 20 log rows (5 from the earlier section + 15 just added)');
+
     putenv('RIVETCORE_PG_DATABASE=rivet_rmm'); putenv('RIVETCORE_PG_USER=rivet_rmm'); putenv("RIVETCORE_PG_HOST=$pgHost"); putenv("RIVETCORE_PG_PORT=$pgPort"); putenv('RIVETCORE_PG_SSLMODE=disable'); putenv('RIVETCORE_PG_SCHEMA=public');
     $passfile = sys_get_temp_dir() . '/rmm_pg_test.pgpass';
     file_put_contents($passfile, "$pgHost:$pgPort:rivet_rmm:rivet_rmm:$pgPass\n");
@@ -143,8 +157,29 @@ if ($phase === 'up1') {
     exec("$root/vendor/rivet/rivet-core/scripts/rmm-postgres-backup.sh > " . escapeshellarg($dumpFile) . " 2>" . escapeshellarg($dumpFile . '.err'), $o, $rc);
     $ok($rc === 0 && filesize($dumpFile) > 0, 'rmm-postgres-backup.sh produced a non-empty dump (rc=' . $rc . ', ' . (int) @filesize($dumpFile) . ' bytes; ' . trim((string) @file_get_contents($dumpFile . '.err')) . ')');
     $before = $rmm->dataStores()->logs()->oldestEventAt(90001) !== null;
+    // Prove the restore actually REPLACES data, not just adds to it: insert a row into the live database that the dump above does NOT
+    // contain, so a restore that merely merged (instead of RMM_PG_RESTORE_CLEAN=1 really dropping and recreating the schema) would be
+    // caught by the row count below (21, not 20) instead of silently passing.
+    $pdoForCounts->exec("INSERT INTO endpoint_agent_log_events (device_id, client_id, occurred_at, received_at, level, source, message, dedupe) VALUES (90001, 1, NOW(), NOW(), 1, 'test', 'should NOT survive the clean restore', decode('ffffffffffffffffffffffffffffffff', 'hex'))");
+    $ok((int) $pdoForCounts->query('SELECT COUNT(*) FROM endpoint_agent_log_events')->fetchColumn() === 21, 'fixture: a 21st row was added AFTER the dump, to prove restore replaces rather than merges');
     exec("RMM_PG_RESTORE_CLEAN=1 $root/vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh < " . escapeshellarg($dumpFile) . " 2>" . escapeshellarg($dumpFile . '.restore.err'), $o2, $rc2);
     $ok($rc2 === 0, 'rmm-postgres-restore.sh restored the dump cleanly (rc=' . $rc2 . '; ' . trim((string) @file_get_contents($dumpFile . '.restore.err')) . ')');
+    $countAfter = (int) $pdoForCounts->query('SELECT COUNT(*) FROM endpoint_agent_log_events')->fetchColumn();
+    $ok($countAfter === $countBefore, "row count matches exactly before vs after the restore ($countBefore -> $countAfter) - not just \"some rows exist\", and the post-dump 21st row is correctly gone (a real restore, not a merge)");
+
+    // rmm-store-verify.php: read-only reconciliation of the control database against the just-restored hot store (docs/rmm/POSTGRES.md
+    // section 8.6). Exit 0 = clean (the two agree); this test's fixtures are self-consistent, so clean is the expected, asserted result,
+    // not just "didn't crash".
+    exec(PHP_BINARY . ' ' . escapeshellarg("$root/vendor/rivet/rivet-core/scripts/rmm-store-verify.php") . ' --bootstrap=' . escapeshellarg("$root/scripts/rmm_store_bootstrap.php") . ' --json 2>' . escapeshellarg($dumpFile . '.verify.err'), $overify, $rcVerify);
+    $verifyJson = json_decode(implode("\n", $overify), true);
+    $ok($rcVerify === 0, 'rmm-store-verify.php reports CLEAN after the restore (rc=' . $rcVerify . '; ' . trim((string) @file_get_contents($dumpFile . '.verify.err')) . '; ' . implode("\n", $overify) . ')');
+    $ok(is_array($verifyJson), 'rmm-store-verify.php --json produced parseable JSON');
+
+    // The PGPASSFILE actually gets deleted after use - prove it the same way deploy/lib/common.sh's register_tmpfile() does (shred -u,
+    // not a bare unlink), per the task's "prove the deletion happened" requirement.
+    $ok(is_file($passfile), 'sanity: the PGPASSFILE still exists right before the shred (so the next assertion proves something)');
+    exec('shred -u ' . escapeshellarg($passfile) . ' 2>&1', $oShred, $rcShred);
+    $ok($rcShred === 0 && !is_file($passfile), 'the PGPASSFILE (held the real password in cleartext, 0600) is shredded and gone after use - not merely unlinked, the same command deploy/lib/common.sh\'s register_tmpfile() runs on every registered temp file at EXIT');
     $db3 = new mysqli($GLOBALS['dbhost'] ?? '127.0.0.1', $GLOBALS['dbusername'], $GLOBALS['dbpassword'], $GLOBALS['database']);
     $rmm = rivetRmmModule($db3);   // fresh connection + fresh module: the restore replaced the PostgreSQL schema, and reusing a cached module/settings would read stale state (see the rollback comment above)
     $after = $rmm->dataStores()->logs()->oldestEventAt(90001) !== null;

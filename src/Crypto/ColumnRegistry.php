@@ -67,6 +67,12 @@ final class ColumnRegistry
             // Mesh login key, and (Phase 2) the secret parameters of a queued job and the values of secret custom fields. A cleartext value
             // there is never a ciphertext the module would accept, so a rewrap never wraps one.
             ['endpoint_agent_settings', 'id', ['signing_private_key_enc', 'mesh_login_key_enc']],
+            // RivetCore\Rmm\Store\DataStoreSwitch (1.0.0-rc.41, #89 phase 3/4, the RMM PostgreSQL data store) seals the stored connection's
+            // password through the same SecretBoxInterface -> EndpointSecretBox -> encryptSetting() path (ENC2: before a key file exists, v3:
+            // once one does), in its own table rather than `settings`. DataStoreSwitch::prepare() always calls $this->box->encrypt() for a
+            // non-empty password (a blank password reuses the existing sealed value or stores NULL) - never a cleartext row - so this column
+            // is a rewrap target (ENC2: -> v3: under a new key) but never a wrap-plaintext target, same as the two above.
+            ['rmm_data_store_connection', 'id', ['password_sealed']],
         ] as [$table, $pk, $cols]) {
             foreach ($cols as $c) {
                 $specs[] = new ColumnSpec($table, $pk, $c, 'settings', $wrap($table, $c));

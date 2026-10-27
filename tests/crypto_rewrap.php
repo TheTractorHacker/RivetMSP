@@ -57,6 +57,14 @@ foreach (ColumnRegistry::all() as $cs) {
     } elseif ($cs->table === 'endpoint_agent_settings') {
         $q("UPDATE endpoint_agent_settings SET `{$cs->column}` = '" . $esc($stored) . "' WHERE id = 1");
         $pkv = 1;
+    } elseif ($cs->table === 'rmm_data_store_connection') {
+        // Singleton row (DataStoreSwitch always reads/writes id = 1); its pk is a tinyint, so the generic "900 + $seeded" pk the else
+        // branch below uses for ordinary multi-row tables would silently CLAMP under this harness's non-strict sql_mode (seeding a row
+        // at id=127, not 900ish) and the read-back check two sections down would then look up the wrong id and find nothing - exactly
+        // the same reason endpoint_agent_settings gets its own branch just above.
+        $q("INSERT INTO rmm_data_store_connection (id, host, port, db_name, db_user, password_sealed, sslmode, schema_name, test_ok, updated_at) VALUES (1, '127.0.0.1', 5432, 'crw_db', 'crw_user', '"
+            . $esc($stored) . "', 'disable', 'public', 0, UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE password_sealed = VALUES(password_sealed)");
+        $pkv = 1;
     } elseif ($cs->table === 'recovery_settings') {
         $q("INSERT INTO recovery_settings (setting_key, setting_value) VALUES ('drill_db_pass', '" . $esc($stored) . "') ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
     } else {
@@ -92,8 +100,11 @@ $otherEnvelope = [   // table.column => why it is not in the registry
     'settings.config_backup_s3_access_key' => 'an access key ID is an identifier, not a secret (the secret key is registered)',
     'users.user_passkey_enc_ciphertext' => 'passkey wrap, derived from the user\'s password (not encryptSetting)', 'users.user_passkey_enc_iv' => 'passkey wrap IV (not a secret value)',
 ];
+// '%\\_sealed' added alongside '%\\_enc': RivetCore\Rmm\Store\DataStoreSwitch names its own sealed column "password_sealed", not
+// "..._enc" like every column the edition's own services named - exactly the naming mismatch that let it slip past this scan
+// once (it was missing from ColumnRegistry::all() until this check's own convention was widened to also look for it).
 $scan = $rows("SELECT TABLE_NAME t, COLUMN_NAME c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND DATA_TYPE IN ('varchar','text','mediumtext','longtext','tinytext','char')
-    AND (COLUMN_NAME LIKE '%\\_enc' OR (TABLE_NAME = 'settings' AND (COLUMN_NAME LIKE 'config\\_%secret' OR COLUMN_NAME LIKE 'config\\_%password' OR COLUMN_NAME LIKE 'config\\_%\\_token' OR COLUMN_NAME LIKE 'config\\_%\\_key' OR COLUMN_NAME LIKE 'config\\_%passphrase' OR COLUMN_NAME LIKE 'config\\_%\\_pass')))");
+    AND (COLUMN_NAME LIKE '%\\_enc' OR COLUMN_NAME LIKE '%\\_sealed' OR (TABLE_NAME = 'settings' AND (COLUMN_NAME LIKE 'config\\_%secret' OR COLUMN_NAME LIKE 'config\\_%password' OR COLUMN_NAME LIKE 'config\\_%\\_token' OR COLUMN_NAME LIKE 'config\\_%\\_key' OR COLUMN_NAME LIKE 'config\\_%passphrase' OR COLUMN_NAME LIKE 'config\\_%\\_pass')))");
 $missing = [];
 foreach ($scan as $r) {
     $n = $r['t'] . '.' . $r['c'];

@@ -691,7 +691,9 @@ $scaleCtx['ext'] = ['flags' => $__flags, 'buffer' => $__buf];
 // RivetCore 1.0.0-rc.40/41 RMM data store (phase 4 of #89, docs/rmm/POSTGRES.md section 13-16): Administration > RMM > Data store.
 // DataStoreSwitch::status() degrades gracefully (bare setting only) on a database that has not run migrations 0042-0044 yet.
 require_once dirname(__DIR__) . '/includes/rmm_data_store_ui.php';
-$scaleCtx['ds'] = ['csrf' => $csrf, 'msg' => $scaleCtx['msg']['data-store'], 'old' => $scaleCtx['old']['data-store'], 'status' => $rmm->dataStoreSwitch()->status()];
+$scaleCtx['ds'] = ['csrf' => $csrf, 'msg' => $scaleCtx['msg']['data-store'], 'old' => $scaleCtx['old']['data-store'], 'status' => $rmm->dataStoreSwitch()->status(),
+    // DB 2.6.115, edition-owned (never a Core table): when the stored PostgreSQL password was last rotated, for the "Change password" sub-card.
+    'last_changed' => rivetRmmPgCredentialLastChanged($mysqli)];
 foreach (preg_split('/(?=<div class="card mb-3 rmm-scale-card" id=")/', rivetRmmUiScaleCards($scaleCtx), -1, PREG_SPLIT_NO_EMPTY) as $__chunk) {
     $eaTab(preg_match('/id="(remote-tools|file-transfer)"/', $__chunk) ? 'remote' : 'inventory');
     echo $__chunk;

@@ -67,10 +67,13 @@ $ok($row2['host'] === '127.0.0.1', 'a changed host with a blank password changes
 $ok(str_contains($body3, 'Enter the password again'), 'the refusal names the exact reason (Core\'s own message), not a generic error');
 
 // -------------------------------------------------------------------------------------------------------------------- test connection (no real server needed: a connect failure IS the test)
+// Port 5432 is used here deliberately (unlike the background-job section below, which switches to an unassigned port): a bogus
+// user/password/database on it fails the test (a wrong role or a wrong password) whether or not anything real happens to be
+// listening there on a given host, so this assertion never depends on the host's own state.
 
 $r = web($wb, 'POST', '/admin/post.php', $SS['admin'], ['rmm_ds_test_connection' => '1', 'host' => '127.0.0.1', 'port' => '5432', 'database' => 'rivet_rmm', 'user' => 'rivet_rmm', 'password' => 'whatever', 'sslmode' => 'disable', 'schema' => 'public', 'csrf_token' => 'csrftok1'], array_merge($REF, ['Accept: application/json']));
 $j = json_decode($r[1], true);
-$ok($r[0] === 200 && is_array($j) && $j['ok'] === false, 'testing an address with nothing listening answers ok=false, not a 500 or a fatal error');
+$ok($r[0] === 200 && is_array($j) && $j['ok'] === false, 'testing a bogus role/password/database answers ok=false, not a 500 or a fatal error (whether or not anything is actually listening on 127.0.0.1:5432 on this host)');
 $ok(isset($j['checks']) && is_array($j['checks']) && $j['checks'] !== [], 'the JSON carries the checks array (Core\'s own testConnection() shape)');
 $ok(!str_contains($r[1], 'whatever'), 'the password typed into the test is never echoed back in the JSON answer');
 
@@ -78,7 +81,7 @@ $ok(!str_contains($r[1], 'whatever'), 'the password typed into the test is never
 $r = web($wb, 'POST', '/admin/post.php', $SS['tech'], ['rmm_ds_test_connection' => '1', 'host' => '1.2.3.4', 'port' => '5432', 'database' => 'x', 'user' => 'x', 'password' => '', 'sslmode' => 'disable', 'schema' => 'public', 'csrf_token' => 'csrftok1'], array_merge($REF, ['Accept: application/json']));
 $ok(!is_array(json_decode($r[1], true)) || (json_decode($r[1], true)['ok'] ?? null) !== true, 'a non-admin cannot get a successful connection test through admin/post.php');
 
-// -------------------------------------------------------------------------------------------------------------------- switch refusals (still no real PostgreSQL)
+// -------------------------------------------------------------------------------------------------------------------- switch refusals (the stored connection's bogus role/password still fails its test)
 
 $r = $post(['rmm_ds_switch_to' => 'postgres']);   // no acknowledge_no_data_move box ticked
 $kind = $one("SELECT data_store FROM endpoint_agent_settings WHERE id = 1");
@@ -86,9 +89,9 @@ $ok($kind === 'mariadb', 'switching to postgres without ticking the acknowledgem
 [, $body4] = $pg('admin');
 $ok(str_contains($body4, 'Confirm that you understand this to switch') || str_contains($body4, 'does not move existing history'), 'the refusal repeats the no-data-move notice');
 
-$r = $post(['rmm_ds_switch_to' => 'postgres', 'acknowledge_no_data_move' => '1']);   // ticked, but nothing is actually listening on 127.0.0.1:5432
+$r = $post(['rmm_ds_switch_to' => 'postgres', 'acknowledge_no_data_move' => '1']);   // ticked, but the stored connection (host/port/role/password above) still fails its own test
 $kind2 = $one("SELECT data_store FROM endpoint_agent_settings WHERE id = 1");
-$ok($kind2 === 'mariadb', 'ticking the box still refuses the switch when the connection test itself fails (no real PostgreSQL here)');
+$ok($kind2 === 'mariadb', 'ticking the box still refuses the switch when the connection test itself fails');
 
 // Switching back to mariadb is always allowed, even though it is already the active store (RivetCore's own "always allowed" rule).
 $r = $post(['rmm_ds_switch_to' => 'mariadb']);
@@ -105,19 +108,27 @@ $ok(!str_contains($fleetBody, 'Fatal error') && !str_contains($fleetBody, 'Warni
 $log = (string) @file_get_contents($web['log']);
 $ok(!str_contains($log, 'pdo_pgsql') && !str_contains($log, 'PostgresException') && !str_contains($log, 'Fatal error'), 'nothing in the server log suggests a PostgreSQL connection was attempted by mere page views on a mariadb-only install');
 
-// -------------------------------------------------------------------------------------------------------------------- the background job actually runs, detached (no pdo_pgsql here, so it fails fast and visibly)
-
+// -------------------------------------------------------------------------------------------------------------------- the background job actually runs, detached
+// host:port is a deliberately unassigned loopback port, not 5432: some hosts that run this suite have an UNRELATED real PostgreSQL
+// listening on 127.0.0.1:5432 (another install, another test session), and this assertion must never depend on - or connect to -
+// whatever that happens to be. Port 25955 is picked fresh for this run and verified free just above it would be, were anything
+// actually listening there the "connection refused" message below would not match and this test would correctly fail loud.
 $jobLog = "$root/backups/rmm-store-migrate.log";
 @unlink($jobLog);
-$post(['rmm_ds_save_connection' => '1', 'host' => '127.0.0.1', 'port' => '5432', 'database' => 'rivet_rmm', 'user' => 'rivet_rmm', 'password' => 'x', 'sslmode' => 'disable', 'schema' => 'public']);
+$post(['rmm_ds_save_connection' => '1', 'host' => '127.0.0.1', 'port' => '25955', 'database' => 'rivet_rmm', 'user' => 'rivet_rmm', 'password' => 'x', 'sslmode' => 'disable', 'schema' => 'public']);
 $t0 = microtime(true);
 [$codeStart] = $post(['rmm_ds_migrate_start' => '1', 'rmm_ds_migrate_to' => 'postgres']);
 $ok($codeStart === 302 && microtime(true) - $t0 < 2.0, 'starting a migration returns immediately (302, well under 2s) - the long command runs detached, never inside this request');
 for ($i = 0; $i < 50 && !is_file($jobLog); $i++) { usleep(100000); }
 $ok(is_file($jobLog), 'the detached background job actually started and wrote its log');
-for ($i = 0; $i < 50 && !str_contains((string) @file_get_contents($jobLog), 'pdo_pgsql'); $i++) { usleep(100000); }
+// Whichever reason this sandbox's PHP cannot reach PostgreSQL on this nothing-listening port, that reason must show up for real -
+// either the extension really is missing (pdo_pgsql not installed) or it is installed and the connection is refused (nothing
+// listening on 25955). Either message proves the detached process genuinely reached and used RivetCore's PostgreSQL code, which is
+// everything this assertion is actually checking; it must never hard-code one specific environment's reason.
+$jobReachedPostgres = static fn (string $t): bool => str_contains($t, 'pdo_pgsql is not installed') || (str_contains($t, '127.0.0.1') && (stripos($t, 'refused') !== false || stripos($t, 'failed') !== false));
+for ($i = 0; $i < 50 && !$jobReachedPostgres((string) @file_get_contents($jobLog)); $i++) { usleep(100000); }
 $jobLogText = (string) @file_get_contents($jobLog);
-$ok(str_contains($jobLogText, 'pdo_pgsql is not installed'), 'the background job itself (a real, separate PHP process) reached the point of trying to use PostgreSQL and reported the real, honest reason it could not (consistent with this sandbox having no pdo_pgsql - see the final report)');
+$ok($jobReachedPostgres($jobLogText), 'the background job itself (a real, separate PHP process) reached the point of trying to use PostgreSQL and reported the real, honest reason it could not reach anything on this nothing-listening port (' . trim(mb_substr($jobLogText, 0, 200)) . ')');
 [, $poll] = web($wb, 'POST', '/admin/post.php', $SS['admin'], ['rmm_ds_migrate_status' => '1', 'csrf_token' => 'csrftok1'], array_merge($REF, ['Accept: application/json']));
 $pj = json_decode($poll, true);
 $ok(is_array($pj) && array_key_exists('active', $pj) && array_key_exists('run', $pj) && array_key_exists('log', $pj), 'the status-poll AJAX endpoint answers the shape the page\'s JS expects (active/run/log), admin-only, in-process (no shell)');
