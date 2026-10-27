@@ -9,6 +9,7 @@
 
 require_once __DIR__ . '/rmm_ui_render.php';
 require_once __DIR__ . '/rmm_scale_admin.php';
+require_once __DIR__ . '/rmm_data_store_ui.php';
 
 /** A card shell for the administration page (the same markup the other cards of the page use). */
 function rivetRmmScaleCard(string $id, string $icon, string $title, bool $on, string $body, ?string $pill = null): string
@@ -235,6 +236,19 @@ function rivetRmmUiScaleCards(array $c): string
     // ------------------------------------------------------------------------------------------------------------------ 5. Storage and partitioning
     $oPt = $o('partitioning');
     $p = $c['partition'];
+    if (!empty($p['not_applicable'])) {
+        // PostgreSQL (RivetCore 1.0.0-rc.39/40): the MariaDB-only partition probe/convert tool has nothing
+        // to do here - PostgreSQL's own housekeeping manages its partitions. Show the retention tiers
+        // through the store-API-aware accessor instead of a blank card.
+        $tierRows = '';
+        foreach (($p['tiers'] ?? []) as $tierName => $tierInfo) {
+            $tierRows .= '<tr><th scope="row" class="ps-3 fw-normal"><code>' . rmmH((string) $tierName) . '</code></th><td>' . rmmH(is_array($tierInfo) ? json_encode($tierInfo) : (string) $tierInfo) . '</td></tr>';
+        }
+        $body = '<p class="small text-muted mb-2">The hot RMM history tables are on PostgreSQL. Partitioning (MariaDB\'s own time-partitioning tool, above) does not apply - PostgreSQL\'s own housekeeping manages retention and partitions for the active store automatically.</p>'
+            . ($tierRows !== '' ? '<div class="table-responsive rmm-scale-scroll mb-2"><table class="table table-sm mb-0"><caption class="visually-hidden">PostgreSQL retention tiers</caption>' . rivetRmmUiThead(['Tier', 'Detail']) . '<tbody>' . $tierRows . '</tbody></table></div>' : '');
+        $out .= rivetRmmScaleCard('partitioning', 'database', 'Metric storage and partitioning', true, $body, 'PostgreSQL');
+        goto rivetRmmScalePartitioningDone;
+    }
     $words = $p['words'];
     $probeAt = $p['probe_at'];
     $roll = $p['rollup'];
@@ -299,6 +313,13 @@ function rivetRmmUiScaleCards(array $c): string
         $body .= '<p class="small text-muted mb-0">No table is partitioned. Expired rows are removed by deleting them in batches, which is fine for most installs.</p>';
     }
     $out .= rivetRmmScaleCard('partitioning', 'database', 'Metric storage and partitioning', $anyPart, $body, $anyPart ? 'Partitioned' : 'Off');
+
+    rivetRmmScalePartitioningDone:
+
+    // ------------------------------------------------------------------------------------------------------------------ 5b. RMM data store (RivetCore 1.0.0-rc.40/41, phase 4 of #89)
+    if (isset($c['ds'])) {
+        $out .= rivetRmmUiDataStoreCard($c['ds']);
+    }
 
     // ------------------------------------------------------------------------------------------------------------------ 6. External metric store
     $oEx = $o('ext-store');

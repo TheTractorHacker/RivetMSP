@@ -117,4 +117,104 @@
     if (msg && typeof msg.focus === 'function') {
         window.setTimeout(function () { msg.focus({ preventScroll: false }); }, 50);
     }
+
+    // ---- RivetCore 1.0.0-rc.40/41 RMM data store (includes/rmm_data_store_ui.php): "Test connection" answers in the page without losing what was
+    // typed (the saved password is never sent back; a blank password here means "test the stored one" / "use the stored one", exactly as saveConnection() treats it).
+    document.querySelectorAll('[data-rmm-scale-test="ds"]').forEach(function (btn) {
+        var form = btn.closest('form[data-rmm-scale-test-group="ds"]');
+        var live = form ? form.querySelector('[data-rmm-scale-live]') : null;
+        if (!form || !live || !window.fetch || !window.FormData) { return; }
+        btn.addEventListener('click', function () {
+            var data = new FormData(form);
+            data.delete('rmm_ds_save_connection');
+            data.set('rmm_ds_test_connection', '1');
+            live.textContent = '';
+            var note = document.createElement('div');
+            note.className = 'alert alert-info py-2 mb-0';
+            note.textContent = 'Testing the connection (up to a few seconds)...';
+            live.appendChild(note);
+            btn.disabled = true;
+            fetch(form.getAttribute('action') || 'post.php', { method: 'POST', body: data, credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.json().catch(function () { return { ok: false, checks: [{ name: 'error', ok: false, message: 'The server did not return an answer (HTTP ' + r.status + ').' }] }; }); })
+                .then(show)
+                .catch(function () { show({ ok: false, checks: [{ name: 'error', ok: false, message: 'The request could not be sent. Check your connection and try again.' }] }); });
+            function show(j) {
+                btn.disabled = false;
+                live.textContent = '';
+                var box = document.createElement('div');
+                box.className = 'alert py-2 mb-2 alert-' + (j.ok ? 'success' : 'danger');
+                var head = document.createElement('strong');
+                head.textContent = j.ok ? 'Connected. ' : 'Not connected. ';
+                box.appendChild(head);
+                if (j.server_version) { box.appendChild(document.createTextNode('PostgreSQL ' + j.server_version + ((j.storage_mode) ? ' (' + j.storage_mode + ' mode)' : '') + '. ')); }
+                live.appendChild(box);
+                (j.checks || []).forEach(function (c) {
+                    var row = document.createElement('div');
+                    row.className = 'small ' + (c.ok ? 'text-success' : 'text-danger');
+                    row.textContent = (c.ok ? '✓ ' : '✗ ') + c.name + ': ' + c.message;
+                    live.appendChild(row);
+                });
+                (j.warnings || []).forEach(function (w) {
+                    var row = document.createElement('div');
+                    row.className = 'small text-warning';
+                    row.textContent = '⚠ ' + w;
+                    live.appendChild(row);
+                });
+            }
+        });
+    });
+
+    // ---- migration progress: poll rmm_ds_migrate_status while a run is active, and reload once it stops being active (so the Start/Resume/Cut
+    // over/Roll back buttons, which depend on the run's final state, catch up without the administrator having to refresh by hand).
+    var dsPoll = document.querySelector('[data-rmm-ds-poll]');
+    if (dsPoll && window.fetch) {
+        var dsCsrf = dsPoll.getAttribute('data-rmm-ds-csrf') || '';
+        function renderRun(run) {
+            dsPoll.textContent = '';
+            var box = document.createElement('div');
+            box.className = 'alert py-2 mb-0 alert-' + (run.state === 'failed' ? 'danger' : 'info');
+            var head = document.createElement('div');
+            head.textContent = run.state + ': ' + run.from_store + ' → ' + run.to_store
+                + (run.phase ? ' · phase: ' + run.phase : '') + ' · updated ' + run.updated_at
+                + (run.dual_faults > 0 ? ' · ' + run.dual_faults + ' dual-write fault(s)' : '');
+            box.appendChild(head);
+            if (run.last_error) {
+                var err = document.createElement('div');
+                err.className = 'small mt-1';
+                err.textContent = run.last_error;
+                box.appendChild(err);
+            }
+            dsPoll.appendChild(box);
+        }
+        var dsTimer = window.setInterval(function () {
+            fetch('post.php', { method: 'POST', body: 'csrf_token=' + encodeURIComponent(dsCsrf) + '&rmm_ds_migrate_status=1', credentials: 'same-origin',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' } })
+                .then(function (r) { return r.json(); })
+                .then(function (j) {
+                    if (j && j.run) { renderRun(j.run); }
+                    if (!j || !j.active) {
+                        window.clearInterval(dsTimer);
+                        window.setTimeout(function () { window.location.reload(); }, 1500);
+                    }
+                })
+                .catch(function () { /* a missed poll just tries again next interval */ });
+        }, 4000);
+    }
+
+    // ---- purge: a typed confirmation (RivetDialog.prompt), not a native confirm() and not just a checkbox.
+    document.addEventListener('submit', function (e) {
+        var btn = e.submitter;
+        if (!btn || !btn.hasAttribute('data-rmm-ds-typed-confirm') || !window.RivetDialog) { return; }
+        e.preventDefault();
+        var form = e.target;
+        RivetDialog.prompt('Type PURGE to permanently delete the RMM history from the store that is not active. This cannot be undone.', { required: true, okText: 'Purge' }).then(function (v) {
+            if (v !== 'PURGE') { return; }
+            var h = document.createElement('input');
+            h.type = 'hidden';
+            h.name = 'rmm_ds_purge_confirm';
+            h.value = 'PURGE';
+            form.appendChild(h);
+            form.submit();
+        });
+    });
 })();

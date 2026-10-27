@@ -11,6 +11,7 @@ the rivet-core repository:
 | What the module is, its contracts, key classes, behaviour | `docs/modules/rmm.md` |
 | Wire protocol, credential formats, signing, error codes | `docs/rmm/PROTOCOL.md`, `docs/rmm/openapi-device.yaml` |
 | Module switch, state file, load shedding, capacity | `docs/rmm/CAPACITY.md` |
+| Optional PostgreSQL data store for the 12 "hot" history tables | `docs/rmm/POSTGRES.md` |
 | Building and releasing the agent | `docs/rmm/AGENT_BUILD.md`, `endpoint-agent/README.md` |
 | Design and decisions | `docs/design/endpoint-module-extraction.md`, `docs/architecture/ADR-010-endpoint-agent-module.md` |
 
@@ -158,6 +159,9 @@ node tests/browser/rmm_p1213_{mesh,starter}_smoke.mjs   # real-browser smokes of
 node tests/browser/rmm_p16_smoke.mjs     # real-browser smoke of the pushed Mesh install, the bulk install, the Format selector and the MSI templates (rc.16)
 php tests/rmm_installer_ui.php             # the Add device dialog and installer download, including the optional MeshCentral agent box and the payload Core stamps
 RIVETMSP_SOCKET=... AGENT_BIN=.../rivetit-agent-linux-amd64 tests/real_agent_proof/run.sh   # the real Linux agent under systemd against RivetMSP's bridges (docker; the Mesh agent against a MOCK Mesh server and the starter pack through the API are part of it)
+php tests/rmm_data_store_ui_smoke.php      # Data store card, every refusal rule, capacity-card additions; MariaDB scratch only, no PostgreSQL needed
+php tests/rmm_postgres_cli_scripts_sync.php   # the composer-dist-strips-these-5-scripts workaround actually restores them (real network, real git clone)
+RIVETMSP_PG_HOST=... RIVETMSP_PG_PORT=... RIVETMSP_PG_PASSWORD=... php tests/rmm_data_store_postgres.php --phase=up1|down|up2   # real PostgreSQL: see section 6r
 ```
 
 The scratch `config.php` must define `EA_ALLOW_INSECURE_HTTP` (the golden runner starts a second server with `EA_TEST_NO_INSECURE=1` for the 426 transcripts),
@@ -438,3 +442,75 @@ Tests: `tests/rmm_alert_ticket_defaults.php`.
 - **Extended metrics.** Limit `metrics_extended`; the Performance charts read `cpu.utilization`, `memory.utilization`, `disk.utilization`, `network.rx_bytes_per_s`, `network.tx_bytes_per_s`, all still written.
 - **Change monitoring.** Switch + read-only Changes tab only (includes/rmm_change_ui.php); abilities `rmm.change.view` (module_rmm_scripts >= 2) and `rmm.change.manage` (module_rmm >= 2) in `EndpointAccessPolicy`; `api/v1/agent_changes.php`. The full UI (presets, custom watches, rules, search) is not built yet.
 - **Allow Linux devices to enroll.** `rivetRmmAllowLinuxSetting()` feeds Core's `allow_linux` option; default on.
+
+## 6r. RMM data store: optional PostgreSQL for the 12 hot history tables (RivetCore 1.0.0-rc.40/41 adoption, phase 4 of rivet-core #89, DB 2.6.114)
+
+MariaDB remains the default and the only store a fresh RivetMSP install ever sees. Administrators who outgrow it may move the 12 "hot" history tables
+(`endpoint_agent_check_history`, `endpoint_agent_log_events`/`_state`, `endpoint_agent_change_records`/`_state`, `rmm_metric_latest`/`_hourly`/`_daily`,
+`rmm_software_history`, `rmm_patch_history`, `rmm_package_history`, `rmm_hypervisor_vm_history`) to a separate PostgreSQL database; everything else (devices,
+clients, settings, alerts, jobs, enrollment) stays in the control database regardless. Full operator reference: rivet-core's `docs/rmm/POSTGRES.md` - this
+section is only RivetMSP's own wiring on top of it.
+
+- **Settings card.** Administration > RMM > Data store (`includes/rmm_data_store_ui.php`, rendered inside `rivetRmmUiScaleCards()` next to the partitioning
+  card, handlers in `admin/post/settings_endpoint_agent.php`): connection form (host/port/database/user/password/sslmode/schema - the password field is
+  always blank and is never echoed, logged or returned; `DataStoreSwitch::saveConnection()` itself refuses a changed host/port/user/database without
+  retyping the password, so a hijacked admin session cannot redirect the stored secret to another server), Test connection (AJAX, `rmm_ds_test_connection`,
+  renders Core's `checks`/`warnings`/`server_version`/`storage_mode` with `textContent` only - this page's existing no-innerHTML convention), Switch to
+  PostgreSQL (requires a checkbox next to the exact text of `DataStoreSwitch::NO_DATA_MOVE_NOTICE`), Switch back to MariaDB (always allowed), and a
+  status read-out (active store, last test, newest migration run, the "left behind" banner when a switch happened without a migration).
+- **Migrate data.** The same card's migration section: Start/dry-run, Resume, Cut over, Abort, Roll back (within the retention window, default 7 days),
+  Purge old store (a `RivetDialog.prompt()` typed "PURGE" confirmation, never a native `confirm()`). The actual migration
+  (`vendor/rivet/rivet-core/scripts/rmm-store-migrate.php`) runs as a job detached from the web request - `rivetRmmDsLaunchJob()` in
+  `includes/rmm_data_store_ui.php`, `proc_open()` with a literal argv array and `setsid`, never `proc_close()`'d (verified empirically: `proc_close()`
+  blocks until the child exits even with `setsid`; never calling it is what actually detaches the job - the same pattern `src/Recovery/
+  RestoreDrill::spawn()` already uses). Abort and the status poll (`rmm_ds_migrate_status`) are plain database reads/writes and run in-process. The edition
+  bootstrap file for the migrate/verify CLI scripts is `scripts/rmm_store_bootstrap.php` (`RivetCore\Rmm\Store\Cli\CliBootstrap::load()`'s expected shape);
+  it explicitly re-populates `$GLOBALS` after requiring `config.php`, because `CliBootstrap::load()` requires that file from inside its own closure, which
+  would otherwise leave `$config_settings_enc_key`/`$mysqli` local to that closure - a real bug found only by running a real migration end to end against a
+  throwaway PostgreSQL container, not by review (the symptom was "the sealed Postgres password cannot be read", which has nothing to do with the actual key).
+- **Capacity card.** `includes/rmm_ui_render.php`'s `rivetRmmUiCapacity()` shows `capacity()->build()['data_store_recommendation']` (MariaDB's own "consider
+  PostgreSQL" advice once the fleet or the hot tables cross a threshold) and `['store_sizes']` (rows/bytes of the ACTIVE store's hot tables) - both were
+  already produced by `RmmModule::capacity()`; this is rendering only.
+- **Backup and restore.** `scripts/rmm_postgres_backup_env.php` bridges `deploy/backup.sh`/`restore.sh` (plain bash) to the sealed connection: unseals it,
+  writes a 0600 `PGPASSFILE`, prints `export` lines to `eval` - the password is never a command-line argument or printed. `deploy/backup.sh` dumps
+  `rmm-postgres.dump` into the SAME encrypted archive as the control-database dump whenever `data_store = postgres` (skipped, no error, otherwise);
+  `deploy/restore.sh` restores it after the control database (`RMM_PG_RESTORE_CLEAN=1`) and runs `vendor/rivet/rivet-core/scripts/rmm-store-verify.php`.
+  The in-app backup (`admin/post/backup.php`) does the equivalent via `RivetCore\Rmm\Store\BackupHook`, recording the connection descriptor (never the
+  password) in the manifest; a dump failure fails the whole backup rather than silently shipping one missing the RMM history.
+- **A rivet-core packaging bug, worked around.** `vendor/rivet/rivet-core`'s own `.gitattributes` marks `/scripts/*` export-ignore, which strips the five
+  PostgreSQL operator scripts (`rmm-postgres.php`, `rmm-store-migrate.php`, `rmm-store-verify.php`, `rmm-postgres-backup.sh`, `rmm-postgres-restore.sh`)
+  from every `composer install`/`update rivet/rivet-core` dist install, even though `docs/rmm/POSTGRES.md` tells editions to run them straight out of
+  that path. Reported upstream: github.com/TheTractorHacker/rivet-core#90. `scripts/vendor-fixups/sync-rmm-postgres-cli-scripts.sh` recovers the exact
+  5 files (cloned from the same installed commit, byte-identical, never hand-edited) and runs automatically after `composer install` in
+  `deploy/update.sh`'s `run_composer_install()` (a failure there warns but does not fail the update - most installs run MariaDB only and never need
+  these scripts). `php tests/rmm_postgres_cli_scripts_sync.php` proves the recovery end to end against the real GitHub remote.
+- **Store-interface rewiring (item 6 of the phase-4 work).** The one piece of edition code that read the hot tables directly was
+  `includes/rmm_log_ui.php`'s `SELECT MIN(occurred_at) FROM endpoint_agent_log_events` - replaced with `LogStore::oldestEventAt()` (catches
+  `HotStoreUnavailableException`). The MariaDB-only partition probe/convert tool (`admin/settings_endpoint_agent.php`, `admin/post/
+  settings_endpoint_agent.php`, rendered by `includes/rmm_scale_cards.php`, NOT `rmm_scale_admin.php`/`rmm_ui_render.php` despite their similar names) is
+  gated behind `data_store === 'mariadb'` both in the page (shows `dataStores()->maintenance()->tiers()` instead on PostgreSQL) and in the POST handler.
+  `includes/rmm_bootstrap.php`'s standalone metric reader reads through `RmmModule::dataStores()->metrics()`; the main module-build site needed no change
+  (`RmmModule::routedMetrics()` already auto-wraps any `MetricStore`-typed sink). Every other RMM page (`includes/rmm_ui.php`, `agent/asset_details.php`)
+  already reads metrics through `RmmMetricReaderInterface` and needed no change, verified explicitly with the store set to `postgres`, not assumed.
+- **Tenant isolation (MSP-specific).** A technician scoped to one client never sees another client's log/change rows from a PostgreSQL store, nor a row
+  with `client_id IS NULL` (SQL's own `NULL IN (...)` is never true, so a scoped `WHERE client_id IN (...)` excludes it by construction - Core's own
+  behaviour, verified rather than assumed); an unrestricted/admin caller sees all of it. `DeviceService::transfer()` (the only edition call site that
+  changes a device's client, confirmed by grepping the whole edition) actually moves existing history in place via `ClientMoves::apply()`
+  (`reassignClient()`), not a copy. When PostgreSQL is unreachable the move is deferred into `rmm_pending_client_moves` (nothing lost - the control-database
+  part of the transfer still succeeds) and completed by the next housekeeping run's `ClientMoves::retryPending()` (already wired into
+  `Housekeeping::run()`, no edition code needed for the retry itself). Tests: `tests/rmm_tenant_isolation_client_scope.php` (MariaDB, 19/19) and
+  `tests/rmm_data_store_postgres.php --phase=down`/`up2` (real PostgreSQL stopped and restarted mid-test, 7/7).
+- **Tests, what they actually proved.** `tests/rmm_data_store_ui_smoke.php` (26/26, scratch MariaDB only): the card, every refusal rule (a changed host
+  without the password, no acknowledgement, a failed connection test, a non-admin), the capacity-card additions, and that a mariadb-only install's page
+  views never attempt a PostgreSQL connection. `tests/rmm_data_store_postgres.php` (33/33 across `--phase=up1/down/up2`, inside a throwaway PHP 8.5 +
+  `pdo_pgsql` Docker container - this host's own PHP deliberately has no `pdo_pgsql` - against a throwaway PostgreSQL container): a real connection
+  save+test success (including the superuser warning firing against the throwaway role), a real switch, real log ingest, a real capacity reading of
+  actual PostgreSQL table sizes, a real migration BOTH DIRECTIONS reaching cutover, rollback, a real `pg_dump`/`pg_restore` round trip, and the
+  tenant-isolation down/retry scenario above.
+- **Known gaps, not blockers.** No TimescaleDB coverage (the throwaway PostgreSQL images used for testing have no `timescaledb` extension installed -
+  only native partitioned mode was exercised). No `sslmode=verify-full`/remote-TLS coverage (tested locally with `sslmode=disable`). `--purge-old` was not
+  exercised end to end against a real PostgreSQL store (the server-side typed-confirmation refusal is implemented and reviewed, not Docker-tested). The
+  Resume/Cut-over buttons' web-UI click path was not exercised in a browser; the CLI flags they send were exercised directly. No scale/load testing at the
+  10,000-device target (the synthetic fleet was one device). `postgres:17` was used in testing in place of the suggested 16 after `pg_dump` 17's restore
+  preamble (`SET transaction_timeout = 0`) proved incompatible with a 16 server - a client/server version-skew artifact of the test rig, not a product
+  bug; PostgreSQL 14-16 remain fully supported per `docs/rmm/POSTGRES.md`.

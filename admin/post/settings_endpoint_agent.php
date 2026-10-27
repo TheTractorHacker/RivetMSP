@@ -1152,6 +1152,18 @@ if (isset($_POST['save_scale_settings'])) {
 
 // ---------------------------------------------------------------- Partitioning
 
+// MariaDB-only (RivetCore 1.0.0-rc.39/40 UPGRADING.md): PostgreSQL manages its own partitions via
+// housekeeping, so probing/converting/disabling MariaDB's time-partitioning tool makes no sense once the
+// hot tables are on PostgreSQL. Refused here, not just hidden in the UI (a stale page tab, or anyone who
+// crafts the POST directly, must not be able to run a MariaDB-specific DDL tool against the wrong store).
+if (isset($_POST['partition_probe']) || isset($_POST['partition_enable']) || isset($_POST['partition_disable'])) {
+    if ($rmm->settings()->dataStore() !== \RivetCore\Rmm\Store\RmmDataStoreKind::MARIADB) {
+        validateCSRFToken($_POST['csrf_token']);
+        rivetRmmScaleMsg('partitioning', 'error', 'The data store is PostgreSQL - MariaDB\'s own partitioning tool does not apply. PostgreSQL manages its own partitions.');
+        ea_scale_back('partitioning');
+    }
+}
+
 if (isset($_POST['partition_probe'])) {
     validateCSRFToken($_POST['csrf_token']);
     ea_scale_require_admin($rmm, (int) $session_user_id, 'partitioning');
@@ -1457,4 +1469,151 @@ if (isset($_POST['agent_feed_refresh']) || isset($_POST['agent_feed_settings']) 
     $_SESSION['rmm_feed_steps'] = $res['steps'];
     rivetRmmScaleMsg('agent-updates', $res['ok'] ? 'success' : 'error', $res['message']);
     ea_scale_back('agent-updates');
+}
+
+// ================================================================================================================================================================
+// RivetCore 1.0.0-rc.40/41 RMM data store (phase 4 of #89; docs/rmm/POSTGRES.md section 13-15): Administration > RMM > Data store (includes/
+// rmm_data_store_ui.php). Core's RivetCore\Rmm\Store\DataStoreSwitch / RmmStoreMigrator do every validation, connection test, authorization decision
+// and audit entry (EndpointAudit, already wired into rivetRmmModule()); this file only reads the form, shows what they answer in the card it belongs
+// to, and runs the LONG migration commands (migrate/resume/cutover/rollback/purge-old) as a job detached from this request (rivetRmmDsLaunchJob(),
+// includes/rmm_data_store_ui.php) - never inside the web request, per POSTGRES.md section 14's own warning. Abort and the status poll are plain
+// database reads/writes and run in-process.
+// ================================================================================================================================================================
+require_once dirname(__DIR__, 2) . '/includes/rmm_data_store_ui.php';
+
+if (isset($_POST['rmm_ds_migrate_status'])) {
+    // AJAX poll target for the progress panel. No CSRF needed (read-only), but still admin-only (admin/post.php's own gate).
+    header('Content-Type: application/json');
+    try {
+        $m = $rmm->storeMigrator()->status();
+        $active = $m !== null && in_array((string) $m['state'], ['copying', 'dual_write', 'verified', 'failed'], true);
+        // Plain fields, not pre-rendered HTML: this page's own convention (js/rmm_scale.js's header comment) is that server text reaching the
+        // client is written with textContent only, never innerHTML, so the JS builds the DOM itself from these.
+        echo json_encode(['active' => $active, 'run' => $m === null ? null : ['state' => (string) $m['state'], 'from_store' => (string) $m['from_store'], 'to_store' => (string) $m['to_store'],
+            'phase' => $m['phase'] ?? null, 'updated_at' => (string) $m['updated_at'], 'dual_faults' => (int) ($m['dual_faults'] ?? 0), 'last_error' => $m['last_error'] ?? null],
+            'log' => rivetRmmDsJobLogTail(40)], JSON_UNESCAPED_SLASHES);
+    } catch (\Throwable) {
+        echo json_encode(['active' => false, 'run' => null, 'log' => '']);
+    }
+    exit;
+}
+
+if (isset($_POST['rmm_ds_test_connection'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    header('Content-Type: application/json');
+    $in = [];
+    foreach (['host', 'port', 'database', 'user', 'password', 'sslmode', 'schema'] as $k) {
+        if (isset($_POST[$k]) && is_string($_POST[$k]) && $_POST[$k] !== '') {
+            $in[$k] = $k === 'port' ? (int) $_POST[$k] : $_POST[$k];
+        }
+    }
+    try {
+        $r = $rmm->dataStoreSwitch()->testConnection($in === [] ? null : $in);
+    } catch (\Throwable) {
+        $r = ['ok' => false, 'checks' => [['name' => 'error', 'ok' => false, 'message' => 'Unexpected error while testing the connection.']], 'warnings' => [], 'server_version' => null, 'timescale' => false, 'storage_mode' => null, 'schema' => ['exists' => false, 'pending' => []]];
+    }
+    echo json_encode($r, JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+/** The connection fields of the Data store form, as DataStoreSwitch::saveConnection()/testConnection() expect them. Port is cast to int; a blank field (other than password, which is deliberately kept as '') is omitted so it falls back to the stored value. */
+function ea_ds_conn_in(): array
+{
+    $in = [];
+    foreach (['host', 'port', 'database', 'user', 'password', 'sslmode', 'schema'] as $k) {
+        if (!isset($_POST[$k]) || !is_string($_POST[$k])) {
+            continue;
+        }
+        if ($k !== 'password' && $_POST[$k] === '') {
+            continue;
+        }
+        $in[$k] = $k === 'port' ? (int) $_POST[$k] : $_POST[$k];
+    }
+
+    return $in;
+}
+
+if (isset($_POST['rmm_ds_save_connection'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $in = ea_ds_conn_in();
+    $errors = $rmm->dataStoreSwitch()->saveConnection($in);
+    $old = $in;
+    $old['password'] = '';   // never put the typed password back into the form, saved or refused
+    if ($errors !== []) {
+        rivetRmmScaleMsg('data-store', 'error', implode(' ', $errors), $old);
+    } else {
+        rivetRmmScaleMsg('data-store', 'success', 'Connection settings saved.');
+    }
+    ea_scale_back('data-store');
+}
+
+if (isset($_POST['rmm_ds_switch_to']) && in_array($_POST['rmm_ds_switch_to'], \RivetCore\Rmm\Store\RmmDataStoreKind::ALL, true)) {
+    validateCSRFToken($_POST['csrf_token']);
+    $to = (string) $_POST['rmm_ds_switch_to'];
+    $r = $rmm->dataStoreSwitch()->switchTo($to, ['acknowledge_no_data_move' => ($_POST['acknowledge_no_data_move'] ?? '') === '1', 'actor' => (string) $session_name]);
+    if ($r['errors'] !== []) {
+        rivetRmmScaleMsg('data-store', 'error', implode(' ', $r['errors']));
+    } else {
+        rivetRmmScaleMsg('data-store', 'success', $r['notice'] ?? ('The RMM data store is now ' . \RivetCore\Rmm\Store\DataStoreSwitch::label($to) . '.'));
+    }
+    ea_scale_back('data-store');
+}
+
+if (isset($_POST['rmm_ds_migrate_start']) || isset($_POST['rmm_ds_migrate_dry_run'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $to = ($_POST['rmm_ds_migrate_to'] ?? '') === 'mariadb' ? \RivetCore\Rmm\Store\RmmDataStoreKind::MARIADB : \RivetCore\Rmm\Store\RmmDataStoreKind::POSTGRES;
+    $flags = ['--to=' . $to, '--actor=' . (string) $session_name];
+    if (isset($_POST['rmm_ds_migrate_dry_run'])) {
+        $flags[] = '--dry-run';
+    }
+    $started = rivetRmmDsLaunchJob($flags);
+    rivetRmmScaleMsg('data-store', $started ? 'success' : 'error', $started
+        ? (isset($_POST['rmm_ds_migrate_dry_run']) ? 'Dry run started in the background; refresh in a moment to see its result in the log below.' : 'Migration started in the background. This card polls its progress.')
+        : 'Could not start the migration job (no PHP CLI binary was found, or proc_open is disabled on this server).');
+    ea_scale_back('data-store');
+}
+
+if (isset($_POST['rmm_ds_migrate_resume'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $started = rivetRmmDsLaunchJob(['--to=' . (string) $rmm->settings()->dataStore(), '--resume', '--actor=' . (string) $session_name]);
+    rivetRmmScaleMsg('data-store', $started ? 'success' : 'error', $started ? 'Resuming the migration in the background.' : 'Could not start the resume job.');
+    ea_scale_back('data-store');
+}
+
+if (isset($_POST['rmm_ds_migrate_cutover'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $started = rivetRmmDsLaunchJob(['--to=' . (string) $rmm->settings()->dataStore(), '--resume', '--cutover', '--actor=' . (string) $session_name]);
+    rivetRmmScaleMsg('data-store', $started ? 'success' : 'error', $started ? 'Cutting over in the background.' : 'Could not start the cut-over job.');
+    ea_scale_back('data-store');
+}
+
+if (isset($_POST['rmm_ds_migrate_abort'])) {
+    // A DB-row flag flip (RmmStoreMigrator::abort()): quick, safe to run inline. A still-running background job notices this cooperatively (it checks
+    // the run's state between batches) and stops itself; nothing here kills a process by PID.
+    validateCSRFToken($_POST['csrf_token']);
+    try {
+        $rmm->storeMigrator()->abort((string) $session_name);
+        rivetRmmScaleMsg('data-store', 'success', 'Migration aborted. Rows already copied stay in the target store until you purge them.');
+    } catch (\Throwable $e) {
+        rivetRmmScaleMsg('data-store', 'error', $e->getMessage());
+    }
+    ea_scale_back('data-store');
+}
+
+if (isset($_POST['rmm_ds_migrate_rollback'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $started = rivetRmmDsLaunchJob(['--rollback', '--actor=' . (string) $session_name]);
+    rivetRmmScaleMsg('data-store', $started ? 'success' : 'error', $started ? 'Rolling back in the background.' : 'Could not start the rollback job.');
+    ea_scale_back('data-store');
+}
+
+if (isset($_POST['rmm_ds_migrate_purge'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    if (($_POST['rmm_ds_purge_confirm'] ?? '') !== 'PURGE') {
+        rivetRmmScaleMsg('data-store', 'error', 'Typed confirmation did not match "PURGE" - nothing was deleted.');
+        ea_scale_back('data-store');
+    }
+    $started = rivetRmmDsLaunchJob(['--purge-old', '--yes', '--actor=' . (string) $session_name]);
+    rivetRmmScaleMsg('data-store', $started ? 'success' : 'error', $started ? 'Purging the old store in the background.' : 'Could not start the purge job.');
+    ea_scale_back('data-store');
 }

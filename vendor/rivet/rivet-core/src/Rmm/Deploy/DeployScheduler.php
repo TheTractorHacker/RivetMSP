@@ -26,6 +26,8 @@ use RivetCore\Rmm\Support\Sql;
  */
 final class DeployScheduler
 {
+    private readonly \RivetCore\Rmm\Store\DeploymentHistoryStore $deployHistory;
+
     public function __construct(
         private readonly Sql $sql,
         private readonly RmmSettings $settings,
@@ -35,7 +37,9 @@ final class DeployScheduler
         private readonly ?ScheduleGateInterface $gate = null,
         private readonly ?\RivetCore\Rmm\AutoInstall\AutoInstallService $auto = null,
         private readonly ?HostedFiles $hosted = null,
+        ?\RivetCore\Rmm\Store\DeploymentHistoryStore $history = null,
     ) {
+        $this->deployHistory = $history ?? new \RivetCore\Rmm\Store\MariaDb\MariaDbDeploymentHistoryStore($sql);
     }
 
     /** @return array<string,int> */
@@ -84,7 +88,7 @@ final class DeployScheduler
     private function evaluateDue(int $batch): int
     {
         $rows = $this->sql->all("SELECT d.* FROM endpoint_agent_devices d LEFT JOIN rmm_deploy_state s ON s.device_id = d.device_id
-            WHERE d.link_state = 'linked' AND d.revoked_at IS NULL AND d.retired_at IS NULL AND (s.evaluated_at IS NULL OR s.evaluated_at <= ?)
+            WHERE d.link_state = 'linked' AND d.revoked_at IS NULL AND d.retired_at IS NULL AND d.device_automation_disabled = 0 AND (s.evaluated_at IS NULL OR s.evaluated_at <= ?)
             ORDER BY s.evaluated_at IS NOT NULL, s.evaluated_at, d.device_id LIMIT " . max(1, $batch), [$this->sql->utcAt(-3600)]);
         foreach ($rows as $dev) {
             $this->expectations->evaluate($dev);
@@ -107,7 +111,7 @@ final class DeployScheduler
             JOIN rmm_device_state st ON st.device_id = d.device_id AND st.capabilities_json LIKE '%\"software:detect\"%'
             JOIN (SELECT DISTINCT device_id FROM rmm_package_installs WHERE expected_action IS NOT NULL) e ON e.device_id = d.device_id
             LEFT JOIN rmm_deploy_state s ON s.device_id = d.device_id
-            WHERE d.link_state = 'linked' AND d.revoked_at IS NULL AND d.retired_at IS NULL AND d.last_checkin_at > ?
+            WHERE d.link_state = 'linked' AND d.revoked_at IS NULL AND d.retired_at IS NULL AND d.device_automation_disabled = 0 AND d.last_checkin_at > ?
               AND (s.detected_at IS NULL OR s.detected_at <= DATE_SUB(?, INTERVAL (? + (CRC32(d.device_id) % GREATEST(1, ?))) SECOND))
               AND (s.detect_requested_at IS NULL OR s.detect_requested_at <= DATE_SUB(?, INTERVAL GREATEST(3600, ?) SECOND))
             ORDER BY s.detected_at IS NOT NULL, s.detected_at, d.device_id LIMIT " . max(1, $batch),
@@ -149,7 +153,7 @@ final class DeployScheduler
             WHERE i.expected_action IS NOT NULL AND i.detected_at IS NOT NULL AND i.expected_since <= ?
               AND ((i.expected_action = 'install' AND COALESCE(i.satisfied, 0) = 0) OR (i.expected_action = 'uninstall' AND i.installed = 1))
               AND (i.fail_count = 0 OR (i.fail_count < ? AND (i.last_attempt_at IS NULL OR i.last_attempt_at <= ?)))
-              AND d.link_state = 'linked' AND d.revoked_at IS NULL AND d.retired_at IS NULL AND d.last_checkin_at > ?
+              AND d.link_state = 'linked' AND d.revoked_at IS NULL AND d.retired_at IS NULL AND d.device_automation_disabled = 0 AND d.last_checkin_at > ?
             ORDER BY COALESCE(i.last_attempt_at, '1970-01-01'), i.device_id, i.package_id LIMIT " . max(1, $batch),
             [$this->sql->utcNow(), DeployProtocol::MAX_ATTEMPTS, $this->sql->utcAt(-DeployProtocol::RETRY_AFTER_S), $this->sql->utcAt(-(int) $cfg['offline_after_s'])]);
         $doneDevices = [];
@@ -200,7 +204,7 @@ final class DeployScheduler
      */
     private function prune(array $limits): int
     {
-        $n = $this->sql->run('DELETE FROM rmm_package_history WHERE at < ? LIMIT 5000', [$this->sql->utcAt(-(int) $limits['software_deploy_history_days'] * 86400)]);
+        $n = $this->deployHistory->deleteOlderThan($this->sql->utcAt(-(int) $limits['software_deploy_history_days'] * 86400), 5000);
         $n += $this->sql->run('DELETE FROM rmm_package_jobs WHERE applied_at IS NOT NULL AND created_at < ? LIMIT 5000', [$this->sql->utcAt(-30 * 86400)]);
         // Rows of devices that were deleted, and rows nothing expects any more and that have not been touched for a long time.
         $n += $this->sql->run('DELETE FROM rmm_package_installs WHERE expected_action IS NULL AND updated_at < ? LIMIT 5000', [$this->sql->utcAt(-90 * 86400)]);

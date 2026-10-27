@@ -22,7 +22,7 @@ if (in_array((string) getenv('RIVETMSP_REDIS_PORT'), ['', '6379', '6380'], true)
     fwrite(STDERR, "Refusing: set RIVETMSP_REDIS_PORT to a throwaway Redis (not 6379/6380) and RIVETMSP_REDIS_ENV_FILE=/dev/null\n"); exit(2);
 }
 mysqli_report(MYSQLI_REPORT_OFF);
-$db = new mysqli('localhost', getenv('RIVETMSP_TEST_DB_USER'), getenv('RIVETMSP_TEST_DB_PASS'), getenv('RIVETMSP_TEST_DB_NAME'));
+$db = new mysqli(getenv('RIVETMSP_TEST_DB_HOST') ?: 'localhost', getenv('RIVETMSP_TEST_DB_USER'), getenv('RIVETMSP_TEST_DB_PASS'), getenv('RIVETMSP_TEST_DB_NAME'));
 if ($db->connect_errno) { fwrite(STDERR, "connect failed\n"); exit(2); }
 date_default_timezone_set('UTC');
 $db->query("SET SESSION sql_mode=''");
@@ -53,7 +53,14 @@ function ea_reset(): void {
               'endpoint_agent_binaries', 'endpoint_agent_msi_templates',
               // Hosted Linux files (DB 2.6.104) the same way: tests/rmm_agent_feed.php's "exactly three new rows" / "not arm64" checks failed when it ran after
               // tests/rmm_linux_hosting.php in the same scratch database (that file leaves 1.0.0 Linux files behind). Absent before 2.6.104: the DELETE just fails.
-              'endpoint_agent_linux_files'] as $t) { $q("DELETE FROM $t"); }
+              'endpoint_agent_linux_files',
+              // The 12 "hot" RMM history tables (RivetCore 1.0.0-rc.40/41, #89) the same way again: tests/rmm_data_store_postgres.php's real migration
+              // into mariadb refused with "the mariadb store already holds history" when it ran after any earlier test left check-ins/metrics/log rows
+              // behind in the same scratch database - a real product safety check (never mix two histories), tripped by test pollution, not a product
+              // bug. These tables and the data-store module's own state are reset here for the same reason the others above are.
+              'rmm_metric_latest', 'rmm_metric_hourly', 'rmm_metric_daily', 'rmm_metric_rollup_state', 'endpoint_agent_check_history', 'endpoint_agent_log_events',
+              'endpoint_agent_log_state', 'endpoint_agent_change_records', 'endpoint_agent_change_state', 'rmm_software_history', 'rmm_patch_history',
+              'rmm_package_history', 'rmm_hypervisor_vm_history', 'rmm_data_store_connection', 'rmm_store_migration', 'rmm_pending_client_moves', 'rmm_hot_store_faults'] as $t) { $q("DELETE FROM $t"); }
     $q("DELETE FROM rmm_integrations");
     $q("DELETE FROM endpoint_agent_settings"); $q("INSERT INTO endpoint_agent_settings (id) VALUES (1)");
     $q("UPDATE settings SET config_ticket_prefix='T', config_ticket_next_number=1000, config_module_enable_rmm=1, config_core_rmm_enabled=0 WHERE company_id=1");

@@ -6,14 +6,14 @@ namespace RivetCore\Rmm\Support;
 
 use RivetCore\Contracts\ClockInterface;
 use RivetCore\Database\DatabaseInterface;
-use RivetCore\Rmm\Contracts\RmmMetricReaderInterface;
-use RivetCore\Rmm\Contracts\RmmMetricSinkInterface;
+use RivetCore\Rmm\Storage\MetricRollup;
 use RivetCore\Rmm\Storage\StorageState;
+use RivetCore\Rmm\Store\MetricStore;
 
 /**
  * A metric sink backed by two Core tables (migration 0018), for editions without a metrics subsystem (RivetMSP): the newest reading of
  * every (asset, key, instance) in `rmm_metric_latest` and one rollup row per (asset, key, instance, hour) in `rmm_metric_hourly`
- * (sample count, sum, minimum and maximum). It implements {@see RmmMetricReaderInterface}, so the pages can show a 24 hour peak and
+ * (sample count, sum, minimum and maximum). It implements {@see \RivetCore\Rmm\Contracts\RmmMetricReaderInterface}, so the pages can show a 24 hour peak and
  * sparklines without any extra store.
  *
  * Cost and bounds: raw samples are never stored, so a device adds at most one row per metric instance per hour (about 12 rows an hour
@@ -21,13 +21,16 @@ use RivetCore\Rmm\Storage\StorageState;
  * {@see ROWS_PER_STATEMENT} rows, so an ingest batch of many check-ins costs a handful of statements. {@see prune()} deletes expired
  * rows in batches and is called by Housekeeping.
  *
+ * This is also the MariaDB / MySQL implementation of {@see MetricStore} (the HOT metric store of #89): the class and its public behaviour are unchanged;
+ * {@see rollUp()} and {@see rollupWatermark()} expose the daily rollup the maintenance job used to reach through {@see MetricRollup} directly.
+ *
  * Rules shared with every sink: a utilization outside 0..100, a negative or non-finite value is dropped, never clamped. A retried
  * delivery of the same samples adds them twice to the rollup; that doubles count and sum together, so the mean is unchanged and the
  * minimum and maximum are unaffected.
  *
  * @api
  */
-final class DatabaseMetricSink implements RmmMetricSinkInterface, RmmMetricReaderInterface
+final class DatabaseMetricSink implements MetricStore
 {
     public const ROWS_PER_STATEMENT = 200;
     public const DEFAULT_RETENTION_DAYS = 14;
@@ -42,7 +45,6 @@ final class DatabaseMetricSink implements RmmMetricSinkInterface, RmmMetricReade
      */
     public const ROLLUP_KEYS = ['cpu.utilization', 'memory.utilization', 'disk.utilization', 'disk.free_bytes', 'network.rx_bytes_per_s', 'network.tx_bytes_per_s',
         'memory.used_bytes', 'memory.available_bytes', 'cpu.core.utilization', 'disk.read_iops', 'disk.write_iops', 'disk.queue_length', 'network.errors', 'battery.charge_percent'];
-    private const KEY_RE = '/^[a-z0-9_.]{1,64}$/D';
 
     private readonly Sql $sql;
     private readonly StorageState $state;
@@ -61,38 +63,7 @@ final class DatabaseMetricSink implements RmmMetricSinkInterface, RmmMetricReade
 
     public function ingest(array $samples, int $integrationId): void
     {
-        /** @var array<string,array{0:int,1:string,2:string,3:float,4:?string,5:int}> $latest */
-        $latest = [];
-        /** @var array<string,array{0:int,1:string,2:string,3:int,4:int,5:float,6:float,7:float}> $hourly */
-        $hourly = [];
-        foreach ($samples as $s) {
-            $key = $s['key'];
-            $value = $s['value'];
-            $asset = $s['asset_id'];
-            if ($asset <= 0 || preg_match(self::KEY_RE, $key) !== 1 || !is_finite((float) $value) || $value < 0 || (str_ends_with($key, '.utilization') && $value > 100)) {
-                continue;
-            }
-            $inst = $s['instance'] === null ? '' : mb_substr($s['instance'], 0, 64);
-            $ts = $s['at']->getTimestamp();
-            $id = $asset . "\0" . $key . "\0" . $inst;
-            if (!isset($latest[$id]) || $ts >= $latest[$id][5]) {
-                $latest[$id] = [$asset, $key, $inst, (float) $value, $s['label'] === null ? null : mb_substr($s['label'], 0, 64), $ts];
-            }
-            if (in_array($key, self::ROLLUP_KEYS, true)) {
-                $hour = $ts - $ts % 3600;
-                $hid = $id . "\0" . $hour;
-                if (!isset($hourly[$hid])) {
-                    $hourly[$hid] = [$asset, $key, $inst, $hour, 1, (float) $value, (float) $value, (float) $value];
-                } else {
-                    $h = &$hourly[$hid];
-                    ++$h[4];
-                    $h[5] += (float) $value;
-                    $h[6] = min($h[6], (float) $value);
-                    $h[7] = max($h[7], (float) $value);
-                    unset($h);
-                }
-            }
-        }
+        [$latest, $hourly] = MetricMath::fold($samples);
         foreach (array_chunk(array_values($latest), self::ROWS_PER_STATEMENT) as $chunk) {
             $params = [];
             foreach ($chunk as [$asset, $key, $inst, $value, $label, $ts]) {
@@ -113,6 +84,22 @@ final class DatabaseMetricSink implements RmmMetricSinkInterface, RmmMetricReade
                 . ' ON DUPLICATE KEY UPDATE samples = samples + VALUES(samples), sum_value = sum_value + VALUES(sum_value),'
                 . ' min_value = LEAST(min_value, VALUES(min_value)), max_value = GREATEST(max_value, VALUES(max_value))', $params);
         }
+    }
+
+    public function rollUp(int $budgetSeconds = 20, ?int $maxSlices = null): array
+    {
+        return (new MetricRollup($this->sql, $this->state))->run($budgetSeconds, $maxSlices);
+    }
+
+    public function rollupWatermark(): ?string
+    {
+        return $this->state->rollupWatermark();
+    }
+
+    /** Seconds beyond which a window is answered from the daily tier (a store in another database needs the same figure). */
+    public function dailyFromSeconds(): int
+    {
+        return $this->dailyFromSeconds;
     }
 
     public function retentionDays(): int
@@ -138,8 +125,8 @@ final class DatabaseMetricSink implements RmmMetricSinkInterface, RmmMetricReade
         }
         $out = [];
         foreach ($this->sql->all($sql . ' ORDER BY metric_key, instance', $params) as $r) {
-            $out[] = ['key' => (string) $r['metric_key'], 'instance' => $r['instance'] === '' ? null : (string) $r['instance'], 'value' => self::number($r['value']),
-                'at' => self::at((string) $r['sampled_at']), 'label' => $r['label'] === null ? null : (string) $r['label']];
+            $out[] = ['key' => (string) $r['metric_key'], 'instance' => $r['instance'] === '' ? null : (string) $r['instance'], 'value' => MetricMath::number($r['value']),
+                'at' => MetricMath::at((string) $r['sampled_at']), 'label' => $r['label'] === null ? null : (string) $r['label']];
         }
 
         return $out;
@@ -166,25 +153,7 @@ final class DatabaseMetricSink implements RmmMetricSinkInterface, RmmMetricReade
         if ($tier !== null) {
             $tiers[] = $tier;
         }
-        if ($tiers === []) {
-            return null;
-        }
-        $n = 0;
-        $total = 0.0;
-        $lo = $tiers[0]['lo'];
-        $hi = $tiers[0]['hi'];
-        $at = $tiers[0]['at'];
-        foreach ($tiers as $t) {
-            $n += $t['n'];
-            $total += $t['total'];
-            $lo = min($lo, $t['lo']);
-            if ($t['hi'] >= $hi) {
-                $hi = $t['hi'];
-                $at = $t['at'];   // on a tie the later tier (more recent data) holds the peak
-            }
-        }
-
-        return ['min' => $lo, 'max' => $hi, 'avg' => $total / $n, 'samples' => $n, 'peak_at' => self::at($at)];
+        return MetricMath::combine($tiers);
     }
 
     /** @return array{n:int,total:float,lo:float,hi:float,at:string}|null */
@@ -217,7 +186,7 @@ final class DatabaseMetricSink implements RmmMetricSinkInterface, RmmMetricReade
                 WHERE asset_id = ? AND metric_key = ? AND instance = ? AND day_start >= ? AND day_start < ? AND day_start <= ? ORDER BY day_start LIMIT 4000',
                 [$assetId, $key, $inst, $dayFrom, $split, $to]) as $r) {
                 $c = max(1, (int) $r['samples']);
-                $out[] = ['at' => self::at((string) $r['day_start']), 'min' => (float) $r['min_value'], 'max' => (float) $r['max_value'], 'avg' => (float) $r['sum_value'] / $c, 'samples' => (int) $r['samples']];
+                $out[] = ['at' => MetricMath::at((string) $r['day_start']), 'min' => (float) $r['min_value'], 'max' => (float) $r['max_value'], 'avg' => (float) $r['sum_value'] / $c, 'samples' => (int) $r['samples']];
             }
             $from = max($from, $split);
         }
@@ -226,7 +195,7 @@ final class DatabaseMetricSink implements RmmMetricSinkInterface, RmmMetricReade
             [$assetId, $key, $inst, $from, $to]);
         foreach ($rows as $r) {
             $n = max(1, (int) $r['samples']);
-            $out[] = ['at' => self::at((string) $r['hour_start']), 'min' => (float) $r['min_value'], 'max' => (float) $r['max_value'], 'avg' => (float) $r['sum_value'] / $n, 'samples' => (int) $r['samples']];
+            $out[] = ['at' => MetricMath::at((string) $r['hour_start']), 'min' => (float) $r['min_value'], 'max' => (float) $r['max_value'], 'avg' => (float) $r['sum_value'] / $n, 'samples' => (int) $r['samples']];
         }
 
         return $out;
@@ -284,17 +253,5 @@ final class DatabaseMetricSink implements RmmMetricSinkInterface, RmmMetricReade
         }
 
         return $total;
-    }
-
-    private static function number(mixed $v): int|float
-    {
-        $f = (float) $v;
-
-        return $f == floor($f) && abs($f) < 9e15 ? (int) $f : $f;
-    }
-
-    private static function at(string $utc): \DateTimeImmutable
-    {
-        return new \DateTimeImmutable($utc, new \DateTimeZone('UTC'));
     }
 }

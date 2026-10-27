@@ -453,6 +453,52 @@ apply_settings_enc_key() {
     success "config_settings_enc_key updated."
 }
 
+# restore_rmm_postgres(): the RMM data store's SECOND database (docs/rmm/POSTGRES.md section 8.6), restored
+# AFTER the control database (which holds the "postgres"/"mariadb" setting and the sealed connection) and
+# AFTER apply_settings_enc_key (which must already have put the SOURCE install's $config_settings_enc_key
+# back in config.php — otherwise the sealed PostgreSQL password, sealed under THAT key, cannot be unsealed).
+# Skipped entirely, with no error, when the just-restored control database says "mariadb". The target
+# PostgreSQL database and role must already exist (docs section 3); this never creates them.
+restore_rmm_postgres() {
+    local store
+    store="$(mysql -N -e "SELECT data_store FROM endpoint_agent_settings WHERE id = 1" "${DB_NAME}" 2>/dev/null || true)"
+    if [[ "${store}" != "postgres" ]]; then
+        info "RMM data store is '${store:-mariadb}'; no PostgreSQL restore needed."
+        return 0
+    fi
+    local dump="${EXTRACT_DIR}/rmm-postgres.dump"
+    if [[ ! -f "${dump}" ]]; then
+        warn "The RMM data store is 'postgres' but ${BACKUP_FILE} contains no rmm-postgres.dump (an older backup, taken before this was wired up, or the store was switched to postgres after this backup was made). The RMM history in PostgreSQL is NOT restored by this run — it still holds whatever is on that server now."
+        return 0
+    fi
+
+    announce "Restoring the RMM PostgreSQL store from ${dump}..."
+    local pg_passfile
+    pg_passfile="$(mktemp)"
+    chmod 600 "${pg_passfile}"
+    register_tmpfile "${pg_passfile}"
+    local pg_env pg_rc=0
+    pg_env="$(php "${APP_DIR}/scripts/rmm_postgres_backup_env.php" --app-dir="${APP_DIR}" --passfile="${pg_passfile}")" || pg_rc=$?
+    if [[ "${pg_rc}" -ne 0 || -z "${pg_env}" ]]; then
+        die "Could not read the RMM PostgreSQL connection to restore into (scripts/rmm_postgres_backup_env.php exited ${pg_rc}). The control database and uploads/ are already restored; fix the connection in Administration > RMM > Data store, then restore ${dump} by hand with vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh."
+    fi
+    eval "${pg_env}"
+    info "Restoring into PostgreSQL database '${RIVETCORE_PG_DATABASE}' (RMM_PG_RESTORE_CLEAN=1: an existing schema there is replaced)..."
+    if ! RMM_PG_RESTORE_CLEAN=1 "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh" < "${dump}"; then
+        die "rmm-postgres-restore.sh failed. The control database and uploads/ are already restored; the PostgreSQL store may be partially restored — investigate before opening the site (docs/rmm/POSTGRES.md section 8.6)."
+    fi
+    success "RMM PostgreSQL store restored."
+
+    announce "Reconciling the control database against the restored RMM store (read-only)..."
+    local verify_rc=0
+    php "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-store-verify.php" --bootstrap="${APP_DIR}/scripts/rmm_store_bootstrap.php" || verify_rc=$?
+    if [[ "${verify_rc}" -eq 0 ]]; then
+        success "rmm-store-verify.php: clean — the control database and the RMM store agree."
+    else
+        warn "rmm-store-verify.php reported findings above (exit ${verify_rc}) — review them before opening the site (docs/rmm/POSTGRES.md section 8.6 explains each finding code; most, like orphan_rows after a mismatched pair of dumps, are informational and self-heal)."
+    fi
+}
+
 main() {
     parse_args "$@"
     require_root "$@"
@@ -478,6 +524,7 @@ main() {
     else
         warn "No --key-file given: if this install used the Core key file (/etc/rivetmsp/keys.json), put the offline copy back, or v3 secrets stay unreadable."
     fi
+    restore_rmm_postgres
 
     success "=== Restore complete: ${APP_DIR} now reflects ${BACKUP_FILE} ==="
     log "RESTORE OK app_dir=${APP_DIR} backup=${BACKUP_FILE} database=${DB_NAME}"

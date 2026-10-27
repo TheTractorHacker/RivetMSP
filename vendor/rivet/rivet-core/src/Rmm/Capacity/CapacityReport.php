@@ -9,7 +9,10 @@ use RivetCore\Rmm\RmmState;
 use RivetCore\Rmm\Settings\RmmSettings;
 use RivetCore\Rmm\Storage\PartitionMaintenance;
 use RivetCore\Rmm\Support\RmmCache;
-use RivetCore\Rmm\Storage\StorageState;
+use RivetCore\Rmm\Storage\StorageMaintenance;
+use RivetCore\Rmm\Store\ChangeEventStore;
+use RivetCore\Rmm\Store\MariaDb\MariaDbChangeEventStore;
+use RivetCore\Rmm\Store\StoreMaintenance;
 use RivetCore\Rmm\Support\Sql;
 
 /**
@@ -31,6 +34,9 @@ use RivetCore\Rmm\Support\Sql;
  */
 final class CapacityReport
 {
+    private readonly StoreMaintenance $maintenance;
+    private readonly ChangeEventStore $changeEvents;
+
     public const ROWS_PER_BATCH = 7;
     public const BASE_ROWS = 7;
     public const BASE_STATEMENTS = 12;
@@ -47,7 +53,14 @@ final class CapacityReport
         private readonly ?RmmCache $cache = null,
         private readonly ?HerdControl $herd = null,
         private readonly ?ExternalMetricSink $external = null,
+        ?StoreMaintenance $maintenance = null,
+        ?ChangeEventStore $changeEvents = null,
+        private readonly ?\RivetCore\Rmm\Store\Postgres\Guard\HotStoreFaults $faults = null,
+        private readonly ?\Closure $dataStoreKind = null,
+        private readonly \RivetCore\Rmm\Store\StoreSizes|\Closure|null $storeSizes = null,
     ) {
+        $this->maintenance = $maintenance ?? new StorageMaintenance(new PartitionMaintenance($sql), null, $sql);
+        $this->changeEvents = $changeEvents ?? new MariaDbChangeEventStore($sql);
     }
 
     /**
@@ -82,6 +95,11 @@ final class CapacityReport
             'redis_available' => $env['redis_available'] ?? null, 'projected_storage_gb' => $projection['storage_steady_gb'], 'storage_budget_gb' => $env['storage_budget_gb'] ?? null,
             'ingest_mode' => (string) $cfg['ingest_mode'], 'dead_letter' => $backlog['dead_letter'],
         ];
+        $store = $this->dataStore();
+        $sizes = $this->storeSizes();
+        if ($store['errors'] > 0) {
+            $facts['data_store'] = $store;
+        }
 
         return [
             'generated_at' => $now,
@@ -98,7 +116,10 @@ final class CapacityReport
             'patching' => $features['patching'] ? $this->patching($limits) : null,
             'software_deploy' => $features['software_deploy'] ? $this->softwareDeploy($limits) : null,
             'change_monitor' => ($features['change_monitor'] ?? false) ? $this->changeMonitor() : null,
+            'data_store' => $store,
             'tables' => $this->tables(),
+            'store_sizes' => $sizes,
+            'data_store_recommendation' => \RivetCore\Rmm\Capacity\DataStoreRecommendation::evaluate($store['kind'], $d['active'], $limits['rmm_pg_recommend_devices'], $limits['rmm_pg_recommend_hot_mb'], $sizes, $now),
             'settings' => $inputs + ['max_devices' => (int) $cfg['max_devices']],
             'projection' => $projection,
             'warnings' => self::warnings($facts),
@@ -126,8 +147,9 @@ final class CapacityReport
     public function changeMonitor(): array
     {
         try {
-            $rows = (int) $this->sql->val('SELECT COALESCE(SUM(row_count), 0) FROM endpoint_agent_change_state');
-            $devices = (int) $this->sql->val('SELECT COUNT(*) FROM endpoint_agent_change_state WHERE last_batch_at IS NOT NULL');
+            $totals = $this->changeEvents->ledgerTotals();
+            $rows = $totals['rows'];
+            $devices = $totals['devices'];
             $raw = $this->sql->val('SELECT limits_json FROM endpoint_agent_change_settings WHERE id = 1');
         } catch (\Throwable) {
             return ['available' => false];   // migration 0030 is not applied yet
@@ -249,19 +271,43 @@ final class CapacityReport
      */
     public function storage(array $limits): array
     {
-        $state = new StorageState($this->sql);
-        $wm = $state->rollupWatermark();
-        $pm = new PartitionMaintenance($this->sql, $state);
-        $explicit = $this->settings->explicitLimits();
-        $retention = ['rmm_metric_hourly' => $explicit['metric_hourly_days'] ?? $limits['metric_hourly_days'], 'rmm_metric_daily' => $explicit['metric_daily_days'] ?? $limits['metric_daily_days'],
-            'endpoint_agent_check_history' => max(1, $limits['check_history_days'])];
-        $tables = [];
-        foreach (array_keys(PartitionMaintenance::TABLES) as $t) {
-            $parts = $pm->partitions($t);
-            $tables[$t] = ['partitioned' => $parts !== [], 'partitions' => count($parts), 'retention_days' => $retention[$t]];
+        try {
+            return $this->maintenance->tiers($limits, $this->settings->explicitLimits());
+        } catch (\RivetCore\Rmm\Store\HotStoreUnavailableException $e) {
+            // the hot store is down: the panel still renders, and says why the tiers are missing
+            return ['partitioning_enabled' => false, 'rollup_watermark' => null, 'rollup_behind_days' => null, 'tables' => [], 'unavailable' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Where the hot tables live and what could not be written there (the record {@see \RivetCore\Rmm\Store\Postgres\Guard\HotStoreFaults} keeps in the control database).
+     *
+     * @return array{kind:string,dropped:int,errors:int,first_at:?string,last_at:?string,last_error:string,stores:array<string,array{dropped:int,errors:int,last_at:string,last_error:string}>}
+     */
+    public function dataStore(): array
+    {
+        $s = $this->faults?->summary() ?? ['dropped' => 0, 'errors' => 0, 'first_at' => null, 'last_at' => null, 'last_error' => '', 'stores' => []];
+
+        return ['kind' => $this->dataStoreKind !== null ? ($this->dataStoreKind)() : 'mariadb'] + $s;
+    }
+
+    /**
+     * Rows and bytes of the hot tables of the ACTIVE store (additive to {@see tables()}, which stays the control database's view). Never throws.
+     *
+     * @return array{kind:string,available:bool,error:?string,tables:list<array{table:string,rows:int,bytes:int}>,total_rows:int,total_bytes:int,oldest_at:?string}
+     */
+    public function storeSizes(): array
+    {
+        $kind = $this->dataStoreKind !== null ? ($this->dataStoreKind)() : 'mariadb';
+        $s = $this->storeSizes instanceof \Closure ? ($this->storeSizes)() : $this->storeSizes;
+        if ($s === null) {
+            if ($kind !== 'mariadb') {
+                return ['kind' => $kind, 'available' => false, 'error' => 'No size reader was configured for this store.', 'tables' => [], 'total_rows' => 0, 'total_bytes' => 0, 'oldest_at' => null];
+            }
+            $s = new \RivetCore\Rmm\Store\Sizes\MariaDbStoreSizes($this->sql);
         }
 
-        return ['partitioning_enabled' => $limits['partitioning'] === 1, 'rollup_watermark' => $wm, 'rollup_behind_days' => $wm === null ? null : max(0, intdiv($this->sql->time() - Sql::ts($wm), 86400)), 'tables' => $tables];
+        return $s->report();
     }
 
     // ------------------------------------------------------------------ the pure model
@@ -303,7 +349,7 @@ final class CapacityReport
     /**
      * The warnings of 13.5.
      *
-     * @param array{devices:int,max_devices:int,collect_interval_s:int,retention_days:int,queue_age_s:int,shed_level:int,redis_available:?bool,projected_storage_gb:float,storage_budget_gb:?float,ingest_mode:string,dead_letter:int} $f
+     * @param array{devices:int,max_devices:int,collect_interval_s:int,retention_days:int,queue_age_s:int,shed_level:int,redis_available:?bool,projected_storage_gb:float,storage_budget_gb:?float,ingest_mode:string,dead_letter:int,data_store?:array{kind:string,dropped:int,errors:int,last_at:?string,last_error:string}} $f
      * @return list<array{code:string,message:string}>
      */
     public static function warnings(array $f): array
@@ -332,6 +378,10 @@ final class CapacityReport
         }
         if ($f['storage_budget_gb'] !== null && $f['storage_budget_gb'] > 0 && $f['projected_storage_gb'] > $f['storage_budget_gb']) {
             $w[] = ['code' => 'storage', 'message' => sprintf('Projected raw sample storage %.1f GB exceeds the budget of %.1f GB.', $f['projected_storage_gb'], $f['storage_budget_gb'])];
+        }
+        if (isset($f['data_store']) && $f['data_store']['errors'] > 0) {
+            $w[] = ['code' => 'data_store', 'message' => sprintf('The RMM data store (%s) could not be reached or written %d time(s); %d history write(s) were dropped, the last at %s: %s',
+                $f['data_store']['kind'], $f['data_store']['errors'], $f['data_store']['dropped'], $f['data_store']['last_at'] ?? 'an unknown time', $f['data_store']['last_error'])];
         }
         if ($f['devices'] > 1000 && $f['ingest_mode'] !== 'queued') {
             $w[] = ['code' => 'queued_ingest', 'message' => 'Queued ingest is recommended above 1,000 devices or on slow disks.'];

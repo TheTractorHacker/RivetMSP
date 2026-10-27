@@ -216,8 +216,12 @@ function rivetRmmForgetAccess(?int $userId = null, $mysqli = null): void
 }
 
 /**
- * The module's metric history reader (the same Core DatabaseMetricSink the module writes through; it holds no state, so a second instance reads the
- * same rows; the daily tier of rc.11 answers windows over 7 days; the external store, when on, answers first). Only call it once the module is known to be on: it is the one place besides the module that touches rmm_metric_*.
+ * The module's metric history reader. RivetCore 1.0.0-rc.39+ (roadmap: Postgres data store phase 1): reads through the SAME routed metric store
+ * the module itself resolves (RmmModule::dataStores()->metrics() - the module wraps whatever sink it was given in a LazyMetricStore the first time
+ * any store is touched, so this follows the rmm_data_store setting automatically instead of always reading rmm_metric_* on MariaDB directly). Falls
+ * back to building its own MariaDB DatabaseMetricSink only in the unexpected case the module's resolved store is null (kept for safety, matches the
+ * pre-rc.39 behaviour exactly). The daily tier of rc.11 answers windows over 7 days; the external store, when on, answers first.
+ * Only call it once the module is known to be on: it is the one place besides the module that touches the hot RMM tables for reads.
  */
 function rivetRmmMetricReader($mysqli = null): \RivetCore\Rmm\Contracts\RmmMetricReaderInterface
 {
@@ -226,7 +230,8 @@ function rivetRmmMetricReader($mysqli = null): \RivetCore\Rmm\Contracts\RmmMetri
         throw new \RuntimeException('The RMM module needs the database connection.');
     }
 
-    $db = new \RivetCore\Rmm\Support\DatabaseMetricSink(rivetCoreDb($mysqli), new \RivetCore\Support\SystemClock());
+    $db = rivetRmmModule($mysqli)->dataStores()->metrics()
+        ?? new \RivetCore\Rmm\Support\DatabaseMetricSink(rivetCoreDb($mysqli), new \RivetCore\Support\SystemClock());
     $store = rivetRmmExternalStore($mysqli);
 
     // With the external store on, history is read from it first and from the database tier when it does not answer (the same pair the module wires).

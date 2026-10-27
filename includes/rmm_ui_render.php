@@ -1434,6 +1434,25 @@ function rivetRmmUiCapacity(array $cap): string
     if (is_array($ext)) {
         $storRows[] = ['External metric store', rivetRmmUiPill($ext['pending_batches'] > 0 ? 'warn' : 'ok', 'On') . ' ' . (int) $ext['pending_batches'] . ' batch' . ((int) $ext['pending_batches'] === 1 ? '' : 'es') . ' waiting &middot; ' . (int) $ext['dropped_points'] . ' points dropped (this request)'];
     }
+
+    // ---- RMM data store (RivetCore 1.0.0-rc.40/41, phases 3/4 of #89): which store the 12 hot history tables live in now, how big it is, and whether
+    // the capacity read model recommends considering PostgreSQL. RmmModule::capacity() already wires the sizes report for the active store; this is
+    // rendering only. Never auto-switches — Administration > RMM > Data store is the only way to do that.
+    $sizes = $cap['store_sizes'] ?? null;
+    if (is_array($sizes)) {
+        $storRows[] = ['RMM data store', rivetRmmUiPill($sizes['kind'] === 'postgres' ? 'ok' : 'off', ucfirst((string) $sizes['kind']))
+            . ($sizes['available'] ? ' ' . rmmH(number_format((int) $sizes['total_rows'])) . ' rows &middot; ' . rmmH(round($sizes['total_bytes'] / 1048576, 1)) . ' MB across the hot tables'
+                : ' ' . rivetRmmUiPill('warn', 'Size unavailable') . ' ' . rmmH((string) ($sizes['error'] ?? 'could not be read')))];
+    }
+    $rec = $cap['data_store_recommendation'] ?? null;
+    $recHtml = '';
+    if (is_array($rec) && !empty($rec['message'])) {
+        $recHtml = '<div class="rmm-scale-hint rmm-hint-up mb-3" id="rmm-data-store-recommendation"><p class="mb-1"><i class="fas fa-arrow-up text-warning me-2" aria-hidden="true"></i><strong>' . rmmH($rec['message']) . '</strong></p>'
+            . '<p class="small text-muted mb-0">' . (int) $rec['devices'] . ' of ' . (int) $rec['threshold_devices'] . ' comfortable devices'
+            . ($rec['hot_mb'] !== null ? ' &middot; ' . rmmH($rec['hot_mb']) . ' MB of hot history' . ($rec['growth_mb_per_day'] !== null ? ' (about ' . rmmH($rec['growth_mb_per_day']) . ' MB/day)' : '') : '')
+            . '. <a href="/admin/settings_endpoint_agent.php#data-store">Administration &rarr; RMM &rarr; Data store</a> when you are ready &mdash; nothing switches by itself.</p></div>';
+    }
+
     $detail = '<div class="row"><div class="col-lg-6 mb-2"><h6 class="small text-uppercase text-muted">Load and cache</h6><div class="rmm-scale-dl">' . rivetRmmUiDl($cacheRows) . '</div></div>'
         . ($storRows !== [] ? '<div class="col-lg-6 mb-2"><h6 class="small text-uppercase text-muted">Storage</h6><div class="rmm-scale-dl">' . rivetRmmUiDl($storRows) . '</div></div>' : '') . '</div>';
 
@@ -1445,6 +1464,7 @@ function rivetRmmUiCapacity(array $cap): string
         . '<i class="fas fa-server me-2 text-info" aria-hidden="true"></i>Performance and capacity <span class="small text-muted fw-normal ms-2">scale, queue workers and storage &middot; Administrators only</span></h6>'
         . ($shed > 0 ? rivetRmmUiPill('warn', 'Shed level ' . $shed) : rivetRmmUiPill('ok', 'Shed level 0: normal')) . '</div><div class="card-body pb-1">' . $workers . '<div class="row">' . $tiles . '</div>'
         . ($warn !== '' ? '<ul class="list-group list-group-flush mb-2">' . $warn . '</ul>' : '<p class="small text-muted"><i class="fas fa-check-circle text-success me-1" aria-hidden="true"></i>No capacity warnings.</p>')
+        . $recHtml
         . $detail
         . ($tables !== '' ? '<div class="table-responsive"><table class="table table-sm mb-2"><caption class="visually-hidden">Largest endpoint agent tables</caption>' . rivetRmmUiThead(['Table', 'Rows (estimate)', 'Size']) . '<tbody>' . $tables . '</tbody></table></div>' : '')
         . $guidance

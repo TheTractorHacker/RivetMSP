@@ -328,10 +328,16 @@ function rivetRmmLogStatsView(array $ctx, ?int $deviceId): array
         'fleet_max_rows' => (int) $s['fleet_max_rows'], 'device_worst_bytes' => (int) $s['device_max_rows'] * RIVET_RMM_LOG_BYTES_PER_ENTRY, 'fleet_worst_bytes' => (int) $s['fleet_max_rows'] * RIVET_RMM_LOG_BYTES_PER_ENTRY,
         'fleet_rows' => $unrestricted ? (int) $s['fleet_rows'] : null, 'oldest' => null, 'device' => $s['device'] ?? null];
     if ($unrestricted || $deviceId !== null) {
+        // RivetCore 1.0.0-rc.39 (RMM data store interface, phase 1): through LogStore::oldestEventAt()
+        // instead of a direct SELECT on endpoint_agent_log_events, so this follows the rmm_data_store
+        // setting - a query against the MariaDB table would silently answer "no history" once the hot
+        // tables are on PostgreSQL instead of raising a clear error.
         try {
-            $res = mysqli_query($m, 'SELECT MIN(occurred_at) FROM endpoint_agent_log_events' . ($deviceId !== null ? ' WHERE device_id = ' . (int) $deviceId : ''));
-            $v = $res ? mysqli_fetch_row($res)[0] ?? null : null;
+            $v = $rmm->dataStores()->logs()->oldestEventAt($deviceId);
             $out['oldest'] = $v === null ? null : gmdate('Y-m-d\TH:i:s\Z', (int) strtotime($v . ' UTC'));
+        } catch (\RivetCore\Rmm\Store\HotStoreUnavailableException $e) {
+            $out['oldest'] = null;
+            $out['history_store_unreachable'] = true;
         } catch (\Throwable) {
             $out['oldest'] = null;
         }

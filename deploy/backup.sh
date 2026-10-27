@@ -311,8 +311,37 @@ EOF
     local -a snapshot_member=()
     if backup_make_snapshot "${snapshot_file}"; then snapshot_member=("$(basename "${snapshot_file}")"); fi
 
+    # RMM PostgreSQL store (docs/rmm/POSTGRES.md section 8): a SECOND database, backed up in the same run
+    # and to the same encrypted destination as the control database above. Skipped entirely (no file, no
+    # member) when the setting is "mariadb" — the hot tables are already in the control-database dump.
+    # scripts/rmm_postgres_backup_env.php unseals the stored connection and writes a 0600 PGPASSFILE; the
+    # password is never an argument or printed. A non-empty, non-skip failure here is fatal (die), not a
+    # warning: the whole point of this step is to never produce a backup that silently omits RMM history
+    # just because the PostgreSQL connection briefly could not be read.
+    local rmm_pg_dump="${DEST}/rmm-postgres.dump"
+    local rmm_pg_passfile
+    rmm_pg_passfile="$(mktemp)"
+    chmod 600 "${rmm_pg_passfile}"
+    register_tmpfile "${rmm_pg_passfile}"
+    local rmm_pg_env rmm_pg_rc=0
+    rmm_pg_env="$(php "${APP_DIR}/scripts/rmm_postgres_backup_env.php" --app-dir="${APP_DIR}" --passfile="${rmm_pg_passfile}")" || rmm_pg_rc=$?
+    [[ "${rmm_pg_rc}" -eq 0 ]] || die "Could not prepare the RMM PostgreSQL connection for backup (scripts/rmm_postgres_backup_env.php exited ${rmm_pg_rc}; see the error above). Fix the connection in Administration > RMM > Data store first — refusing to produce a backup that would silently omit the RMM history."
+    local -a rmm_pg_member=()
+    if [[ -n "${rmm_pg_env}" ]]; then
+        eval "${rmm_pg_env}"
+        info "Dumping the RMM PostgreSQL store (database '${RIVETCORE_PG_DATABASE}')..."
+        : > "${rmm_pg_dump}"
+        chmod 600 "${rmm_pg_dump}"
+        register_tmpfile "${rmm_pg_dump}"
+        if ! "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-postgres-backup.sh" > "${rmm_pg_dump}"; then
+            die "rmm-postgres-backup.sh failed. No encrypted backup was produced this run."
+        fi
+        success "RMM PostgreSQL dump complete ($(du -h "${rmm_pg_dump}" | awk '{print $1}'))."
+        rmm_pg_member=("$(basename "${rmm_pg_dump}")")
+    fi
+
     info "Bundling the database dump with ${APP_DIR}/uploads into ${combined}..."
-    local -a tar_members=(-C "$(dirname "${sql_file}")" "$(basename "${sql_file}")" "$(basename "${manifest_file}")" "${snapshot_member[@]}")
+    local -a tar_members=(-C "$(dirname "${sql_file}")" "$(basename "${sql_file}")" "$(basename "${manifest_file}")" "${snapshot_member[@]}" "${rmm_pg_member[@]}")
     if [[ -d "${APP_DIR}/uploads" ]]; then
         tar_members+=(-C "${APP_DIR}" uploads)
     else
