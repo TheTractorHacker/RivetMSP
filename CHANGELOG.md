@@ -4,6 +4,12 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.46] RivetMSP — per-category SLA-exempt and Non-billable ticket settings (DB 2.6.126)
+
+**Deploy notes:** back up the database, pull this branch, run **Administration > Updates** once (one additive, idempotent step, 2.6.125 -> 2.6.126). No behavior changes until an admin turns on a flag on a category.
+
+Adds two Ticket-category flags on the existing Categories page: **SLA exempt** (reuses the existing `ticket_counts_sla` mechanism, so exempt tickets get no policy, no due dates, never breach, and are excluded from the Service Desk report's SLA numbers) and **Non-billable** (new tickets in the category default to non-billable; a `ticket_billable_overridden` marker preserves any value a human explicitly set, even across a later category change). One shared helper (`includes/ticket_category_rules.php`) is called from every ticket-creation and category-change path: agent UI, bulk edits, the email parser, the client portal, recurring-ticket generation, the API, RMM alert tickets, and the ticket-automation engine - so the rule behaves identically everywhere. No back-fill: existing tickets are unaffected until an admin uses the new, confirmation-gated "Apply to existing open tickets" button on the category edit form.
+
 ## [26.10.45] RivetMSP — consolidation: RivetCore rc.37->rc.42 + RMM PostgreSQL data store, security audit, and 14 roadmap features (DB 2.6.112 to 2.6.125)
 
 **Deploy notes:** back up the database, pull this branch, run **Administration > Updates** once: it walks fourteen additive, guarded steps in order (2.6.113 through 2.6.125), each idempotent and safe to re-run. `composer.json`/`composer.lock` gained `firebase/php-jwt` (OIDC) alongside the `rivet/rivet-core` bump to 1.0.0-rc.42 - run `composer install` (or redeploy the vendored tree as usual) before the first page load. The PostgreSQL RMM data store is opt-in and OFF by default (`data_store` stays `mariadb` until an admin completes Administration > Endpoint agent > Data store); nothing here switches it on. `tests/`, `.github/` and `.well-known/` are no longer version-controlled as of this release (see the dedicated note below) - GitHub Actions CI on this repo stops running once this is pushed.
