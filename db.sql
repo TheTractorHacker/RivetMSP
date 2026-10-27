@@ -19,6 +19,8 @@ CREATE TABLE `accounting_entity_map` (
   `map_local_type` varchar(20) NOT NULL,
   `map_local_id` int(11) NOT NULL,
   `map_remote_id` varchar(64) DEFAULT NULL,
+  `map_remote_name` varchar(255) DEFAULT NULL,
+  `map_local_subtype` varchar(20) DEFAULT NULL,
   `map_remote_sync_token` varchar(32) DEFAULT NULL,
   `map_last_synced_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`map_id`),

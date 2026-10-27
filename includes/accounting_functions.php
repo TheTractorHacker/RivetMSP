@@ -1,16 +1,27 @@
 <?php
 
 /*
- * ITFlow - Accounting sync helpers (QuickBooks Online one-way push)
+ * ITFlow - Accounting sync helpers (one-way push to QuickBooks Online or Xero)
  *
  * Small, self-contained helper layer used by:
  *   - agent/post/invoice.php  and  agent/post/payment.php   (enqueue hooks)
  *   - cron/accounting_sync.php                              (queue worker)
- *   - admin/settings_accounting.php + oauth_quickbooks_*    (settings / connect)
+ *   - admin/settings_accounting.php + oauth_{quickbooks,xero}_*  (settings / connect)
  *
  * Mirrors the webhook_queue retry pattern already used in cron/cron.php.
  * Deliberately does NOT touch functions.php - all new logic lives here.
+ *
+ * Roadmap #20 (Xero): accountingMakeEnsureCustomer(), accountingMakeEnsureItem() and
+ * accountingSyncProcessJob() below are now typed against AccountingClientInterface instead of
+ * the concrete QboClient class - a pure re-type, no change to any of their logic. Which concrete
+ * class an $accounting_provider actually gets is decided in ONE place, makeAccountingClient()
+ * below, so every caller (cron, the settings UI) swapped `new QboClient(...)` for
+ * `makeAccountingClient(...)` and otherwise needed no changes.
  */
+
+require_once __DIR__ . '/interface_accounting_client.php';
+require_once __DIR__ . '/class_qbo_client.php';
+require_once __DIR__ . '/class_xero_client.php';
 
 // Exponential backoff (minutes) between delivery attempts, matching the
 // webhook delivery worker: 5m, 30m, 2h, 6h -> then failed on the 5th attempt.
@@ -19,6 +30,32 @@ if (!defined('ACCOUNTING_BACKOFFS')) {
 }
 if (!defined('ACCOUNTING_MAX_ATTEMPTS')) {
     define('ACCOUNTING_MAX_ATTEMPTS', 5);
+}
+
+if (!function_exists('makeAccountingClient')) {
+    /**
+     * Instantiate the right AccountingClientInterface implementation for an
+     * accounting_integrations row's accounting_provider. The one place that knows the full
+     * set of supported providers.
+     *
+     * Test-only endpoint overrides (RIVETMSP_TEST_QBO_* / RIVETMSP_TEST_XERO_* env vars) point
+     * the real client classes at a loopback fake server instead of the real Intuit/Xero hosts -
+     * see tests/accounting_interface_refactor.php and tests/accounting_xero.php. Unset in every
+     * real environment, where this is identical to `new QboClient($mysqli, $integration)`.
+     */
+    function makeAccountingClient(mysqli $mysqli, array $integration): AccountingClientInterface {
+        $provider = (string) ($integration['accounting_provider'] ?? 'quickbooks_online');
+        if ($provider === 'xero') {
+            $overrides = [];
+            if (getenv('RIVETMSP_TEST_XERO_TOKEN_URL')) { $overrides['token_url'] = getenv('RIVETMSP_TEST_XERO_TOKEN_URL'); }
+            if (getenv('RIVETMSP_TEST_XERO_API_BASE'))  { $overrides['api_base']  = getenv('RIVETMSP_TEST_XERO_API_BASE'); }
+            return new XeroClient($mysqli, $integration, $overrides);
+        }
+        $overrides = [];
+        if (getenv('RIVETMSP_TEST_QBO_TOKEN_URL')) { $overrides['token_url'] = getenv('RIVETMSP_TEST_QBO_TOKEN_URL'); }
+        if (getenv('RIVETMSP_TEST_QBO_API_BASE'))  { $overrides['api_base']  = getenv('RIVETMSP_TEST_QBO_API_BASE'); }
+        return new QboClient($mysqli, $integration, $overrides);
+    }
 }
 
 /**
@@ -352,7 +389,7 @@ function setAccountingMap(mysqli $mysqli, int $accounting_id, string $type, int 
  * (the one-job-per-call endpoint behind the live progress UI) can share the
  * exact same dependency-resolution logic instead of duplicating it.
  */
-function accountingMakeEnsureCustomer(mysqli $mysqli, QboClient $qbo, int $acc_id): callable {
+function accountingMakeEnsureCustomer(mysqli $mysqli, AccountingClientInterface $qbo, int $acc_id): callable {
     return function (int $client_id) use ($mysqli, $qbo, $acc_id): string {
         $existing = getAccountingMap($mysqli, $acc_id, 'client', $client_id);
         if ($existing && !empty($existing['map_remote_id'])) {
@@ -362,7 +399,7 @@ function accountingMakeEnsureCustomer(mysqli $mysqli, QboClient $qbo, int $acc_i
         $res = mysqli_query($mysqli, "SELECT client_name, client_website, client_currency_code FROM clients WHERE client_id = $client_id LIMIT 1");
         $client = $res ? mysqli_fetch_assoc($res) : null;
         if (!$client) {
-            throw new QboException("Local client $client_id not found.");
+            throw new AccountingClientException("Local client $client_id not found.");
         }
 
         $display_name = trim((string) $client['client_name']);
@@ -404,7 +441,7 @@ function accountingMakeEnsureCustomer(mysqli $mysqli, QboClient $qbo, int $acc_i
  * empty, in which case the QBO account default is looked up lazily on first
  * use and cached for the lifetime of the returned closure).
  */
-function accountingMakeEnsureItem(mysqli $mysqli, QboClient $qbo, int $acc_id, string $income_account_hint = ''): callable {
+function accountingMakeEnsureItem(mysqli $mysqli, AccountingClientInterface $qbo, int $acc_id, string $income_account_hint = ''): callable {
     $acc_income_account = $income_account_hint;
     return function (int $product_id, string $name, float $price, string $description) use ($mysqli, $qbo, $acc_id, &$acc_income_account): string {
         // product_id 0 is the synthetic "generic services" fallback item used for
@@ -429,7 +466,7 @@ function accountingMakeEnsureItem(mysqli $mysqli, QboClient $qbo, int $acc_id, s
             $acc_income_account = (string) ($qbo->getDefaultIncomeAccountId() ?? '');
         }
         if ($acc_income_account === '') {
-            throw new QboException('No income account available to create QBO item.');
+            throw new AccountingClientException('No income account available to create the remote item.');
         }
 
         $created = $qbo->createItem([
@@ -456,7 +493,7 @@ function accountingMakeEnsureItem(mysqli $mysqli, QboClient $qbo, int $acc_id, s
  * Returns ['queue_id','type','local_id','outcome','message'] where outcome is
  * one of: delivered | already-mapped | skipped | deferred | retry | failed.
  */
-function accountingSyncProcessJob(mysqli $mysqli, QboClient $qbo, int $acc_id, array $job, callable $ensureCustomer, callable $ensureItem): array {
+function accountingSyncProcessJob(mysqli $mysqli, AccountingClientInterface $qbo, int $acc_id, array $job, callable $ensureCustomer, callable $ensureItem): array {
     $job_id       = intval($job['queue_id']);
     $job_type     = (string) $job['queue_local_type'];
     $job_local_id = intval($job['queue_local_id']);
@@ -502,7 +539,7 @@ function accountingSyncProcessJob(mysqli $mysqli, QboClient $qbo, int $acc_id, a
                 $ires = mysqli_query($mysqli, "SELECT * FROM invoices WHERE invoice_id = $job_local_id LIMIT 1");
                 $invoice = $ires ? mysqli_fetch_assoc($ires) : null;
                 if (!$invoice) {
-                    throw new QboException("Local invoice $job_local_id not found.");
+                    throw new AccountingClientException("Local invoice $job_local_id not found.");
                 }
 
                 $customer_ref = $ensureCustomer(intval($invoice['invoice_client_id']));
@@ -576,7 +613,7 @@ function accountingSyncProcessJob(mysqli $mysqli, QboClient $qbo, int $acc_id, a
                 $qres = mysqli_query($mysqli, "SELECT * FROM quotes WHERE quote_id = $job_local_id LIMIT 1");
                 $quote = $qres ? mysqli_fetch_assoc($qres) : null;
                 if (!$quote) {
-                    throw new QboException("Local quote $job_local_id not found.");
+                    throw new AccountingClientException("Local quote $job_local_id not found.");
                 }
 
                 $customer_ref = $ensureCustomer(intval($quote['quote_client_id']));
@@ -650,7 +687,7 @@ function accountingSyncProcessJob(mysqli $mysqli, QboClient $qbo, int $acc_id, a
                 $pres = mysqli_query($mysqli, "SELECT * FROM payments WHERE payment_id = $job_local_id LIMIT 1");
                 $payment = $pres ? mysqli_fetch_assoc($pres) : null;
                 if (!$payment) {
-                    throw new QboException("Local payment $job_local_id not found.");
+                    throw new AccountingClientException("Local payment $job_local_id not found.");
                 }
 
                 $invoice_id = intval($payment['payment_invoice_id']);
@@ -688,7 +725,7 @@ function accountingSyncProcessJob(mysqli $mysqli, QboClient $qbo, int $acc_id, a
             }
 
             default:
-                throw new QboException("Unknown queue local type '$job_type'.");
+                throw new AccountingClientException("Unknown queue local type '$job_type'.");
         }
 
     } catch (Throwable $e) {

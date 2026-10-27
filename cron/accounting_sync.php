@@ -46,12 +46,12 @@ if (
 $acc_id = intval($acc_integration['accounting_id']);
 
 try {
-    $qbo = new QboClient($mysqli, $acc_integration);
+    $qbo = makeAccountingClient($mysqli, $acc_integration);
     // Fail fast (and re-fetch the possibly-rotated integration row) if we can't
     // get a token at all - avoids hammering the API for every queued job.
     $qbo->getAccessToken();
     $acc_integration = getAccountingIntegration($mysqli); // refresh rotated tokens
-    $qbo = new QboClient($mysqli, $acc_integration);
+    $qbo = makeAccountingClient($mysqli, $acc_integration);
 } catch (Throwable $e) {
     logApp("Accounting", "error", "QBO auth failed, skipping sync run: " . $e->getMessage());
     accountingLog($mysqli, $acc_id, 'integration', $acc_id, 'error', 'Auth failed: ' . $e->getMessage());
