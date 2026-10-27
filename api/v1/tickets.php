@@ -683,6 +683,11 @@ if ($method === 'POST' && $id === null) {
     $delivery_method = getTicketDeliveryMethodForCategory($mysqli, $category);
     $delivery_method_sql = $delivery_method !== null ? "'" . mysqli_real_escape_string($mysqli, $delivery_method) . "'" : 'NULL';
 
+    // Per-category Non-billable (DB 2.6.126): this endpoint never set ticket_billable at all before (it was always
+    // the column default, 0), so this documents/enforces the same 0 explicitly rather than changing behaviour.
+    require_once $DOCUMENT_ROOT . '/includes/ticket_category_rules.php';
+    $billable = ticketCategoryBillableForNewTicket($mysqli, $category, 0);
+
     // Auto-link to a matching asset for this client by hostname/asset name
     $asset_id = 0;
     if ($hostname && $client) {
@@ -737,11 +742,13 @@ if ($method === 'POST' && $id === null) {
     // bytes the previous escaped-then-interpolated INSERT did.
     $new_id = api_exec(
         "INSERT INTO tickets (ticket_prefix, ticket_subject, ticket_details, ticket_client_id, ticket_contact_id, ticket_priority,
-         ticket_status, ticket_assigned_to, ticket_created_by, ticket_source, ticket_number, ticket_category, ticket_asset_id, ticket_contract_id, ticket_url_key, ticket_created_at, ticket_updated_at, ticket_delivery_method)
-         VALUES ('$prefix_esc', ?, ?, $client, $contact, '$priority', $status, $assigned, $created_by_sql, 'API', $next_num, $category, $asset_id, $contract_id_sql, '$url_key', NOW(), NOW(), $delivery_method_sql)",
+         ticket_status, ticket_assigned_to, ticket_created_by, ticket_source, ticket_number, ticket_category, ticket_billable, ticket_asset_id, ticket_contract_id, ticket_url_key, ticket_created_at, ticket_updated_at, ticket_delivery_method)
+         VALUES ('$prefix_esc', ?, ?, $client, $contact, '$priority', $status, $assigned, $created_by_sql, 'API', $next_num, $category, $billable, $asset_id, $contract_id_sql, '$url_key', NOW(), NOW(), $delivery_method_sql)",
         'ss',
         [$subject_raw, $details_raw]
     );
+    // Per-category SLA-exempt (DB 2.6.126): no policy/due dates for a ticket in an SLA-exempt category.
+    ticketCategoryApplyOnCreate($mysqli, $new_id, $category);
 
     // Notify the assigned agent of the new ticket, or broadcast to active
     // agents if it wasn't auto-assigned (e.g. ITPanel Pro quick-ticket

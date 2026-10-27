@@ -8043,3 +8043,29 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.125'");
     }
+
+    if ($rivetit_db_version() == '2.6.125') {
+        // Per-category SLA-exempt / Non-billable ticket settings.
+        //
+        // categories.category_sla_exempt     1 = a Ticket category whose tickets get no SLA at all: the exact same
+        //                                     end state as tickets.ticket_counts_sla = 0 (includes/ticket_flags.php /
+        //                                     includes/sla_functions.php) - no policy, no due dates, never breached,
+        //                                     left out of the SLA reports. Reusing that existing, already-wired
+        //                                     mechanism rather than inventing a second "has no SLA" flag.
+        // categories.category_non_billable   1 = a Ticket category whose tickets are billable = 0 by default.
+        // tickets.ticket_billable_overridden 1 = a human explicitly set THIS ticket's billable value after creation
+        //                                     (the billable modal, the ticket edit form's billable checkbox when it
+        //                                     actually changes, or a bulk/API billable edit) - never set by a
+        //                                     category default, so a category's non-billable rule never clobbers an
+        //                                     explicit human choice.
+        //
+        // All three default off/0, so no existing category or ticket changes behaviour until an admin turns a
+        // category flag on (admin/category.php, Ticket category tab) - see includes/ticket_category_rules.php for
+        // the one shared helper every ticket-creation and category-change path calls.
+        mysqli_query($mysqli, "ALTER TABLE `categories`
+            ADD COLUMN IF NOT EXISTS `category_sla_exempt` TINYINT(1) NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `category_non_billable` TINYINT(1) NOT NULL DEFAULT 0");
+        mysqli_query($mysqli, "ALTER TABLE `tickets` ADD COLUMN IF NOT EXISTS `ticket_billable_overridden` TINYINT(1) NOT NULL DEFAULT 0");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.126'");
+    }

@@ -836,6 +836,9 @@ if (isset($_POST['bulk_add_client_ticket'])) {
     $use_primary_contact = intval($_POST['use_primary_contact']);
     $ticket_template_id = intval($_POST['bulk_ticket_template_id']);
     $billable = intval($_POST['bulk_billable'] ?? 0);
+    // Per-category Non-billable (DB 2.6.126): forces 0 regardless of what the bulk form's checkbox sent.
+    require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/ticket_category_rules.php';
+    $billable = ticketCategoryBillableForNewTicket($mysqli, $category_id, $billable);
     $delivery_method = getTicketDeliveryMethodForCategory($mysqli, $category_id);
     $delivery_method_sql = $delivery_method !== null ? "'" . mysqli_real_escape_string($mysqli, $delivery_method) . "'" : 'NULL';
 
@@ -894,6 +897,8 @@ if (isset($_POST['bulk_add_client_ticket'])) {
             mysqli_query($mysqli, "INSERT INTO tickets SET ticket_prefix = '$config_ticket_prefix', ticket_number = $ticket_number, ticket_category = $category_id, ticket_subject = '$subject', ticket_details = '$details', ticket_priority = '$priority', ticket_billable = $billable, ticket_status = $ticket_status, ticket_created_by = $session_user_id, ticket_assigned_to = $assigned_to, ticket_url_key = '$url_key', ticket_client_id = $client_id, ticket_project_id = $project_id, ticket_delivery_method = $delivery_method_sql");
 
             $ticket_id = mysqli_insert_id($mysqli);
+            // Per-category SLA-exempt (DB 2.6.126): no policy/due dates for a ticket in an SLA-exempt category.
+            ticketCategoryApplyOnCreate($mysqli, $ticket_id, $category_id);
 
             // Add Tasks
             if (!empty($_POST['tasks'])) {

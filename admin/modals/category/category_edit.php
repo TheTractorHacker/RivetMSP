@@ -13,6 +13,17 @@ $category_color = nullable_htmlentities($row['category_color']);
 $category_type = nullable_htmlentities($row['category_type']);
 $category_parent = intval($row['category_parent']);
 $category_required_skill_tag_id = intval($row['category_required_skill_tag_id'] ?? 0);
+$category_sla_exempt = intval($row['category_sla_exempt'] ?? 0);
+$category_non_billable = intval($row['category_non_billable'] ?? 0);
+
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/ticket_category_rules.php';
+// "Apply to existing open tickets": only offered once the category has at least one flag saved ON, and only for an
+// already-saved Ticket category (this is the admin-only bulk sweep described in includes/ticket_category_rules.php
+// - it never runs on an unsaved form state). Counts are informational only; the real action re-queries at submit time.
+$apply_counts = ($category_type === 'Ticket' && ($category_sla_exempt || $category_non_billable))
+    ? ticketCategoryApplyToExistingOpenTickets($mysqli, $category_id, true)
+    : ['sla_count' => 0, 'billable_count' => 0, 'total_count' => 0];
+$apply_affected_count = $apply_counts['total_count'];
 
 // Generate the HTML form content using output buffering.
 ob_start();
@@ -66,6 +77,20 @@ ob_start();
         </div>
         <?php } ?>
 
+        <?php if ($category_type === 'Ticket') { ?>
+        <div class="form-group">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="category_sla_exempt" value="1" id="categorySlaExempt" <?= $category_sla_exempt ? 'checked' : '' ?>>
+                <label class="form-check-label" for="categorySlaExempt">SLA exempt <small class="text-muted">(tickets in this category get no SLA policy, due dates or breaches)</small></label>
+            </div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="category_non_billable" value="1" id="categoryNonBillable" <?= $category_non_billable ? 'checked' : '' ?>>
+                <label class="form-check-label" for="categoryNonBillable">Non-billable <small class="text-muted">(tickets in this category default to not billable)</small></label>
+            </div>
+            <small class="text-muted">Changing these only affects new tickets and tickets later moved into/out of this category - existing tickets keep their current SLA/billable values. Save first, then use "Apply to existing open tickets" below to retrofit them.</small>
+        </div>
+        <?php } ?>
+
         <div class="form-group">
             <label>Name <strong class="text-danger">*</strong></label>
             <div class="input-group">
@@ -97,7 +122,17 @@ ob_start();
         </div>
 
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer flex-wrap">
+        <?php if ($apply_affected_count > 0) { ?>
+        <button type="submit" name="apply_category_ticket_rules" class="btn btn-outline-warning" formnovalidate
+            data-rivet-confirm="Apply this category's current SLA-exempt / Non-billable settings to the <?= $apply_affected_count ?> currently open ticket(s) already in <?= $category_name ?>? This changes those tickets right away and cannot be undone automatically."
+            data-confirm-variant="warning" data-confirm-title="Apply to existing open tickets"
+            data-confirm-ok="Apply">
+            <i class="fas fa-fw fa-bolt me-2"></i>Apply to <?= $apply_affected_count ?> existing open ticket<?= $apply_affected_count === 1 ? '' : 's' ?>
+        </button>
+        <?php } elseif ($category_type === 'Ticket' && ($category_sla_exempt || $category_non_billable)) { ?>
+        <small class="text-muted me-auto align-self-center">No open tickets in this category currently need these rules applied.</small>
+        <?php } ?>
         <button type="submit" name="edit_category" class="btn btn-primary text-bold"><i class="fa fa-check me-2"></i>Save</button>
         <button type="button" class="btn btn-light" data-bs-dismiss="modal"><i class="fa fa-times me-2"></i>Cancel</button>
     </div>

@@ -65,8 +65,14 @@ if (isset($_POST['add_ticket'])) {
     $delivery_method = getTicketDeliveryMethodForCategory($mysqli, $category);
     $delivery_method_sql = $delivery_method !== null ? "'" . mysqli_real_escape_string($mysqli, $delivery_method) . "'" : 'NULL';
 
-    mysqli_query($mysqli, "INSERT INTO tickets SET ticket_prefix = '$config_ticket_prefix', ticket_number = $ticket_number, ticket_source = 'Portal', ticket_category = $category, ticket_subject = '$subject', ticket_details = '$details', ticket_priority = '$priority', ticket_status = $ticket_status, ticket_billable = $config_ticket_default_billable, ticket_created_by = $session_user_id, ticket_contact_id = $session_contact_id, ticket_asset_id = $asset, ticket_url_key = '$url_key', ticket_client_id = $session_client_id, ticket_assigned_to = $resolved_assigned_to, ticket_delivery_method = $delivery_method_sql, ticket_catalog_item_id = $catalog_item_sql");
+    // Per-category Non-billable (DB 2.6.126): forces 0 regardless of config_ticket_default_billable.
+    require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/ticket_category_rules.php';
+    $billable = ticketCategoryBillableForNewTicket($mysqli, $category, intval($config_ticket_default_billable));
+
+    mysqli_query($mysqli, "INSERT INTO tickets SET ticket_prefix = '$config_ticket_prefix', ticket_number = $ticket_number, ticket_source = 'Portal', ticket_category = $category, ticket_subject = '$subject', ticket_details = '$details', ticket_priority = '$priority', ticket_status = $ticket_status, ticket_billable = $billable, ticket_created_by = $session_user_id, ticket_contact_id = $session_contact_id, ticket_asset_id = $asset, ticket_url_key = '$url_key', ticket_client_id = $session_client_id, ticket_assigned_to = $resolved_assigned_to, ticket_delivery_method = $delivery_method_sql, ticket_catalog_item_id = $catalog_item_sql");
     $ticket_id = mysqli_insert_id($mysqli);
+    // Per-category SLA-exempt (DB 2.6.126): no policy/due dates for a ticket in an SLA-exempt category.
+    ticketCategoryApplyOnCreate($mysqli, $ticket_id, $category);
 
     // Roadmap #6 (Service Catalog): hold the ticket if the item requires approval.
     if ($catalog_item && intval($catalog_item['requires_approval'])) {
