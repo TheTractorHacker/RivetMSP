@@ -7942,3 +7942,57 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.122'");
     }
+
+    if ($rivetit_db_version() == '2.6.122') {
+        // Renumbered during consolidation: originally guarded on 2.6.112, targeting 2.6.113 directly (claimed at
+        // the same beta tip as several other branches). Chains after 2.6.122 now.
+        //
+        // Roadmap #25 (Pax8 cost sync for billing/COGS reconciliation): three new tables,
+        // mirroring the unifi_integrations/unifi_site_mappings shape (a simple API-credential
+        // row + a mapping table) rather than the OAuth2-authorization-code accounting_integrations
+        // shape, since Pax8 uses OAuth2 client-credentials (machine-to-machine, no browser
+        // redirect) - pax8_integrations (one row, API creds + token), pax8_client_map (Pax8
+        // company <-> local client, like the accounting client-mapping tables), and
+        // pax8_subscriptions (pulled subscription cost rows, the actual COGS data).
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `pax8_integrations` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `client_id` varchar(255) DEFAULT NULL,
+            `client_secret_enc` text DEFAULT NULL,
+            `access_token_enc` text DEFAULT NULL,
+            `token_expires_at` datetime DEFAULT NULL,
+            `enabled` tinyint(1) NOT NULL DEFAULT 0,
+            `last_synced_at` datetime DEFAULT NULL,
+            `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+            `updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `pax8_client_map` (
+            `map_id` int(11) NOT NULL AUTO_INCREMENT,
+            `pax8_company_id` varchar(64) NOT NULL,
+            `pax8_company_name` varchar(255) DEFAULT NULL,
+            `client_id` int(11) DEFAULT NULL,
+            `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+            PRIMARY KEY (`map_id`),
+            UNIQUE KEY `uniq_pax8_company` (`pax8_company_id`),
+            KEY `idx_pax8_map_client` (`client_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `pax8_subscriptions` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `pax8_subscription_id` varchar(64) NOT NULL,
+            `pax8_company_id` varchar(64) NOT NULL,
+            `client_id` int(11) DEFAULT NULL,
+            `product_name` varchar(255) DEFAULT NULL,
+            `quantity` int(11) NOT NULL DEFAULT 0,
+            `unit_cost` decimal(10,2) NOT NULL DEFAULT 0.00,
+            `total_cost` decimal(10,2) NOT NULL DEFAULT 0.00,
+            `billing_term` varchar(20) DEFAULT NULL,
+            `status` varchar(20) DEFAULT NULL,
+            `synced_at` datetime NOT NULL DEFAULT current_timestamp(),
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uniq_pax8_subscription` (`pax8_subscription_id`),
+            KEY `idx_pax8_sub_company` (`pax8_company_id`),
+            KEY `idx_pax8_sub_client` (`client_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.123'");
+    }

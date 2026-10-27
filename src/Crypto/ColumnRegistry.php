@@ -66,6 +66,10 @@ final class ColumnRegistry
             // as the client_secret it was minted from, so it gets the same key-rotation/rewrap coverage.
             ['microsoft_integrations', 'microsoft_integration_id', ['client_secret_enc', 'token_cache_enc']],
             ['accounting_integrations', 'accounting_id', ['accounting_client_secret', 'accounting_access_token', 'accounting_refresh_token']],
+            // msp-pax8-cost-sync (roadmap #25): OAuth2 client-credentials row for the Pax8 cost-sync API, same
+            // credential+token shape as accounting_integrations/microsoft_integrations just above - never registered
+            // by that branch itself.
+            ['pax8_integrations', 'id', ['client_secret_enc', 'access_token_enc']],
             ['mailboxes', 'mailbox_id', ['mailbox_imap_password_enc', 'mailbox_oauth_refresh_token_enc', 'mailbox_oauth_access_token_enc']],
             // The RMM module seals these through EndpointSecretBox (encryptSetting, generic context): the instance signing key and the
             // Mesh login key, and (Phase 2) the secret parameters of a queued job and the values of secret custom fields. A cleartext value

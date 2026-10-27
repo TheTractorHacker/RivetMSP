@@ -6211,6 +6211,48 @@ CREATE TABLE `unifi_site_mappings` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `integration_site` (`integration_id`,`unifi_site_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+DROP TABLE IF EXISTS `pax8_integrations`;
+CREATE TABLE `pax8_integrations` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `client_id` varchar(255) DEFAULT NULL,
+  `client_secret_enc` text DEFAULT NULL,
+  `access_token_enc` text DEFAULT NULL,
+  `token_expires_at` datetime DEFAULT NULL,
+  `enabled` tinyint(1) NOT NULL DEFAULT 0,
+  `last_synced_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+DROP TABLE IF EXISTS `pax8_client_map`;
+CREATE TABLE `pax8_client_map` (
+  `map_id` int(11) NOT NULL AUTO_INCREMENT,
+  `pax8_company_id` varchar(64) NOT NULL,
+  `pax8_company_name` varchar(255) DEFAULT NULL,
+  `client_id` int(11) DEFAULT NULL,
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`map_id`),
+  UNIQUE KEY `uniq_pax8_company` (`pax8_company_id`),
+  KEY `idx_pax8_map_client` (`client_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+DROP TABLE IF EXISTS `pax8_subscriptions`;
+CREATE TABLE `pax8_subscriptions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `pax8_subscription_id` varchar(64) NOT NULL,
+  `pax8_company_id` varchar(64) NOT NULL,
+  `client_id` int(11) DEFAULT NULL,
+  `product_name` varchar(255) DEFAULT NULL,
+  `quantity` int(11) NOT NULL DEFAULT 0,
+  `unit_cost` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `total_cost` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `billing_term` varchar(20) DEFAULT NULL,
+  `status` varchar(20) DEFAULT NULL,
+  `synced_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_pax8_subscription` (`pax8_subscription_id`),
+  KEY `idx_pax8_sub_company` (`pax8_company_id`),
+  KEY `idx_pax8_sub_client` (`client_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `unifi_sync_log`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
