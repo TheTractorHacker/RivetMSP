@@ -63,8 +63,10 @@ jobs:
         run: composer install --no-interaction --prefer-dist
 
       - name: Check out rivet-core (it carries PHPUnit and, from v1.0.0-rc.1, the kit)
+        env:
+          CORE_REF_INPUT: ${{ github.event.inputs.core_ref }}
         run: |
-          REF="${{ github.event.inputs.core_ref }}"
+          REF="$CORE_REF_INPUT"
           if [ -z "$REF" ]; then REF="$(composer show rivet/rivet-core --format=json | php -r 'echo json_decode(stream_get_contents(STDIN))->versions[0];')"; fi
           echo "rivet-core ref: $REF"
           git clone --depth 1 --branch "$REF" https://github.com/TheTractorHacker/rivet-core.git rivet-core
