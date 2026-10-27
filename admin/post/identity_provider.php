@@ -29,3 +29,35 @@ if (isset($_POST['edit_identity_provider'])) {
     redirect();
 
 }
+
+if (isset($_POST['edit_oidc_provider'])) {
+
+    validateCSRFToken($_POST['csrf_token']);
+
+    $oidc_enabled = (isset($_POST['oidc_enabled']) && $_POST['oidc_enabled'] === '1') ? 1 : 0;
+    $oidc_link_by_email = (isset($_POST['oidc_link_by_email']) && $_POST['oidc_link_by_email'] === '1') ? 1 : 0;
+    $oidc_require_verified_email = (isset($_POST['oidc_require_verified_email']) && $_POST['oidc_require_verified_email'] === '1') ? 1 : 0;
+    $oidc_issuer = sanitizeInput(trim($_POST['oidc_issuer'] ?? ''));
+    $oidc_client_id = sanitizeInput(trim($_POST['oidc_client_id'] ?? ''));
+    $oidc_client_secret_raw = trim($_POST['oidc_client_secret'] ?? '');
+
+    // Same "blank means keep current" rule as the Microsoft Entra secret above - the field is never
+    // redisplayed, so a blank submit here is never "clear it".
+    if ($oidc_client_secret_raw !== '') {
+        $oidc_client_secret = encryptSetting($oidc_client_secret_raw);
+        $stmt = mysqli_prepare($mysqli, "UPDATE settings SET config_oidc_enabled = ?, config_oidc_issuer = ?, config_oidc_client_id = ?, config_oidc_client_secret = ?, config_oidc_link_by_email = ?, config_oidc_require_verified_email = ? WHERE company_id = 1");
+        mysqli_stmt_bind_param($stmt, "isssii", $oidc_enabled, $oidc_issuer, $oidc_client_id, $oidc_client_secret, $oidc_link_by_email, $oidc_require_verified_email);
+    } else {
+        $stmt = mysqli_prepare($mysqli, "UPDATE settings SET config_oidc_enabled = ?, config_oidc_issuer = ?, config_oidc_client_id = ?, config_oidc_link_by_email = ?, config_oidc_require_verified_email = ? WHERE company_id = 1");
+        mysqli_stmt_bind_param($stmt, "issii", $oidc_enabled, $oidc_issuer, $oidc_client_id, $oidc_link_by_email, $oidc_require_verified_email);
+    }
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+
+    logAction("Settings", "Edit", "$session_name edited OpenID Connect provider settings");
+
+    flash_alert("OpenID Connect settings updated");
+
+    redirect();
+
+}

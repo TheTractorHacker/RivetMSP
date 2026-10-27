@@ -44,6 +44,7 @@ final class ColumnRegistry
         // settings (single row, company_id = 1).
         foreach ([
             'config_login_key_secret', 'config_whitelabel_key', 'config_smtp_password', 'config_azure_client_secret',
+            'config_oidc_client_secret',
             'config_mail_oauth_client_secret', 'config_mail_oauth_refresh_token', 'config_mail_oauth_access_token',
             'config_outlook_cal_client_secret', 'config_imap_password', 'config_backup_s3_secret_key', 'config_backup_passphrase',
             'config_comet_admin_pass', 'config_comet_totp_secret', 'config_comet_webhook_secret', 'config_redis_password',
