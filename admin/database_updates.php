@@ -7736,3 +7736,48 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.116'");
     }
+
+    if ($rivetit_db_version() == '2.6.116') {
+        // Renumbered during consolidation: originally guarded on 2.6.112, targeting 2.6.113 directly (claimed at
+        // the same beta tip as msp-port-kb-v2, per this step's own note below). Chains after 2.6.116 now.
+        //
+        // Roadmap #10 slice 1: per-client Microsoft/Entra tenant credentials (schema + admin UI only - the actual
+        // Graph API sync engine, GraphClientFactory/token cache/cron conversion, is a separate, later, security-
+        // sensitive piece and deliberately NOT part of this step; see docs on agent/intune_settings.php).
+        //
+        // microsoft_integrations is new to RivetMSP, but src/Crypto/ColumnRegistry.php already has a forward
+        // registration for it (table `microsoft_integrations`, pk `microsoft_integration_id`, encrypted column
+        // `client_secret_enc`) - the exact names below match that registration so the key-rotation/rewrap tool
+        // picks this table up with no further change. RivetIT's own version of this table has a GLOBAL (single
+        // installation-wide) row with a column literally named `client_id` holding the Azure AD App Registration's
+        // own "Application (client) ID" - a different thing entirely from this app's `clients.client_id`
+        // department id. Renamed that column to `azure_client_id` here to avoid exactly that collision, and added
+        // a real `client_id` (this app's own department id) with a UNIQUE key, since one department maps to
+        // exactly one Microsoft tenant (unlike, say, unifi_integrations' many-controllers-to-many-sites shape).
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `microsoft_integrations` (
+            `microsoft_integration_id` int(11) NOT NULL AUTO_INCREMENT,
+            `client_id` int(11) NOT NULL,
+            `tenant_id` varchar(100) DEFAULT NULL,
+            `azure_client_id` varchar(100) DEFAULT NULL,
+            `client_secret_enc` text DEFAULT NULL,
+            `sync_scope` varchar(20) NOT NULL DEFAULT 'read_only',
+            `enabled` tinyint(1) NOT NULL DEFAULT 0,
+            `intune_sync_enabled` tinyint(1) NOT NULL DEFAULT 0,
+            `directory_sync_enabled` tinyint(1) NOT NULL DEFAULT 0,
+            `last_test_at` datetime DEFAULT NULL,
+            `last_test_success` tinyint(1) DEFAULT NULL,
+            `last_test_error` varchar(500) DEFAULT NULL,
+            `last_test_error_code` varchar(40) DEFAULT NULL,
+            `last_sync_at` datetime DEFAULT NULL,
+            `last_directory_sync_at` datetime DEFAULT NULL,
+            `token_cache_enc` text DEFAULT NULL,
+            `token_expires_at` datetime DEFAULT NULL,
+            `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+            `updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
+            `created_by` int(11) DEFAULT 0,
+            PRIMARY KEY (`microsoft_integration_id`),
+            UNIQUE KEY `uniq_microsoft_integrations_client_id` (`client_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.117'");
+    }

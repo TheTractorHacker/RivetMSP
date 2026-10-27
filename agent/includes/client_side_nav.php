@@ -188,6 +188,13 @@ $current_page = basename($_SERVER["PHP_SELF"]);
                             </a>
                         </li>
 
+                        <li class="nav-item<?php if ($current_page == "intune_settings.php") { echo " active"; } ?>">
+                            <a href="/agent/intune_settings.php?client_id=<?php echo $client_id; ?>" class="nav-link<?php if ($current_page == "intune_settings.php") { echo " active"; } ?>">
+                                <span class="nav-link-icon"><i class="fab fa-microsoft"></i></span>
+                                <span class="nav-link-title">Microsoft 365</span>
+                            </a>
+                        </li>
+
                         <li class="nav-item<?php if ($current_page == "software.php") { echo " active"; } ?>">
                             <a href="/agent/software.php?client_id=<?php echo $client_id; ?>" class="nav-link<?php if ($current_page == "software.php") { echo " active"; } ?>">
                                 <span class="nav-link-icon"><i class="fas fa-cube"></i></span>

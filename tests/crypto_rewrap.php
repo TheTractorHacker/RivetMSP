@@ -69,7 +69,10 @@ foreach (ColumnRegistry::all() as $cs) {
         $q("INSERT INTO recovery_settings (setting_key, setting_value) VALUES ('drill_db_pass', '" . $esc($stored) . "') ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
     } else {
         $q("DELETE FROM `{$cs->table}` WHERE `{$cs->pk}` = $pkv");
-        $extra = $cs->table === 'software_keys' ? ', software_key_software_id = 899' : ($cs->pk2 !== null ? ", `{$cs->pk2}` = 7" : '');
+        // microsoft_integrations has a required, UNIQUE-keyed client_id with no default - two ColumnSpecs share this
+        // table (client_secret_enc, token_cache_enc), each seeded as its own row ($pkv differs per iteration), so
+        // reusing $pkv as client_id keeps every seeded row's client_id distinct too (never colliding on the UNIQUE key).
+        $extra = $cs->table === 'software_keys' ? ', software_key_software_id = 899' : ($cs->table === 'microsoft_integrations' ? ", client_id = $pkv" : ($cs->pk2 !== null ? ", `{$cs->pk2}` = 7" : ''));
         $ok($q("INSERT INTO `{$cs->table}` SET `{$cs->pk}` = $pkv, `{$cs->column}` = '" . $esc($stored) . "'$extra") !== false, "seed {$cs->name()}");
     }
     $expect[$cs->name()] = [$cs, $pkv, $val];

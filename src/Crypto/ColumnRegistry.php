@@ -60,7 +60,10 @@ final class ColumnRegistry
             ['ai_providers', 'ai_provider_id', ['ai_provider_api_key']],
             ['rmm_integrations', 'id', ['api_key_enc']],
             ['unifi_integrations', 'id', ['api_key_enc']],
-            ['microsoft_integrations', 'microsoft_integration_id', ['client_secret_enc']],
+            // client_secret_enc: the Entra app registration's client secret. token_cache_enc: the cached Graph API
+            // access/refresh token pair (added by msp-port-intune-per-client, roadmap #10 slice 1) - just as secret
+            // as the client_secret it was minted from, so it gets the same key-rotation/rewrap coverage.
+            ['microsoft_integrations', 'microsoft_integration_id', ['client_secret_enc', 'token_cache_enc']],
             ['accounting_integrations', 'accounting_id', ['accounting_client_secret', 'accounting_access_token', 'accounting_refresh_token']],
             ['mailboxes', 'mailbox_id', ['mailbox_imap_password_enc', 'mailbox_oauth_refresh_token_enc', 'mailbox_oauth_access_token_enc']],
             // The RMM module seals these through EndpointSecretBox (encryptSetting, generic context): the instance signing key and the
