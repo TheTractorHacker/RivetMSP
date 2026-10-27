@@ -220,6 +220,22 @@ if ($config_module_enable_itdoc == 1 && lookupUserPermission('module_credential'
     ];
 }
 
+// Roadmap #30: display RMM patch data on the department's own page - the compliance dashboard
+// (agent/rmm_patch_compliance.php) and the per-device patch tab on each asset already exist and already
+// support filtering/scoping to one client; the only thing missing was a quick way to reach "this
+// department's" view from its own overview page. "Needs a decision" mirrors rivetRmmPatchComplianceView's
+// own default status filter (RIVET_RMM_PATCH_STATUSES 'available' - detected, not yet approved or declined).
+if (!empty($config_module_enable_rmm) && lookupUserPermission('module_rmm') >= 1) {
+    $num_patches_pending = (int) (mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM rmm_patch_available WHERE client_id = $client_id AND status = 'available'"))[0] ?? 0);
+    $stat_tiles[] = [
+        'label'       => 'Patches needing a decision',
+        'icon'        => 'fa-download',
+        'value'       => $num_patches_pending,
+        'value_class' => $num_patches_pending > 0 ? 'text-warning' : '',
+        'href'        => "rmm_patch_compliance.php?client_id=$client_id",
+    ];
+}
+
 $stat_tiles[] = [
     'label'       => 'Expiring 45d',
     'icon'        => 'fa-hourglass-half',
