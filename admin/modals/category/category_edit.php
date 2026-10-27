@@ -12,6 +12,7 @@ $category_description = nullable_htmlentities($row['category_description']);
 $category_color = nullable_htmlentities($row['category_color']);
 $category_type = nullable_htmlentities($row['category_type']);
 $category_parent = intval($row['category_parent']);
+$category_required_skill_tag_id = intval($row['category_required_skill_tag_id'] ?? 0);
 
 // Generate the HTML form content using output buffering.
 ob_start();
@@ -44,6 +45,25 @@ ob_start();
         </div>
         <?php } else { ?>
         <input type="hidden" name="category_parent" value="0">
+        <?php } ?>
+
+        <?php if ($category_type === 'Ticket') { ?>
+        <div class="form-group">
+            <label>Required Skill <small class="text-muted">(optional — roadmap #29: auto-dispatch matches tickets in this category to a technician holding this skill tag)</small></label>
+            <div class="input-group">
+                <div class="input-group-prepend"><span class="input-group-text"><i class="fa fa-fw fa-tags"></i></span></div>
+                <select class="form-control select2" name="required_skill_tag_id">
+                    <option value="0" <?= $category_required_skill_tag_id === 0 ? 'selected' : '' ?>>— None (workload balance only) —</option>
+                    <?php
+                    $sql_skill_tags = mysqli_query($mysqli, "SELECT tag_id, tag_name FROM tags WHERE tag_type = 7 ORDER BY tag_name");
+                    while ($st = mysqli_fetch_assoc($sql_skill_tags)) {
+                        $st_id = intval($st['tag_id']);
+                        echo "<option value=\"$st_id\"" . ($st_id === $category_required_skill_tag_id ? ' selected' : '') . ">" . nullable_htmlentities($st['tag_name']) . "</option>";
+                    }
+                    ?>
+                </select>
+            </div>
+        </div>
         <?php } ?>
 
         <div class="form-group">

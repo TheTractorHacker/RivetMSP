@@ -8012,3 +8012,34 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.124'");
     }
+
+    if ($rivetit_db_version() == '2.6.124') {
+        // Renumbered during consolidation: originally guarded on 2.6.112, targeting 2.6.113 directly (claimed at
+        // the same beta tip as several other branches). Chains after 2.6.124 now - deliberately merged right
+        // after msp-sla-automation-gaps (both touch admin/ticket_automation.php, admin/post/ticket_automation.php
+        // and the add_rule/edit_rule modals' action lists; combined by hand, not clobbered - see that step's own
+        // commit) so both branches' automation actions land together correctly.
+        //
+        // Roadmap #29 (automated dispatch v1): skill-tag + workload-balance ticket assignment,
+        // no AI dependency. `tags` gets a new tag_type = 7 ("Technician") for skill tags, held
+        // on users via the new user_tags join table (mirrors ticket_tags exactly). A Ticket
+        // category can optionally name ONE required skill tag; dispatchAssignTicket() (new
+        // includes/dispatch_functions.php) matches active technicians who hold that skill,
+        // falls back to every active technician when the category has none set or nobody
+        // matches, and breaks ties by current open-ticket count (fewest wins), lowest user_id
+        // as the final tiebreak. Wired in as a new 'dispatch_assign' ticket-automation action
+        // (includes/automation_functions.php) rather than a separate standalone mechanism, so
+        // it reuses the existing rule engine's triggers/conditions/run-log instead of
+        // duplicating them.
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `user_tags` (
+            `user_tag_user_id` int(11) NOT NULL,
+            `user_tag_tag_id` int(11) NOT NULL,
+            PRIMARY KEY (`user_tag_user_id`,`user_tag_tag_id`),
+            KEY `fk_user_tag_tag` (`user_tag_tag_id`),
+            CONSTRAINT `fk_user_tag_tag` FOREIGN KEY (`user_tag_tag_id`) REFERENCES `tags` (`tag_id`) ON DELETE CASCADE,
+            CONSTRAINT `fk_user_tag_user` FOREIGN KEY (`user_tag_user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+        mysqli_query($mysqli, "ALTER TABLE `categories` ADD COLUMN IF NOT EXISTS `category_required_skill_tag_id` int(11) DEFAULT NULL");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.125'");
+    }

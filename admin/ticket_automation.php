@@ -70,6 +70,7 @@ $op_labels = [
 $action_labels = [
     'set_priority'             => 'Set priority',
     'assign_to'                => 'Assign to user ID',
+    'dispatch_assign'          => 'Auto-dispatch (skill + workload match)',
     'set_status'               => 'Set status ID',
     'set_category'             => 'Set ticket category',
     'add_tag'                  => 'Add tag',

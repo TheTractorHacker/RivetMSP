@@ -178,6 +178,7 @@ ob_start();
     var ACTION_OPTIONS = [
         ['set_priority',           'Set ticket priority (low / medium / high / critical)'],
         ['assign_to',               'Assign ticket to user ID'],
+        ['dispatch_assign',         'Auto-dispatch (match technician skill tag, workload-balance tiebreak)'],
         ['escalate',                'Escalate ticket (reassign + bump priority: userID:priority)'],
         ['set_status',               'Set ticket status ID'],
         ['set_category',             'Set ticket category (category ID)'],
@@ -241,7 +242,7 @@ ob_start();
         var isScr = action.value === 'run_script';
         var isNone = action.value === 'notify_assignee' || action.value === 'close_ticket'
                   || action.value === 'create_ticket_from_alert' || action.value === 'acknowledge_alert'
-                  || action.value === 'ai_triage';
+                  || action.value === 'ai_triage' || action.value === 'dispatch_assign';
 
         text.style.display = (isWS || isScr) ? 'none' : '';
         text.disabled      = (isWS || isScr);

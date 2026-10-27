@@ -121,6 +121,19 @@ function automationExecuteAction($mysqli, array $action, array &$context, array 
             logAction("Automation", "Update", "Rule '$rule_name': assigned ticket $tid to user $uid", $client_id, $tid);
             return "assigned ticket #$tid to user $uid";
 
+        case 'dispatch_assign':
+            // Roadmap #29: automated dispatch v1 (skill-tag match, workload-balance tiebreak,
+            // no AI). Silent no-op (consistent with every other guarded action here) when there
+            // is no active technician at all to assign to.
+            if (!$tid) return null;
+            require_once __DIR__ . '/dispatch_functions.php';
+            $picked = dispatchAssignTicket($mysqli, $tid);
+            if ($picked === null) return null;
+            mysqli_query($mysqli, "UPDATE tickets SET ticket_assigned_to = $picked WHERE ticket_id = $tid");
+            appNotify("Automation", "Rule '$rule_name' auto-dispatched ticket #$tid to you", "/agent/ticket.php?ticket_id=$tid", $client_id);
+            logAction("Automation", "Dispatch", "Rule '$rule_name': auto-dispatched ticket $tid to user $picked", $client_id, $tid);
+            return "auto-dispatched ticket #$tid to user $picked";
+
         case 'escalate':
             // Tiered escalation: reassign to a named user and/or bump priority in one
             // action, then notify the new assignee. Value format: "userID:priority"
