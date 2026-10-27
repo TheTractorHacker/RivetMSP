@@ -154,7 +154,22 @@ function itflow_nav_icon_class($icon, $fallback = 'fa-link')
 
     <link rel="stylesheet" href="/css/itflow_bs5_bridge.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_bs5_bridge.css') ?>">
     <link rel="stylesheet" href="/css/itflow_custom.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_custom.css') ?>">
+    <?php if (file_exists($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_custom.edition.css')) { ?>
+    <!-- Edition override: the RivetMSP-only rules cut out of itflow_custom.css so it can be Core's
+         shared, unmodified copy (vendor/rivet/rivet-core assets/ui, installed via
+         scripts/install-ui-assets.php). See css/itflow_custom.edition.css for what and why. -->
+    <link rel="stylesheet" href="/css/itflow_custom.edition.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_custom.edition.css') ?>">
+    <?php } ?>
     <link rel="stylesheet" href="/css/itflow_design.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_design.css') ?>">
+    <?php if (file_exists($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_design.edition.css')) { ?>
+    <!-- Edition override: the RivetMSP-only rules cut out of itflow_design.css (ticket-list stat
+         tiles, KB reader). See css/itflow_design.edition.css. -->
+    <link rel="stylesheet" href="/css/itflow_design.edition.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_design.edition.css') ?>">
+    <?php } ?>
+
+    <!-- Generic file-input surface (RivetCore shared UI assets): every input[type=file],
+         including the legacy .form-control-file markup, becomes one themed control. -->
+    <link rel="stylesheet" href="/css/file_upload.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/file_upload.css') ?>">
 
     <!-- Motion layer. Owns every animation in the app, including the single global
          prefers-reduced-motion guard, so no later rule can forget it. Must sit AFTER
@@ -163,28 +178,45 @@ function itflow_nav_icon_class($icon, $fallback = 'fa-link')
          itflow.compat-color.css / itflow_metrics.css / itflow.bind-tabler.css. -->
     <link rel="stylesheet" href="/css/itflow_motion.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_motion.css') ?>">
 
-    <!-- RMM asset panel and agent fleet page (includes/rmm_ui_render.php). Scoped under .rmm-* (plus the .ifm-* / .it-* tile and empty-state rules it needs,
-         since there is no itflow_metrics.css here). Built from --if-* tokens; must sit AFTER itflow_design.css and itflow_motion.css and BEFORE
-         itflow.bind-tabler.css. -->
-    <link rel="stylesheet" href="/css/itflow_rmm.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm.css') ?>">
-    <link rel="stylesheet" href="/css/itflow_rmm_automation.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_automation.css') ?>">
-    <!-- RMM Phase 6 and 8 and the scale settings (RivetCore 1.0.0-rc.11): the Remote tab, the Logs pages and the Administration scale panel. Same layer, same rules. -->
-    <link rel="stylesheet" href="/css/itflow_rmm_remote.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_remote.css') ?>">
-    <link rel="stylesheet" href="/css/itflow_rmm_logs.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_logs.css') ?>">
-    <link rel="stylesheet" href="/css/itflow_rmm_scale.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_scale.css') ?>">
-    <!-- RMM starter pack (RivetCore 1.0.0-rc.13): the Starter pack page and the Starter marks of the script library. Same layer, same rules. -->
-    <link rel="stylesheet" href="/css/itflow_rmm_starter.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_starter.css') ?>">
-
     <!-- --color-* -> --if-* alias. MUST come after BOTH itflow_custom.css (which
          declares --color-*) and itflow_design.css (which declares --if-*): it is a
          pure alias layer and linked any earlier it silently does nothing. Keeps the
          ~500 existing var(--color-...) reads resolving to one source of truth, and
          fixes card headers rendering a different grey than their own card body in
-         dark mode. -->
+         dark mode. Placed here (ahead of itflow_metrics.css and the RMM sheets) to
+         match RivetCore's documented load order (vendor/rivet/rivet-core/docs/ui/DESIGN_ASSETS.md):
+         the shared metrics/RMM sheets are written assuming compat-color has already run. -->
     <link rel="stylesheet" href="/css/itflow.compat-color.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow.compat-color.css') ?>">
 
+    <!-- Device Performance pane (RivetCore shared UI assets): the .ifm-* tile/banner rules the
+         RMM asset page and fleet view need. -->
+    <link rel="stylesheet" href="/css/itflow_metrics.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_metrics.css') ?>">
+
+    <!-- RMM asset panel and agent fleet page (includes/rmm_ui_render.php). Scoped under .rmm-*.
+         Built from --if-* tokens; must sit AFTER itflow_design.css, itflow_motion.css and
+         itflow_metrics.css and BEFORE itflow.bind-tabler.css. -->
+    <link rel="stylesheet" href="/css/itflow_rmm.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm.css') ?>">
+    <!-- Alerts centre, starter policies, hypervisors, reports (.rmmx-* kit, RivetCore shared UI assets). -->
+    <link rel="stylesheet" href="/css/itflow_rmm_ui.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_ui.css') ?>">
+    <link rel="stylesheet" href="/css/itflow_rmm_automation.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_automation.css') ?>">
+    <!-- RMM Phase 6 and 8 and the scale settings (RivetCore 1.0.0-rc.11): the Remote tab, the Logs pages and the Administration scale panel. Same layer, same rules. -->
+    <link rel="stylesheet" href="/css/itflow_rmm_remote.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_remote.css') ?>">
+    <?php if (file_exists($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm.edition.css')) { ?>
+    <!-- Edition override: the RivetMSP-only rules cut out of itflow_rmm.css and itflow_rmm_remote.css
+         (compact RMM-panel buttons, Performance-history chart sizing, Mesh node-id wrapping). See
+         css/itflow_rmm.edition.css. -->
+    <link rel="stylesheet" href="/css/itflow_rmm.edition.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm.edition.css') ?>">
+    <?php } ?>
+    <link rel="stylesheet" href="/css/itflow_rmm_logs.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_logs.css') ?>">
+    <!-- Patch compliance/approvals and software deployment (RivetCore shared UI assets). -->
+    <link rel="stylesheet" href="/css/itflow_rmm_patches.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_patches.css') ?>">
+    <link rel="stylesheet" href="/css/itflow_rmm_software.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_software.css') ?>">
+    <link rel="stylesheet" href="/css/itflow_rmm_scale.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_scale.css') ?>">
+    <!-- RMM starter pack (RivetCore 1.0.0-rc.13): the Starter pack page and the Starter marks of the script library. Same layer, same rules. MSP-only, no RivetIT/Core counterpart yet. -->
+    <link rel="stylesheet" href="/css/itflow_rmm_starter.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_rmm_starter.css') ?>">
+
     <!-- Token seam: maps this app's --if-* / --color-* tokens onto Tabler's --tblr-*.
-         MUST load after the design layer (so the mappings win) and BEFORE the
+         MUST load after the design layer and the RMM sheets (so the mappings win) and BEFORE the
          per-company accent block below (so a custom accent still overrides them). -->
     <link rel="stylesheet" href="/css/itflow.bind-tabler.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow.bind-tabler.css') ?>">
 

@@ -1,57 +1,12 @@
 /*
  * RMM asset panel and agent fleet page (includes/rmm_ui_render.php, agent/rmm_fleet.php).
  *
- * RivetMSP has no css/itflow_metrics.css (no Metrics subsystem), so this file carries the small slice of the .ifm-* tile/banner rules and the
- * .it-* stat-card, empty-state and tint rules that the panel's markup uses, next to its own .rmm-* additions. Every colour is an existing token
- * (--if-*, --tblr-*; tints are color-mix of --tblr-* ), so light, dark and the per-company accent come for free.
+ * Scoped under .rmm-*; the gauges, summary tiles, banners and chart chrome are the existing .ifm-* rules in css/itflow_metrics.css and the
+ * .it-* layer of css/itflow_design.css. Every colour is an existing token (--if-*, --tblr-*), so light, dark and the per-company accent
+ * come for free and this file adds no colour literal.
  *
- * Load order: after css/itflow_motion.css, before css/itflow.compat-color.css and css/itflow.bind-tabler.css (see includes/header.php).
+ * Load order: after css/itflow_metrics.css, before css/itflow.bind-tabler.css (see includes/header.php).
  */
-
-/* ---- tiles, banners, labels (.ifm-*) */
-.ifm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .75rem; margin-bottom: 1.25rem; }
-.ifm-card { background: var(--if-surface); border: 1px solid var(--if-border); border-radius: var(--if-radius); box-shadow: var(--if-shadow); overflow: hidden; }
-.ifm-card > .it-stat-card { background: transparent; border: 0; box-shadow: none; padding-bottom: .25rem; }
-.ifm-card-meta { display: flex; flex-wrap: wrap; gap: .9rem; padding: 0 1.1rem .8rem calc(1.1rem + 2.5rem + .85rem); font-size: .72rem; color: var(--if-muted); }
-.ifm-card-meta b { font-family: var(--if-mono); font-weight: 600; color: var(--if-ink); }
-.ifm-card-stale { border-style: dashed; }
-.ifm-chip { display: inline-block; padding: 0 .4rem; border-radius: 999px; font-size: .66rem; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
-  border: 1px solid var(--if-border-strong); color: var(--if-muted); }
-.ifm-chip-stale { background: rgba(var(--if-primary-rgb), .07); }
-.ifm-family { margin: 1.4rem 0 .6rem; font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--if-muted); }
-.ifm-family:first-of-type { margin-top: 0; }
-.ifm-mono { font-family: var(--if-mono); }
-.ifm-toolbar-label { font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--if-muted); }
-.ifm-banner { display: flex; align-items: flex-start; gap: .7rem; padding: .7rem .9rem; margin-bottom: 1rem; border: 1px solid var(--if-border); border-left-width: 4px;
-  border-radius: var(--if-radius-sm); background: var(--if-surface); color: var(--if-ink); font-size: .84rem; line-height: 1.45; box-shadow: var(--if-shadow); }
-.ifm-banner-icon { margin-top: .15rem; opacity: .8; }
-.ifm-banner-offline { border-left-color: var(--if-muted); }
-.ifm-banner-offline .ifm-banner-icon { color: var(--if-muted); }
-.ifm-banner-warn { border-left-color: var(--if-primary); }
-.ifm-banner-warn .ifm-banner-icon { color: var(--if-primary); }
-
-/* ---- stat cards and empty state (.it-*) */
-.it-stat-card { display: flex; align-items: center; gap: .85rem; background: var(--if-surface); border: 1px solid var(--if-border); border-radius: var(--if-radius);
-  box-shadow: var(--if-shadow); padding: 1rem 1.1rem; color: inherit; }
-.it-stat-icon { width: 2.5rem; height: 2.5rem; min-width: 2.5rem; border-radius: var(--if-radius-sm); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
-.it-stat-body { min-width: 0; }
-.it-stat-value { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; font-family: var(--if-mono); }
-.it-stat-label { font-size: .78rem; color: var(--if-muted); font-weight: 500; line-height: 1.3; }
-.it-stat-icon.it-tint-primary { background: var(--if-primary-soft); color: var(--if-primary); }
-.it-stat-icon.it-tint-slate { background: color-mix(in srgb, var(--if-muted) 16%, transparent); color: var(--if-muted); }
-.it-stat-icon.it-tint-success { background: color-mix(in srgb, var(--tblr-success) 15%, transparent); color: var(--tblr-success); }
-.it-stat-icon.it-tint-warning { background: color-mix(in srgb, var(--tblr-warning) 18%, transparent); color: var(--tblr-warning); }
-.it-stat-icon.it-tint-danger { background: color-mix(in srgb, var(--tblr-danger) 15%, transparent); color: var(--tblr-danger); }
-.it-stat-icon.it-tint-info { background: color-mix(in srgb, var(--tblr-info) 15%, transparent); color: var(--tblr-info); }
-.it-stat-icon.it-tint-violet { background: color-mix(in srgb, var(--tblr-purple) 15%, transparent); color: var(--tblr-purple); }
-.it-empty-state { text-align: center; padding: 3rem 1.5rem; }
-.it-empty-icon { font-size: 2.25rem; color: var(--if-border-strong); margin-bottom: .75rem; }
-.it-empty-title { font-size: 1rem; font-weight: 600; color: var(--if-ink); margin: 0 0 .35rem; }
-.it-empty-subtitle { font-size: .875rem; color: var(--if-muted); margin: 0 auto 1rem; max-width: 32rem; }
-.it-empty-actions { display: flex; gap: .5rem; justify-content: center; flex-wrap: wrap; }
-.card-body > .it-empty-state:last-child { padding-bottom: 1.5rem; }
-
-#rmm-panel .btn-xs, #rmm-panel .btn-group-xs > .btn { --tblr-btn-padding-y: .1rem; --tblr-btn-padding-x: .4rem; --tblr-btn-font-size: .75rem; padding: .1rem .4rem; font-size: .75rem; }
 
 .min-w-0 { min-width: 0; }
 
@@ -108,6 +63,13 @@
 .rmm-trend { position: relative; }   /* the visually-hidden text inside is absolutely positioned: keep it inside the scrolling table container, or it widens the page */
 .rmm-trend summary { cursor: pointer; color: var(--if-muted); }
 
+/* The Run script dialog: two panes (library / free-form) that each wrap their own body and footer, so the body still scrolls inside the dialog. */
+.rmm-run-pane { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.rmm-run-pane[hidden] { display: none; }
+.rmm-run-pane > .modal-body { overflow-y: auto; }
+#rmm-run-lib-script { max-height: 14rem; }
+#rmm-run-lib-detail:empty { display: none; }
+
 /* Phone width: the strip stacks (identity, then the action row wrapping), tables sit in their own scroll container. */
 @media (max-width: 767.98px) {
   .rmm-strip-row { align-items: flex-start !important; }
@@ -115,6 +77,3 @@
   .rmm-actions .btn { flex: 1 1 auto; }
   .rmm-dl-key { width: auto; white-space: normal; }
 }
-
-/* Performance history charts (Chart.js canvas needs a sized container) */
-.rmm-perf-canvas { position: relative; height: 200px; }

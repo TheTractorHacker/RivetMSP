@@ -1,0 +1,40 @@
+/* =============================================================================
+   RivetMSP edition override for css/itflow_rmm.css and css/itflow_rmm_remote.css.
+
+   Both of those files are now RivetCore's shared, unmodified copies (installed
+   byte for byte by vendor/rivet/rivet-core/scripts/install-ui-assets.php; see
+   vendor/rivet/rivet-core/docs/ui/DESIGN_ASSETS.md). Per that doc's "Never
+   edit a shared file in the edition" rule, nothing below may be merged back
+   into either file - it lives here instead, loaded right after
+   css/itflow_rmm_remote.css (includes/header.php).
+
+   Unlike itflow_custom.css/itflow_design.css, Core's manifest has no
+   *.edition.css override slot for the RMM sheets, so this is a RivetMSP-only
+   addition to the load order (not a Core-recognized file name), kept small
+   and scoped on purpose.
+
+   Content is RivetMSP-only product surface with no RivetIT/Core equivalent
+   (DESIGN_ASSETS.md "RivetMSP migration checklist", section 2):
+     - `#rmm-panel .btn-xs` / `.btn-group-xs > .btn`: compact buttons in the
+       asset page's RMM panel.
+     - `.rmm-perf-canvas`: sized container (height: 200px) for the Performance
+       history Chart.js canvas - without it the chart has no height to render
+       into.
+     - `.rmm-mesh-agent` / `#mesh .alert > div`: lets a MeshCentral node id
+       (no natural break opportunity) wrap instead of widening the asset
+       Remote/Mesh tab on a phone.
+
+   Extracted verbatim from RivetMSP's pre-migration css/itflow_rmm.css and
+   css/itflow_rmm_remote.css (commit 0b044dabf, "Release 26.10.46") during the
+   Core UI asset sync (2026-10-27). No declarations were changed.
+   ============================================================================= */
+
+/* from css/itflow_rmm.css */
+#rmm-panel .btn-xs, #rmm-panel .btn-group-xs > .btn { --tblr-btn-padding-y: .1rem; --tblr-btn-padding-x: .4rem; --tblr-btn-font-size: .75rem; padding: .1rem .4rem; font-size: .75rem; }
+
+/* Performance history charts (Chart.js canvas needs a sized container) */
+.rmm-perf-canvas { position: relative; height: 200px; }
+
+/* from css/itflow_rmm_remote.css: the MeshCentral agent state of a device (RivetCore 1.0.0-rc.12) - a node id has no break opportunities, so it must be allowed to wrap on a phone */
+.rmm-mesh-agent { overflow-wrap: anywhere; }
+.rmm-mesh-agent .alert > div, #mesh .alert > div { min-width: 0; overflow-wrap: anywhere; }

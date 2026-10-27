@@ -134,7 +134,14 @@ if ($csp_sent !== '' && stripos($csp_sent, 'script-src') === false) {
 
     <link rel="stylesheet" href="/css/itflow_bs5_bridge.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_bs5_bridge.css') ?>">
     <link rel="stylesheet" href="/css/itflow_custom.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_custom.css') ?>">
+    <?php if (file_exists($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_custom.edition.css')) { ?>
+    <link rel="stylesheet" href="/css/itflow_custom.edition.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_custom.edition.css') ?>">
+    <?php } ?>
     <link rel="stylesheet" href="/css/itflow_design.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_design.css') ?>">
+    <?php if (file_exists($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_design.edition.css')) { ?>
+    <!-- Carries the KB reader/article-card styling the client-portal KB pages use. -->
+    <link rel="stylesheet" href="/css/itflow_design.edition.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_design.edition.css') ?>">
+    <?php } ?>
 
     <!-- Motion layer. Owns every animation in the app, including the single global
          prefers-reduced-motion guard, so no later rule can forget it. Must sit AFTER
