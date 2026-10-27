@@ -7823,3 +7823,16 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.118'");
     }
+
+    if ($rivetit_db_version() == '2.6.118') {
+        // Renumbered during consolidation: originally guarded on 2.6.112, targeting 2.6.113 directly (claimed at
+        // the same beta tip as several other branches, per this step's own note below). Chains after 2.6.118 now.
+        //
+        // Roadmap #21 (child tickets): a ticket may optionally belong to a parent
+        // ticket of the same client. agent/post/ticket.php validates the link
+        // (same client, not itself, not a one-level cycle) before ever storing it.
+        mysqli_query($mysqli, "ALTER TABLE `tickets` ADD COLUMN IF NOT EXISTS `ticket_parent_id` int(11) DEFAULT NULL AFTER `ticket_merged_into_id`");
+        mysqli_query($mysqli, "ALTER TABLE `tickets` ADD INDEX IF NOT EXISTS `idx_tickets_parent_id` (`ticket_parent_id`)");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.119'");
+    }
