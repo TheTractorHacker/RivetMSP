@@ -4,6 +4,12 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.47] RivetMSP — adopt RivetCore's shared UI asset layer (no database change)
+
+**Deploy notes:** back up the database as usual (no migration in this release), pull this branch, run `composer install` if the vendor tree isn't already current for 1.0.0-rc.42.
+
+RivetMSP now consumes RivetCore's shared, Core-maintained design layer (`vendor/rivet/rivet-core/assets/ui/css/`) instead of its own long-drifted copies of the same files - installed via Core's own `install-ui-assets.php`/`check-ui-assets.php` tooling. Genuine RivetMSP-specific styling that had no Core equivalent (ticket stat boxes, Knowledge Base article/reader styling, RMM panel compact-button and Mesh-node-id wrapping tweaks, and five still-active widgets whose markup predates Core's newer versions of the same components) was preserved in three new override sheets (`itflow_custom.edition.css`, `itflow_design.edition.css`, `itflow_rmm.edition.css`) rather than silently lost. Two webhook stylesheets (`webhook_form.css`, `webhook_guides.css`) were deliberately left on RivetMSP's own version for now, since Core's versions style a two-page wizard flow RivetMSP doesn't have and installing them as-is would have broken the live webhook pages - tracked as a separate follow-up, not a regression.
+
 ## [26.10.46] RivetMSP — per-category SLA-exempt and Non-billable ticket settings (DB 2.6.126)
 
 **Deploy notes:** back up the database, pull this branch, run **Administration > Updates** once (one additive, idempotent step, 2.6.125 -> 2.6.126). No behavior changes until an admin turns on a flag on a category.
