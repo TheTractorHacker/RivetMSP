@@ -20,6 +20,7 @@ renderAdminDirectory('Templates', 'Create and manage reusable content.', 'fa-cop
             ['Contract templates', 'Build contracts from a standard format.', 'contract_template.php', 'fa-file-contract', true, ['url' => '/admin/modals/contract_template/contract_template_add.php', 'size' => 'lg']],
             ['Project templates', 'Start projects with predefined work.', 'project_template.php', 'fa-project-diagram', true, ['url' => '/admin/modals/project_template/project_template_add.php']],
             ['Document templates', 'Create standard documents.', 'document_template.php', 'fa-file-alt', true, ['url' => '/admin/modals/document_template/document_template_add.php', 'size' => 'xl']],
+            ['Structured documentation types', 'Build a field layout once (Firewall, ISP Circuit, ...), reused by every document of that type.', 'structured_doc_types.php', 'fa-sitemap', true, ['url' => '/admin/modals/structured_doc_type/structured_doc_type_add.php']],
         ],
     ],
     'people-assets' => [

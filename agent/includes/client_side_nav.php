@@ -206,6 +206,13 @@ $current_page = basename($_SERVER["PHP_SELF"]);
                             </a>
                         </li>
 
+                        <li class="nav-item<?php if ($current_page == "structured_docs.php" || $current_page == "structured_doc.php") { echo " active"; } ?>">
+                            <a href="/agent/structured_docs.php?client_id=<?php echo $client_id; ?>" class="nav-link<?php if ($current_page == "structured_docs.php" || $current_page == "structured_doc.php") { echo " active"; } ?>">
+                                <span class="nav-link-icon"><i class="fas fa-sitemap"></i></span>
+                                <span class="nav-link-title">Structured Docs</span>
+                            </a>
+                        </li>
+
                         <?php if (lookupUserPermission("module_credential") >= 1) { ?>
                             <li class="nav-item<?php if ($current_page == "credentials.php") { echo " active"; } ?>">
                                 <a href="/agent/credentials.php?client_id=<?php echo $client_id; ?>" class="nav-link<?php if ($current_page == "credentials.php") { echo " active"; } ?>">
