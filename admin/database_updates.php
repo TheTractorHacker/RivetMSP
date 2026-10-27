@@ -7905,3 +7905,17 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.120'");
     }
+
+    if ($rivetit_db_version() == '2.6.120') {
+        // Renumbered during consolidation: originally guarded on 2.6.112, targeting 2.6.113 directly (claimed at
+        // the same beta tip as several other branches, per this step's own note below). Chains after 2.6.120 now.
+        //
+        // Roadmap #24: link a recurring invoice to a contract so it pauses/stops when the contract does -
+        // neither edition had this (checked RivetIT: no equivalent column or hook exists there either, so
+        // this is new work, not a port). No hard FK (recurring_invoice_category_id, the closest existing
+        // column, has none either - this table's own convention), just a plain nullable column + index.
+        mysqli_query($mysqli, "ALTER TABLE `recurring_invoices` ADD COLUMN IF NOT EXISTS `recurring_invoice_contract_id` int(11) DEFAULT NULL AFTER `recurring_invoice_client_id`");
+        mysqli_query($mysqli, "ALTER TABLE `recurring_invoices` ADD INDEX IF NOT EXISTS `idx_recurring_invoice_contract_id` (`recurring_invoice_contract_id`)");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.121'");
+    }

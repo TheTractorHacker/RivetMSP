@@ -87,6 +87,10 @@ if (isset($_POST['add_recurring_invoice'])) {
 
     enforceClientAccess();
 
+    // roadmap #24: a linked contract must belong to this same client - never trust the posted id alone.
+    $contract_id_raw = intval($_POST['contract_id'] ?? 0);
+    $contract_id = ($contract_id_raw > 0 && (int) getFieldById('contracts', $contract_id_raw, 'contract_client_id') === $client_id) ? $contract_id_raw : 'NULL';
+
     // Atomically increment and get the new recurring_invoice number
     mysqli_query($mysqli, "
         UPDATE settings
@@ -101,7 +105,7 @@ if (isset($_POST['add_recurring_invoice'])) {
     // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.
     $recurring_invoice_prefix_sql = mysqli_real_escape_string($mysqli, (string) $config_recurring_invoice_prefix);
     $company_currency_sql = mysqli_real_escape_string($mysqli, (string) $session_company_currency);
-    mysqli_query($mysqli,"INSERT INTO recurring_invoices SET recurring_invoice_prefix = '$recurring_invoice_prefix_sql', recurring_invoice_number = $recurring_invoice_number, recurring_invoice_scope = '$scope', recurring_invoice_frequency = '$frequency', recurring_invoice_next_date = '$start_date', recurring_invoice_category_id = $category, recurring_invoice_status = 1, recurring_invoice_currency_code = '$company_currency_sql', recurring_invoice_client_id = $client_id");
+    mysqli_query($mysqli,"INSERT INTO recurring_invoices SET recurring_invoice_prefix = '$recurring_invoice_prefix_sql', recurring_invoice_number = $recurring_invoice_number, recurring_invoice_scope = '$scope', recurring_invoice_frequency = '$frequency', recurring_invoice_next_date = '$start_date', recurring_invoice_category_id = $category, recurring_invoice_status = 1, recurring_invoice_currency_code = '$company_currency_sql', recurring_invoice_client_id = $client_id, recurring_invoice_contract_id = $contract_id");
 
     $recurring_invoice_id = mysqli_insert_id($mysqli);
 
@@ -139,6 +143,10 @@ if (isset($_POST['edit_recurring_invoice'])) {
 
     enforceClientAccess();
 
+    // roadmap #24: a linked contract must belong to this same client - never trust the posted id alone.
+    $contract_id_raw = intval($_POST['contract_id'] ?? 0);
+    $contract_id = ($contract_id_raw > 0 && (int) getFieldById('contracts', $contract_id_raw, 'contract_client_id') === $client_id) ? $contract_id_raw : 'NULL';
+
     //Calculate new total
     $sql = mysqli_query($mysqli,"SELECT * FROM recurring_invoice_items WHERE item_recurring_invoice_id = $recurring_invoice_id");
     $recurring_invoice_amount = 0;
@@ -148,7 +156,7 @@ if (isset($_POST['edit_recurring_invoice'])) {
     }
     $recurring_invoice_amount = $recurring_invoice_amount - $recurring_invoice_discount;
 
-    mysqli_query($mysqli,"UPDATE recurring_invoices SET recurring_invoice_scope = '$scope', recurring_invoice_frequency = '$frequency', recurring_invoice_next_date = '$next_date', recurring_invoice_category_id = $category, recurring_invoice_discount_amount = $recurring_invoice_discount, recurring_invoice_amount = $recurring_invoice_amount, recurring_invoice_status = $status WHERE recurring_invoice_id = $recurring_invoice_id");
+    mysqli_query($mysqli,"UPDATE recurring_invoices SET recurring_invoice_scope = '$scope', recurring_invoice_frequency = '$frequency', recurring_invoice_next_date = '$next_date', recurring_invoice_category_id = $category, recurring_invoice_discount_amount = $recurring_invoice_discount, recurring_invoice_amount = $recurring_invoice_amount, recurring_invoice_status = $status, recurring_invoice_contract_id = $contract_id WHERE recurring_invoice_id = $recurring_invoice_id");
 
     mysqli_query($mysqli,"INSERT INTO history SET history_status = '$status', history_description = 'Recurring Invoice edited', history_recurring_invoice_id = $recurring_invoice_id");
 

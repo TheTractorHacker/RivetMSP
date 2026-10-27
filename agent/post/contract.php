@@ -38,6 +38,26 @@ if (isset($_POST['add_contract'])) {
     redirect();
 }
 
+/*
+ * roadmap #24: pause every recurring invoice linked to a contract (recurring_invoice_contract_id) that is
+ * still active, so nothing keeps billing against a contract that has ended. Logged the same way an admin
+ * pausing it by hand would be (a history row + logAction), so there is a visible trail of WHY it stopped.
+ */
+function pauseRecurringInvoicesForContract(\mysqli $mysqli, int $contractId, string $reason): void
+{
+    $sql = mysqli_query($mysqli, "SELECT recurring_invoice_id, recurring_invoice_prefix, recurring_invoice_number, recurring_invoice_scope, recurring_invoice_client_id FROM recurring_invoices WHERE recurring_invoice_contract_id = $contractId AND recurring_invoice_status = 1 AND recurring_invoice_archived_at IS NULL");
+    while ($row = mysqli_fetch_assoc($sql)) {
+        $id = (int) $row['recurring_invoice_id'];
+        $label = sanitizeInput($row['recurring_invoice_prefix'] . $row['recurring_invoice_number'] . ' - ' . $row['recurring_invoice_scope']);
+        $clientId = (int) $row['recurring_invoice_client_id'];
+        mysqli_query($mysqli, "UPDATE recurring_invoices SET recurring_invoice_status = 0 WHERE recurring_invoice_id = $id");
+        // history_description is varchar(200) - truncated defensively since $reason can carry a contract name of arbitrary length.
+        $description = mb_substr("Recurring Invoice paused automatically - $reason", 0, 200);
+        mysqli_query($mysqli, "INSERT INTO history SET history_status = '0', history_description = '" . mysqli_real_escape_string($mysqli, $description) . "', history_recurring_invoice_id = $id");
+        logAction("Recurring Invoice", "Edit", "Recurring invoice $label paused automatically - $reason", $clientId, $id);
+    }
+}
+
 if (isset($_POST['edit_contract'])) {
     validateCSRFToken($_POST['csrf_token']);
     enforceUserPermission('module_support', 2);
@@ -46,6 +66,10 @@ if (isset($_POST['edit_contract'])) {
 
     // Confirm access to the contract's current client before allowing any edit
     enforceClientAccess(intval(getFieldById('contracts', $contract_id, 'contract_client_id')));
+
+    // roadmap #24: captured before the UPDATE below, to tell "just turned Expired/Cancelled" (pause now)
+    // from "was already Expired/Cancelled" (nothing newly changed, so nothing to pause again).
+    $contract_status_before = (string) getFieldById('contracts', $contract_id, 'contract_status');
 
     $client_id = intval($_POST['contract_client_id']);
     $name = sanitizeInput($_POST['contract_name']);
@@ -77,6 +101,12 @@ if (isset($_POST['edit_contract'])) {
 
     mysqli_query($mysqli, "UPDATE contracts SET contract_name = '$name', contract_type = '$type', contract_status = '$status', contract_value = $value_sql, contract_renewal_frequency = $freq_sql, contract_start_date = $start_sql, contract_end_date = $end_sql, contract_renewal_date = $renewal_sql, contract_details = '$notes', contract_sla_low_response_time = $sla_lr, contract_sla_low_resolution_time = $sla_lres, contract_sla_medium_response_time = $sla_mr, contract_sla_medium_resolution_time = $sla_mres, contract_sla_high_response_time = $sla_hr, contract_sla_high_resolution_time = $sla_hres, contract_support_hours_included_remote = $hours_remote, contract_support_hours_included_onsite = $hours_onsite WHERE contract_id = $contract_id");
 
+    // roadmap #24: only on the TRANSITION into Expired/Cancelled - re-saving an already-Expired contract
+    // must not re-fire (and must not fight an admin who deliberately re-enabled the invoice since).
+    if (in_array($status, ['Expired', 'Cancelled'], true) && !in_array($contract_status_before, ['Expired', 'Cancelled'], true)) {
+        pauseRecurringInvoicesForContract($mysqli, $contract_id, "the linked contract \"$name\" was marked $status");
+    }
+
     logAction("Contract", "Edit", "Updated contract $name", $client_id);
     flash_alert("Contract updated.");
     redirect();
@@ -93,6 +123,10 @@ if (isset($_GET['delete_contract'])) {
     enforceClientAccess();
 
     mysqli_query($mysqli, "UPDATE contracts SET contract_archived_at = NOW() WHERE contract_id = $contract_id");
+
+    // roadmap #24: a deleted contract is gone, same as an Expired/Cancelled one - pause what was linked to it.
+    pauseRecurringInvoicesForContract($mysqli, $contract_id, "the linked contract was deleted");
+
     logAction("Contract", "Delete", "Deleted contract #$contract_id", $client_id);
     flash_alert("Contract deleted.");
     redirect();
