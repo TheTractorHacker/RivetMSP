@@ -4,6 +4,59 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.45] RivetMSP — consolidation: RivetCore rc.37->rc.42 + RMM PostgreSQL data store, security audit, and 14 roadmap features (DB 2.6.112 to 2.6.125)
+
+**Deploy notes:** back up the database, pull this branch, run **Administration > Updates** once: it walks fourteen additive, guarded steps in order (2.6.113 through 2.6.125), each idempotent and safe to re-run. `composer.json`/`composer.lock` gained `firebase/php-jwt` (OIDC) alongside the `rivet/rivet-core` bump to 1.0.0-rc.42 - run `composer install` (or redeploy the vendored tree as usual) before the first page load. The PostgreSQL RMM data store is opt-in and OFF by default (`data_store` stays `mariadb` until an admin completes Administration > Endpoint agent > Data store); nothing here switches it on. `tests/`, `.github/` and `.well-known/` are no longer version-controlled as of this release (see the dedicated note below) - GitHub Actions CI on this repo stops running once this is pushed.
+
+This release consolidates a large batch of parallel feature branches built over one long session, merged back into `beta` one at a time with conflicts resolved by hand and each branch's own test suite re-verified after merging (DB-version collisions were common - several branches independently claimed the same step number from the same prior tip and were renumbered in sequence as each actually landed).
+
+**RivetCore 1.0.0-rc.37 -> 1.0.0-rc.42, RMM PostgreSQL data store (phases 1-4) and credential hardening:**
+- Staged Core adoption through rc.38 (hardening), rc.39 (data-store interface), rc.40 (PostgreSQL phase 2), rc.41 (data-store setting + migration command), rc.42. An optional PostgreSQL store for RMM log/change/check/patch/software history and metrics, with a settings-card connection test, dry-run and real migration (both directions, with rollback), and backup/restore tooling - a device move while PostgreSQL is unreachable is deferred (`rmm_pending_client_moves`) and retried by the normal cron housekeeping pass, never lost.
+- **Credential hardening:** empty-password/peer-authentication support (a blank password is not refused - trust/peer auth over a unix socket is the documented recommended setup), a password-rotation UI that tests the new password against the real server *before* replacing the stored one, an audit trail (`rmm_pg_credential_rotations`: who/when, never the value, with a 90-day-stale warning), and rewrap coverage for the stored connection password.
+- **Security:** a GitHub Actions template-injection fix (the manual `core_ref` workflow input no longer interpolates directly into a shell step), a consolidated real-HTTP tenant-isolation test for the device check-in/job endpoints, and a closed test-harness guard gap.
+
+**Service catalog v1 (#6), DB 2.6.113:** curated, one-click ticket templates ("Request Something") on both the agent side and the client portal, with an optional price and a `requires_approval` hold (new ticket starts at "Pending Approval", resolved by status name) - both creation paths share one `serviceCatalogHoldTicket()` helper so the hold behaves identically either way. "Popular this month" / "recently used by you" surface real usage history; deleting an item detaches it from past tickets without touching them.
+
+**KB article version history + review schedule (#7, slice 1), DB 2.6.116:** every edit or restore snapshots what was replaced (never the new text); an optional review-due date + reviewer surfaces a "Needs Review" badge/filter once it passes.
+
+**Per-client Microsoft/Entra tenant credentials (#10, slice 1), DB 2.6.117:** schema + admin UI for a per-client Graph API tenant/client-secret pair (the Graph sync engine itself is a later, separate step). The cached-token column added for that later step is already registered for key-rotation coverage.
+
+**Generic OpenID Connect client-portal sign-in (#14), DB 2.6.118:** a real authorization-code + PKCE + nonce flow with JWKS-verified ID tokens for any standards-compliant provider, alongside the existing Microsoft Entra path. Subject matching is case-sensitive from the start (RivetIT shipped this case-insensitive first and had to fix it later).
+
+**Admin Server status page:** CPU, memory, disk, database/application version and PHP extensions, each degrading to a warning rather than a fatal error when a signal can't be read.
+
+**Child tickets (#21), DB 2.6.119:** an optional parent/child link between two tickets of the same client, validated server-side (same client, not itself, not a one-level cycle) on both create and edit.
+
+**Relationships card widened to tickets (#23):** the existing cross-entity linking system now covers ticket pages too - the one real gap in an otherwise-complete system.
+
+**Patch-compliance stat tile (#30):** a per-client count of available, non-approved patches on the client overview, linking to the compliance page pre-filtered to that client.
+
+**Recurring invoices linked to contracts (#24), DB 2.6.121:** marking a linked contract Expired/Cancelled, or deleting it, auto-pauses its linked *active* recurring invoice (never an already-paused one, never an unlinked invoice for the same client), with a history row explaining why.
+
+**Structured documentation field builder (#22), DB 2.6.120:** a Hudu/IT Glue "flexible assets"-style module - an admin defines a document type's field layout once (text/textarea/checkbox/dropdown/password), every document of that type gets the same fields. A new, dedicated module rather than built on the dead `custom_fields` stub; password-type values are encrypted at rest with an audited reveal endpoint.
+
+**Xero accounting integration (#20) + a QuickBooks fatal fix, DB 2.6.122:** a provider-agnostic `AccountingClientInterface` extraction lets the existing push-sync pipeline, mapping table and log work against either QuickBooks Online or Xero. Also fixes a genuine pre-existing bug found while building this: `accounting_entity_map` was missing two columns the mapping-picker UI already queried unconditionally, so any QuickBooks-connected install with `accounting_id > 0` fatally crashed its Client/Item Mapping tabs the moment they loaded (the automatic sync pipeline was unaffected, which is why this went unnoticed).
+
+**Pax8 cost sync for billing/COGS reconciliation (#25), DB 2.6.123:** pulls Pax8 subscription costs per mapped client and surfaces margin (billed minus cost) per client, including negative margins.
+
+**SLA per-client policy override (#17) + automation vocabulary gaps (#18), DB 2.6.124:** a client can have its own SLA policy (falling back to the company default); a new `ticket_updated` automation trigger and `add_tag`/`set_category` actions.
+
+**Automated ticket dispatch v1 (#29), DB 2.6.125:** skill-tag matching with a workload-balance tiebreak (no AI dependency) - a new `user_tags` table of technician skill tags and an optional required-skill tag per category, wired in as a `dispatch_assign` automation action reusing the existing rule engine rather than a new mechanism. Merged immediately after the SLA/automation-vocabulary step above and manually combined with it (both touch the same automation-rule admin pages and modals).
+
+**Verified with no code gap found (#26, #27, #31):** Slack/Teams chat webhook delivery, the provider-agnostic AI interface, and technician utilization reporting/CSV export were all already correctly built - each got a real-HTTP/real-fixture test suite rather than a code change.
+
+**Repository hygiene:** `tests/`, `.github/` and `.well-known/` are no longer tracked by git (confirmed with the user) - every file is still on disk exactly where it was; only GitHub's copy of the repo loses them once this is pushed. Known tradeoffs: GitHub Actions CI stops running, and `.well-known/assetlinks.json` (Android App Links) is untracked too (this does not touch any already-deployed web server's filesystem).
+
+**Fixed along the way (not a feature, found during this consolidation's own verification):**
+- `db.sql`'s seed row for the default SLA policy was never updated when `policy_client_id` became that table's 13th column - a fresh install failed outright (`Column count doesn't match value count`) the moment it tried to load the seed data.
+- Two new secret columns landed without key-rotation/rewrap registration (`microsoft_integrations.token_cache_enc`, `pax8_integrations.client_secret_enc`/`access_token_enc`) - both now registered in `src/Crypto/ColumnRegistry.php`.
+- A scratch-DB test harness gap: several crypto tests rely on `config.php` bridging a `SCRATCH_KEYFILE` environment variable to `$config_keyfile` for a freshly-spawned subprocess to see the same key file its parent just flipped to; this was missing (local, gitignored `config.php` only, not a code change).
+- A destructive test bug: `tests/compliance_snapshot_cron.php` dropped the real `compliance_snapshots` table to test graceful degradation and never recreated it, permanently breaking every later test run against the same scratch database until this was found and fixed.
+
+**Known, not fixed here (flagged for follow-up):** `rmm_package_params.value_enc` (a Core/vendor table with a 4-column composite primary key) is a real, pre-existing gap in the key-rotation registry, predating this entire consolidation - `ColumnSpec`'s current (table, pk, pk2) shape doesn't cleanly cover a 4-part key, so it wasn't rushed in alongside the two gaps above.
+
+**Tests:** every merged branch's own test suite was re-verified immediately after that branch's merge, and the full suite was re-run against a freshly-migrated scratch database (not the long-lived one used during individual branch work, which this round's own experience re-confirmed accumulates misleading contamination) for this consolidated release. The full historical DB migration chain (2.6.112 -> 2.6.125) was replayed from a pre-consolidation schema snapshot and confirmed idempotent, reaching a schema equivalent to a fresh `db.sql` load (modulo harmless column-ordering differences from historical `ADD COLUMN` steps with no `AFTER` clause, and one PostgreSQL-data-store-related table whose partitioned primary key is applied by RivetCore's own migration runner rather than tracked in the edition's `db.sql`).
+
 ## [26.10.44] RivetMSP — security fixes from an Aikido scan; RivetCore 1.0.0-rc.31 (Mesh node approval, PHP 8.5 minimum) (DB 2.6.108)
 
 **Deploy notes:** back up the database, pull this tag (tracked `vendor/rivet/rivet-core` is the v1.0.0-rc.31 git archive, verified byte-identical against a fresh `composer update`), run **Administration > Updates** (DB 2.6.107 to 2.6.108: one new table `endpoint_agent_config_seq` and one additive `rmm_hosted_files.verified_fp` column, via Core's own migration runner - guarded, idempotent, nothing written). **This server must already be running PHP 8.5** - Core's own `vendor/composer/platform_check.php` now refuses to boot under 8.4, and `composer.json` declares `"php": ">=8.5"` for the first time (it previously declared no floor at all). The RMM device protocol is unchanged; an old agent keeps working and the golden replay is identical. The Administration > Identity Providers page no longer shows the saved Entra client secret; leave the field blank to keep it.
