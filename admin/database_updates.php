@@ -8099,3 +8099,30 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         }
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.127'");
     }
+
+    if ($rivetit_db_version() == '2.6.127') {
+        // DB 2.6.128: RivetCore 1.0.0-rc.44 -> 1.0.0-rc.47 (M1 stage 3, the last stage of the staged rc.47
+        // catch-up). rc.45 adds migration 0047 (0047_reporting_views): 17 rpt_ views (CREATE OR REPLACE VIEW,
+        // idempotent) over the Core-owned tables, for Power BI / any BI tool - no table, column or row is
+        // touched, nothing is granted, and an edition that does nothing keeps running exactly as before (see
+        // vendor/rivet/rivet-core/UPGRADING.md "Adopting the reporting views"). rc.46 (Core security audit:
+        // secret scanning, SSRF pin, tenancy, Redis, redaction) and rc.47 (published security baseline, quality
+        // gates, PHPUnit 13) ship no migration of their own. One MigrationRunner pass picks up 0047 (and
+        // anything still pending before it); idempotent either way.
+        //
+        // Renumbered from the originally-authored 2.6.127 to 2.6.128, following stage 2's renumbering above
+        // (2.6.126 -> 2.6.127) after beta's SLA/billing merge claimed 2.6.126 first.
+        //
+        // Nothing here grants the read-only reporting account (RivetCore\Reporting\ReportingRole returns the
+        // SQL, never executes it - a database administrator login runs it by hand, see UPGRADING.md point 3)
+        // and nothing adds the edition's own client/site/asset/ticket/SLA reporting views on top of Core's: that
+        // is the rest of the reporting work (M3/R3 prompt, queued after Blake reviews this stage on beta).
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+        }
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.128'");
+    }

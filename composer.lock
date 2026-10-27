@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1d95f4b11823ffb7a2979f957b69e887",
+    "content-hash": "90ddd31bbc3c3a82ea65bc639089897c",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -951,16 +951,16 @@
         },
         {
             "name": "rivet/rivet-core",
-            "version": "v1.0.0-rc.44",
+            "version": "v1.0.0-rc.47",
             "source": {
                 "type": "git",
                 "url": "https://github.com/TheTractorHacker/rivet-core",
-                "reference": "f3cb46270c2bed5f66d9349069fc2c32e1f84166"
+                "reference": "491cfab7765550509b8425f86ab5a0c17d612d68"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/TheTractorHacker/rivet-core/zipball/f3cb46270c2bed5f66d9349069fc2c32e1f84166",
-                "reference": "f3cb46270c2bed5f66d9349069fc2c32e1f84166",
+                "url": "https://api.github.com/repos/TheTractorHacker/rivet-core/zipball/491cfab7765550509b8425f86ab5a0c17d612d68",
+                "reference": "491cfab7765550509b8425f86ab5a0c17d612d68",
                 "shasum": ""
             },
             "require": {
@@ -974,7 +974,7 @@
             },
             "require-dev": {
                 "phpstan/phpstan": "^2",
-                "phpunit/phpunit": "^11.5"
+                "phpunit/phpunit": "^11.5 || ^13.0"
             },
             "suggest": {
                 "ext-pdo_pgsql": "Only for the optional PostgreSQL RMM data store (docs/rmm/POSTGRES.md); MariaDB and MySQL installs never need it."
@@ -1010,7 +1010,7 @@
                 "issues": "https://github.com/TheTractorHacker/rivet-core/issues",
                 "source": "https://github.com/TheTractorHacker/rivet-core"
             },
-            "time": "2026-10-26T16:26:41+00:00"
+            "time": "2026-10-27T14:43:07+00:00"
         },
         {
             "name": "symfony/deprecation-contracts",
