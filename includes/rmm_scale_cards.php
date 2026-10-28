@@ -66,7 +66,52 @@ function rivetRmmScaleSwitch(string $id, string $name, string $label, bool $chec
 }
 
 /**
- * @param array<string,mixed> $c context from the page: csrf, module_on, features, remote{...}, transfer{...}, logs{...}, scale{...}, ext{...}, msg{card=>?array}, old{card=>array}
+ * The Windows security event-log preset checklist (RivetCore 1.0.0-rc.54 compliance baseline, RemoteSettings::summary()['log_presets']): a checkbox row per
+ * preset (title, description, "Recommended for compliance" badge with its framework list, and the per-row audit-policy need), the never-chosen banner, the
+ * always-visible audit-policy warning and the "Apply compliance baseline" button (admin only; never flips the collection switch). Initial checked state is
+ * exactly `selected` (Core's own pre-tick while nothing is chosen, or the saved choice once something is) - nothing here invents a default.
+ *
+ * @param array<string,mixed> $rs RemoteSettings::summary()
+ * @param array<string,mixed> $old the refused form, if any (a 'presets' key wins over $rs)
+ */
+function rivetRmmScaleLogPresetsRowsHtml(array $rs, array $old): string
+{
+    $oldPresets = array_key_exists('presets', $old) ? (array) $old['presets'] : null;
+    $rows = '';
+    foreach ((array) $rs['log_presets'] as $p) {
+        $id = (string) $p['id'];
+        $checked = $oldPresets !== null ? in_array($id, $oldPresets, true) : (bool) $p['selected'];
+        $badge = !empty($p['recommended']) ? ' <span class="badge bg-success">Recommended for compliance</span>' : '';
+        $fw = (array) ($p['frameworks'] ?? []);
+        $rows .= '<div class="form-check mb-3 rmm-log-preset-row"><input class="form-check-input" type="checkbox" id="lp_' . rmmH($id) . '" name="presets[]" value="' . rmmH($id) . '"' . ($checked ? ' checked' : '') . '>'
+            . '<label class="form-check-label" for="lp_' . rmmH($id) . '"><strong>' . rmmH((string) $p['title']) . '</strong>' . $badge
+            . '<div class="small text-muted">' . rmmH((string) $p['description']) . '</div>'
+            . ($fw !== [] ? '<div class="small text-muted">' . rmmH(implode(', ', $fw)) . '</div>' : '')
+            . '<div class="small text-muted"><i class="fas fa-shield-alt me-1" aria-hidden="true"></i>Needs: ' . rmmH((string) ($p['audit_policy'] ?? '')) . '</div></label></div>';
+    }
+
+    return '<div id="lg-presets">' . $rows . '</div>';
+}
+
+/** The banner, the always-visible audit-policy warning and the standalone "Apply compliance baseline" form - everything that must sit OUTSIDE the save-settings form (its own form, admin only, never flips the switch). */
+function rivetRmmScaleLogPresetsStaticHtml(array $rs, string $csrf, bool $rmmAdmin, bool $logsOn): string
+{
+    $chosen = (bool) $rs['log_presets_chosen'];
+    $banner = $chosen ? '' : '<div class="alert alert-info py-2" role="status"><i class="fas fa-info-circle me-2" aria-hidden="true"></i>Nothing is saved yet. The recommended presets are ticked; they take effect when you save.</div>';
+    $auditNote = '<div class="alert alert-warning py-2"><i class="fas fa-exclamation-triangle me-2" aria-hidden="true"></i>' . rmmH((string) $rs['log_presets_audit_note'])
+        . ' See <code>docs/rmm/GPO_TEMPLATES_PLAN.md</code> for the optional auditpol / Group Policy script that turns a subcategory on; it is a planned follow-up and does not exist yet, so there is nothing here to run it for you.</div>';
+    $apply = '';
+    if ($rmmAdmin) {
+        $apply = '<form action="post.php" method="post" class="d-inline mb-3"><input type="hidden" name="csrf_token" value="' . rmmH($csrf) . '">'
+            . '<button type="submit" name="apply_log_preset_baseline" class="btn btn-outline-primary btn-sm"><i class="fas fa-shield-alt me-1" aria-hidden="true"></i>Apply compliance baseline</button>'
+            . '<span class="small text-muted ms-2">Adds the recommended presets to what is already chosen; never unticks anything.' . ($logsOn ? '' : ' Log collection is off, so this only stores the choice until you turn the switch on above.') . '</span></form>';
+    }
+
+    return $auditNote . $banner . $apply;
+}
+
+/**
+ * @param array<string,mixed> $c context from the page: csrf, module_on, features, remote{...}, transfer{...}, logs{...}, scale{...}, ext{...}, msg{card=>?array}, old{card=>array}, rmm_admin
  */
 function rivetRmmUiScaleCards(array $c): string
 {
@@ -175,10 +220,13 @@ function rivetRmmUiScaleCards(array $c): string
     $fleetCap = (int) $rs['logs_fleet_cap_bytes'];
     $logLink = $lgOn ? '<a class="btn btn-outline-secondary btn-sm" href="/agent/rmm_logs.php"><i class="fas fa-stream me-1" aria-hidden="true"></i>Open the Logs page</a>' : '';
     $body = $m('log-collection') . '<p class="small text-muted">Log collection reads Windows event-log channels and Linux system-log entries on the devices and stores them here, so a technician can search them and raise alerts on a pattern. It is the heaviest optional part of the RMM and is off until you turn it on.' . $moduleNote . '</p>'
+        . rivetRmmScaleLogPresetsStaticHtml($rs, $c['csrf'], !empty($c['rmm_admin']), $lgOn)
         . '<form action="post.php" method="post" autocomplete="off" data-rmm-scale-logs>' . $csrf
         . rivetRmmScaleSwitch('lg_on', 'feature_logs', 'Collect logs from devices <code>logs</code>', array_key_exists('feature_logs', $oLg) ? !empty($oLg['feature_logs']) : $lgOn, '', ' data-rmm-scale-gate="#lg_ack" data-rmm-scale-was="' . ($lgOn ? '1' : '0') . '"')
         . '<div id="lg_ack">' . rivetRmmScaleAck('lg_accept', 'accept_logs_storage', (string) $rs['logs_storage_warning'], 'I understand how much this stores, and I will watch the figures below', $lgOn) . '</div>'
-        . '<h6 class="mt-3">What to collect</h6><p class="small text-muted mb-2">Choose narrow sources: warnings and errors from a few channels or services. Every device gets the list for its own platform. An empty list collects nothing, even with the switch on.</p>'
+        . '<h6 class="mt-3">Windows security event-log presets</h6><p class="small text-muted mb-2">Named presets of security-relevant Windows events (account and group changes, repeated failed logons, cleared logs, new services and tasks, audit-policy changes). Checking a box here is enough; the sources it needs are added for you below. An unticked box collects nothing from that preset, even with the switch on.</p>'
+        . rivetRmmScaleLogPresetsRowsHtml($rs, $oLg)
+        . '<h6 class="mt-4">Custom sources</h6><p class="small text-muted mb-2">Choose narrow sources: warnings and errors from a few channels or services. Every device gets the list for its own platform. An empty list collects nothing beyond the presets above, even with the switch on.</p>'
         . '<fieldset class="mb-3"><legend class="fs-6">Windows event-log channels (up to 20)</legend><div data-rmm-scale-rows="win">' . $wHtml . '</div>'
         . '<button type="button" class="btn btn-outline-primary btn-sm mt-1" data-rmm-scale-add="win"><i class="fas fa-plus me-1" aria-hidden="true"></i>Add a Windows channel</button></fieldset>'
         . '<fieldset class="mb-3"><legend class="fs-6">Linux system log (journald, up to 20)</legend><div data-rmm-scale-rows="lin">' . $lHtml . '</div>'

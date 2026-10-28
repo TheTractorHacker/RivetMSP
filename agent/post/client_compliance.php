@@ -104,6 +104,41 @@ if (isset($_POST['share_client_compliance'])) {
     redirect();
 }
 
+if (isset($_POST['apply_log_preset_baseline_client'])) {
+    // RivetCore 1.0.0-rc.54 compliance baseline: the Windows security event-log presets are ONE installation-wide RMM setting, so this button (shown on
+    // every client's compliance page) changes the same install-wide choice the Administration > Endpoint agent page does. It is gated separately from
+    // module_client: a technician without the RMM administrator ability must never see or post this, whatever their client-module level is.
+    validateCSRFToken($_POST['csrf_token']);
+    enforceUserPermission('module_client', 2);
+    $client_id = intval($_POST['client_id'] ?? 0);
+    $exists = $client_id > 0 ? mysqli_query($mysqli, "SELECT client_id FROM clients WHERE client_id = $client_id") : false;
+    if (!$exists || mysqli_num_rows($exists) === 0) {
+        flash_alert('Client not found.', 'error');
+        redirect('clients.php');
+    }
+    $GLOBALS['client_id'] = $client_id;
+    enforceClientAccess();
+    require_once dirname(__DIR__, 2) . '/includes/rmm_bootstrap.php';
+    if (!rivetRmmLogPresetAdmin((int) $session_user_id, $mysqli)) {
+        flash_alert('Your role cannot change the RMM log collection settings.', 'error');
+        redirect();
+    }
+    $rmm = rivetRmmModule($mysqli);
+    $before = $rmm->remoteSettings()->logPresets();
+    $r = $rmm->remoteActions()->applyLogPresetBaseline(rivetRmmPrincipal((int) $session_user_id, (string) $session_name));
+    $rmm->syncState();
+    if (!$r->ok) {
+        flash_alert($r->message, 'error');
+        redirect();
+    }
+    $after = (array) ($r->data['logs_collect']['presets'] ?? []);
+    $added = array_values(array_diff($after, $before));
+    logAction('Client', 'Edit', "$session_name applied the Windows security event-log preset compliance baseline from client $client_id's compliance page", $client_id, $client_id);
+    $client_compliance_audit('compliance.log_preset_baseline_applied', $client_id, 'update', 'Compliance baseline of log presets applied from a client compliance page', ['added' => $added]);
+    flash_alert($added === [] ? 'The compliance baseline was already fully chosen; nothing to add.' : 'Added to the chosen presets: ' . implode(', ', $added) . '.');
+    redirect();
+}
+
 if (isset($_POST['unshare_client_compliance'])) {
     $client_id = $client_compliance_gate();
     ComplianceService::subjects($mysqli)->unshare($client_id);

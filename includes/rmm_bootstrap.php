@@ -402,6 +402,90 @@ function rivetRmmPrincipal(int $userId, string $userName): RmmPrincipal
     return new RmmPrincipal($userId, $userName);
 }
 
+/** May this user apply the log preset compliance baseline / change remote-tools settings (RMM administrator, independent of the module-level permission that only gates reaching the page)? */
+function rivetRmmLogPresetAdmin(int $userId, $mysqli = null): bool
+{
+    try {
+        return rivetRmmModule($mysqli)->authorizer()->allowed($userId, \RivetCore\Rmm\Authz\RmmAbility::ADMIN, 0, false);
+    } catch (\Throwable) {
+        return false;
+    }
+}
+
+/**
+ * The install-wide "Security event log presets" compliance fact (RivetCore 1.0.0-rc.54, {@see \RivetCore\Compliance\Check\SecurityLogPresetsCheck}): are the
+ * Windows security event-log presets of the compliance baseline ({@see \RivetCore\Rmm\Logs\SecurityLogPresets::complianceBaseline()}) collected? This is ONE
+ * installation-wide setting (the presets are not per client), so every caller - the install-wide Automatic checks list and every client's compliance view -
+ * shows the exact same result; nothing here is computed per client. The wording is copied verbatim from SecurityLogPresetsCheck::evaluate() (not reachable
+ * directly: that class needs Core's FrameworkProfile/RequirementsProviderInterface system, which this edition does not wire in - RivetMSP's own compliance
+ * catalog uses the simpler Framework-keyed check model instead), so a reader never sees two different tellings of the same fact.
+ *
+ * @return array{status:string,summary:string,lines:list<string>,logs_on:bool,chosen:bool,baseline:list<string>,missing:list<string>}
+ */
+function rivetRmmLogPresetsComplianceFact($mysqli = null): array
+{
+    $want = \RivetCore\Rmm\Logs\SecurityLogPresets::complianceBaseline();
+    $caveat = 'Caveat: a preset only reads events Windows writes; the matching Advanced Audit Policy subcategory must be on, and this system does not read the audit policy of a device.';
+    try {
+        $rmm = rivetRmmModule($mysqli);
+        $rs = $rmm->remoteSettings();
+        $have = $rs->logPresets();
+        $logsOn = rivetRmmFeatureOn('logs', $mysqli);
+        $chosen = $rs->logPresetsChosen();
+    } catch (\Throwable) {
+        return ['status' => 'na', 'summary' => 'Not available yet (run the database update).', 'lines' => [], 'logs_on' => false, 'chosen' => false, 'baseline' => $want, 'missing' => $want];
+    }
+    $missing = array_values(array_diff($want, $have));
+    if (!$logsOn) {
+        return ['status' => 'fail', 'summary' => 'Log collection is off, so no security events are collected.', 'lines' => [
+            'Not met: the log collection switch is off.',
+            ...($missing === [] ? [] : ['Evidence: ' . count($missing) . ' of ' . count($want) . ' baseline presets are not saved.']),
+            'Remediation: turn log collection on, then ' . ($missing === [] ? 'keep' : 'apply') . ' the compliance baseline presets.',
+            $caveat,
+        ], 'logs_on' => false, 'chosen' => $chosen, 'baseline' => $want, 'missing' => $missing];
+    }
+    if ($missing !== []) {
+        return ['status' => 'fail', 'summary' => 'Not every security event preset of the compliance baseline is enabled.', 'lines' => [
+            'Not met: ' . count($missing) . ' of ' . count($want) . ' baseline presets are not enabled.',
+            ...array_map(static fn (string $id): string => 'Remediation: ' . \RivetCore\Rmm\Logs\SecurityLogPresets::remediation($id) . '.', $missing),
+            $caveat,
+        ], 'logs_on' => true, 'chosen' => $chosen, 'baseline' => $want, 'missing' => $missing];
+    }
+
+    return ['status' => 'pass', 'summary' => 'All ' . count($want) . ' security event presets of the compliance baseline are enabled.', 'lines' => [
+        'Met: log collection is on and every baseline preset is enabled (' . implode(', ', $want) . ').',
+        $caveat,
+    ], 'logs_on' => true, 'chosen' => $chosen, 'baseline' => $want, 'missing' => []];
+}
+
+/**
+ * A count of this client's Windows devices that are online and have announced the log-collection capability - NOT proof that any of them is actually being
+ * audited (a preset cannot see a device's Windows audit policy). Label it as a device count wherever it is shown, never as a per-client compliance score:
+ * {@see rivetRmmLogPresetsComplianceFact()} is the one fact, the same for every client.
+ */
+function rivetRmmLogCapableWindowsDeviceCount(\mysqli $mysqli, int $clientId): int
+{
+    try {
+        $cfg = rivetRmmModule($mysqli)->settings()->get();
+        $onlineSince = gmdate('Y-m-d H:i:s', time() - (int) ($cfg['offline_after_s'] ?? 900));
+        $sql = 'SELECT COUNT(*) AS n FROM endpoint_agent_devices d LEFT JOIN rmm_device_state s ON s.device_id = d.device_id '
+            . 'WHERE d.client_id = ? AND d.revoked_at IS NULL AND d.retired_at IS NULL AND d.os = \'windows\' AND d.last_checkin_at >= ? '
+            . 'AND s.capabilities_json LIKE \'%"logs:collect"%\'';
+        $stmt = mysqli_prepare($mysqli, $sql);
+        if (!$stmt) {
+            return 0;
+        }
+        mysqli_stmt_bind_param($stmt, 'is', $clientId, $onlineSince);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+
+        return (int) ($row['n'] ?? 0);
+    } catch (\Throwable) {
+        return 0;
+    }
+}
+
 /**
  * Build the request object from the PHP superglobals. TLS and proxy trust stay RivetMSP's decision: TLS is required unless the connection is https,
  * on port 443, or relayed by a proxy on this host / private network that says so (X-Forwarded-Proto: https).

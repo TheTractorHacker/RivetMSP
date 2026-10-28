@@ -1032,7 +1032,11 @@ if (isset($_POST['save_logs_settings'])) {
         }
         $lin[] = ['kind' => 'journal', 'units' => $units, 'identifiers' => $idents, 'min_level' => $min, 'contains' => $contains];
     }
-    $old = ['feature_logs' => !empty($_POST['feature_logs']) ? 1 : 0, 'win' => $winRows, 'lin' => $linRows];
+    // RivetCore 1.0.0-rc.54: the compliance-baseline preset checklist. Only ids from SecurityLogPresets::catalog() are accepted; an empty posted list is a
+    // valid explicit choice ("none"), which is why 'presets' is always included below (never gated on "did anything change").
+    $wasChosen = $rs->logPresetsChosen();
+    $postedPresets = array_values(array_intersect(array_map('strval', is_array($_POST['presets'] ?? null) ? $_POST['presets'] : []), \RivetCore\Rmm\Logs\SecurityLogPresets::ids()));
+    $old = ['feature_logs' => !empty($_POST['feature_logs']) ? 1 : 0, 'win' => $winRows, 'lin' => $linRows, 'presets' => $postedPresets];
     foreach (['logs_retention_days', 'logs_device_max_rows', 'logs_fleet_max_rows', 'logs_rate_per_min', 'logs_interval_s'] as $k) {
         $old[$k] = $_POST[$k] ?? '';
     }
@@ -1041,10 +1045,15 @@ if (isset($_POST['save_logs_settings'])) {
         $in['features'] = ['logs' => $want];
         if ($want) {
             $in['accept_logs_storage'] = !empty($_POST['accept_logs_storage']);
+            // First enable (RivetCore 1.0.0-rc.54 compliance baseline): while nobody has ever chosen presets, ask Core to store the baseline if this save
+            // does not already choose one. Never sent once a choice exists, and this never turns the switch on by itself (the admin already did, above).
+            if (!$wasChosen) {
+                $in['compliance_baseline_if_unset'] = true;
+            }
         }
     }
-    $sources = ['linux' => $lin, 'windows' => $win];
-    $curSources = ['linux' => $rs->logSources('linux'), 'windows' => $rs->logSources('windows')];
+    $sources = ['linux' => $lin, 'windows' => $win, 'presets' => $postedPresets];
+    $curSources = ['linux' => $rs->logSources('linux'), 'windows' => $rs->logSources('windows'), 'presets' => $rs->logPresets()];
     if (json_encode($sources) !== json_encode($curSources)) {
         $in['logs_collect'] = $sources;
     }
@@ -1084,6 +1093,29 @@ if (isset($_POST['save_logs_settings'])) {
             $bits[] = 'limits saved';
         }
         rivetRmmScaleMsg('log-collection', 'success', ucfirst(implode(', ', $bits)) . '.');
+    }
+    ea_scale_back('log-collection');
+}
+
+if (isset($_POST['apply_log_preset_baseline'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    ea_scale_require_admin($rmm, (int) $session_user_id, 'log-collection');
+    $rmm->settings()->refresh();
+    $rmm->remoteSettings()->refresh();
+    $logsOn = !empty($rmm->settings()->features()['logs']);
+    $before = $rmm->remoteSettings()->logPresets();
+    $r = $rmm->remoteActions()->applyLogPresetBaseline($ea_who);
+    $rmm->syncState();
+    if (!$r->ok) {
+        rivetRmmScaleMsg('log-collection', 'error', $r->message);
+    } else {
+        $after = (array) ($r->data['logs_collect']['presets'] ?? []);
+        $added = array_values(array_diff($after, $before));
+        $msg = $added === [] ? 'The compliance baseline was already fully chosen; nothing to add.' : 'Added to the chosen presets: ' . implode(', ', $added) . '.';
+        if (!$logsOn) {
+            $msg .= ' Log collection is still off, so nothing is collected yet; turn the switch on above when you are ready.';
+        }
+        rivetRmmScaleMsg('log-collection', 'success', $msg);
     }
     ea_scale_back('log-collection');
 }

@@ -233,6 +233,34 @@ final class ComplianceCatalog
                     : CheckResult::warn("$n active agents have no recorded sign-in in $days days.", 'Disable accounts that are no longer needed.', 'users.php', ['dormant' => $n]);
             });
 
+        // RivetCore 1.0.0-rc.54 compliance baseline: the Windows security event-log presets. The fact is installation-wide (one RMM setting, not per
+        // client) - rivetRmmLogPresetsComplianceFact() (includes/rmm_bootstrap.php) carries the exact wording of Core's SecurityLogPresetsCheck so the
+        // automatic-checks list below, every client's compliance view and the shared report never tell this fact two different ways. The require_once is
+        // a no-op once a page has already loaded the RMM bootstrap (every caller of ComplianceService::assess() loads it first); function_exists guards
+        // callers, such as the housekeeping cron path, that run before the RMM module is wired in for that request.
+        if (!function_exists('rivetRmmLogPresetsComplianceFact')) {
+            $__bootstrap = $this->appRoot . '/includes/rmm_bootstrap.php';
+            if (is_file($__bootstrap)) {
+                require_once $__bootstrap;
+            }
+        }
+        if (function_exists('rivetRmmLogPresetsComplianceFact')) {
+            $out[] = new CallbackCheck('security_log_presets', 'Security events are collected from Windows devices', 'Logging and monitoring',
+                'Account and group changes, failed logons, cleared logs, new services and tasks and audit-policy changes are the events an investigation needs; they must be collected centrally, not only on a device that may be compromised.',
+                [F::ISO27001 => ['A.8.15'], F::SOC2 => ['CC7.2'], F::PCI => ['10.2'], F::HIPAA => ['164.312(b)'], F::NIST171 => ['3.3.1', '3.3.2']],
+                function (): CheckResult {
+                    $fact = rivetRmmLogPresetsComplianceFact($this->db);
+                    $detail = implode("\n", $fact['lines']);
+                    $m = ['logs_on' => $fact['logs_on'], 'presets_chosen' => $fact['chosen'], 'presets_wanted' => count($fact['baseline']), 'presets_enabled' => count($fact['baseline']) - count($fact['missing'])];
+
+                    return match ($fact['status']) {
+                        'pass' => CheckResult::pass($fact['summary'], $detail, $m),
+                        'na' => CheckResult::notApplicable($fact['summary']),
+                        default => CheckResult::fail($fact['summary'], $detail, 'settings_endpoint_agent.php', $m),
+                    };
+                });
+        }
+
         $out[] = new CallbackCheck('schema_current', 'Application and database are up to date', 'Change management',
             'Running current code with a matching database schema avoids known defects and vulnerabilities.',
             [F::ISO27001 => ['A.8.8', 'A.8.32'], F::SOC2 => ['CC7.1', 'CC8.1'], F::PCI => ['6.3.3'], F::HIPAA => ['164.308(a)(1)(ii)(B)']],

@@ -1,6 +1,7 @@
 <?php
 
 require_once "includes/inc_all_client.php";
+require_once dirname(__DIR__) . '/includes/rmm_bootstrap.php';
 
 use RivetCore\Compliance\ClientChecklist;
 use RivetCore\Compliance\Framework;
@@ -9,6 +10,24 @@ use RivetMSP\Compliance\ComplianceService;
 // Perms
 enforceUserPermission('module_client');
 $can_edit = lookupUserPermission('module_client') >= 2;
+
+// RivetCore 1.0.0-rc.54 compliance baseline (Windows security event-log presets): installation-wide, not per client (see
+// includes/rmm_bootstrap.php, rivetRmmLogPresetsComplianceFact()). Shown on every client's page with the SAME result and labelled as such; never
+// faked per client. The device count is a separate, explicitly-labelled figure (this client's Windows devices online with the logs capability),
+// never presented as proof that any of them is actually audited.
+$log_preset_fact = null;
+$log_preset_device_count = null;
+$log_preset_rmm_admin = false;
+try {
+    if (rivetRmmEnabled($mysqli)) {
+        $log_preset_fact = rivetRmmLogPresetsComplianceFact($mysqli);
+        $log_preset_device_count = rivetRmmLogCapableWindowsDeviceCount($mysqli, $client_id);
+        $log_preset_rmm_admin = rivetRmmLogPresetAdmin((int) $session_user_id, $mysqli);
+    }
+} catch (\Throwable) {
+    $log_preset_fact = null;
+}
+$log_preset_onboarding_hint = $log_preset_fact !== null && $log_preset_rmm_admin && !empty($log_preset_fact['logs_on']) && empty($log_preset_fact['chosen']) && ($log_preset_device_count ?? 0) > 0;
 
 $csrf = $_SESSION['csrf_token'];
 $ready = ComplianceService::subjectsReady($mysqli);
@@ -47,6 +66,40 @@ $controls_text = static function (array $controls): string {
         It is a working checklist for you and the client, <strong>not</strong> a certification or an audit opinion; control references are indicative.</p>
     </div>
 </div>
+
+<?php if ($log_preset_fact !== null) { ?>
+<?php if ($log_preset_onboarding_hint) { ?>
+<div class="alert alert-info alert-dismissible fade show" role="alert">
+    <i class="fas fa-info-circle me-1" aria-hidden="true"></i>
+    This client has <?= (int) $log_preset_device_count ?> Windows device<?= (int) $log_preset_device_count === 1 ? '' : 's' ?> online with log collection, but nobody has chosen the Windows security event-log presets yet. This is an installation-wide setting (it is not specific to this client). Use <strong>Apply compliance baseline</strong> on the "Security event log presets" card below; it never turns log collection on or off by itself.
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+<?php } ?>
+<div class="card mb-3">
+    <div class="card-header py-2"><h4 class="card-title mt-2 mb-0">Security event log presets</h4></div>
+    <div class="card-body">
+        <p class="mb-2"><span class="badge text-bg-<?= $log_preset_fact['status'] === 'pass' ? 'success' : ($log_preset_fact['status'] === 'na' ? 'secondary' : 'danger') ?>"><?= $log_preset_fact['status'] === 'pass' ? 'Pass' : ($log_preset_fact['status'] === 'na' ? 'Not available' : 'Fail') ?></span>
+        <strong class="ms-2"><?= nullable_htmlentities($log_preset_fact['summary']) ?></strong></p>
+        <p class="small text-muted mb-2">The Windows security event-log presets are ONE setting for the whole installation (Administration &rarr; Endpoint agent), not a per-client setting: this result is collected for all clients, and every client's page shows the exact same fact.</p>
+        <?php if ($log_preset_fact['lines']) { ?>
+        <ul class="small text-muted mb-2">
+            <?php foreach ($log_preset_fact['lines'] as $line) { ?><li><?= nullable_htmlentities($line) ?></li><?php } ?>
+        </ul>
+        <?php } ?>
+        <?php if ($log_preset_device_count !== null) { ?>
+        <p class="small text-muted mb-2"><i class="fas fa-desktop me-1" aria-hidden="true"></i><strong><?= (int) $log_preset_device_count ?></strong> of this client's Windows devices <?= (int) $log_preset_device_count === 1 ? 'is' : 'are' ?> online and announce the log-collection capability. This is a device count, not proof that any of them is actually auditing: Windows must still write the events (Advanced Audit Policy).</p>
+        <?php } ?>
+        <?php if ($can_edit) { ?>
+        <?php if ($log_preset_rmm_admin) { ?>
+        <form action="post.php" method="post" class="d-inline"><input type="hidden" name="csrf_token" value="<?= $csrf ?>"><input type="hidden" name="client_id" value="<?= $client_id ?>"><button class="btn btn-outline-primary btn-sm" type="submit" name="apply_log_preset_baseline_client"><i class="fas fa-shield-alt me-1" aria-hidden="true"></i>Apply compliance baseline</button></form>
+        <span class="small text-muted ms-2">Changes the installation-wide setting; never unticks anything and never switches log collection on or off.</span>
+        <?php } else { ?>
+        <p class="small text-muted mb-0">Changing this needs the RMM administrator ability (Administration &rarr; Endpoint agent).</p>
+        <?php } ?>
+        <?php } ?>
+    </div>
+</div>
+<?php } ?>
 
 <?php if (!$ready) { ?>
     <div class="alert alert-warning">Run the database update first (Administration &rarr; Update) to turn on customer compliance.</div>

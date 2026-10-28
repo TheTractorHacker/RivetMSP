@@ -609,6 +609,7 @@ foreach (['remote-tools', 'file-transfer', 'log-collection', 'scale', 'partition
     [$scaleCtx['msg'][$__card], $scaleCtx['old'][$__card]] = rivetRmmScaleTake($__card);
 }
 $scaleCtx['rs'] = $rmm->remoteSettings()->summary();
+$scaleCtx['rmm_admin'] = rivetRmmLogPresetAdmin((int) $session_user_id, $mysqli);
 $__lvl3 = @mysqli_fetch_row(@mysqli_query($mysqli, 'SELECT config_rmm_remote_manage_lvl3 FROM settings WHERE company_id = 1'));
 $scaleCtx['lvl3'] = (int) ($__lvl3[0] ?? 0) === 1;
 $scaleCtx['caps'] = ['total' => null, 'services' => 0, 'processes' => 0, 'logs' => 0];
