@@ -116,6 +116,30 @@ function zip_uploads(string $uploadsPath, string $zipFilePath): void {
 /** Raised when a backup is requested without a usable backup passphrase. Callers show message(); cron logs it. */
 class BackupPassphraseRequired extends RuntimeException {}
 
+/**
+ * Raised when the in-app zip would be built without the audit-logged "allow unencrypted" override (rc.53 GAP-11:
+ * compliance now reads real backup encryption - see src/Compliance/Backup/RivetMspBackupFactsProvider.php).
+ */
+class BackupUnencryptedNotAllowed extends RuntimeException {}
+
+/**
+ * Refuses (throws) unless the admin explicitly turned on config_backup_allow_unencrypted_override (Admin > Backup >
+ * Scheduled Backups). The in-app builder's zip holds db.sql and uploads.zip as plain zip content: only the manifest
+ * inside it (backup-manifest.json.enc, carrying the settings key) is passphrase-encrypted - see
+ * build_backup_manifest()'s own doc comment. deploy/backup.sh encrypts the WHOLE archive and needs no override.
+ */
+function backup_require_unencrypted_override(): void {
+    if ((int) ($GLOBALS['config_backup_allow_unencrypted_override'] ?? 0) === 1) {
+        return;
+    }
+    throw new BackupUnencryptedNotAllowed(
+        'In-app backups are refused: the zip this builder produces holds the database dump and uploaded files as plain, '
+        . 'unencrypted zip content (only the small manifest carrying the settings key is passphrase-encrypted). '
+        . 'Either turn on "Allow unencrypted in-app backups" under Maintenance > Backup > Scheduled Backups (the choice is '
+        . 'recorded in the audit log), or use deploy/backup.sh instead, which encrypts the whole archive before it touches disk.'
+    );
+}
+
 /** Shortest backup passphrase the app accepts (the key that unlocks the settings key and every secret in a restore). */
 const BACKUP_PASSPHRASE_MIN_LENGTH = 16;
 
@@ -238,8 +262,9 @@ function build_backup_manifest(mysqli $mysqli, string $baseName, ?string $passph
  * $type: 'manual' or 'auto'
  */
 function build_backup(mysqli $mysqli, string $type, string $backupDir): array {
-    // Refuse before any temp file or dump is created. Throws BackupPassphraseRequired.
+    // Refuse before any temp file or dump is created. Throws BackupPassphraseRequired or BackupUnencryptedNotAllowed.
     $passphrase   = backup_require_passphrase();
+    backup_require_unencrypted_override();
     // Status record (Recovery): a failed or interrupted run is alerted, see src/Recovery/BackupStatus.php.
     $statusId     = \RivetMSP\Recovery\BackupStatus::begin($mysqli, $type === 'auto' ? 'app_auto' : 'app_manual');
     $timestamp    = date('YmdHis');
@@ -432,7 +457,7 @@ if (isset($_GET['backup_download_fresh'])) {
 
     try {
         $result = build_backup($mysqli, 'manual', sys_get_temp_dir());
-    } catch (BackupPassphraseRequired $e) {
+    } catch (BackupPassphraseRequired | BackupUnencryptedNotAllowed $e) {
         flash_alert(htmlspecialchars($e->getMessage(), ENT_QUOTES), 'error');
         redirect();
     }
@@ -454,7 +479,7 @@ if (isset($_GET['backup_save'])) {
     validateCSRFToken($_GET['csrf_token']);
     try {
         $result = build_backup($mysqli, 'manual', $BACKUP_DIR);
-    } catch (BackupPassphraseRequired $e) {
+    } catch (BackupPassphraseRequired | BackupUnencryptedNotAllowed $e) {
         flash_alert(htmlspecialchars($e->getMessage(), ENT_QUOTES), 'error');
         redirect();
     }
@@ -503,7 +528,9 @@ if (isset($_POST['save_backup_settings'])) {
     $auto    = isset($_POST['config_backup_auto_enabled']) ? 1 : 0;
     $freq    = in_array($_POST['config_backup_frequency'] ?? '', ['daily','weekly']) ? $_POST['config_backup_frequency'] : 'daily';
     $retain  = max(1, min(90, intval($_POST['config_backup_retain_count'] ?? 7)));
-    $set = "config_backup_auto_enabled = $auto, config_backup_frequency = '$freq', config_backup_retain_count = $retain";
+    // rc.53 GAP-11: audit-logged admin opt-in (see BackupUnencryptedNotAllowed's doc comment).
+    $allow_unencrypted = isset($_POST['config_backup_allow_unencrypted_override']) ? 1 : 0;
+    $set = "config_backup_auto_enabled = $auto, config_backup_frequency = '$freq', config_backup_retain_count = $retain, config_backup_allow_unencrypted_override = $allow_unencrypted";
     // Blank = keep whatever is already saved (same convention as the S3 secret key below it on this form).
     if (trim($_POST['config_backup_passphrase'] ?? '') !== '') {
         $new_passphrase = trim($_POST['config_backup_passphrase']);
@@ -514,8 +541,10 @@ if (isset($_POST['save_backup_settings'])) {
         $passphrase = mysqli_real_escape_string($mysqli, encryptSetting($new_passphrase));
         $set .= ", config_backup_passphrase = '$passphrase'";
     }
+    $unencrypted_changed = $allow_unencrypted !== (int) ($GLOBALS['config_backup_allow_unencrypted_override'] ?? 0);
     mysqli_query($mysqli, "UPDATE settings SET $set WHERE company_id = 1");
-    logAction('Settings', 'Edit', "$session_name updated backup settings");
+    logAction('Settings', 'Edit', "$session_name updated backup settings"
+        . ($unencrypted_changed ? ($allow_unencrypted ? ' (turned ON \'allow unencrypted in-app backups\')' : ' (turned OFF \'allow unencrypted in-app backups\')') : ''));
     flash_alert('Backup settings saved');
     redirect();
 }
@@ -608,7 +637,7 @@ if (isset($_GET['cron_backup']) && php_sapi_name() === 'cli') {
     // Only callable from CLI (cron)
     try {
         $result = build_backup($mysqli, 'auto', $BACKUP_DIR);
-    } catch (BackupPassphraseRequired $e) {
+    } catch (BackupPassphraseRequired | BackupUnencryptedNotAllowed $e) {
         logApp('Backup', 'error', 'Auto-backup refused: ' . $e->getMessage());
         fwrite(STDERR, 'Auto-backup refused: ' . $e->getMessage() . "\n");
         exit(1);

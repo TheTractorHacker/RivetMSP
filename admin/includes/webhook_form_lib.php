@@ -198,6 +198,11 @@ function rivetWebhookCollect($mysqli, array $in, ?array $existing = null): array
     $secretFinal = $secret !== '' ? $secret : $existingSecret;
     $blank['events'] = $events;
 
+    // GAP-08: plain http:// is refused by default (WebhookDispatcher::requireHttps, see includes/event_bus.php and
+    // src/Core/CoreBridge.php). This is the one explicit, audit-logged admin opt-in checkbox that lifts that refusal
+    // for THIS destination only (admin/webhook_form.php's "Allow plain http://" box).
+    $allowHttp = isset($in['webhook_allow_http']);
+
     // ---------- legacy post (no platform): the old behaviour, a plain JSON-envelope endpoint
     if ($destId === '') {
         $url = filter_var(trim((string) ($in['webhook_url'] ?? '')), FILTER_SANITIZE_URL);
@@ -206,13 +211,14 @@ function rivetWebhookCollect($mysqli, array $in, ?array $existing = null): array
         }
         if ($url === '') {
             $errors[] = 'An endpoint URL is required.';
-        } elseif (!rivetWebhookUrlPolicy($mysqli)->isSafe($url)) {
-            $errors[] = 'Endpoint URL rejected (' . rivetWebhookRuleText($mysqli) . '). Loopback, link-local and cloud-metadata addresses are never allowed.';
+        } elseif ($d = rivetWebhookUrlPolicy($mysqli)->destinationProblem($url, $allowHttp)) {
+            $errors[] = $d;
         }
         $row = [
             'webhook_name' => $name, 'webhook_url' => $url, 'webhook_secret' => rivetWebhookSeal($secretFinal, $existing, 'webhook_secret'), 'webhook_events' => implode(',', $events),
             'webhook_enabled' => $enabled, 'webhook_destination' => '', 'webhook_format' => '', 'webhook_method' => 'POST',
-            'webhook_template' => null, 'webhook_auth_mode' => 'none', 'webhook_auth_enc' => null, 'webhook_extra' => null,
+            'webhook_template' => null, 'webhook_auth_mode' => 'none', 'webhook_auth_enc' => null,
+            'webhook_extra' => $allowHttp ? (string) json_encode(['allow_http' => true]) : null,
         ];
 
         return ['errors' => $errors, 'row' => $row, 'destination' => null, 'subscription' => $errors ? null : rivetWebhookSubsFromRow($row, (int) ($existing['webhook_id'] ?? 0)), 'auth_redacted' => ['mode' => 'none'], 'events' => $events];
@@ -249,7 +255,7 @@ function rivetWebhookCollect($mysqli, array $in, ?array $existing = null): array
                 $url = str_replace('{' . $f->name . '}', str_replace('%3A', ':', rawurlencode($fields[$f->name])), $url);
             }
         }
-        $verdict = rivetWebhookUrlVerdict($mysqli, $dest, $url);
+        $verdict = rivetWebhookUrlVerdict($mysqli, $dest, $url, $allowHttp);
         if ($verdict['state'] !== 'ok') {
             $errors[] = $verdict['error'];
         }
@@ -326,7 +332,7 @@ function rivetWebhookCollect($mysqli, array $in, ?array $existing = null): array
         $errors[] = 'A signing secret is required when the receiver verifies our signature (use Generate).';
     }
 
-    $extra = ['fields' => [], 'template_encoding' => $templateEnc];
+    $extra = ['fields' => [], 'template_encoding' => $templateEnc, 'allow_http' => $allowHttp ? true : null];
     foreach ($dest->extraFields as $f) {
         if ($f->target === 'option' && $fields[$f->name] !== '') {
             $extra['fields'][$f->name] = $fields[$f->name];
@@ -369,7 +375,7 @@ function rivetWebhookCollect($mysqli, array $in, ?array $existing = null): array
  *
  * @return array{state:string, error:?string, friendly:string, host:string, link:?string, suggest:?string}
  */
-function rivetWebhookUrlVerdict($mysqli, ?Destination $dest, string $url): array
+function rivetWebhookUrlVerdict($mysqli, ?Destination $dest, string $url, bool $allowHttp = false): array
 {
     $mk = static fn (string $state, ?string $error, string $friendly, string $host = '', ?string $link = null, ?string $suggest = null): array => [
         'state' => $state, 'error' => $error, 'friendly' => $friendly, 'host' => $host, 'link' => $link, 'suggest' => $suggest,
@@ -415,7 +421,10 @@ function rivetWebhookUrlVerdict($mysqli, ?Destination $dest, string $url): array
     }
     $probe = str_replace('{txn}', 'x', $url);
     $policy = rivetWebhookUrlPolicy($mysqli);
-    if ($policy->isSafe($probe)) {
+    if (\RivetCore\Webhooks\UrlPolicy::isPlainHttp($probe) && !$allowHttp) {
+        return $mk('invalid', 'Plain http:// destinations are not allowed. Use https://, or turn on "Allow plain http://" below and accept that the payload and its signature travel unencrypted.', 'Use https://, or tick "Allow plain http://" below.', $host);
+    }
+    if ($policy->isSafe($probe, $allowHttp)) {
         return $mk('ok', null, 'Looks good.', $host);
     }
     $error = 'Endpoint URL rejected (' . rivetWebhookRuleText($mysqli) . '). Loopback, link-local and cloud-metadata addresses are never allowed.';

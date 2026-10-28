@@ -3,6 +3,8 @@
 namespace RivetMSP\Compliance;
 
 use RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter;
+use RivetCore\Compliance\Backup\BackupFactsProviderInterface;
+use RivetCore\Compliance\Backup\UnavailableBackupFactsProvider;
 use RivetCore\Compliance\Check\AuditTrailRecordingCheck;
 use RivetCore\Compliance\Check\RetentionMeetsPresetCheck;
 use RivetCore\Compliance\CheckInterface;
@@ -21,8 +23,9 @@ final class ComplianceCatalog
     private const STALE_AGENT_DAYS = 90;
     private const RESTORE_TEST_DAYS = 35;
 
-    public function __construct(private \mysqli $db, private string $appRoot, private array $settings)
+    public function __construct(private \mysqli $db, private string $appRoot, private array $settings, private ?BackupFactsProviderInterface $backupFacts = null)
     {
+        $this->backupFacts ??= new UnavailableBackupFactsProvider();
     }
 
     private function one(string $sql): array
@@ -146,23 +149,33 @@ final class ComplianceCatalog
             'You can only recover from an incident if a recent, protected copy exists.',
             [F::ISO27001 => ['A.8.13'], F::SOC2 => ['A1.2', 'CC9.1'], F::PCI => ['12.10.1'], F::HIPAA => ['164.308(a)(7)(ii)(A)']],
             function (): CheckResult {
-                $files = array_merge(glob($this->appRoot . '/backups/*.zip') ?: [], glob($this->appRoot . '/backups/*.enc') ?: []);
-                $newest = 0;
-                foreach ($files as $f) {
-                    $newest = max($newest, (int) @filemtime($f));
-                }
+                // rc.53 (GAP-11): read age, success and encryption from the real backup artifact (this installation's own
+                // run log, backup_runs, checked against the artifact's own content) rather than from a filesystem glob
+                // and configuration flags - see RivetMSP\Compliance\Backup\RivetMspBackupFactsProvider and
+                // RivetCore\Compliance\Backup\ArtifactCheckedBackupFactsProvider.
+                $facts = $this->backupFacts->backupFacts();
                 $enabled = (int) $this->setting('config_backup_auto_enabled', 0) === 1;
-                $m = ['scheduled' => $enabled, 'offsite' => (int) $this->setting('config_backup_s3_enabled', 0) === 1, 'newest_backup' => $newest ? date('Y-m-d H:i', $newest) : null];
-                if ($newest === 0) {
-                    return CheckResult::fail('No backup file was found.', null, 'backup.php', $m);
+                $m = [
+                    'scheduled' => $enabled,
+                    'offsite' => $facts->hasOffsite(),
+                    'newest_backup' => $facts->lastSuccessAt?->format('Y-m-d H:i'),
+                    'encrypted' => $facts->encrypted,
+                    'encryption_method' => $facts->encryptionMethod,
+                ];
+                if (!$facts->available) {
+                    return CheckResult::warn('Not available: ' . ($facts->reason !== '' ? $facts->reason : 'backup information is not reported.'), null, 'backup.php', $m);
                 }
-                $age = (time() - $newest) / 86400;
-                $notes = [$enabled ? 'scheduled backups on' : 'scheduled backups off', $m['offsite'] ? 'off-site copy on' : 'no off-site copy'];
-                if ($age > 14) {
+                if ($facts->lastSuccessAt === null) {
+                    return CheckResult::fail('No successful backup is on record.', null, 'backup.php', $m);
+                }
+                $age = (time() - $facts->lastSuccessAt->getTimestamp()) / 86400;
+                $encNote = $facts->encrypted === true ? 'encrypted' . ($facts->encryptionMethod !== null ? " ({$facts->encryptionMethod})" : '') : ($facts->encrypted === false ? 'NOT encrypted' : 'encryption unknown');
+                $notes = [$enabled ? 'scheduled backups on' : 'scheduled backups off', $m['offsite'] ? 'off-site copy on' : 'no off-site copy', $encNote];
+                if ($age > 14 || $facts->encrypted === false) {
                     return CheckResult::fail('The newest backup is ' . (int) $age . ' days old.', implode('; ', $notes), 'backup.php', $m);
                 }
 
-                return ($age > 8 || !$enabled || !$m['offsite'])
+                return ($age > 8 || !$enabled || !$m['offsite'] || $facts->encrypted !== true)
                     ? CheckResult::warn('Newest backup is ' . max(0, (int) $age) . ' days old.', implode('; ', $notes), 'backup.php', $m)
                     : CheckResult::pass('Newest backup is ' . max(0, (int) $age) . ' days old.', implode('; ', $notes), $m);
             });

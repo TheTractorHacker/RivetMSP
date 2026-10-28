@@ -193,6 +193,9 @@ $config_backup_s3_access_key  = $row['config_backup_s3_access_key'] ?? '';
 $config_backup_s3_secret_key  = decryptSetting($row['config_backup_s3_secret_key'] ?? '');
 $config_backup_passphrase     = decryptSetting($row['config_backup_passphrase'] ?? '');
 $config_backup_s3_path_style  = intval($row['config_backup_s3_path_style'] ?? 1);
+// rc.53 GAP-11: audit-logged admin opt-in that lets the in-app builder (admin/post/backup.php) keep producing its zip
+// even though db.sql/uploads.zip inside it are plain zip content - see BackupUnencryptedNotAllowed's doc comment.
+$config_backup_allow_unencrypted_override = intval($row['config_backup_allow_unencrypted_override'] ?? 0);
 $config_backup_s3_prefix      = $row['config_backup_s3_prefix'] ?? '';
 // Comet Backup
 $config_comet_enabled      = intval($row['config_comet_enabled'] ?? 0);

@@ -164,6 +164,14 @@ function rivetRmmUiDataStoreCard(array $ctx): string
         . $field('password', 'Password', 'password', '', $conn !== null && $conn['password_set'] ? 'Leave blank to keep the stored password. Changing the host, port, role or database requires typing it again. To ROTATE the password for the same target, use "Change password" below instead - it tests the new value first.' : 'Leave blank for peer authentication over a unix socket (recommended above) - required otherwise.', ['autocomplete' => 'new-password'])
         . $selSsl('prefer')
         . $field('schema', 'Schema', 'text', $conn['schema'] ?? 'public')
+        // GAP-01/rc.48: a remote host with sslmode disable/allow/prefer (or no password at all) is refused unless this
+        // explicit, audit-logged box is checked. Local socket/loopback peer authentication is never affected by it.
+        . '<div class="col-12"><div class="form-check">'
+        . '<input class="form-check-input" type="checkbox" id="ds_allow_insecure" name="' . rmmH(\RivetCore\Rmm\Store\DataStoreSwitch::ACK_INSECURE_KEY) . '" value="1">'
+        . '<label class="form-check-label small" for="ds_allow_insecure">I accept an unencrypted or unverified connection to a remote PostgreSQL host</label>'
+        . '<div class="form-text text-warning"><i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>Only check this for a remote host you cannot yet set to <code>verify-full</code>/<code>verify-ca</code>. '
+        . 'The connection (including the RMM history it carries) can then travel unencrypted or be downgraded. This choice is recorded in the audit log and is not stored - it must be given again on every save or test that needs it.</div>'
+        . '</div></div>'
         . '<div class="col-12"><div data-rmm-scale-live aria-live="polite"></div></div>'
         . '<div class="col-12 d-flex gap-2 flex-wrap">'
         . '<button type="submit" name="rmm_ds_save_connection" value="1" class="btn btn-outline-secondary"><i class="fas fa-save me-1" aria-hidden="true"></i>Save connection</button>'

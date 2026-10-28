@@ -61,7 +61,8 @@ if (isset($_POST['add_webhook'])) {
     unset($_SESSION['webhook_form_draft']);
 
     $webhook_name = $r['webhook_name'];
-    logAction("Settings", "Webhook", "$session_name added webhook $webhook_name" . ($r['webhook_destination'] !== '' ? " ({$r['webhook_destination']})" : ''));
+    $allow_http_on = (json_decode((string) ($r['webhook_extra'] ?? ''), true)['allow_http'] ?? false) === true;
+    logAction("Settings", "Webhook", "$session_name added webhook $webhook_name" . ($r['webhook_destination'] !== '' ? " ({$r['webhook_destination']})" : '') . ($allow_http_on ? " with plain http:// allowed" : ""));
 
     flash_alert("Webhook <strong>" . nullable_htmlentities($webhook_name) . "</strong> added");
     // The guided page shows a success screen with the next actions ("Create and send test" also fires a test there).
@@ -104,7 +105,10 @@ if (isset($_POST['edit_webhook'])) {
     unset($_SESSION['webhook_form_draft']);
 
     $webhook_name = $r['webhook_name'];
-    logAction("Settings", "Webhook", "$session_name edited webhook $webhook_name");
+    $was_http_on = (json_decode((string) ($existing['webhook_extra'] ?? ''), true)['allow_http'] ?? false) === true;
+    $now_http_on = (json_decode((string) ($r['webhook_extra'] ?? ''), true)['allow_http'] ?? false) === true;
+    $http_note = $now_http_on !== $was_http_on ? ($now_http_on ? " (turned ON plain http:// for this destination)" : " (turned OFF plain http:// for this destination)") : "";
+    logAction("Settings", "Webhook", "$session_name edited webhook $webhook_name" . $http_note);
 
     flash_alert("Webhook <strong>" . nullable_htmlentities($webhook_name) . "</strong> updated");
     redirect('settings_webhooks.php');

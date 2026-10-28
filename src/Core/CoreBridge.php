@@ -220,6 +220,10 @@ final class CoreBridge
             // Always vetted: the shared policy (public addresses plus the admin's allowed networks) when the event bus is loaded,
             // otherwise the strict default (public addresses only).
             function_exists('rivetWebhookUrlPolicy') ? rivetWebhookUrlPolicy() : new UrlPolicy(),
+            true,
+            // GAP-08: http:// destinations are refused unless the destination's own WebhookSubscription::options
+            // carries allow_http => true, set only via an audit-logged admin opt-in checkbox on the destination form
+            // (see admin/includes/webhook_form_lib.php and admin/post/webhook.php).
             true
         ));
     }

@@ -59,5 +59,5 @@ if ($dest !== null) {
     }
 }
 
-$v = rivetWebhookUrlVerdict($mysqli, $dest, $url);
+$v = rivetWebhookUrlVerdict($mysqli, $dest, $url, isset($_POST['webhook_allow_http']));
 $out(['ok' => $v['state'] === 'ok', 'state' => $v['state'], 'message' => $v['friendly'], 'host' => $v['host'], 'link' => $v['link'], 'suggest' => $v['suggest']]);

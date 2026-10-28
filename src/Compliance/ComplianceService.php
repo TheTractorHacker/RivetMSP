@@ -2,13 +2,17 @@
 
 namespace RivetMSP\Compliance;
 
+use RivetMSP\Compliance\Backup\RivetMspBackupFactsProvider;
 use RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter;
 use RivetCore\Compliance\Assessment;
 use RivetCore\Compliance\AttestationStore;
+use RivetCore\Compliance\Backup\ArtifactCheckedBackupFactsProvider;
+use RivetCore\Compliance\Backup\BackupFactsProviderInterface;
 use RivetCore\Compliance\ComplianceAssessor;
 use RivetCore\Compliance\SharedReport;
 use RivetCore\Compliance\SnapshotStore;
 use RivetCore\Compliance\SubjectCompliance;
+use RivetCore\Rmm\Store\RmmDataStoreKind;
 use RivetCore\Support\SystemClock;
 
 /** Wires the Core compliance engine to this installation. Pages and cron use this and nothing else. */
@@ -70,7 +74,35 @@ final class ComplianceService
         $res = mysqli_query($db, 'SELECT * FROM settings WHERE company_id = 1');
         $settings = ($res ? mysqli_fetch_assoc($res) : null) ?: [];
 
-        return new ComplianceCatalog($db, dirname(__DIR__, 2), $settings);
+        return new ComplianceCatalog($db, dirname(__DIR__, 2), $settings, self::backupFacts($db, dirname(__DIR__, 2)));
+    }
+
+    /**
+     * RivetCore's "real backup artifact" provider (rc.53's ArtifactCheckedBackupFactsProvider): RivetMspBackupFactsProvider
+     * reads this installation's own run log (backup_runs), then the artifact itself is checked by its content (not its
+     * name) for every file of the newest successful run that is actually readable by this process - never the files
+     * deploy/backup.sh writes (0600, root:root; that path already asserts encrypted=true from its own honest record,
+     * see RivetMspBackupFactsProvider's class doc).
+     */
+    public static function backupFacts(\mysqli $db, string $appRoot): BackupFactsProviderInterface
+    {
+        $kind = RmmDataStoreKind::MARIADB;
+        try {
+            if (function_exists('rivetRmmModule')) {
+                $kind = rivetRmmModule($db)->settings()->dataStore();
+            }
+        } catch (\Throwable) {
+            // Falls back to MariaDB (control_db only): a backup check must never fail because the RMM module could not load.
+        }
+        $inner = new RivetMspBackupFactsProvider($db, $kind);
+
+        return new ArtifactCheckedBackupFactsProvider($inner, static function () use ($db, $appRoot): array {
+            $res = @mysqli_query($db, "SELECT run_file FROM backup_runs WHERE run_ok = 1 AND run_file IS NOT NULL ORDER BY run_finished_at DESC LIMIT 1");
+            $row = $res ? mysqli_fetch_assoc($res) : null;
+            $file = $row['run_file'] ?? null;
+
+            return is_string($file) && $file !== '' ? [$appRoot . '/backups/' . basename($file)] : [];
+        });
     }
 
     public static function assess(\mysqli $db): Assessment

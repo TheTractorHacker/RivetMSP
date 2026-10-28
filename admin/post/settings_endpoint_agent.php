@@ -1507,6 +1507,11 @@ if (isset($_POST['rmm_ds_test_connection'])) {
             $in[$k] = $k === 'port' ? (int) $_POST[$k] : $_POST[$k];
         }
     }
+    // GAP-01/rc.48: the explicit, audit-logged "I accept an unencrypted connection" checkbox (see includes/rmm_data_store_ui.php).
+    // DataStoreSwitch itself writes the audit row (rmm.data_store.insecure_transport_ack) only when it actually needed the override.
+    if (($_POST[\RivetCore\Rmm\Store\DataStoreSwitch::ACK_INSECURE_KEY] ?? '') === '1') {
+        $in[\RivetCore\Rmm\Store\DataStoreSwitch::ACK_INSECURE_KEY] = true;
+    }
     try {
         $r = $rmm->dataStoreSwitch()->testConnection($in === [] ? null : $in);
     } catch (\Throwable) {
@@ -1529,6 +1534,11 @@ function ea_ds_conn_in(): array
         }
         $in[$k] = $k === 'port' ? (int) $_POST[$k] : $_POST[$k];
     }
+    // GAP-01/rc.48: the explicit, audit-logged "I accept an unencrypted connection" checkbox (see includes/rmm_data_store_ui.php).
+    // DataStoreSwitch itself writes the audit row (rmm.data_store.insecure_transport_ack) only when it actually needed the override.
+    if (($_POST[\RivetCore\Rmm\Store\DataStoreSwitch::ACK_INSECURE_KEY] ?? '') === '1') {
+        $in[\RivetCore\Rmm\Store\DataStoreSwitch::ACK_INSECURE_KEY] = true;
+    }
 
     return $in;
 }
@@ -1539,6 +1549,7 @@ if (isset($_POST['rmm_ds_save_connection'])) {
     $errors = $rmm->dataStoreSwitch()->saveConnection($in);
     $old = $in;
     $old['password'] = '';   // never put the typed password back into the form, saved or refused
+    // Show DataStoreSwitch's own error text verbatim: never re-worded or summarized.
     if ($errors !== []) {
         rivetRmmScaleMsg('data-store', 'error', implode(' ', $errors), $old);
     } else {

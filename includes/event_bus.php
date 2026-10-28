@@ -68,7 +68,10 @@ function rivetWebhookDispatcher($mysqli, $subscriptions = null): \RivetCore\Webh
 
     // Delivery re-vets (and pins) with the same policy the settings page used: public addresses plus the admin's allowed networks.
     $policy = rivetWebhookUrlPolicy($mysqli);
-    return new \RivetCore\Webhooks\WebhookDispatcher($db, $subscriptions ?? new $subsClass($db), new \RivetCore\Support\SystemClock(), rivetWebhookHeaderPrefixes(), null, \RivetCore\Webhooks\WebhookDispatcher::DEFAULT_TIMEOUT_SECONDS, $policy, true);
+    // GAP-08: a plain http:// destination is only contacted when its own WebhookSubscription::options carries
+    // allow_http => true (the audit-logged per-destination opt-in checkbox - see admin/webhook_form.php and
+    // admin/includes/webhook_form_lib.php::rivetWebhookCollect()). Every other destination must be https://.
+    return new \RivetCore\Webhooks\WebhookDispatcher($db, $subscriptions ?? new $subsClass($db), new \RivetCore\Support\SystemClock(), rivetWebhookHeaderPrefixes(), null, \RivetCore\Webhooks\WebhookDispatcher::DEFAULT_TIMEOUT_SECONDS, $policy, true, true);
 }
 
 /** Does a stored webhook subscription ("ticket.created, invoice.*", "*") include this event? */

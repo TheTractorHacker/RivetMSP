@@ -25,6 +25,7 @@ function fmt_age(?int $ts): string {
     return '<span title="' . date('Y-m-d H:i:s', $ts) . '">' . timeAgo(date('Y-m-d H:i:s', $ts)) . '</span>';
 }
 $backup_passphrase_ready = strlen((string) $config_backup_passphrase) >= 16;
+$backup_ready = $backup_passphrase_ready && (int) $config_backup_allow_unencrypted_override === 1;
 ?>
 
 <?php if (!$backup_passphrase_ready): ?>
@@ -33,6 +34,12 @@ $backup_passphrase_ready = strlen((string) $config_backup_passphrase) >= 16;
     Set a passphrase of at least 16 characters under <em>Scheduled Backups &rarr; Backup encryption passphrase</em> below.
     Every backup carries the key that unlocks your stored secrets, so it is only ever written encrypted with that passphrase.
     Keep the passphrase somewhere other than this server; without it a backup cannot be restored onto a new server.
+</div>
+<?php elseif (!$backup_ready): ?>
+<div class="alert alert-danger" role="alert">
+    <i class="fas fa-exclamation-triangle me-2"></i><strong>Backups are turned off: this builder's zip is not fully encrypted.</strong>
+    Turn on <em>Scheduled Backups &rarr; Allow unencrypted in-app backups</em> below (recorded in the audit log), or use
+    <code>deploy/backup.sh</code> instead, which encrypts the whole archive.
 </div>
 <?php endif; ?>
 
@@ -55,11 +62,11 @@ $backup_passphrase_ready = strlen((string) $config_backup_passphrase) >= 16;
             // stat row below, so the buttons land centered directly above it. ?>
             <div class="col-md-4 text-center mt-3 mt-md-0 text-nowrap">
                 <a href="post.php?backup_download_fresh=1&csrf_token=<?= $_SESSION['csrf_token'] ?>"
-                   class="btn btn-sm btn-primary me-1<?= $backup_passphrase_ready ? '' : ' disabled' ?>"<?= $backup_passphrase_ready ? '' : ' aria-disabled="true" title="Set a backup passphrase first"' ?>>
+                   class="btn btn-sm btn-primary me-1<?= $backup_ready ? '' : ' disabled' ?>"<?= $backup_ready ? '' : ' aria-disabled="true" title="Set a backup passphrase and allow unencrypted in-app backups first"' ?>>
                     <i class="fas fa-download me-1"></i>Download Backup
                 </a>
                 <a href="post.php?backup_save=1&csrf_token=<?= $_SESSION['csrf_token'] ?>"
-                   class="btn btn-sm btn-outline-secondary<?= $backup_passphrase_ready ? '' : ' disabled' ?>"<?= $backup_passphrase_ready ? '' : ' aria-disabled="true" title="Set a backup passphrase first"' ?>>
+                   class="btn btn-sm btn-outline-secondary<?= $backup_ready ? '' : ' disabled' ?>"<?= $backup_ready ? '' : ' aria-disabled="true" title="Set a backup passphrase and allow unencrypted in-app backups first"' ?>>
                     <i class="fas fa-save me-1"></i>Save to Server
                 </a>
             </div>
@@ -157,6 +164,21 @@ $backup_passphrase_ready = strlen((string) $config_backup_passphrase) >= 16;
                             (<code>openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt</code>, the scheme <code>deploy/backup.sh</code> also uses),
                             so the settings key never sits in a backup in plain text. Use a long random passphrase and keep a copy
                             away from this server: if you lose it you cannot recover the key from a backup.
+                        </small>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="backup_allow_unencrypted" name="config_backup_allow_unencrypted_override" value="1"
+                                   <?= $config_backup_allow_unencrypted_override ? 'checked' : '' ?>>
+                            <label class="form-check-label" for="backup_allow_unencrypted">Allow unencrypted in-app backups</label>
+                        </div>
+                        <small class="text-warning">
+                            <i class="fas fa-triangle-exclamation me-1"></i>Off by default: this builder's zip holds the database dump and uploaded files
+                            as plain, unencrypted zip content - only the small manifest above (carrying the settings key) is passphrase-encrypted. With
+                            this off, "Download Backup", "Save to Server" and the automatic schedule all refuse to run. Turn this on only if you
+                            understand the zip itself is not fully encrypted, or use <code>deploy/backup.sh</code> instead, which encrypts the whole
+                            archive. Changing this is recorded in the audit log.
                         </small>
                     </div>
 

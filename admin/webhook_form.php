@@ -209,6 +209,7 @@ if ($v_template === '' && $dest->id === 'custom-template') {
 $v_enc = $draft['webhook_template_encoding'] ?? ($extra['template_encoding'] ?? ($dest->formatOptions['template_encoding'] ?? 'json'));
 $v_user = $draft['auth_username'] ?? ($auth_old['username'] ?? '');
 $v_hname = $draft['auth_header_name'] ?? ($auth_old['header_name'] ?? ($dest->defaultAuthHeader ?? ''));
+$v_allow_http = $draft ? isset($draft['webhook_allow_http']) : (($extra['allow_http'] ?? false) === true);
 $has_url_fields = false;
 foreach ($dest->extraFields as $f) {
     $has_url_fields = $has_url_fields || $f->target === 'url';
@@ -337,7 +338,7 @@ $render_payload = static function () use ($dest, $is_custom, $v_method, $v_enc, 
     <?php }
 };
 
-$render_advanced = static function () use ($render_auth, $render_secret, $render_fields, $render_payload, $auth_above, $secret_above, $is_custom, $dest) {
+$render_advanced = static function () use ($render_auth, $render_secret, $render_fields, $render_payload, $auth_above, $secret_above, $is_custom, $dest, $v_allow_http, $h) {
     if (!$auth_above) {
         echo '<h5 class="whf-subh">Authentication</h5>';
         $render_auth();
@@ -351,6 +352,12 @@ $render_advanced = static function () use ($render_auth, $render_secret, $render
         $render_payload();
     }
     ?>
+    <h5 class="whf-subh">Transport security</h5>
+    <div class="form-check mb-2">
+        <input type="checkbox" class="form-check-input" id="webhook_allow_http" name="webhook_allow_http" value="1" <?= $v_allow_http ? 'checked' : '' ?>>
+        <label class="form-check-label" for="webhook_allow_http">Allow plain <code>http://</code> for this destination</label>
+        <div class="form-text text-warning"><i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>By default <?= $h(defined('APP_NAME') ? APP_NAME : 'RivetMSP') ?> refuses to deliver to a plain <code>http://</code> address: the payload, its signature and any authentication header would travel unencrypted. Only turn this on for a destination you control on a trusted network (for example a local automation tool with no TLS certificate). Turning it on or off is recorded in the audit log.</div>
+    </div>
     <h5 class="whf-subh">Retries</h5>
     <p class="small text-muted mb-0">If the receiver does not answer with a success status, the delivery is retried after 1, 5, 30 and 120 minutes and then set aside as failed (see the Job queue page). Every attempt is kept in the delivery log.</p>
     <?php

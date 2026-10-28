@@ -187,7 +187,16 @@ if ($log_retention_days >= 1) {
 // follow the activity-log horizon. Never fatal: the cron's other work must run even if these tables are missing.
 if (class_exists(\RivetCore\Retention\RetentionService::class)) {
     try {
-        (new \RivetCore\Retention\RetentionService(new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli)))->prune($log_retention_days, $audit_retention_days);
+        // ERR-03/GAP-10: RetentionService::prune() already floors the audit horizon at
+        // SecurityBaseline::MIN_AUDIT_RETENTION_DAYS internally (rc.53), but the edition's own call site is fed the
+        // floored value too, defence in depth, so a stored value under the floor never even reaches the service as
+        // the "requested" number in logs/traces. A horizon below 1 ("keep everything", RetentionService's own
+        // documented convention) is left alone: SecurityBaseline::auditRetentionDays() has no such escape hatch
+        // (effective() clamps unconditionally) and would otherwise turn "keep forever" into "keep >= 90 days".
+        $audit_retention_days_floored = ($audit_retention_days >= 1 && class_exists(\RivetCore\Security\SecurityBaseline::class))
+            ? \RivetCore\Security\SecurityBaseline::auditRetentionDays($audit_retention_days)
+            : $audit_retention_days;
+        (new \RivetCore\Retention\RetentionService(new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli)))->prune($log_retention_days, $audit_retention_days_floored);
     } catch (\Throwable $e) {
         error_log('RivetCore retention skipped: ' . $e->getMessage());
     }
@@ -1247,6 +1256,8 @@ $config_backup_s3_path_style = intval($settings_row['config_backup_s3_path_style
 $config_backup_s3_prefix     = $settings_row['config_backup_s3_prefix'] ?? '';
 // The backup passphrase (required: build_backup() refuses to run without one, and the settings key goes only into the manifest it encrypts).
 $config_backup_passphrase    = decryptSetting($settings_row['config_backup_passphrase'] ?? '');
+// rc.53 GAP-11: same override build_backup() requires, see BackupUnencryptedNotAllowed's doc comment.
+$config_backup_allow_unencrypted_override = intval($settings_row['config_backup_allow_unencrypted_override'] ?? 0);
 
 if ($config_backup_auto_enabled) {
     $backup_dir   = dirname(__DIR__) . '/backups';
@@ -1285,6 +1296,12 @@ if ($config_backup_auto_enabled) {
             logApp('Backup', 'error', 'Auto-backup refused: ' . $e->getMessage());
             appNotify('Backup', 'Automatic backup was NOT taken: set a backup passphrase (16+ characters) in Maintenance > Backup.', '/admin/backup.php');
             echo gmdate('Y-m-d\\TH:i:s\\Z') . " cron: auto-backup refused (no backup passphrase)\n";
+            $result = null;
+        } catch (BackupUnencryptedNotAllowed $e) {
+            // rc.53 GAP-11: refuse rather than silently write a backup whose db.sql/uploads.zip content is not encrypted.
+            logApp('Backup', 'error', 'Auto-backup refused: ' . $e->getMessage());
+            appNotify('Backup', 'Automatic backup was NOT taken: turn on "Allow unencrypted in-app backups" in Maintenance > Backup, or switch to deploy/backup.sh.', '/admin/backup.php');
+            echo gmdate('Y-m-d\\TH:i:s\\Z') . " cron: auto-backup refused (unencrypted override not set)\n";
             $result = null;
         }
         if ($result !== null) {

@@ -8126,3 +8126,24 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         }
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.128'");
     }
+
+    if ($rivetit_db_version() == '2.6.128') {
+        // DB 2.6.129: RivetCore 1.0.0-rc.47 -> 1.0.0-rc.54 and the rc.53 hardening (M4/R5 prompt,
+        // docs/design/edition-prompts-rc54.md). rc.48-rc.54 ship NO new Core migration (every CHANGELOG entry
+        // from rc.48 through rc.54 says so explicitly; `git diff v1.0.0-rc.47 v1.0.0-rc.54 -- migrations/
+        // src/*/Migration/` in the vendored package is empty) - this step exists only for RivetMSP's OWN new
+        // setting, not to mirror a Core migration.
+        //
+        // config_backup_allow_unencrypted_override: audit-logged admin opt-in (admin/backup.php, Scheduled
+        // Backups card) that lets admin/post/backup.php's in-app builder keep producing its zip even though
+        // db.sql/uploads.zip inside it are plain zip content (only the manifest carrying the settings key is
+        // passphrase-encrypted - see build_backup_manifest()'s own doc comment). Off by default: with it off,
+        // build_backup() refuses and tells the admin to either turn it on (accepting the risk) or run
+        // deploy/backup.sh instead, which encrypts the whole archive. Toggling it is logged via logAction()
+        // (admin/post/backup.php save_backup_settings), which CoreBridge::recordAction() mirrors into the
+        // audit trail when core.audit.enabled is on (Settings is already an audited log type).
+        mysqli_query($mysqli, "ALTER TABLE `settings`
+            ADD COLUMN IF NOT EXISTS `config_backup_allow_unencrypted_override` TINYINT(1) NOT NULL DEFAULT 0 AFTER `config_backup_passphrase`");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.129'");
+    }

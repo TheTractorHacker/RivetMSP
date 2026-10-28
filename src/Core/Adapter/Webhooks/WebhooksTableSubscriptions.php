@@ -99,8 +99,12 @@ final class WebhooksTableSubscriptions implements WebhookSubscriptionsInterface,
     {
         $destId = (string) ($r['webhook_destination'] ?? '');
         $format = (string) ($r['webhook_format'] ?? '');
+        $rawExtra = json_decode((string) ($r['webhook_extra'] ?? ''), true);
+        // GAP-08: the per-destination "allow plain http://" opt-in must reach WebhookSubscription::allowsHttp() even for a
+        // legacy row (no platform preset), so it is read before the early-return that otherwise keeps a legacy row's options empty.
+        $allowHttp = is_array($rawExtra) && ($rawExtra['allow_http'] ?? false) === true;
         if ($destId === '' && $format === '') {
-            return [];
+            return $allowHttp ? ['allow_http' => true] : [];
         }
         $dest = $destId !== '' ? Destinations::get($destId) : null;
         $format = $format !== '' ? $format : ($dest->format ?? 'json');
@@ -134,6 +138,9 @@ final class WebhooksTableSubscriptions implements WebhookSubscriptionsInterface,
         }
 
         $opts['extraHeaders'] = self::headersFromRow($r, $dest);
+        if ($allowHttp) {
+            $opts['allow_http'] = true;
+        }
 
         return $opts;
     }
