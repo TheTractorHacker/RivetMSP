@@ -12,8 +12,21 @@ backups/*
 # credentials tables, were committed by mistake on 2024-02-05 and later removed from the tree - see
 # commits 74fb7931f/717f4d9e1; they remain in git history, which is a separate, explicit cleanup this
 # rule does not address). The tracked schema-only file db.sql is the one intentional exception.
+# Also block the common compressed/renamed variants of an ad-hoc dump (a dated history scan (M7,
+# 2026-10-27) additionally found a stray 45-byte pittpc.tar.gz from 2019 and two docker/.env files
+# from 2023, all already absent from HEAD - these patterns stop that class of mistake going forward).
 *.sql
 !/db.sql
+*.sql.bak
+*.sql.gz
+*.sql.zip
+*.dump
+*.tar.gz
+!/vendor/**/*.tar.gz
+.env
+docker/.env
+docker/**/.env
+!.env.example
 
 uploads/favicon.ico
 uploads/contracts/*
