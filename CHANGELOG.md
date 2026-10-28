@@ -4,6 +4,22 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.48] RivetMSP — finish rc.47 catch-up, adopt RivetCore 1.0.0-rc.54 + rc.53 hardening, log presets UI, secrets hygiene (DB 2.6.126 -> 2.6.129)
+
+**Deploy notes:** back up the database, pull this branch, run **Administration > Updates** once: it walks three additive, idempotent steps in order (2.6.126 -> 2.6.129 — the RivetCore rc.44 compliance migration, the rc.47 reporting-views migration, and a new `config_backup_allow_unencrypted_override` setting). `composer.json`/`composer.lock` moved `rivet/rivet-core` to the exact pin `1.0.0-rc.54` — run `composer install` (or redeploy the vendored tree as usual) before the first page load. **In-app backups (Administration > Backup) will refuse to run until an admin either turns on the new "Allow unencrypted in-app backup" override or switches to the already-encrypted `deploy/backup.sh` path** — anyone relying on the in-app builder for scheduled backups should see this before the first post-deploy backup attempt.
+
+**RivetCore rc.37 -> rc.47 catch-up, finished:** the staged adoption left unfinished in the prior consolidation (PostgreSQL 18, `DataStoreInfo`, compliance frameworks migration 0046, reporting views migration 0047) is now merged. Renumbered from its originally-authored DB steps (which collided with the since-merged ticket-category SLA/billing release) to 2.6.127/2.6.128 — tree content re-verified identical, tests re-run fresh rather than trusted from before the renumbering.
+
+**RivetCore 1.0.0-rc.54 adoption + rc.53 hardening, DB 2.6.129:**
+- Webhook deliveries are now `https://`-only by default; a plain `http://` destination needs an explicit, audit-logged per-destination "Allow plain http://" opt-in on the webhook form. Fixed a latent bug found while testing: reloading a legacy webhook row would have silently dropped this flag.
+- Compliance now reads real backup age/success/encryption from the actual backup artifact (`RivetMspBackupFactsProvider`, wrapped in Core's artifact-checked provider) instead of a filesystem glob and config flags.
+- The RMM PostgreSQL data-store form now refuses a remote host with weak transport (disable/allow/prefer `sslmode`) unless an explicit "allow insecure transport" admin checkbox is ticked with a warning; an empty or reused password on a remote host has no override at all. Local socket/loopback peer auth is unaffected.
+- Audit-log retention now honors `SecurityBaseline::auditRetentionDays()` as a floor, defence in depth on top of RivetCore's own internal retention floor.
+
+**Log presets UI + per-client compliance row (no database change):** the RMM log-collection settings page now renders RivetCore's Windows security-log presets as a checklist (recommended-for-compliance badge, frameworks, per-row audit-policy requirement), with a never-chosen banner, an admin-only "Apply compliance baseline" button that only ever adds to an existing choice, and an always-visible audit-policy caveat. Each client's compliance view gets a new "Security event log presets" row showing the one install-wide result (explicitly labelled as install-wide, never faked per-client) plus a plain device count of that client's online, logs-capable Windows machines. New clients with Windows devices and logging on but nothing chosen yet get a dismissible, admin-only onboarding hint with the same Apply button.
+
+**Secrets and repository hygiene (no database change):** re-verified the repo's history for committed `.sql`/backup-like files and secret-shaped strings (all already removed from the tree or already false positives, per the prior security audit); hardened `.gitignore` against the same classes of mistake recurring (`*.sql.bak`/`*.sql.gz`/`*.sql.zip`/`*.dump`/`*.tar.gz`/bare `.env`). No action needed in the app itself; see the standing rotation checklist for what still needs rotating outside this repo (Azure AD app secret, a test-mode Stripe key sitting in 2024 git history).
+
 ## [26.10.47] RivetMSP — adopt RivetCore's shared UI asset layer (no database change)
 
 **Deploy notes:** back up the database as usual (no migration in this release), pull this branch, run `composer install` if the vendor tree isn't already current for 1.0.0-rc.42.
