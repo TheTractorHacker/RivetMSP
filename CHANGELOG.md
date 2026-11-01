@@ -4,6 +4,12 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+**Security: TinyMCE 8.5.0 → 8.5.1 (no database change).** Fixes three stored-XSS CVEs (CVE-2026-47759, CVE-2026-47761,
+CVE-2026-47762) disclosed against the vendored editor bundle (`plugins/tinymce/`, audit finding C4). Verified provenance against
+the npm registry's recorded SHA-1/SHA-512 for the official `tinymce@8.5.1` package before swapping in the bundle; no local
+modifications existed in the prior vendored tree to preserve. See `docs/security/MSP_REMEDIATION_REPORT.md` item 1 for the full
+verification and smoke-test write-up.
+
 ## [26.10.48] RivetMSP — finish rc.47 catch-up, adopt RivetCore 1.0.0-rc.54 + rc.53 hardening, log presets UI, secrets hygiene (DB 2.6.126 -> 2.6.129)
 
 **Deploy notes:** back up the database, pull this branch, run **Administration > Updates** once: it walks three additive, idempotent steps in order (2.6.126 -> 2.6.129 — the RivetCore rc.44 compliance migration, the rc.47 reporting-views migration, and a new `config_backup_allow_unencrypted_override` setting). `composer.json`/`composer.lock` moved `rivet/rivet-core` to the exact pin `1.0.0-rc.54` — run `composer install` (or redeploy the vendored tree as usual) before the first page load. **In-app backups (Administration > Backup) will refuse to run until an admin either turns on the new "Allow unencrypted in-app backup" override or switches to the already-encrypted `deploy/backup.sh` path** — anyone relying on the in-app builder for scheduled backups should see this before the first post-deploy backup attempt.

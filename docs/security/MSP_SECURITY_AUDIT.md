@@ -30,12 +30,12 @@ Findings are organized Critical → High → Medium → Low. Each carries **Loca
 - **Confidence:** Confirmed (known CVE, vendored version was in the affected range).
 - **Status:** **Fixed** (pass 1). `composer.json` requires `predis/predis: ^3.7`; `composer.lock` / `vendor/predis/predis` is installed at **3.7.0**. Re-confirmed this pass: the advertised upstream fix landed in the 3.3.0 changelog note but the *real* fix is in 3.6.1 - 3.7.0 is comfortably past both. `composer audit --no-interaction` run fresh this pass: **"No security vulnerability advisories found."**
 
-### C4. TinyMCE 8.5.0 - three stored-XSS CVEs (NEW this pass, UNRESOLVED)
+### C4. TinyMCE 8.5.0 - three stored-XSS CVEs (FIXED - upgraded to 8.5.1)
 - **Location:** `plugins/tinymce/` (vendored, no `package.json`/lockfile; version read from the bundle's own `majorVersion:"8",minorVersion:"5.0"`).
 - **Risk:** CVE-2026-47759, CVE-2026-47761, CVE-2026-47762 - stored XSS via crafted `data-mce-href` / `data-mce-src` / `data-mce-style` attributes and forged `mce:protected` comments that survive TinyMCE's own HTML serialization and execute when the content is reloaded into the editor or rendered. GitLab rates two of the three 8.7 (High); all three are fixed upstream in 8.5.1.
-- **Reachability check performed this pass:** the `media` plugin (CVE-2026-47761's specific trigger) is **not** enabled anywhere `tinymce.init()` is called in this app (`js/app.js`, `admin/settings_mail_templates.php`, `client/includes/footer.php` all load only `link image lists table code codesample fullscreen autoresize`-class plugin sets). However, the **`code` plugin is enabled on nearly every instance** (ticket replies, KB articles, mail templates, docs) - that gives any user with editor access a "View source" box to type the crafted `data-mce-*` attributes that CVE-2026-47759 (core serializer, plugin-independent) describes directly. This is assessed as **reachable**, not merely theoretical.
-- **Confidence:** High Confidence (advisory-confirmed version match plus a verified-reachable attack surface in this app; not dynamically exploited in this pass - see remediation report for why).
-- **Status:** **Unresolved.** Requires replacing the vendored `plugins/tinymce/` tree with the upstream 8.5.1+ self-hosted bundle. See `MSP_REMEDIATION_REPORT.md` for why this was left for Blake rather than hand-patched.
+- **Reachability check performed:** the `media` plugin (CVE-2026-47761's specific trigger) is **not** enabled anywhere `tinymce.init()` is called in this app (`js/app.js`, `admin/settings_mail_templates.php`, `client/includes/footer.php` all load only `link image lists table code codesample fullscreen autoresize`-class plugin sets). However, the **`code` plugin is enabled on nearly every instance** (ticket replies, KB articles, mail templates, docs) - that gives any user with editor access a "View source" box to type the crafted `data-mce-*` attributes that CVE-2026-47759 (core serializer, plugin-independent) describes directly. This was assessed as **reachable**, not merely theoretical.
+- **Confidence:** High Confidence (advisory-confirmed version match plus a verified-reachable attack surface in this app).
+- **Status:** **Fixed.** `plugins/tinymce/` upgraded to the official **8.5.1** self-hosted bundle (the only 8.5.x patch release; it carries exactly the three stored-XSS fixes matching these CVEs - two core-serializer fixes plus the `media` plugin `data-mce-object` fix). Provenance verified against the npm registry's recorded sha1/sha512 for the official `tinymce@8.5.1` package (published by Tiny Technologies' own npm account, `repository` pointing at `github.com/tinymce/tinymce`) before swapping in the bundle - see `MSP_REMEDIATION_REPORT.md` item 1 for the exact verification steps and smoke-test results.
 
 ---
 
@@ -102,7 +102,7 @@ Findings are organized Critical → High → Medium → Low. Each carries **Loca
   |---|---|---|
   | jQuery | 3.7.1 | No known CVE |
   | Bootstrap | 5.3.3 | No known CVE |
-  | TinyMCE | 8.5.0 | **3 stored-XSS CVEs - see C4** |
+  | TinyMCE | 8.5.1 | Fixed - see C4 |
   | Select2 | 4.0.13 | Past the only relevant CVE (CVE-2016-10744, fixed ≤4.0.6) |
   | DataTables | 2.3.7 | No advisory found |
   | Dropzone.js | 5.9.3 | No CVE found in the library's own runtime code (one unrelated Drupal packaging note about its *build tooling*, not applicable here) |
