@@ -143,6 +143,9 @@ if ($csp_sent !== '' && stripos($csp_sent, 'script-src') === false) {
     <link rel="stylesheet" href="/css/itflow_design.edition.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow_design.edition.css') ?>">
     <?php } ?>
 
+    <!-- Shared file-input surface (DESIGN_ASSETS.md load order item 6: the portal loads it too; the ticket and document uploads are file inputs). -->
+    <link rel="stylesheet" href="/css/file_upload.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/file_upload.css') ?>">
+
     <!-- Motion layer. Owns every animation in the app, including the single global
          prefers-reduced-motion guard, so no later rule can forget it. Must sit AFTER
          itflow_design.css (it reads --if-* tokens and retunes Tabler's own .card /

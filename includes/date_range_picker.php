@@ -1,101 +1,146 @@
 <?php
 
 /*
- * The shared date-range picker (RivetCore DateRange presets + a Litepicker calendar for "Custom range").
+ * Shared date-range picker (RivetCore\Ui\DateRange presets + a Litepicker calendar for "Custom range").
  *
- * dateRangePickerField($date_range) prints a button ("Last 30 days · Sep 6 – Oct 5") that opens a popover, plus the
- * hidden inputs the legacy filter already used: canned_date, dtf, dtt. Preset ranges submit only canned_date (dtf/dtt are
- * disabled so they stay out of the URL and saved views stay rolling); a custom range submits canned_date=custom with
- * dtf/dtt. The popover, keyboard handling and auto-submit live in js/date_range_picker.js (delegated from document, so it
- * also works inside AJAX modals). Server side, read the result with dateRangeFromRequest($_GET) (includes/date_range.php).
+ * dateRangePickerField($range) prints (dateRangePickerHtml() returns) the markup for ONE button showing "Last 30 days  Sep 6 - Oct 5" that opens a popover
+ * (grouped preset list + a two-month calendar with From/To). It writes three hidden inputs - canned_date, dtf, dtt - with the
+ * exact names and meaning the list pages and includes/filter_header.php have always used, so URLs and bookmarks keep working.
+ * For every preset except "custom" dtf/dtt are submitted empty-and-disabled (so a saved "Last 7 days" stays rolling); a custom
+ * range carries explicit dates. The behaviour lives in js/date_range_picker.js (loaded once by includes/footer.php and bound
+ * by event delegation, so AJAX-loaded modals work too); styles are at the end of css/itflow_custom.css.
  *
- * $opts:
- *   default      preset id the page uses when nothing is chosen (shows a "clear" link when something else is active). 'alltime'
- *   hide_groups  preset groups to leave out, e.g. ['Upcoming'] (the current range's own preset is always kept)
- *   from_name / to_name  names of the hidden inputs (default dtf / dtt, or derived from $name: f_canned_date => f_dtf / f_dtt)
- *   autosubmit   submit the form when a range is applied (default true)
- *   id           id for the button (default random)
+ * The picker is only a convenience: the server re-validates everything through dateRangeFromRequest().
  */
 
 require_once __DIR__ . '/date_range.php';
 
 use RivetCore\Ui\DateRange;
 
-function dateRangePickerField(DateRange $current, string $name = 'canned_date', array $opts = []): void
-{
-    $h = static fn($s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
-    $fromName = $opts['from_name'] ?? (preg_replace('/canned_date$/', 'dtf', $name) ?: 'dtf');
-    $toName = $opts['to_name'] ?? (preg_replace('/canned_date$/', 'dtt', $name) ?: 'dtt');
-    $default = DateRange::isPreset((string) ($opts['default'] ?? '')) ? (string) $opts['default'] : 'alltime';
-    $hide = array_map('strval', (array) ($opts['hide_groups'] ?? []));
-    $auto = ($opts['autosubmit'] ?? true) ? '1' : '0';
-    $id = preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($opts['id'] ?? '')) ?: 'drp_' . bin2hex(random_bytes(4));
-
-    $isCustom = $current->preset() === 'custom';
-    $defaultRange = dateRangeResolve($default);
-    $isDefault = !$isCustom && $current->preset() === $default;
-    $dates = dateRangeDisplayDates($current);
-    $label = $isCustom ? 'Custom' : $current->label();
-    $text = $label . ($dates !== '' ? ' · ' . $dates : '');
-
-    // Group the catalog, dropping hidden groups (never the active preset's group).
-    $groups = [];
-    foreach (DateRange::presets() as $p) {
-        if (in_array($p['group'], $hide, true) && $p['id'] !== $current->preset()) {
-            continue;
+if (!function_exists('dateRangeDayLabel')) {
+    /** "Sep 6 - Oct 5" (years are added when the range is not entirely within the current year). */
+    function dateRangeDayLabel(string $from, string $to): string
+    {
+        $a = new DateTimeImmutable($from);
+        $b = new DateTimeImmutable($to);
+        $cur = (new DateTimeImmutable('now'))->format('Y');
+        $withYear = $a->format('Y') !== $b->format('Y') || $a->format('Y') !== $cur;
+        $f = $withYear ? 'M j, Y' : 'M j';
+        if ($from === $to) {
+            return $a->format($f);
         }
-        $groups[$p['group']][] = $p;
+
+        return $a->format($f) . ' – ' . $b->format($f);
     }
-    ?>
-    <div class="date-range-picker" data-date-range-picker data-default="<?= $h($default) ?>" data-autosubmit="<?= $auto ?>"
-         data-default-label="<?= $h($defaultRange->label()) ?>">
-        <input type="hidden" name="<?= $h($name) ?>" value="<?= $h($current->preset()) ?>" data-drp-preset>
-        <input type="hidden" name="<?= $h($fromName) ?>" value="<?= $isCustom ? $h($current->from()) : '' ?>" data-drp-from <?= $isCustom ? '' : 'disabled' ?>>
-        <input type="hidden" name="<?= $h($toName) ?>" value="<?= $isCustom ? $h($current->to()) : '' ?>" data-drp-to <?= $isCustom ? '' : 'disabled' ?>>
-        <div class="drp-controls">
-            <button type="button" class="drp-button" id="<?= $h($id) ?>" aria-haspopup="dialog" aria-expanded="false">
-                <i class="far fa-calendar-alt drp-icon" aria-hidden="true"></i>
-                <span class="drp-text"><?= $h($text) ?></span>
-                <i class="fas fa-chevron-down drp-caret" aria-hidden="true"></i>
-            </button>
-            <button type="button" class="drp-clear" aria-label="Clear date range (back to <?= $h($defaultRange->label()) ?>)" title="Clear date range" <?= $isDefault ? 'hidden' : '' ?>>
-                <i class="fas fa-times" aria-hidden="true"></i>
-            </button>
-        </div>
-        <div class="drp-panel" role="dialog" aria-label="Choose a date range" hidden>
-            <button type="button" class="drp-close" aria-label="Close date range"><span>Date range</span><i class="fas fa-times" aria-hidden="true"></i></button>
-            <div class="drp-presets" role="listbox" aria-label="Preset ranges">
-                <?php foreach ($groups as $group => $presets) { ?>
-                    <div class="drp-group" role="group" aria-label="<?= $h($group) ?>">
-                        <div class="drp-group-label" aria-hidden="true"><?= $h($group) ?></div>
-                        <?php foreach ($presets as $p) {
-                            $r = $p['id'] === 'custom' ? null : dateRangeResolve($p['id']);
-                            $active = $p['id'] === 'custom' ? $isCustom : (!$isCustom && $current->preset() === $p['id']);
-                            ?>
-                            <button type="button" class="drp-option<?= $active ? ' selected' : '' ?>" role="option"
-                                    aria-selected="<?= $active ? 'true' : 'false' ?>" tabindex="-1"
-                                    data-preset="<?= $h($p['id']) ?>" data-label="<?= $h($p['label']) ?>"
-                                    data-dates="<?= $h($r ? dateRangeDisplayDates($r) : '') ?>">
-                                <span><?= $h($p['label']) ?></span>
-                                <?php if ($r && !$r->isAllTime()) { ?><small><?= $h(dateRangeDisplayDates($r)) ?></small><?php } ?>
-                            </button>
-                        <?php } ?>
+}
+
+if (!function_exists('dateRangePickerHtml')) {
+    /**
+     * @param DateRange $current resolved current range (normally $date_range from filter_header.php)
+     * @param string    $name    name of the hidden preset input (default 'canned_date'; dtf/dtt keep their names)
+     * @param array     $opts    default (preset id the page applies when none is requested, default 'alltime'),
+     *                           hide_groups (e.g. ['Upcoming']), dates ([from, to] shown for "all time" when a report bounds it),
+     *                           auto_submit (default true; 'autosubmit' is accepted too), id, label (accessible name), class,
+     *                           from_name / to_name (names of the hidden dtf / dtt inputs; default dtf / dtt, or derived from $name:
+     *                           f_canned_date gives f_dtf / f_dtt)
+     */
+    function dateRangePickerHtml(DateRange $current, string $name = 'canned_date', array $opts = []): string
+    {
+        static $seq = 0;
+        $seq++;
+        $e = static fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $id = preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($opts['id'] ?? ('drp-' . $seq))) ?: 'drp-' . $seq;
+        $default = DateRange::isPreset((string) ($opts['default'] ?? 'alltime')) ? (string) ($opts['default'] ?? 'alltime') : 'alltime';
+        $hide = array_map('strval', (array) ($opts['hide_groups'] ?? []));
+        $auto = ($opts['auto_submit'] ?? $opts['autosubmit'] ?? true) ? '1' : '0';
+        $fromName = (string) ($opts['from_name'] ?? (preg_replace('/canned_date$/', 'dtf', $name) ?: 'dtf'));
+        $toName = (string) ($opts['to_name'] ?? (preg_replace('/canned_date$/', 'dtt', $name) ?: 'dtt'));
+        $a11y = (string) ($opts['label'] ?? 'Date range');
+        $extraClass = trim(preg_replace('/[^A-Za-z0-9 _-]/', '', (string) ($opts['class'] ?? '')));
+
+        $tz = dateRangeTimezone();
+
+        $preset = $current->preset();
+        $isCustom = $preset === 'custom';
+        $shownFrom = $current->from();
+        $shownTo = $current->to();
+        if ($current->isAllTime() && !empty($opts['dates'][0]) && !empty($opts['dates'][1])) {
+            $shownFrom = (string) $opts['dates'][0];
+            $shownTo = (string) $opts['dates'][1];
+        }
+        $dates = $current->isAllTime() && empty($opts['dates']) ? '' : dateRangeDayLabel($shownFrom, $shownTo);
+        $label = $isCustom ? 'Custom range' : $current->label();
+        $nonDefault = $isCustom || $preset !== $default;
+
+        // Group the catalogue, honouring hidden groups. The preset list shows each preset's resolved dates beside its name.
+        $groups = [];
+        foreach (DateRange::presets() as $p) {
+            if (in_array($p['group'], $hide, true)) {
+                continue;
+            }
+            $groups[$p['group']][] = $p;
+        }
+
+        ob_start();
+        ?>
+        <div class="drp <?php echo $e($extraClass); ?>" data-drp data-drp-default="<?php echo $e($default); ?>" data-drp-auto="<?php echo $auto; ?>" data-drp-name="<?php echo $e($name); ?>">
+            <input type="hidden" name="<?php echo $e($name); ?>" value="<?php echo $e($preset); ?>" class="drp-canned">
+            <input type="hidden" name="<?php echo $e($fromName); ?>" value="<?php echo $isCustom ? $e($current->from()) : ''; ?>" class="drp-dtf" <?php echo $isCustom ? '' : 'disabled'; ?>>
+            <input type="hidden" name="<?php echo $e($toName); ?>" value="<?php echo $isCustom ? $e($current->to()) : ''; ?>" class="drp-dtt" <?php echo $isCustom ? '' : 'disabled'; ?>>
+            <div class="drp-row">
+                <button type="button" class="drp-btn" id="<?php echo $e($id); ?>-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="<?php echo $e($id); ?>-panel" aria-label="<?php echo $e($a11y); ?>: <?php echo $e($label . ($dates !== '' ? ', ' . $dates : '')); ?>">
+                    <i class="far fa-calendar-alt drp-icon" aria-hidden="true"></i>
+                    <span class="drp-text"><span class="drp-label"><?php echo $e($label); ?></span><span class="drp-dates"><?php echo $e($dates); ?></span></span>
+                    <i class="fas fa-chevron-down drp-caret" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="drp-clear" aria-label="Clear date range" title="Clear date range" <?php echo $nonDefault ? '' : 'hidden'; ?>><i class="fas fa-times" aria-hidden="true"></i></button>
+            </div>
+            <div class="drp-panel" id="<?php echo $e($id); ?>-panel" role="dialog" aria-label="<?php echo $e($a11y); ?>" hidden>
+                <div class="drp-presets" role="listbox" aria-label="Preset ranges">
+                    <?php foreach ($groups as $gname => $items) { ?>
+                        <div class="drp-group" role="presentation">
+                            <div class="drp-group-title" role="presentation"><?php echo $e($gname); ?></div>
+                            <?php foreach ($items as $p) {
+                                $pid = $p['id'];
+                                $pf = $pt = '';
+                                if ($pid !== 'custom') {
+                                    $r = DateRange::resolve($pid, null, null, null, $tz, dateRangeWeekStart());
+                                    $pf = $r->from();
+                                    $pt = $r->to();
+                                }
+                                $isSel = $pid === $preset;
+                                ?>
+                                <button type="button" role="option" class="drp-opt" data-preset="<?php echo $e($pid); ?>" data-from="<?php echo $e($pf); ?>" data-to="<?php echo $e($pt); ?>" aria-selected="<?php echo $isSel ? 'true' : 'false'; ?>" tabindex="<?php echo $isSel ? '0' : '-1'; ?>">
+                                    <span class="drp-opt-name"><?php echo $e($p['label']); ?></span>
+                                    <?php if ($pid !== 'custom' && $pid !== 'alltime') { ?><span class="drp-opt-dates"><?php echo $e(dateRangeDayLabel($pf, $pt)); ?></span><?php } ?>
+                                </button>
+                            <?php } ?>
+                        </div>
+                    <?php } ?>
+                </div>
+                <div class="drp-custom" <?php echo $isCustom ? '' : 'hidden'; ?>>
+                    <div class="drp-inputs">
+                        <label class="drp-field"><span>From</span><input type="date" class="form-control drp-from" min="1970-01-01" max="2099-12-31" value="<?php echo $isCustom ? $e($current->from()) : ''; ?>"></label>
+                        <label class="drp-field"><span>To</span><input type="date" class="form-control drp-to" min="1970-01-01" max="2099-12-31" value="<?php echo $isCustom ? $e($current->to()) : ''; ?>"></label>
                     </div>
-                <?php } ?>
-            </div>
-            <div class="drp-custom" hidden>
-                <div class="drp-calendar" data-drp-calendar></div>
-                <div class="drp-inputs">
-                    <label>From <input type="date" class="form-control form-control-sm" data-drp-in-from min="1970-01-01" max="2099-12-31"></label>
-                    <label>To <input type="date" class="form-control form-control-sm" data-drp-in-to min="1970-01-01" max="2099-12-31"></label>
-                </div>
-                <div class="drp-hint">Leave one end empty for "on or after" / "up to". Dates are in the app's timezone.</div>
-                <div class="drp-actions">
-                    <button type="button" class="btn btn-sm btn-light drp-cancel">Cancel</button>
-                    <button type="button" class="btn btn-sm btn-primary drp-apply">Apply</button>
+                    <div class="drp-cal" data-first-day="1"></div>
+                    <div class="drp-actions">
+                        <button type="button" class="btn btn-sm btn-outline-secondary drp-cancel">Cancel</button>
+                        <button type="button" class="btn btn-sm btn-primary drp-apply">Apply</button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-    <?php
+        <?php
+
+        return (string) ob_get_clean();
+    }
+}
+
+if (!function_exists('dateRangePickerField')) {
+    /** Prints the picker; same arguments as dateRangePickerHtml(). */
+    function dateRangePickerField(DateRange $current, string $name = 'canned_date', array $opts = []): void
+    {
+        echo dateRangePickerHtml($current, $name, $opts);
+    }
 }

@@ -1,297 +1,242 @@
-/*
- * Webhook guides hub (admin/webhook_guides.php only). Progressive enhancement: without this file the page is one long, fully
- * readable document. With it: one guide at a time (deep links like #n8n, hash updates), live search and category chips, a sidebar
- * that becomes a dropdown on phones, language tabs with arrow keys, code highlighting, copy and wrap buttons, step tick boxes
- * remembered per platform in localStorage, and a scroll-spy for the "On this page" list. Everything the server rendered is escaped;
- * this script only ever uses textContent / DOM nodes, never markup built from page data.
- */
+/* Webhook guides hub (admin/settings_webhook_guides.php only): hash routing, live search + category filter, language tabs, copy,
+ * line-wrap toggle, per-platform progress (localStorage, always in try/catch), a tiny syntax highlighter. No libraries. */
 (function () {
   'use strict';
-  var root = document.querySelector('[data-wg]');
-  if (!root) return;
+  var root = document.getElementById('wg-root');
+  if (!root) { return; }
   root.classList.add('wg-js');
 
-  function $(s, r) { return (r || document).querySelector(s); }
-  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
-  function store(op, key, val) {
-    try { return op === 'get' ? window.localStorage.getItem(key) : window.localStorage.setItem(key, val); } catch (e) { return null; }
+  function $all(sel, ctx) { return Array.prototype.slice.call((ctx || root).querySelectorAll(sel)); }
+  function store(key, val) {
+    try { if (val === undefined) { return window.localStorage.getItem(key); } window.localStorage.setItem(key, val); } catch (e) { return null; }
+    return null;
   }
   var live = document.createElement('div');
   live.className = 'visually-hidden'; live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite');
   root.appendChild(live);
-  function say(t) { live.textContent = ''; setTimeout(function () { live.textContent = t; }, 30); }
 
-  // ------------------------------------------------------------------ syntax highlighting (tiny tokenizer, no library)
-  var JS_KW = 'const|let|var|function|return|if|else|throw|new|await|async|for|while|true|false|null|undefined|typeof|try|catch|of|in|this';
-  var PY_KW = 'def|return|if|elif|else|not|import|from|in|and|or|True|False|None|class|with|as|for|while|try|except|raise|lambda|pass|is';
-  var PHP_KW = 'function|return|if|else|elseif|true|false|null|new|foreach|as|echo|use|namespace|class|public|private|static|string|int|bool|array|abs|time|hash_equals|hash_hmac|preg_match|file_get_contents|isset';
-  var SH_KW = 'if|then|else|fi|exit|echo|printf|cat|sed|date|openssl|curl|for|do|done|while|case|esac|in|test';
-  var DQ = '"(?:\\\\[\\s\\S]|[^"\\\\])*"';
-  var SQ = "'(?:\\\\.|[^'\\\\\\n])*'";
-  var RULES = {
-    json: [['key', DQ + '(?=\\s*:)'], ['str', DQ], ['num', '-?\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b'], ['kw', '\\b(?:true|false|null)\\b']],
-    javascript: [['com', '\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/'], ['str', DQ + '|' + SQ + '|`(?:\\\\[\\s\\S]|[^`\\\\])*`'], ['var', '\\$[A-Za-z_][\\w]*'], ['num', '\\b\\d+(?:\\.\\d+)?\\b'], ['kw', '\\b(?:' + JS_KW + ')\\b'], ['fn', '\\b[A-Za-z_][\\w]*(?=\\()']],
-    python: [['com', '#[^\\n]*'], ['str', '"""[\\s\\S]*?"""|' + DQ + '|' + SQ], ['num', '\\b\\d+(?:\\.\\d+)?\\b'], ['kw', '\\b(?:' + PY_KW + ')\\b'], ['fn', '\\b[A-Za-z_][\\w]*(?=\\()']],
-    php: [['com', '\\/\\/[^\\n]*|#[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/'], ['str', DQ + '|' + SQ], ['var', '\\$[A-Za-z_][\\w]*'], ['num', '\\b\\d+(?:\\.\\d+)?\\b'], ['kw', '\\b(?:' + PHP_KW + ')\\b'], ['fn', '\\b[A-Za-z_][\\w]*(?=\\()']],
-    bash: [['com', '(?:^|(?<=\\s))#[^\\n]*'], ['str', DQ + "|'[^']*'"], ['var', '\\$(?:\\{[^}\\n]*\\}|\\([^)\\n]*\\)|[A-Za-z_@#?0-9][\\w]*)'], ['fn', '(?<=\\s)--?[A-Za-z][\\w-]*'], ['num', '\\b\\d+\\b'], ['kw', '\\b(?:' + SH_KW + ')\\b']]
+  /* ------------------------------------------------------------------ syntax highlighting */
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  var KW = {
+    javascript: 'const let var function return if else for while of in new try catch throw async await require import from export default true false null undefined typeof class this',
+    python: 'def return if elif else for while in import from as try except raise with lambda class pass True False None and or not is yield',
+    php: 'function return if else elseif foreach for while as new try catch throw true false null echo use namespace class public private static string int bool array isset empty define',
+    bash: 'if then else fi for do done while case esac echo export curl read local function in',
+    json: 'true false null'
   };
-  var compiled = {};
-  function compile(lang) {
-    if (compiled[lang]) return compiled[lang];
-    var rules = RULES[lang];
-    if (!rules) return null;
-    try {
-      compiled[lang] = { names: rules.map(function (r) { return r[0]; }), re: new RegExp(rules.map(function (r) { return '(' + r[1] + ')'; }).join('|'), 'gm') };
-    } catch (e) { compiled[lang] = null; }
-    return compiled[lang];
+  var SPEC = {
+    javascript: { com: '\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/', str: '`(?:\\\\[\\s\\S]|[^`\\\\])*`|"(?:\\\\.|[^"\\\\\\n])*"|\'(?:\\\\.|[^\'\\\\\\n])*\'' },
+    python: { com: '#[^\\n]*', str: '"""[\\s\\S]*?"""|\'\'\'[\\s\\S]*?\'\'\'|"(?:\\\\.|[^"\\\\\\n])*"|\'(?:\\\\.|[^\'\\\\\\n])*\'' },
+    php: { com: '\\/\\/[^\\n]*|#[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/', str: '"(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\'', v: '\\$[A-Za-z_]\\w*' },
+    bash: { com: '(?:^|\\s)#[^\\n]*', str: '"(?:\\\\.|[^"\\\\])*"|\'[^\']*\'', v: '\\$\\{?[A-Za-z_]\\w*\\}?' },
+    json: { com: '(?!)', str: '"(?:\\\\.|[^"\\\\\\n])*"' }
+  };
+  var RES = {};
+  function regexFor(lang) {
+    if (RES[lang]) { return RES[lang]; }
+    var s = SPEC[lang];
+    // groups: 1 comment, 2 string, 3 variable, 4 number, 5 word, 6 cli flag
+    RES[lang] = new RegExp('(' + s.com + ')|(' + s.str + ')|(' + (s.v || '(?!)') + ')|(\\b\\d+(?:\\.\\d+)?\\b)|([A-Za-z_][\\w-]*)' + (lang === 'bash' ? '|((?:^|\\s)--?[A-Za-z][\\w-]*)' : ''), 'g');
+    return RES[lang];
   }
-  function highlight(code) {
-    var lang = code.getAttribute('data-lang') || 'text', c = compile(lang), text = code.textContent;
-    if (!c || text.length > 60000) return;
-    var frag = document.createDocumentFragment(), last = 0, m;
-    c.re.lastIndex = 0;
-    while ((m = c.re.exec(text)) !== null) {
-      if (m[0] === '') { c.re.lastIndex++; continue; }
-      var which = -1;
-      for (var i = 1; i < m.length; i++) { if (m[i] !== undefined) { which = i - 1; break; } }
-      if (which < 0) continue;
-      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
-      var span = document.createElement('span');
-      span.className = 'wg-t-' + c.names[which];
-      span.textContent = m[0];
-      frag.appendChild(span);
+  function highlight(code, lang) {
+    if (!SPEC[lang] || code.length > 20000) { return esc(code); }
+    var kw = {}; (KW[lang] || '').split(' ').forEach(function (w) { kw[w] = 1; });
+    var re = regexFor(lang), out = '', last = 0, m;
+    re.lastIndex = 0;
+    while ((m = re.exec(code)) !== null) {
+      if (m[0] === '') { re.lastIndex++; continue; }
+      out += esc(code.slice(last, m.index));
+      var t = m[0], cls = '';
+      if (m[1] !== undefined) { cls = 'com'; }
+      else if (m[2] !== undefined) {
+        cls = 'str';
+        if (lang === 'json' && /^\s*:/.test(code.slice(m.index + t.length, m.index + t.length + 8))) { cls = 'key'; }
+      }
+      else if (m[3] !== undefined) { cls = 'var'; }
+      else if (m[4] !== undefined) { cls = 'num'; }
+      else if (m[5] !== undefined) {
+        if (kw[t]) { cls = 'kw'; }
+        else if (code.charAt(m.index + t.length) === '(' && lang !== 'json') { cls = 'fn'; }
+      } else if (m[6] !== undefined) {
+        var lead = t.match(/^\s*/)[0];
+        out += esc(lead) + '<span class="tk-fn">' + esc(t.slice(lead.length)) + '</span>'; last = m.index + t.length; continue;
+      }
+      if (cls === 'com' && lang === 'bash' && /^\s/.test(t)) {
+        var ws = t.match(/^\s*/)[0]; out += esc(ws); t = t.slice(ws.length);
+      }
+      out += cls ? '<span class="tk-' + cls + '">' + esc(t) + '</span>' : esc(t);
       last = m.index + m[0].length;
     }
-    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
-    code.textContent = '';
-    code.appendChild(frag);
-    code.setAttribute('data-hl', '1');
+    return out + esc(code.slice(last));
   }
-  $$('code[data-lang]', root).forEach(highlight);
-
-  // ------------------------------------------------------------------ copy + wrap
-  function legacyCopy(text) {
-    var ta = document.createElement('textarea');
-    ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px;top:0';
-    document.body.appendChild(ta); ta.select();
-    var ok = false;
-    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-    document.body.removeChild(ta);
-    return ok;
-  }
-  function copyText(text) {
-    if (navigator.clipboard && window.isSecureContext) {
-      return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return legacyCopy(text); });
-    }
-    return Promise.resolve(legacyCopy(text));
-  }
-  root.addEventListener('click', function (e) {
-    var btn = e.target.closest('[data-wg-copy]');
-    if (btn) {
-      var target = $(btn.getAttribute('data-wg-copy'));
-      if (!target) return;
-      var label = $('span', btn), old = label.textContent;
-      copyText(target.textContent).then(function (ok) {
-        label.textContent = ok ? 'Copied' : 'Press Ctrl+C';
-        btn.classList.toggle('is-done', ok);
-        say(ok ? 'Copied to the clipboard' : 'Copy failed, select the text and press Ctrl+C');
-        clearTimeout(btn._t);
-        btn._t = setTimeout(function () { label.textContent = old; btn.classList.remove('is-done'); }, 1800);
-      });
-      return;
-    }
-    var wrap = e.target.closest('[data-wg-wrap]');
-    if (wrap) {
-      var box = wrap.closest('[data-wg-code]'), on = !box.classList.contains('is-wrapped');
-      box.classList.toggle('is-wrapped', on);
-      wrap.setAttribute('aria-pressed', on ? 'true' : 'false');
-    }
+  $all('.wg-code').forEach(function (fig) {
+    var code = fig.querySelector('pre code'); if (!code) { return; }
+    var lang = fig.getAttribute('data-lang');
+    if (SPEC[lang]) { code.innerHTML = highlight(code.textContent, lang); }
   });
 
-  // ------------------------------------------------------------------ language tabs (arrow keys, remembered choice)
+  /* ------------------------------------------------------------------ routing */
+  var sections = $all('[data-wg-guide]');
+  var byId = {}; sections.forEach(function (s) { byId[s.getAttribute('data-guide')] = s; });
+  var links = $all('[data-wg-link]');
+  var jump = root.querySelector('[data-wg-jump]');
+  var current = null;
+
+  function topOffset() { var r = root.querySelector('.wg-layout'); return r ? r.getBoundingClientRect().top + window.pageYOffset - 8 : 0; }
+  function route(initial) {
+    var id = '';
+    try { id = decodeURIComponent((location.hash || '').replace(/^#/, '')); } catch (e) { id = ''; }
+    var el = id ? document.getElementById(id) : null;
+    var guide = el ? el.closest('[data-wg-guide]') : null;
+    if (!guide || !root.contains(guide)) { guide = byId.guides; el = null; }
+    sections.forEach(function (s) { s.classList.toggle('is-active', s === guide); });
+    var gid = guide.getAttribute('data-guide');
+    links.forEach(function (a) {
+      var on = a.getAttribute('data-wg-link') === gid && (gid !== 'n8n' || (a.getAttribute('href') === '#n8n') === (id !== 'n8n-walkthrough'));
+      a.classList.toggle('is-current', on);
+      if (on) { a.setAttribute('aria-current', 'page'); } else { a.removeAttribute('aria-current'); }
+    });
+    if (jump) { var want = (el && el.id === 'networks') ? 'networks' : gid; jump.value = want; if (jump.value !== want) { jump.value = gid; } }
+    if (guide !== current || !initial) {
+      if (el && el !== guide) { el.scrollIntoView(); } else if (!initial || current) { window.scrollTo(0, Math.max(0, topOffset())); }
+    }
+    if (el && el !== guide && initial) { el.scrollIntoView(); }
+    current = guide;
+    var h = guide.querySelector('h2'); if (h) { document.title = h.textContent + ' | ' + (document.title.split(' | ').pop()); }
+    watchToc();
+  }
+  window.addEventListener('hashchange', function () { route(false); });
+  if (jump) { jump.addEventListener('change', function () { location.hash = '#' + jump.value; }); }
+
+  /* ------------------------------------------------------------------ search + category filter */
+  var q = '', cat = '';
+  var items = $all('[data-wg-item]');
+  var search = root.querySelector('[data-wg-search]');
+  function applyFilter() {
+    var visible = 0, cards = 0;
+    items.forEach(function (it) {
+      var ok = (!cat || it.getAttribute('data-cat') === cat) && (!q || (it.getAttribute('data-search') || '').indexOf(q) !== -1);
+      it.hidden = !ok;
+      if (it.tagName === 'OPTION') { it.disabled = !ok; }
+      if (it.tagName === 'ARTICLE' && ok) { cards++; }
+      if (it.tagName === 'LI' && ok) { visible++; }
+    });
+    $all('.wg-navgroup').forEach(function (g) { g.hidden = !g.querySelector('[data-wg-item]:not([hidden])'); });
+    $all('optgroup[data-cat]').forEach(function (g) { var any = !!g.querySelector('option:not([hidden])'); g.hidden = !any; g.disabled = !any; });
+    var e1 = root.querySelector('[data-wg-empty]'), e2 = root.querySelector('[data-wg-empty-grid]'), c = root.querySelector('[data-wg-count]');
+    if (e1) { e1.hidden = visible > 0; }
+    if (e2) { e2.hidden = cards > 0; }
+    if (c) { c.textContent = String(cards); }
+    live.textContent = cards + (cards === 1 ? ' platform' : ' platforms') + ' shown';
+  }
+  if (search) {
+    search.addEventListener('input', function () { q = search.value.trim().toLowerCase(); applyFilter(); });
+    search.addEventListener('keydown', function (e) { if (e.key === 'Escape') { search.value = ''; q = ''; applyFilter(); } });
+  }
+  $all('[data-wg-cat]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      cat = b.getAttribute('data-wg-cat');
+      $all('[data-wg-cat]').forEach(function (o) { var on = o === b; o.classList.toggle('is-active', on); o.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+      applyFilter();
+    });
+  });
+
+  /* ------------------------------------------------------------------ tabs (arrow keys, shared language) */
   function selectTab(tab, focus) {
     var group = tab.closest('[data-wg-tabs]');
-    $$('[role="tab"]', group).forEach(function (t) {
+    $all('[role="tab"]', group).forEach(function (t) {
       var on = t === tab;
-      t.classList.toggle('is-active', on);
-      t.setAttribute('aria-selected', on ? 'true' : 'false');
-      t.tabIndex = on ? 0 : -1;
-      var p = document.getElementById(t.getAttribute('aria-controls'));
-      if (p) p.hidden = !on;
+      t.setAttribute('aria-selected', on ? 'true' : 'false'); t.tabIndex = on ? 0 : -1;
+      var p = document.getElementById(t.getAttribute('aria-controls')); if (p) { p.hidden = !on; }
     });
-    if (focus) tab.focus();
+    if (focus) { tab.focus(); }
   }
   root.addEventListener('click', function (e) {
-    var tab = e.target.closest('[role="tab"][data-wg-lang]');
-    if (!tab) return;
+    var tab = e.target.closest && e.target.closest('[role="tab"][data-wg-lang]');
+    if (!tab) { return; }
     var lang = tab.getAttribute('data-wg-lang');
-    selectTab(tab, false);
-    store('set', 'wg:lang', lang);
-    // keep every other tab group on the same language when it offers it
-    $$('[data-wg-tabs]', root).forEach(function (g) {
-      var same = $('[data-wg-lang="' + lang + '"]', g);
-      if (same && g !== tab.closest('[data-wg-tabs]')) selectTab(same, false);
-    });
+    selectTab(tab, false); store('wg-lang', lang);
+    $all('[role="tab"][data-wg-lang="' + lang + '"]').forEach(function (t) { if (t !== tab) { selectTab(t, false); } });
   });
   root.addEventListener('keydown', function (e) {
     var tab = e.target.closest && e.target.closest('[role="tab"]');
-    if (!tab) return;
-    var tabs = $$('[role="tab"]', tab.closest('[data-wg-tabs]')), i = tabs.indexOf(tab), n = -1;
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = (i + 1) % tabs.length;
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = (i - 1 + tabs.length) % tabs.length;
-    else if (e.key === 'Home') n = 0;
-    else if (e.key === 'End') n = tabs.length - 1;
-    if (n < 0) return;
-    e.preventDefault();
-    selectTab(tabs[n], true);
-    tabs[n].click();
+    if (!tab) { return; }
+    var tabs = $all('[role="tab"]', tab.closest('[data-wg-tabs]')), i = tabs.indexOf(tab), n = -1;
+    if (e.key === 'ArrowRight') { n = (i + 1) % tabs.length; } else if (e.key === 'ArrowLeft') { n = (i - 1 + tabs.length) % tabs.length; }
+    else if (e.key === 'Home') { n = 0; } else if (e.key === 'End') { n = tabs.length - 1; }
+    if (n < 0) { return; }
+    e.preventDefault(); selectTab(tabs[n], true); tabs[n].click();
   });
-  var savedLang = store('get', 'wg:lang');
-  if (savedLang) {
-    $$('[data-wg-tabs]', root).forEach(function (g) {
-      var t = $('[data-wg-lang="' + savedLang + '"]', g);
-      if (t) selectTab(t, false);
+  var savedLang = store('wg-lang');
+  if (savedLang) { $all('[role="tab"][data-wg-lang="' + savedLang + '"]').forEach(function (t) { selectTab(t, false); }); }
+
+  /* ------------------------------------------------------------------ copy + wrap */
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) { return navigator.clipboard.writeText(text); }
+    return new Promise(function (ok, fail) {
+      var ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy') ? ok() : fail(); } catch (err) { fail(err); } finally { document.body.removeChild(ta); }
     });
   }
+  root.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-wg-copy]');
+    if (btn) {
+      var src = document.querySelector(btn.getAttribute('data-wg-copy')); if (!src) { return; }
+      var label = btn.querySelector('[data-wg-copy-label]');
+      copyText(src.textContent).then(function () {
+        if (label) { label.textContent = 'Copied'; } btn.classList.add('is-copied'); live.textContent = 'Copied to clipboard';
+        setTimeout(function () { if (label) { label.textContent = 'Copy'; } btn.classList.remove('is-copied'); }, 1600);
+      }, function () { if (label) { label.textContent = 'Press Ctrl+C'; } window.getSelection().selectAllChildren(src); });
+      return;
+    }
+    var w = e.target.closest && e.target.closest('[data-wg-wrap]');
+    if (w) { var fig = w.closest('.wg-code'), on = !fig.classList.contains('wg-wrap'); fig.classList.toggle('wg-wrap', on); w.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+  });
 
-  // ------------------------------------------------------------------ step tick boxes (per platform, localStorage)
-  $$('[data-wg-steps]', root).forEach(function (list) {
-    var id = list.getAttribute('data-wg-steps'), key = 'wg:steps:' + id, done = [];
-    try { done = JSON.parse(store('get', key) || '[]') || []; } catch (e) { done = []; }
-    var section = list.closest('.wg-block'), progress = $('[data-wg-progress]', section), reset = $('[data-wg-reset]', section);
-    var boxes = $$('[data-wg-tick]', list);
+  /* ------------------------------------------------------------------ ticks remembered per platform */
+  $all('[data-wg-checks]').forEach(function (list) {
+    var key = 'wg:' + list.getAttribute('data-wg-checks');
+    var boxes = $all('input[type="checkbox"]', list), saved = [];
+    try { saved = JSON.parse(store(key) || '[]') || []; } catch (e) { saved = []; }
+    var section = list.closest('section'), prog = section ? section.querySelector('[data-wg-progress]') : null;
     function paint() {
       var n = 0;
-      boxes.forEach(function (b, i) {
-        var on = done.indexOf(i) !== -1;
-        b.checked = on;
-        b.closest('.wg-step').classList.toggle('is-done', on);
-        if (on) n++;
-      });
-      if (progress) progress.textContent = n ? n + ' of ' + boxes.length + ' steps done' : '';
-      if (reset) reset.hidden = n === 0;
+      boxes.forEach(function (b) { var li = b.closest('li'); if (b.checked) { n++; } if (li) { li.classList.toggle('is-done', b.checked); } });
+      if (prog) { prog.textContent = n ? n + ' of ' + boxes.length + ' done' : ''; }
     }
     boxes.forEach(function (b, i) {
+      b.checked = saved.indexOf(i) !== -1;
       b.addEventListener('change', function () {
-        done = done.filter(function (x) { return x !== i; });
-        if (b.checked) done.push(i);
-        store('set', key, JSON.stringify(done));
-        paint();
+        var on = []; boxes.forEach(function (x, j) { if (x.checked) { on.push(j); } });
+        store(key, JSON.stringify(on)); paint();
       });
     });
-    if (reset) reset.addEventListener('click', function () { done = []; store('set', key, '[]'); paint(); });
     paint();
   });
 
-  // ------------------------------------------------------------------ views, deep links and navigation
-  var views = $$('[data-wg-view]', root), links = $$('[data-wg-link]', root);
-  var pageIds = {};
-  views.forEach(function (v) { if (v.id) pageIds[v.id] = v; });
-  var indexView = $('[data-wg-view="index"]', root), side = $('.wg-side', root);
-  var toggle = $('[data-wg-side-toggle]', root), toggleLabel = $('[data-wg-side-label]', root);
-  var spy = null;
-
-  function setSide(open) {
-    if (!side || !toggle) return;
-    side.classList.toggle('is-open', open);
-    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-  }
-  if (toggle) toggle.addEventListener('click', function () { setSide(!side.classList.contains('is-open')); });
-
-  function scrollTo(el, behavior) {
-    if (!el) return;
-    el.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : (behavior || 'auto'), block: 'start' });
-  }
-  function watchToc(view) {
-    if (spy) { spy.disconnect(); spy = null; }
-    if (!view || !('IntersectionObserver' in window)) return;
-    var tocLinks = $$('[data-wg-jump]', view);
-    if (!tocLinks.length) return;
-    spy = new IntersectionObserver(function (entries) {
+  /* ------------------------------------------------------------------ "On this page" highlight */
+  var io = null;
+  function watchToc() {
+    if (io) { io.disconnect(); io = null; }
+    if (!('IntersectionObserver' in window) || !current) { return; }
+    var blocks = $all('[data-wg-toc]', current), tocLinks = $all('.wg-toc a', current);
+    if (!blocks.length) { return; }
+    io = new IntersectionObserver(function (entries) {
       entries.forEach(function (en) {
-        if (!en.isIntersecting) return;
-        tocLinks.forEach(function (a) { a.classList.toggle('is-active', a.getAttribute('data-wg-jump') === en.target.id); });
+        if (!en.isIntersecting) { return; }
+        tocLinks.forEach(function (a) { a.classList.toggle('is-current', a.getAttribute('href') === '#' + en.target.id); });
       });
-    }, { rootMargin: '-15% 0px -70% 0px' });
-    tocLinks.forEach(function (a) { var t = document.getElementById(a.getAttribute('data-wg-jump')); if (t) spy.observe(t); });
+    }, { rootMargin: '0px 0px -65% 0px' });
+    blocks.forEach(function (b) { io.observe(b); });
   }
 
-  var current = null;
-  function route(fromUser) {
-    var id = decodeURIComponent((location.hash || '').replace(/^#/, ''));
-    var target = id ? document.getElementById(id) : null;
-    var view = indexView, scrollTarget = null, name = 'All guides', linkId = '';
-    if (target && pageIds[id] && pageIds[id] !== indexView) {
-      view = pageIds[id]; linkId = id;
-      name = view.getAttribute('data-wg-name') || (id === 'receiving-in-n8n' ? 'Receiving in n8n' : id);
-    } else if (target && indexView.contains(target)) {
-      scrollTarget = target; linkId = ['signing', 'networks'].indexOf(id) !== -1 ? id : '';
-      if (linkId) name = target.querySelector('h4') ? target.querySelector('h4').textContent : name;
-    }
-    views.forEach(function (v) { v.classList.toggle('is-current', v === view); });
-    links.forEach(function (a) {
-      var on = a.getAttribute('data-wg-link') === linkId;
-      a.classList.toggle('is-current', on);
-      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
-    });
-    if (toggleLabel) toggleLabel.textContent = name;
-    setSide(false);
-    watchToc(view === indexView ? null : view);
-    var changed = view !== current;
-    current = view;
-    if (scrollTarget) scrollTo(scrollTarget, 'smooth');
-    else if (changed && (fromUser || id)) scrollTo(view === indexView ? $('.wg-layout', root) : view);
-    if (fromUser && view !== indexView) { var h = $('h4', view); if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); } }
-  }
-  window.addEventListener('hashchange', function () { route(true); });
-  route(false);
+  /* ------------------------------------------------------------------ print: expand everything */
+  var opened = [];
+  window.addEventListener('beforeprint', function () { opened = []; $all('details').forEach(function (d) { if (!d.open) { d.open = true; opened.push(d); } }); });
+  window.addEventListener('afterprint', function () { opened.forEach(function (d) { d.open = false; }); opened = []; });
 
-  // "On this page" jumps scroll inside the open guide without touching the hash
-  root.addEventListener('click', function (e) {
-    var a = e.target.closest('[data-wg-jump]');
-    if (!a) return;
-    e.preventDefault();
-    var t = document.getElementById(a.getAttribute('data-wg-jump'));
-    scrollTo(t, 'smooth');
-    if (t) { t.setAttribute('tabindex', '-1'); t.focus({ preventScroll: true }); }
-  });
-
-  // ------------------------------------------------------------------ search + category chips
-  var input = $('[data-wg-search]', root), chips = $$('[data-wg-cat]', root), cat = 'all';
-  var navLinks = $$('.wg-nav-link[data-wg-hay]', root), tiles = $$('[data-wg-tile]', root), count = $('[data-wg-count]', root), empties = $$('[data-wg-empty]', root);
-  function filter() {
-    var terms = (input ? input.value : '').toLowerCase().split(/\s+/).filter(Boolean), shown = 0;
-    function ok(el) {
-      var hay = el.getAttribute('data-wg-hay') || '';
-      return (cat === 'all' || el.getAttribute('data-wg-cat-of') === cat) && terms.every(function (t) { return hay.indexOf(t) !== -1; });
-    }
-    navLinks.forEach(function (a) { a.hidden = !ok(a); });
-    tiles.forEach(function (t) { var v = ok(t); t.hidden = !v; if (v) shown++; });
-    $$('[data-wg-group]', root).forEach(function (g) { g.hidden = !$$('.wg-nav-link:not([hidden])', g).length; });
-    var stat = $('[data-wg-static]', root);
-    if (stat) stat.hidden = !!terms.length || cat !== 'all';
-    if (count) count.textContent = String(shown);
-    empties.forEach(function (n) { n.hidden = shown > 0; });
-  }
-  if (input) {
-    input.addEventListener('input', filter);
-    input.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') { input.value = ''; filter(); }
-      if (e.key === 'Enter') {
-        var first = navLinks.filter(function (a) { return !a.hidden; })[0];
-        if (first) { e.preventDefault(); location.hash = first.getAttribute('data-wg-link'); }
-      }
-    });
-  }
-  chips.forEach(function (c) {
-    c.addEventListener('click', function () {
-      cat = c.getAttribute('data-wg-cat');
-      chips.forEach(function (x) { var on = x === c; x.classList.toggle('is-active', on); x.setAttribute('aria-pressed', on ? 'true' : 'false'); });
-      filter();
-    });
-  });
-  filter();
-
-  // ------------------------------------------------------------------ print: expand the collapsed example payloads
-  window.addEventListener('beforeprint', function () { $$('details', root).forEach(function (d) { d.setAttribute('open', ''); }); });
+  applyFilter();
+  route(true);
 })();

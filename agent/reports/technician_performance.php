@@ -101,7 +101,7 @@ $cap_hours_per_tech = $report['capacity']['capacity_hours_per_tech'];
 
         <!-- Date range filter -->
         <form class="p-3 d-print-none d-flex flex-wrap align-items-center gap-2">
-            <label class="mb-0 me-1" for="reportDateRange">Date range</label>
+            <label class="mb-0 me-1" for="reportDateRange-btn">Date range</label>
             <?php dateRangePickerField($date_range, 'canned_date', ['hide_groups' => ['Upcoming'], 'id' => 'reportDateRange']); ?>
         </form>
 

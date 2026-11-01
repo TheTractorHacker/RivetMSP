@@ -154,7 +154,8 @@ function rivetWebhookCleanEvents($raw): array
 /** Values of a posted/stored extra-field map, limited to the destination's fields. @return array<string,string> */
 function rivetWebhookPostedFields(Destination $dest, array $in): array
 {
-    $posted = is_array($in['webhook_field'] ?? null) ? $in['webhook_field'] : [];
+    // The wizard (js/webhook_wizard.js) posts the platform's own inputs as extra[name]; webhook_field[name] is the older spelling.
+    $posted = is_array($in['extra'] ?? null) ? $in['extra'] : (is_array($in['webhook_field'] ?? null) ? $in['webhook_field'] : []);
     $out = [];
     foreach ($dest->extraFields as $f) {
         $v = $posted[$f->name] ?? '';
@@ -245,16 +246,16 @@ function rivetWebhookCollect($mysqli, array $in, ?array $existing = null): array
     // ---------- URL (blank on edit keeps the stored one; secrets are never echoed back into the form)
     $submittedUrl = trim((string) ($in['webhook_url'] ?? ''));
     $storedUrl = $existing ? decryptSetting((string) $existing['webhook_url']) : '';
-    $urlChanged = $submittedUrl !== '';
-    if (!$urlChanged && $existing) {
+    $sameDest = $existing !== null && rivetWebhookEffectiveDestination($existing) === $dest->id;
+    $built = rivetWebhookBuildUrl($dest, $submittedUrl, $fields);
+    if ($built === '' && $existing && $sameDest) {
         $url = $storedUrl;
-    } else {
-        $url = $submittedUrl;
-        foreach ($dest->extraFields as $f) {
-            if ($f->target === 'url' && $fields[$f->name] !== '') {
-                $url = str_replace('{' . $f->name . '}', str_replace('%3A', ':', rawurlencode($fields[$f->name])), $url);
-            }
+        // A kept address is not vetted again here, but the opt-in rule applies to it too: un-ticking "Allow plain http://" on a stored http:// address must not save quietly.
+        if (!$allowHttp && \RivetCore\Webhooks\UrlPolicy::isPlainHttp(str_replace('{txn}', 'x', $url))) {
+            $errors[] = 'Plain http:// destinations are not allowed. Use https://, or turn on "Allow plain http://" and accept that the payload and its signature travel unencrypted.';
         }
+    } else {
+        $url = $built;
         $verdict = rivetWebhookUrlVerdict($mysqli, $dest, $url, $allowHttp);
         if ($verdict['state'] !== 'ok') {
             $errors[] = $verdict['error'];
@@ -367,7 +368,96 @@ function rivetWebhookCollect($mysqli, array $in, ?array $existing = null): array
 }
 
 /**
- * The ONE URL check: what the save runs and what the live "is this address OK?" hint (admin/webhook_url_check.php) shows. No outbound
+ * The address a form describes: the typed URL (or, when only the platform's own address parts were filled in, the preset's address
+ * template) with the {placeholders} of target=url fields replaced. '' = nothing typed, so an edit keeps the stored address.
+ *
+ * @param array<string,string> $fields values from rivetWebhookPostedFields()
+ */
+function rivetWebhookBuildUrl(Destination $dest, string $submitted, array $fields): string
+{
+    $filled = false;
+    foreach ($dest->extraFields as $f) {
+        if ($f->target === 'url' && ($fields[$f->name] ?? '') !== '') {
+            $filled = true;
+        }
+    }
+    $url = $submitted !== '' ? $submitted : ($filled ? $dest->urlHint : '');
+    if ($url === '') {
+        return '';
+    }
+    foreach ($dest->extraFields as $f) {
+        if ($f->target === 'url' && ($fields[$f->name] ?? '') !== '') {
+            $url = str_replace('{' . $f->name . '}', str_replace('%3A', ':', rawurlencode($fields[$f->name])), $url);
+        }
+    }
+
+    return $url;
+}
+
+/** The preset a stored row is: its own, or Generic JSON for a row from before presets existed (that is what the Edit page shows it as). */
+function rivetWebhookEffectiveDestination(array $row): string
+{
+    $id = (string) ($row['webhook_destination'] ?? '');
+
+    return $id !== '' && Destinations::has($id) ? $id : 'generic-json';
+}
+
+/** Presets whose address is an ordinary URL; every other preset's address (a chat hook, a bot token ...) is a secret and is never shown again. */
+function rivetWebhookUrlIsSecret(string $destinationId): bool
+{
+    return !in_array($destinationId, ['generic-json', 'generic-form', 'custom-template'], true);
+}
+
+/** HTTP methods an administrator may pick for a preset: a PUT-only preset is PUT, the custom template may be either, the rest POST. @return list<string> */
+function rivetWebhookAllowedMethods(Destination $d): array
+{
+    if ($d->method === 'PUT') {
+        return ['PUT'];
+    }
+
+    return $d->id === 'custom-template' ? ['POST', 'PUT'] : ['POST'];
+}
+
+/**
+ * The quick-pick chips of the Events step. Patterns ("ticket.*") are stored as such, so they keep matching events added later.
+ *
+ * @param list<string> $criticalIds ids of the catalog's critical events
+ * @return list<array{key:string,label:string,values:list<string>,hint:string,recommended:bool}>
+ */
+function rivetWebhookEventPresets(?Destination $d, array $criticalIds = []): array
+{
+    $list = [
+        ['key' => 'all', 'label' => 'All events', 'values' => ['*'], 'hint' => 'Everything, including events added later'],
+        ['key' => 'tickets', 'label' => 'Tickets', 'values' => ['ticket.*'], 'hint' => 'Created, replied, assigned, status changes, resolved, escalated'],
+        ['key' => 'critical', 'label' => 'Critical only', 'values' => $criticalIds ?: ['ticket.sla_breached', 'backup.failed'], 'hint' => 'Only events marked critical, such as an SLA breach or a failed backup'],
+        ['key' => 'sla', 'label' => 'SLA problems', 'values' => ['sla.*', 'ticket.sla_warning', 'ticket.sla_breached'], 'hint' => 'SLA warnings and breaches'],
+        ['key' => 'security', 'label' => 'Security & sign-in', 'values' => ['auth.*', 'vault.*'], 'hint' => 'Logins, failed sign-ins, MFA failures, vault reveals'],
+        ['key' => 'approvals', 'label' => 'Approvals', 'values' => ['approval.*', 'catalog.request_approved', 'catalog.request_rejected'], 'hint' => 'Approval requests and decisions, service catalog requests'],
+        ['key' => 'workflows', 'label' => 'Workflows & lifecycle', 'values' => ['workflow.*', 'employee.*', 'contact.hire_date_set', 'people.import_approved'], 'hint' => 'Onboarding, offboarding and workflow runs'],
+        ['key' => 'system', 'label' => 'Backups & system', 'values' => ['backup.*', 'redis.*', 'job.*', 'cron.job_refused'], 'hint' => 'Backups, Redis, the job queue and scheduler problems'],
+    ];
+    $rec = match ($d?->category) {
+        'chat' => ['values' => ['ticket.created', 'ticket.escalated', 'ticket.sla_warning', 'ticket.sla_breached'], 'hint' => 'New and escalated tickets plus SLA warnings: what a team channel usually wants'],
+        'notify' => ['values' => ['ticket.created', 'ticket.escalated', 'ticket.sla_breached'], 'hint' => 'A short list that is worth a push notification'],
+        'automation' => ['values' => ['ticket.*'], 'hint' => 'Every ticket event: a good start for a workflow'],
+        'home' => ['values' => ['ticket.created', 'ticket.sla_breached'], 'hint' => 'New tickets and SLA breaches'],
+        default => null,
+    };
+    if ($rec !== null && $d !== null) {
+        array_unshift($list, ['key' => 'recommended', 'label' => 'Recommended for ' . $d->name, 'values' => $rec['values'], 'hint' => $rec['hint'], 'recommended' => true]);
+    }
+
+    return array_map(static fn (array $p): array => $p + ['recommended' => false], $list);
+}
+
+/** Events the Review step offers as "Sample event" for the preview and the test (all are in the Core catalog, so their sample data exists). @return list<string> */
+function rivetWebhookSampleEvents(): array
+{
+    return array_values(array_filter(['ticket.created', 'ticket.replied', 'ticket.assigned', 'ticket.status_changed', 'ticket.resolved', 'ticket.sla_breached', 'ticket.escalated'], static fn (string $e): bool => EventCatalog::has($e)));
+}
+
+/**
+ * The ONE URL check: what the save runs and what the live "is this address OK?" hint (modals/webhook/webhook_action.php, wh_action=check_url) shows. No outbound
  * request is made (only a DNS lookup for a host name, which the save does too).
  *
  * state: ok | empty | invalid | placeholder | pattern | private | blocked | unresolved. `error` is the exact message the save reports;
@@ -551,14 +641,16 @@ function rivetWebhookSampleData(): array
  *
  * @return array{ok:bool, http_status:?int, duration_ms:int, error:?string, response:string, event:string}
  */
-function rivetWebhookSendTest($mysqli, WebhookSubscription $sub): array
+function rivetWebhookSendTest($mysqli, WebhookSubscription $sub, ?string $sampleEvent = null): array
 {
     $dispatcher = rivetWebhookDispatcher($mysqli, new RivetInlineWebhookSubscription($sub));
     $opts = $sub->options;
     if ($opts !== []) {
         $opts['format_options'] = array_merge((array) ($opts['format_options'] ?? []), ['test' => true]);
     }
-    $r = $dispatcher->deliverTo($sub->webhookId, 'test', rivetWebhookSampleData(), 1, null, time(), $opts ?: null);
+    // The event type stays "test" (so the delivery log shows it as a test); the sample event only chooses which realistic data it carries.
+    $data = $sampleEvent !== null && $sampleEvent !== '' && EventCatalog::has($sampleEvent) ? PayloadTemplate::sampleContext($sampleEvent)['data'] + ['test' => true] : rivetWebhookSampleData();
+    $r = $dispatcher->deliverTo($sub->webhookId, 'test', $data, 1, null, time(), $opts ?: null);
 
     $response = '';
     $res = mysqli_query($mysqli, "SELECT response_body_snippet FROM webhook_deliveries WHERE webhook_id = " . (int) $sub->webhookId . " AND event_type = 'test' ORDER BY delivery_id DESC LIMIT 1");
@@ -575,7 +667,7 @@ function rivetWebhookSendTest($mysqli, WebhookSubscription $sub): array
 /**
  * Exactly what would be sent for a sample event: method, address (path hidden), headers and body. Secrets are redacted.
  *
- * @return array{method:string, url:string, headers:list<string>, body:string, content_type:string, event:string}
+ * @return array{method:string, url:string, format:string, headers:list<string>, body:string, content_type:string, event:string}
  */
 function rivetWebhookPreview(WebhookSubscription $sub, array $authRedacted, ?string $sampleEvent = null): array
 {
@@ -622,7 +714,7 @@ function rivetWebhookPreview(WebhookSubscription $sub, array $authRedacted, ?str
         $headers[] = $k . ': ' . $v;
     }
 
-    return ['method' => strtoupper((string) ($opts['method'] ?? 'POST')), 'url' => rivetWebhookUrlMasked($sub->url), 'headers' => $headers, 'body' => $f->body, 'content_type' => $f->contentType, 'event' => $evName];
+    return ['method' => strtoupper((string) ($opts['method'] ?? 'POST')), 'url' => rivetWebhookUrlMasked($sub->url), 'format' => $format, 'headers' => $headers, 'body' => $f->body, 'content_type' => $f->contentType, 'event' => $evName];
 }
 
 /** Mask secret-looking keys of a stored request body for display (the delivery log keeps the exact bytes sent). */

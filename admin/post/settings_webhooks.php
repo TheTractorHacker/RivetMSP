@@ -20,32 +20,54 @@ function webhookUrlIsSafe(string $url): bool {
     return rivetWebhookUrlPolicy($GLOBALS['mysqli'] ?? null)->isSafe($url);
 }
 
-/** Keep what was typed (never a secret) so a refused save does not lose the form. */
-function webhookRememberDraft(array $post): void {
-    $keep = ['webhook_id', 'webhook_destination', 'webhook_name', 'webhook_url', 'webhook_method', 'webhook_template', 'webhook_template_encoding',
-        'webhook_auth_mode', 'auth_username', 'auth_header_name', 'webhook_enabled'];
-    $draft = array_intersect_key($post, array_flip($keep));
-    $draft['webhook_events'] = array_values(array_filter((array) ($post['webhook_events'] ?? []), 'is_string'));
-    $draft['webhook_field'] = array_map('strval', array_filter((array) ($post['webhook_field'] ?? []), 'is_string'));
-    // A URL can carry the secret (Telegram token, Zapier hook id): only keep it when it is the platform's own template.
-    unset($draft['webhook_url']);
-    $_SESSION['webhook_form_draft'] = $draft;
+/** The Add / Edit pages save through fetch (wh_ajax=1) and expect JSON; a plain form post keeps its flash + redirect. */
+function webhookWantsJson(): bool {
+    return !empty($_POST['wh_ajax']);
 }
 
-function webhookFormErrorsRedirect(array $errors, array $post, ?int $id): void {
-    webhookRememberDraft($post);
+/** Answer a wh_ajax request. */
+function webhookJson(array $payload, int $status = 200): never {
+    http_response_code($status);
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
+/** CSRF check. For wh_ajax it answers JSON (validateCSRFToken redirects), so the page can show the problem. */
+function webhookCheckCsrf(): void {
+    if (webhookWantsJson()) {
+        $t = $_POST['csrf_token'] ?? null;
+        if (!is_string($t) || !hash_equals((string) ($_SESSION['csrf_token'] ?? ''), $t)) {
+            webhookJson(['ok' => false, 'errors' => ['Your session expired. Reload the page and try again.']], 403);
+        }
+        return;
+    }
+    validateCSRFToken($_POST['csrf_token'] ?? null);
+}
+
+/** A refused save: JSON for the wizard, a flash + back to the form otherwise. */
+function webhookFail(array $errors, ?int $id): never {
+    if (webhookWantsJson()) {
+        webhookJson(['ok' => false, 'errors' => array_values($errors)]);
+    }
     flash_alert('Webhook not saved:<br>' . implode('<br>', array_map('nullable_htmlentities', $errors)), 'error');
-    $dest = urlencode((string) ($post['webhook_destination'] ?? ''));
-    redirect($id ? "webhook_form.php?id=$id" : ($dest !== '' ? "webhook_form.php?dest=$dest&step=review" : 'settings_webhooks.php'));
+    $dest = urlencode((string) ($_POST['webhook_destination'] ?? ''));
+    redirect($id ? "webhook_edit.php?id=$id" : ($dest !== '' ? "webhook_new.php?dest=$dest&step=review" : 'settings_webhooks.php'));
+}
+
+/** Does a validated row carry the plain-http opt-in? */
+function webhookRowAllowsHttp(array $row): bool {
+    return (json_decode((string) ($row['webhook_extra'] ?? ''), true)['allow_http'] ?? false) === true;
 }
 
 if (isset($_POST['add_webhook'])) {
 
-    validateCSRFToken($_POST['csrf_token']);
+    webhookCheckCsrf();
 
     $c = rivetWebhookCollect($mysqli, $_POST, null);
     if ($c['errors']) {
-        webhookFormErrorsRedirect($c['errors'], $_POST, null);
+        webhookFail($c['errors'], null);
     }
     $r = $c['row'];
     $stmt = mysqli_prepare(
@@ -58,20 +80,20 @@ if (isset($_POST['add_webhook'])) {
         $r['webhook_destination'], $r['webhook_format'], $r['webhook_method'], $r['webhook_template'], $r['webhook_auth_mode'], $r['webhook_auth_enc'], $r['webhook_extra']);
     mysqli_stmt_execute($stmt);
     $new_id = (int) mysqli_insert_id($mysqli);
-    unset($_SESSION['webhook_form_draft']);
 
     $webhook_name = $r['webhook_name'];
-    $allow_http_on = (json_decode((string) ($r['webhook_extra'] ?? ''), true)['allow_http'] ?? false) === true;
-    logAction("Settings", "Webhook", "$session_name added webhook $webhook_name" . ($r['webhook_destination'] !== '' ? " ({$r['webhook_destination']})" : '') . ($allow_http_on ? " with plain http:// allowed" : ""));
+    logAction("Settings", "Webhook", "$session_name added webhook " . sanitizeInput($webhook_name) . ($r['webhook_destination'] !== '' ? " ({$r['webhook_destination']})" : '') . (webhookRowAllowsHttp($r) ? " with plain http:// allowed" : ""));
 
+    if (webhookWantsJson()) {
+        webhookJson(['ok' => true, 'id' => $new_id, 'name' => $webhook_name, 'destination' => $r['webhook_destination']]);
+    }
     flash_alert("Webhook <strong>" . nullable_htmlentities($webhook_name) . "</strong> added");
-    // The guided page shows a success screen with the next actions ("Create and send test" also fires a test there).
-    redirect($new_id > 0 && isset($_POST['wizard']) ? "webhook_form.php?id=$new_id&created=1" . (($_POST['after'] ?? '') === 'test' ? '&test=1' : '') : 'settings_webhooks.php');
+    redirect('settings_webhooks.php');
 }
 
 if (isset($_POST['edit_webhook'])) {
 
-    validateCSRFToken($_POST['csrf_token']);
+    webhookCheckCsrf();
 
     $webhook_id = intval($_POST['webhook_id'] ?? 0);
     $stmt = mysqli_prepare($mysqli, "SELECT * FROM webhooks WHERE webhook_id = ?");
@@ -79,6 +101,9 @@ if (isset($_POST['edit_webhook'])) {
     mysqli_stmt_execute($stmt);
     $existing = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
     if (!$existing) {
+        if (webhookWantsJson()) {
+            webhookJson(['ok' => false, 'errors' => ['Webhook not found.']], 404);
+        }
         flash_alert('Webhook not found.', 'error');
         redirect('settings_webhooks.php');
     }
@@ -89,7 +114,7 @@ if (isset($_POST['edit_webhook'])) {
 
     $c = rivetWebhookCollect($mysqli, $_POST, $existing);
     if ($c['errors']) {
-        webhookFormErrorsRedirect($c['errors'], $_POST, $webhook_id);
+        webhookFail($c['errors'], $webhook_id);
     }
     $r = $c['row'];
     $stmt = mysqli_prepare(
@@ -102,15 +127,96 @@ if (isset($_POST['edit_webhook'])) {
     mysqli_stmt_bind_param($stmt, "ssssisssssssi", $r['webhook_name'], $r['webhook_url'], $r['webhook_secret'], $r['webhook_events'], $r['webhook_enabled'],
         $r['webhook_destination'], $r['webhook_format'], $r['webhook_method'], $r['webhook_template'], $r['webhook_auth_mode'], $r['webhook_auth_enc'], $r['webhook_extra'], $webhook_id);
     mysqli_stmt_execute($stmt);
-    unset($_SESSION['webhook_form_draft']);
 
     $webhook_name = $r['webhook_name'];
-    $was_http_on = (json_decode((string) ($existing['webhook_extra'] ?? ''), true)['allow_http'] ?? false) === true;
-    $now_http_on = (json_decode((string) ($r['webhook_extra'] ?? ''), true)['allow_http'] ?? false) === true;
+    $was_http_on = webhookRowAllowsHttp($existing);
+    $now_http_on = webhookRowAllowsHttp($r);
     $http_note = $now_http_on !== $was_http_on ? ($now_http_on ? " (turned ON plain http:// for this destination)" : " (turned OFF plain http:// for this destination)") : "";
-    logAction("Settings", "Webhook", "$session_name edited webhook $webhook_name" . $http_note);
+    logAction("Settings", "Webhook", "$session_name edited webhook " . sanitizeInput($webhook_name) . $http_note);
 
+    if (webhookWantsJson()) {
+        webhookJson(['ok' => true, 'id' => $webhook_id, 'name' => $webhook_name, 'destination' => $r['webhook_destination']]);
+    }
     flash_alert("Webhook <strong>" . nullable_htmlentities($webhook_name) . "</strong> updated");
+    redirect('settings_webhooks.php');
+}
+
+// The enabled switch on the list and the Edit page header: flips one column, answers JSON.
+if (isset($_POST['toggle_webhook'])) {
+
+    webhookCheckCsrf();
+
+    $webhook_id = intval($_POST['webhook_id'] ?? 0);
+    $enabled = !empty($_POST['enabled']) && $_POST['enabled'] !== '0' ? 1 : 0;
+    $name = getFieldById('webhooks', $webhook_id, 'webhook_name');
+    if ($name === null || $name === false) {
+        webhookJson(['ok' => false, 'errors' => ['Webhook not found.']], 404);
+    }
+    $stmt = mysqli_prepare($mysqli, "UPDATE webhooks SET webhook_enabled = ? WHERE webhook_id = ?");
+    mysqli_stmt_bind_param($stmt, "ii", $enabled, $webhook_id);
+    mysqli_stmt_execute($stmt);
+    logAction("Settings", "Webhook", "$session_name " . ($enabled ? 'enabled' : 'disabled') . " webhook " . sanitizeInput($name));
+    webhookJson(['ok' => true, 'id' => $webhook_id, 'enabled' => $enabled]);
+}
+
+// A copy of a webhook (secrets copied as stored: same keys, still encrypted), created disabled so it never doubles deliveries by accident.
+if (isset($_POST['duplicate_webhook'])) {
+
+    validateCSRFToken($_POST['csrf_token'] ?? null);
+
+    $webhook_id = intval($_POST['webhook_id'] ?? 0);
+    $stmt = mysqli_prepare($mysqli, "SELECT * FROM webhooks WHERE webhook_id = ?");
+    mysqli_stmt_bind_param($stmt, "i", $webhook_id);
+    mysqli_stmt_execute($stmt);
+    $src = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    if (!$src) {
+        flash_alert("Webhook not found.", 'error');
+        redirect('settings_webhooks.php');
+    }
+    $name = mb_substr((string) $src['webhook_name'], 0, 190) . ' (copy)';
+    $zero = 0;
+    $stmt = mysqli_prepare($mysqli, "INSERT INTO webhooks
+        SET webhook_name = ?, webhook_url = ?, webhook_secret = ?, webhook_events = ?, webhook_enabled = ?,
+            webhook_destination = ?, webhook_format = ?, webhook_method = ?, webhook_template = ?, webhook_auth_mode = ?, webhook_auth_enc = ?, webhook_extra = ?");
+    mysqli_stmt_bind_param($stmt, 'ssssisssssss', $name, $src['webhook_url'], $src['webhook_secret'], $src['webhook_events'], $zero,
+        $src['webhook_destination'], $src['webhook_format'], $src['webhook_method'], $src['webhook_template'], $src['webhook_auth_mode'], $src['webhook_auth_enc'], $src['webhook_extra']);
+    mysqli_stmt_execute($stmt);
+    $new_id = (int) mysqli_insert_id($mysqli);
+    logAction("Settings", "Webhook", "$session_name duplicated webhook " . sanitizeInput($src['webhook_name']) . " as " . sanitizeInput($name));
+    flash_alert("Webhook duplicated as <strong>" . nullable_htmlentities($name) . "</strong> (disabled until you turn it on)");
+    redirect('webhook_edit.php?id=' . $new_id);
+}
+
+// Sends one clearly labelled test event to a saved webhook through the real delivery path and reports the HTTP result (never the URL).
+// The Add / Edit form has its own Send test (modals/webhook/webhook_action.php) that tries unsaved settings.
+if (isset($_POST['test_webhook'])) {
+
+    validateCSRFToken($_POST['csrf_token'] ?? null);
+
+    $webhook_id = intval($_POST['webhook_id'] ?? 0);
+    $stmt = mysqli_prepare($mysqli, "SELECT * FROM webhooks WHERE webhook_id = ?");
+    mysqli_stmt_bind_param($stmt, "i", $webhook_id);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    if (!$row) {
+        flash_alert("Webhook not found.", 'error');
+        redirect('settings_webhooks.php');
+    }
+
+    try {
+        $r = rivetWebhookSendTest($mysqli, rivetWebhookSubsFromRow($row, $webhook_id));
+    } catch (\Throwable $e) {
+        $r = ['ok' => false, 'http_status' => null, 'duration_ms' => 0, 'error' => $e->getMessage(), 'response' => ''];
+    }
+    $name = nullable_htmlentities($row['webhook_name']);
+    logAction("Settings", "Webhook", "$session_name sent a test message to webhook " . sanitizeInput($row['webhook_name']) . ($r['ok'] ? " (HTTP {$r['http_status']})" : " (failed)"));
+
+    $snippet = $r['response'] !== null && $r['response'] !== '' ? ' Response: ' . nullable_htmlentities(mb_substr($r['response'], 0, 200)) : '';
+    if ($r['ok']) {
+        flash_alert("Test message sent to <strong>$name</strong>: HTTP " . intval($r['http_status']) . " in " . intval($r['duration_ms']) . " ms." . $snippet);
+    } else {
+        flash_alert("Test message to <strong>$name</strong> failed: " . nullable_htmlentities($r['error'] ?? 'unknown error') . $snippet, 'error');
+    }
     redirect('settings_webhooks.php');
 }
 
@@ -127,7 +233,7 @@ if (isset($_GET['delete_webhook'])) {
     logAction("Settings", "Webhook", "$session_name deleted webhook $webhook_name");
 
     flash_alert("Webhook <strong>$webhook_name</strong> deleted", 'error');
-    redirect();
+    redirect('settings_webhooks.php');
 }
 
 // Internal networks webhooks may reach. The list is validated by RivetCore's NetworkList (private ranges only, not too wide);
