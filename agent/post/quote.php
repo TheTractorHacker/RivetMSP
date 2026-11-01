@@ -63,8 +63,6 @@ if (isset($_POST['add_quote_copy'])) {
 
     enforceClientAccess();
 
-    $config_quote_prefix = sanitizeInput($config_quote_prefix);
-
     // Atomically increment and get the new quote number
     mysqli_query($mysqli, "
         UPDATE settings
