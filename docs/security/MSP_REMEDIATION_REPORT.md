@@ -79,18 +79,50 @@ passed cleanly.
 
 ## What still needs Blake's own action
 
-1. **TinyMCE upgrade (8.5.0 → 8.5.1+, audit finding C4).** Three stored-XSS CVEs (CVE-2026-47759, -47761, -47762) are fixed upstream.
-   This was **not hand-patched** in this pass because `plugins/tinymce/` is a large vendored bundle (core, multiple themes, models,
-   plugins, icon packs, language files) distributed as a single self-hosted zip from tiny.cloud (or via `npm install tinymce`, which
-   this repo does not use - there is no `package.json`). Safely upgrading it means downloading the **official** 8.5.1+ self-hosted
-   release and replacing the entire `plugins/tinymce/` tree atomically, verifying the new bundle's checksum/provenance - not editing
-   a handful of minified files by hand, which risks silently breaking the editor or (worse) introducing a worse supply-chain problem
-   than the one being fixed. This needs either network access to fetch the official release artifact and a verification step this
-   environment isn't set up to do safely, or Blake's own download-and-swap during a normal maintenance window.
-   - **What Blake needs to do:** download the TinyMCE 8.5.1 (or later) self-hosted package from `https://www.tiny.cloud/get-tiny/self-hosted/`,
-     replace `plugins/tinymce/` with it (keeping any custom skin/CSS overrides this project layers on top - check `git diff` against the
-     current `plugins/tinymce/` tree for local modifications before overwriting), smoke-test every `tinymce.init()` call site
-     (`js/app.js`, `admin/settings_mail_templates.php`, `client/includes/footer.php`), and commit.
+1. **TinyMCE upgrade (8.5.0 → 8.5.1, audit finding C4). RESOLVED - this was a follow-up pass with network access.** Three
+   stored-XSS CVEs (CVE-2026-47759, -47761, -47762) are fixed upstream in 8.5.1. The original remediation pass above deliberately
+   deferred this (see the now-superseded text this replaces) because it needed network access and careful provenance verification,
+   not hand-patching minified files. A later pass, run in an environment **with** outbound network access, completed it:
+
+   - **Local-modification check (before touching anything):** `git log --follow -- plugins/tinymce/` shows every prior version bump
+     (6.4.2 through 8.5.0) as a clean, atomic "Bump TinyMCE from X to Y" commit touching only the expected vendor files - no commit
+     layers custom skin/CSS edits on top. `git show --stat` on the last bump (`f5da94a27`) confirmed the same pattern. No local
+     modifications were found anywhere under `plugins/tinymce/`, so none needed to be preserved/reapplied.
+   - **Target version:** checked TinyMCE's own changelog (`https://www.tiny.cloud/docs/tinymce/latest/changelog/`) - **8.5.1**
+     (2026-05-20) is the only 8.5.x patch release after 8.5.0, and its Security section lists exactly three stored-XSS fixes
+     matching this finding: two core-serializer fixes (`data-mce-` prefixed attributes, forged `mce:protected` comments) plus a
+     `media` plugin `data-mce-object` injection fix. (TinyMCE's current latest overall is 8.10.1 - deliberately *not* adopted here;
+     the task was a security patch within the 8.5.x line, not a feature-version bump.)
+   - **Provenance verification:** tiny.cloud's own self-hosted download page (`https://www.tiny.cloud/get-tiny/self-hosted/`) offers
+     no checksum or signature at all. The npm registry does: fetched `https://registry.npmjs.org/tinymce/8.5.1` and confirmed (a)
+     the package is published by Tiny Technologies' own npm account (`tinymce`/`ephox`, `engineering-inbox@tiny.cloud`), matching the
+     copyright holder in the vendored `license.md`; (b) `repository.url` is `github.com/tinymce/tinymce`, the same upstream already
+     recorded in this repo; (c) after downloading the tarball over HTTPS, its SHA-1 (`2783ea3a666081b3e8ac38cb4d0cdab589782544`) and
+     SHA-512 (base64, `Wd4OrokDEwlXppSR+ijXngLa2+s3v8NZax9WCvAHeQhqvFsj9tGt19PmrnAdGLiQFkBBYzdOLW23tsBTPMiJYw==`) both matched the
+     registry's own recorded `dist.shasum`/`dist.integrity` byte-for-byte. Extracted and confirmed `tinymce.min.js` reports
+     `majorVersion:"8"`, `minorVersion:"5.1"` and `package.json` reports `"version":"8.5.1"`.
+   - **Swap:** replaced `plugins/tinymce/{icons,models,plugins,skins,themes,tinymce.d.ts,tinymce.min.js,license.md,notices.txt}` with
+     the verified 8.5.1 contents, pruning the npm package's extra unminified source companions (`plugin.js`/`index.js` per plugin,
+     `.ts`/`.css` source files under `skins/`) that this repo has never vendored, so the resulting file-path set is byte-for-byte
+     identical to the pre-upgrade tree (confirmed via `diff` of `git ls-tree` vs. the new file list) - only 3 files actually changed
+     content: `tinymce.min.js`, `plugins/media/plugin.min.js` (the media-plugin fix), and `license.md` (upstream's own 2026 copyright/
+     license-text update). `langs/` (a stock placeholder `README.md` only, no actual language files) was left untouched - the npm
+     package doesn't ship it at all.
+   - **Smoke test:** stood up a schema-only scratch database (`db.sql` imported fresh) with a throwaway admin user via
+     `scripts/setup_cli.php`, served the worktree with PHP's built-in server, and drove a real headless Chromium (via
+     `puppeteer-core`, pointed at a locally cached Chrome build - the project's usual MCP browser tools weren't available in this
+     environment) through: (1) `admin/settings_mail_templates.php` - both `tinymceMailTemplate` editors render with toolbars
+     (`tox-toolbar`), zero console errors, zero failed network requests under the page's CSP; typed content round-tripped through
+     `editor.getContent()`/the underlying `<textarea>`, and a full server round trip (submit → reload) persisted the typed marker
+     correctly; (2) the `.tinymceTicket` editor reached via the real "Add Ticket" ajax-modal flow on `agent/tickets.php` - this is
+     the one that loads the `image` plugin, the plugin family containing the actual CVE-fixed code - toolbar rendered, typing
+     worked, zero console errors/failed requests. `client/includes/footer.php`'s editor was not separately browser-driven (no
+     client-portal ticket existed in the fresh scratch DB) but uses the identical vendored core/skin/theme bundle and an equivalent
+     plugin set to the ticket editor already exercised above. Confirmed all `tinymce.init()` call sites via grep:
+     `js/app.js` (7 calls), `admin/settings_mail_templates.php` (2 calls), `client/includes/footer.php` (1 call) - no others exist.
+   - **Tests:** no PHP files were touched by this change (only files under `plugins/tinymce/` and these docs); `php -l` has nothing
+     new to check. No existing automated test file references `tinymce` (grepped `tests/`).
+   - Scratch DB, scratch user, and the worktree's local `config.php` were dropped/removed after testing; no live data was touched.
 
 2. **Historical backup-dump SQL files in git history (audit finding M1).** This was explicitly decided earlier in this session: the
    files are confirmed removed from the current tree and `.gitignore` now blocks recurrence, but **git history was deliberately not

@@ -141,11 +141,11 @@ manually this pass:
 
 - `composer audit --no-interaction` → **No security vulnerability advisories found.**
 - Vendored browser JS libraries (no `package.json`/lockfile exists in this repo) checked by version string against known CVEs - see
-  `MSP_SECURITY_AUDIT.md` finding M3 for the full table. One actionable finding: **TinyMCE 8.5.0** has 3 disclosed stored-XSS CVEs,
-  fixed in 8.5.1 (finding C4, unresolved - needs Blake's own upgrade, see remediation report). This check is **manual-only
-  verification** (no automated test enforces vendored-library versions); recommended follow-up is adopting a `package.json` +
-  `npm audit`/Dependabot for the vendored front-end libraries, or at minimum a CI step that extracts and diffs each bundle's embedded
-  version string against a pinned allow-list.
+  `MSP_SECURITY_AUDIT.md` finding M3 for the full table. One actionable finding: **TinyMCE 8.5.0** had 3 disclosed stored-XSS CVEs,
+  fixed in 8.5.1 (finding C4 - **fixed this pass**, upgraded to 8.5.1 with verified provenance and a browser smoke test; see
+  remediation report item 1). This check is **manual-only verification** (no automated test enforces vendored-library versions);
+  recommended follow-up is adopting a `package.json` + `npm audit`/Dependabot for the vendored front-end libraries, or at minimum a
+  CI step that extracts and diffs each bundle's embedded version string against a pinned allow-list.
 
 ## Nightly/CLI guard convention
 
@@ -173,4 +173,4 @@ manually this pass:
 | Microsoft OAuth (Identity Providers) | `tests/security_identity_provider.php` (11/11) | - |
 | Tenant separation | `tests/rmm_tenant_isolation.php` (23/23, new) | - |
 | GitHub Actions security | - | full manual review this pass |
-| Dependency audit | `composer audit` (clean) | vendored JS version check (TinyMCE finding) |
+| Dependency audit | `composer audit` (clean) | vendored JS version check (TinyMCE fixed - upgraded to 8.5.1) |
