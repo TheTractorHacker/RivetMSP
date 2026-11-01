@@ -9,7 +9,7 @@
         "css/itflow.shim-bs4.css": "48c0fcb9f10bce08798320e6fc8150a90dc033c29240e0c591044f8ad5352c4b",
         "css/itflow_bs5_bridge.css": "b4d2c95980c1dff99ead8e9ffe07d7e5fa7f6b01f64114f7a060954ed2ebd620",
         "css/itflow_custom.css": "945ec7f6062813fea4418e7f404c934126c85a4770b40d8339441394a616aece",
-        "css/itflow_design.css": "af671f104466eefa46e528437bf9fc360237b058ee84d75ec3ecef06f53a9d6b",
+        "css/itflow_design.css": "94569801ac779ef24f412c4a0c91f91d7a75e1fc3de5a37329216b1dea489c1f",
         "css/itflow_metrics.css": "6f877a8093e58902c0f16701bbf82448fc6e750e15a3cbcf99ee004ace1dee02",
         "css/itflow_motion.css": "9c9e612c4598e4da452d5344f2411f0235800b47e3f38b4c36981c6c39c8d1b2",
         "css/itflow_rmm.css": "82e38823de12e6cd8396520b1dd16b85555fd286dfd16d6f12f88c1050b357f3",
@@ -19,7 +19,7 @@
         "css/itflow_rmm_remote.css": "02f3e15c308a8ed441160ef901633fababcbac773938ca1b9e3a49b647d24654",
         "css/itflow_rmm_scale.css": "99071e0c1d87a4fe1f52c08effa48a9148e7dc97c59df99124991cca7c6d15ef",
         "css/itflow_rmm_software.css": "5d0219e13531330e89a3e5dec37bf480ff2cade4c645635f72545262a84abcb9",
-        "css/itflow_rmm_ui.css": "d8c6ee3c46148e57dd0b24fa4b1ac4237d53115bff9f114cfbc11c1ded117810"
+        "css/itflow_rmm_ui.css": "553c0fa4350f909efb7cb347e9bfd14a5f82c588afb30a7d2f9e79890ab33450"
     },
     "deferred": {
         "css/webhook_form.css": "MSP's pages (admin/webhook_form.php, settings_webhooks.php) use the pre-existing .whf-* single-page form markup, not Core's new .wz-*/.whl-* wizard; installing Core's file would leave those pages unstyled until the wizard is ported. Not installed; check-ui-assets.php will keep reporting it as modified until this is resolved.",
