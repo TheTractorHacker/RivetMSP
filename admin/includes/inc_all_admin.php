@@ -71,6 +71,7 @@ $admin_settings_labels = [
     'settings_endpoint_agent.php' => 'Endpoint agent',
     'rmm_mesh_wizard.php' => 'Remote access setup',
     'settings_unifi.php' => 'Integrations',
+    'settings_mcp.php' => 'Remote MCP',
 ];
 // A page that lives under an admin area (Maintenance, Ticketing setup, ...) gets that area's breadcrumb below; showing
 // the Settings one as well stacked two breadcrumb rows (settings_redis.php is in both lists).

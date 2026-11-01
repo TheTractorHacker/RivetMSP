@@ -2762,6 +2762,103 @@ CREATE TABLE `mailboxes` (
   KEY `idx_mailbox_active` (`mailbox_active`,`mailbox_archived_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `mcp_oauth_client_documents`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `mcp_oauth_client_documents` (
+  `client_id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `source_url` varchar(512) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `document` mediumtext NOT NULL,
+  `first_seen_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `fetched_at` datetime NOT NULL,
+  `expires_at` datetime NOT NULL,
+  `last_error` varchar(100) DEFAULT NULL,
+  `last_error_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`client_id`),
+  KEY `idx_mcp_oauth_client_documents_expires` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `mcp_oauth_clients`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `mcp_oauth_clients` (
+  `client_id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `client_name` varchar(100) NOT NULL,
+  `redirect_uris` text NOT NULL,
+  `registration_type` varchar(10) NOT NULL DEFAULT 'dynamic',
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `created_ip` varchar(64) DEFAULT NULL,
+  `created_by_user_id` int(11) DEFAULT NULL,
+  `disabled_at` datetime DEFAULT NULL,
+  `last_used_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`client_id`),
+  KEY `idx_mcp_oauth_clients_ip` (`created_ip`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `mcp_oauth_codes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `mcp_oauth_codes` (
+  `code_hash` binary(32) NOT NULL,
+  `client_id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `redirect_uri` varchar(512) NOT NULL,
+  `code_challenge` varchar(64) NOT NULL,
+  `scope` varchar(100) NOT NULL,
+  `resource` varchar(255) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `expires_at` datetime NOT NULL,
+  `used_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`code_hash`),
+  KEY `idx_mcp_oauth_codes_expires` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `mcp_oauth_config`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `mcp_oauth_config` (
+  `setting_key` varchar(60) NOT NULL,
+  `setting_value` varchar(255) NOT NULL DEFAULT '',
+  `setting_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `mcp_oauth_grants`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `mcp_oauth_grants` (
+  `grant_id` int(11) NOT NULL AUTO_INCREMENT,
+  `client_id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `scope` varchar(100) NOT NULL,
+  `resource` varchar(255) NOT NULL,
+  `origin_code_hash` binary(32) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `last_used_at` datetime DEFAULT NULL,
+  `expires_at` datetime NOT NULL,
+  `revoked_at` datetime DEFAULT NULL,
+  `revoke_reason` varchar(40) DEFAULT NULL,
+  PRIMARY KEY (`grant_id`),
+  UNIQUE KEY `uniq_mcp_oauth_grant_code` (`origin_code_hash`),
+  KEY `idx_mcp_oauth_grants_user` (`user_id`,`revoked_at`),
+  KEY `idx_mcp_oauth_grants_client` (`client_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `mcp_oauth_tokens`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `mcp_oauth_tokens` (
+  `token_hash` binary(32) NOT NULL,
+  `grant_id` int(11) NOT NULL,
+  `token_kind` varchar(10) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `expires_at` datetime NOT NULL,
+  `used_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`token_hash`),
+  KEY `idx_mcp_oauth_tokens_grant` (`grant_id`),
+  KEY `idx_mcp_oauth_tokens_expires` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `mcp_unlinked_identities`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -5455,6 +5552,9 @@ CREATE TABLE `settings` (
   `config_update_check_last_at` datetime DEFAULT NULL,
   `config_mail_template_header_html` mediumtext DEFAULT NULL,
   `config_mail_template_footer_html` mediumtext DEFAULT NULL,
+  `config_module_enable_mcp` tinyint(1) NOT NULL DEFAULT 0,
+  `config_mcp_issuer` varchar(255) NOT NULL DEFAULT '',
+  `config_mcp_audience` varchar(255) NOT NULL DEFAULT '',
   PRIMARY KEY (`company_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;

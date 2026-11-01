@@ -1,0 +1,443 @@
+<?php
+require_once "includes/inc_all_admin.php";
+
+use RivetMSP\Mcp\McpConfig;
+use RivetMSP\Mcp\McpIdentityLinks;
+use RivetMSP\Mcp\OAuth\OAuthConfig;
+use RivetMSP\Mcp\OAuth\OAuthStore;
+
+$mcp = McpConfig::load($mysqli);
+$mcp_url = 'https://' . $config_base_url . '/mcp';
+$tables_ready = false;
+try { $tables_ready = (bool) $mysqli->query("SHOW TABLES LIKE 'mcp_unlinked_identities'")->fetch_row(); } catch (Throwable $e) {}
+
+$oauth = OAuthConfig::load($mysqli);   // the built-in OAuth server (RivetMSP as its own authorization server)
+$cimd = OAuthConfig::cimd($mysqli);    // trust policy for client metadata documents
+$oauth_clients = $oauth['schema_ready'] ? (new OAuthStore($mysqli))->clients() : [];
+$unused_duplicates = 0;   // surplus unused self-registered copies: what "Delete unused duplicates" would remove
+$seen_dup_groups = [];
+foreach ($oauth_clients as $c0) {
+    if ($c0['duplicates'] > 0 && $c0['registration_type'] === 'dynamic') {
+        $seen_dup_groups[$c0['duplicate_key']]['n'] = ($seen_dup_groups[$c0['duplicate_key']]['n'] ?? 0) + 1;
+        $unusedCopy = (int) $c0['total_grants'] === 0 && $c0['last_used_at'] === null && $c0['disabled_at'] === null;
+        $seen_dup_groups[$c0['duplicate_key']]['unused'] = ($seen_dup_groups[$c0['duplicate_key']]['unused'] ?? 0) + ($unusedCopy ? 1 : 0);
+    }
+}
+foreach ($seen_dup_groups as $g0) {
+    $unused_duplicates += $g0['unused'] - ($g0['unused'] === $g0['n'] ? 1 : 0);
+}
+$oauth_grants = $oauth['schema_ready'] ? (new OAuthStore($mysqli))->activeGrants() : [];
+$as_metadata_url = 'https://' . $config_base_url . '/.well-known/oauth-authorization-server';
+
+$mcp_state = !$mcp['schema_ready'] || !$tables_ready || !$oauth['schema_ready'] ? ['Update needed', 'warning']
+    : (!$mcp['enabled'] ? ['Off', 'secondary']
+    : ($oauth['builtin'] ? ['On (built-in sign-in)', 'success']
+    : (!$mcp['configured'] ? ['Needs setup', 'warning'] : ['On', 'success'])));
+
+$checks = $_SESSION['mcp_checks'] ?? null;
+$pending = $tables_ready ? McpIdentityLinks::pending($mysqli) : [];
+$linkable = $tables_ready ? McpIdentityLinks::linkableAgents($mysqli) : [];
+$linked = McpIdentityLinks::linkedAgents($mysqli);
+$activity = $mysqli->query("SELECT created_at, actor_user_id, summary, request_id FROM audit_events
+    WHERE event_type = 'mcp.tool_call' ORDER BY audit_id DESC LIMIT 15")->fetch_all(MYSQLI_ASSOC);
+$badge = ['ok' => 'success', 'warn' => 'warning', 'fail' => 'danger', 'skip' => 'secondary'];
+$csrf = $_SESSION['csrf_token'];
+?>
+
+<div class="card mb-3">
+    <div class="card-header py-3 d-flex align-items-center justify-content-between">
+        <h3 class="card-title mb-0"><i class="fas fa-fw fa-plug me-2"></i>Remote MCP <span class="badge bg-warning text-dark ms-1">Experimental</span></h3>
+        <span class="badge bg-<?= $mcp_state[1] ?> fs-6"><?= $mcp_state[0] ?></span>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-3">Lets AI tools such as Claude read <?= htmlspecialchars(defined('APP_NAME') ? APP_NAME : 'RivetMSP') ?> (tickets, assets, contacts, knowledge base) as one of your agents, with that agent's own permissions. It is read-only. People sign in either with <?= htmlspecialchars(defined('APP_NAME') ? APP_NAME : 'RivetMSP') ?> itself (built-in sign-in, no other service needed) or through your own identity provider, for example Authentik.</p>
+
+        <?php if (!$mcp['schema_ready'] || !$tables_ready || !$oauth['schema_ready']) { ?>
+            <div class="alert alert-warning mb-0">Run the database update first (Administration &rarr; Updates), then reload this page.</div>
+        <?php } else { ?>
+
+        <?php if ($mcp['killed']) { ?>
+            <div class="alert alert-danger">The server has <code>RIVETMSP_MCP_ENABLED=0</code> set, which keeps Remote MCP off whatever this page says.</div>
+        <?php } ?>
+
+        <form action="post.php" method="post" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="form-check form-switch mb-3">
+                <input type="checkbox" class="form-check-input" id="mcp_enabled" name="mcp_enabled" value="1" <?= $mcp['module_on'] ? 'checked' : '' ?>>
+                <label class="form-check-label" for="mcp_enabled">Turn on Remote MCP</label>
+            </div>
+            <?php if ($oauth['builtin']) { ?>
+                <div class="alert alert-info py-2">Built-in sign-in is on, so the issuer and audience below are not used. They only apply when you use your own identity provider.</div>
+            <?php } ?>
+            <div class="row g-3">
+                <div class="col-lg-7">
+                    <label for="mcp_issuer" class="form-label">Issuer URL</label>
+                    <input type="url" class="form-control" id="mcp_issuer" name="mcp_issuer" maxlength="255" value="<?= nullable_htmlentities($mcp['issuer']) ?>" <?= $mcp['issuer_from_env'] ? 'readonly' : '' ?> placeholder="https://auth.example.com/application/o/rivetmsp-mcp/">
+                    <div class="form-text"><?= $mcp['issuer_from_env'] ? 'Set by the server (RIVETMSP_MCP_ISSUER).' : 'Copy it exactly from your provider, including any trailing slash. Authentik: the issuer in the application\'s OpenID configuration.' ?></div>
+                </div>
+                <div class="col-lg-5">
+                    <label for="mcp_audience" class="form-label">Audience</label>
+                    <input type="text" class="form-control" id="mcp_audience" name="mcp_audience" maxlength="255" value="<?= nullable_htmlentities($mcp['audience']) ?>" <?= $mcp['audience_from_env'] ? 'readonly' : '' ?>>
+                    <div class="form-text"><?= $mcp['audience_from_env'] ? 'Set by the server (RIVETMSP_MCP_AUDIENCE).' : 'Authentik: the provider\'s Client ID.' ?></div>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                <button type="submit" name="save_mcp_settings" class="btn btn-primary"><i class="fa fa-check me-2"></i>Save</button>
+                <button type="submit" name="run_mcp_checks" class="btn btn-outline-secondary"><i class="fa fa-stethoscope me-2"></i>Save and run checks</button>
+            </div>
+        </form>
+
+        <hr>
+        <label class="form-label" for="mcp_url">Address to give your MCP client</label>
+        <div class="input-group" style="max-width:36rem">
+            <input type="text" class="form-control" id="mcp_url" value="<?= nullable_htmlentities($mcp_url) ?>" readonly>
+            <button class="btn btn-outline-secondary js-copy-text" type="button" data-copy-target="mcp_url">Copy</button>
+        </div>
+        <?php } ?>
+    </div>
+</div>
+
+<?php if ($mcp['schema_ready'] && $tables_ready && $oauth['schema_ready']) { ?>
+
+<div class="card mb-3" id="builtin-signin">
+    <div class="card-header py-3 d-flex align-items-center justify-content-between">
+        <h4 class="card-title mb-0"><i class="fas fa-fw fa-key me-2"></i>Built-in sign-in</h4>
+        <span class="badge bg-<?= $oauth['builtin'] ? 'success' : 'secondary' ?>"><?= $oauth['builtin'] ? 'On' : 'Off' ?></span>
+    </div>
+    <div class="card-body">
+        <p class="text-muted"><?= htmlspecialchars(defined('APP_NAME') ? APP_NAME : 'RivetMSP') ?> acts as its own OAuth server for MCP. Add the address above to Claude (Settings &rarr; Connectors) or ToolHive; the person signs in to <?= htmlspecialchars(defined('APP_NAME') ? APP_NAME : 'RivetMSP') ?> as usual (password, 2FA) and approves a read-only connection. No API key and no other identity provider. While this is on, tokens from an external identity provider are not accepted.</p>
+        <form action="post.php" method="post" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="form-check form-switch mb-2">
+                <input type="checkbox" class="form-check-input" id="mcp_oauth_builtin" name="mcp_oauth_builtin" value="1" <?= $oauth['builtin'] ? 'checked' : '' ?>>
+                <label class="form-check-label" for="mcp_oauth_builtin">Use built-in sign-in (also needs <strong>Turn on Remote MCP</strong> above)</label>
+            </div>
+            <div class="form-check form-switch mb-3">
+                <input type="checkbox" class="form-check-input" id="mcp_oauth_registration" name="mcp_oauth_registration" value="1" <?= $oauth['registration'] ? 'checked' : '' ?>>
+                <label class="form-check-label" for="mcp_oauth_registration">Let MCP apps register themselves. Off (recommended): you add each app below and give it its client ID, or let Claude identify itself with its published document (below). Switching this off only stops <em>new</em> registrations; apps already registered, and their connections, keep working.</label>
+            </div>
+            <button type="submit" name="save_mcp_oauth_settings" class="btn btn-primary"><i class="fa fa-check me-2"></i>Save</button>
+        </form>
+        <?php if ($oauth['builtin'] && !$mcp['enabled']) { ?>
+            <div class="alert alert-warning mt-3 mb-0">Remote MCP itself is off, so nothing answers yet. Turn on Remote MCP above.</div>
+        <?php } ?>
+        <?php if ($oauth['builtin']) { ?>
+        <hr>
+        <label class="form-label" for="mcp_as_url">Sign-in server details (for apps that ask)</label>
+        <div class="input-group" style="max-width:48rem">
+            <input type="text" class="form-control" id="mcp_as_url" value="<?= nullable_htmlentities($as_metadata_url) ?>" readonly>
+            <button class="btn btn-outline-secondary js-copy-text" type="button" data-copy-target="mcp_as_url">Copy</button>
+        </div>
+        <?php } ?>
+    </div>
+</div>
+
+<?php if ($oauth['builtin']) { ?>
+<div class="card mb-3">
+    <div class="card-header py-3"><h4 class="card-title mb-0"><i class="fas fa-fw fa-plug me-2"></i>Active connections <span class="badge bg-secondary"><?= count($oauth_grants) ?></span></h4></div>
+    <div class="card-body">
+        <?php if (!$oauth_grants) { ?>
+            <p class="text-muted mb-0">Nobody has connected an AI tool yet. When someone approves one, it appears here and you can end it at any time.</p>
+        <?php } else { ?>
+            <div class="table-responsive"><table class="table align-middle mb-0">
+                <thead><tr><th>Person</th><th>App</th><th>Approved</th><th>Last used</th><th>Ends</th><th></th></tr></thead><tbody>
+                <?php foreach ($oauth_grants as $g) { ?>
+                    <tr>
+                        <td><strong><?= nullable_htmlentities($g['user_name'] ?? 'Removed user') ?></strong><div class="text-muted small"><?= nullable_htmlentities($g['user_email'] ?? '') ?></div></td>
+                        <td><?= nullable_htmlentities($g['client_name']) ?><?php if ($g['registration_type'] === 'metadata' && $g['source_url']) { ?> <span class="badge bg-secondary">from <?= nullable_htmlentities(parse_url((string) $g['source_url'], PHP_URL_HOST) ?: '') ?></span><?php } ?><div class="text-muted small"><code><?= nullable_htmlentities($g['scope']) ?></code></div></td>
+                        <td class="small text-nowrap"><?= nullable_htmlentities(OAuthConfig::localTime($g['created_at'])) ?></td>
+                        <td class="small text-nowrap"><?= $g['last_used_at'] ? timeAgo(OAuthConfig::localTime($g['last_used_at'])) : 'Never' ?></td>
+                        <td class="small text-nowrap"><?= nullable_htmlentities(substr((string) OAuthConfig::localTime($g['expires_at']), 0, 10)) ?></td>
+                        <td class="text-end">
+                            <form action="post.php" method="post" data-confirm-submit="Revoke this connection? The app loses access immediately.">
+                                <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                <input type="hidden" name="grant_id" value="<?= (int) $g['grant_id'] ?>">
+                                <button type="submit" name="revoke_mcp_oauth_grant" class="btn btn-sm btn-outline-danger">Revoke</button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php } ?>
+                </tbody></table></div>
+        <?php } ?>
+    </div>
+</div>
+
+<div class="card mb-3" id="client-metadata">
+    <div class="card-header py-3 d-flex align-items-center justify-content-between">
+        <h4 class="card-title mb-0"><i class="fas fa-fw fa-id-card me-2"></i>Client ID Metadata Documents</h4>
+        <span class="badge bg-<?= $cimd['mode'] === 'off' ? 'secondary' : ($cimd['mode'] === 'any' ? 'warning text-dark' : 'success') ?>"><?= $cimd['mode'] === 'off' ? 'Off' : ($cimd['mode'] === 'any' ? 'Any website' : 'Listed hosts') ?></span>
+    </div>
+    <div class="card-body">
+        <p class="text-muted">Lets an application identify itself with the address of a metadata document it publishes, instead of registering itself first. Claude does this: its published identity is <code>https://claude.ai/oauth/mcp-oauth-client-metadata</code>, so people see that the request really comes from claude.ai. <?= htmlspecialchars(defined('APP_NAME') ? APP_NAME : 'RivetMSP') ?> fetches the document itself (https only, public addresses only, no redirects, 64 KB, 5 seconds) and shows the document's host, not its self-chosen name, on the approval screen.</p>
+        <form action="post.php" method="post" class="mb-3">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <button type="submit" name="trust_claude_cimd" class="btn btn-outline-success"><i class="fa fa-check me-2"></i>Trust Claude (claude.ai)</button>
+            <span class="form-text ms-2">Allows only hosts in the list below, and adds claude.ai to it.</span>
+        </form>
+        <form action="post.php" method="post" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="form-check"><input class="form-check-input" type="radio" name="cimd_mode" id="cimd_off" value="off" <?= $cimd['mode'] === 'off' ? 'checked' : '' ?>><label class="form-check-label" for="cimd_off">Off (default): applications must register themselves or be added by you</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="cimd_mode" id="cimd_hosts" value="hosts" <?= $cimd['mode'] === 'hosts' ? 'checked' : '' ?>><label class="form-check-label" for="cimd_hosts">Only the hosts listed below</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="cimd_mode" id="cimd_any" value="any" <?= $cimd['mode'] === 'any' ? 'checked' : '' ?>><label class="form-check-label" for="cimd_any">Any https website</label></div>
+            <div class="alert alert-warning py-2 mt-2">&ldquo;Any https website&rdquo; lets anyone on the internet create an application entry here, by pointing a sign-in link at a page they control. People still have to sign in and approve, and the approval screen shows an &ldquo;unverified application&rdquo; notice for hosts not in the list, but the name an application gives itself is whatever its author chose. Prefer the listed hosts.</div>
+            <button type="submit" name="save_mcp_cimd_mode" class="btn btn-primary"><i class="fa fa-check me-2"></i>Save</button>
+        </form>
+        <hr>
+        <h5 class="mb-2">Trusted hosts</h5>
+        <?php if (!$cimd['hosts']) { ?><p class="text-muted">No hosts listed, so &ldquo;Only the hosts listed&rdquo; allows nothing.</p><?php } ?>
+        <?php foreach ($cimd['hosts'] as $cimd_host) { ?>
+            <form action="post.php" method="post" class="d-inline-block me-2 mb-2">
+                <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                <input type="hidden" name="cimd_host" value="<?= nullable_htmlentities($cimd_host) ?>">
+                <span class="badge bg-light text-dark border fs-6"><?= nullable_htmlentities($cimd_host) ?></span>
+                <button type="submit" name="remove_mcp_cimd_host" class="btn btn-sm btn-outline-danger ms-1" aria-label="Remove <?= nullable_htmlentities($cimd_host) ?>"><i class="fa fa-times"></i></button>
+            </form>
+        <?php } ?>
+        <form action="post.php" method="post" class="row g-2 mt-1" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="col-auto"><input type="text" class="form-control" name="cimd_host" maxlength="100" placeholder="example.com" aria-label="Host to trust" required></div>
+            <div class="col-auto"><button type="submit" name="add_mcp_cimd_host" class="btn btn-outline-primary"><i class="fa fa-plus me-2"></i>Add host</button></div>
+        </form>
+        <div class="form-text">A host name, optionally with a port (a different port is a different host). Turning this off or removing a host takes effect at once, everywhere: the apps that identified themselves from that host cannot sign in again, cannot refresh, and their existing connections stop working on the very next request (nothing waits for an access token to run out). The connections stay listed and work again if you trust the host again. To end one for good, Revoke the connection.</div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header py-3"><h4 class="card-title mb-0"><i class="fas fa-fw fa-puzzle-piece me-2"></i>Registered apps <span class="badge bg-secondary"><?= count($oauth_clients) ?></span></h4></div>
+    <div class="card-body">
+        <?php if (!$oauth['registration']) { ?>
+            <div class="alert alert-secondary py-2">Self-registration is off. Only apps you add below can connect.</div>
+        <?php } ?>
+        <?php if ($oauth_clients) { ?>
+            <div class="table-responsive mb-4"><table class="table align-middle mb-0">
+                <thead><tr><th>App</th><th>Return addresses</th><th>Added</th><th>Last used</th><th></th></tr></thead><tbody>
+                <?php foreach ($oauth_clients as $c) { ?>
+                    <tr>
+                        <td><strong><?= nullable_htmlentities($c['client_name']) ?></strong>
+                            <span class="badge bg-<?= $c['registration_type'] === 'manual' ? 'info' : ($c['registration_type'] === 'metadata' ? 'primary' : 'secondary') ?> ms-1"><?= $c['registration_type'] === 'manual' ? 'Added by you' : ($c['registration_type'] === 'metadata' ? 'Metadata document' : 'Registered itself') ?></span>
+                            <?php if ($c['disabled_at']) { ?><span class="badge bg-danger ms-1">Disabled</span><?php } ?>
+                            <?php if ($c['duplicates'] > 0) { ?><span class="badge bg-warning text-dark ms-1" title="Same name and return addresses as <?= (int) $c['duplicates'] ?> other app(s)"><?= (int) $c['duplicates'] ?> duplicate<?= $c['duplicates'] > 1 ? 's' : '' ?></span><?php } ?>
+                            <?php if ($c['registration_type'] === 'metadata') { ?>
+                                <div class="small text-break">Source: <code><?= nullable_htmlentities($c['source_url'] ?? '(removed)') ?></code></div>
+                                <div class="text-muted small">First seen <?= nullable_htmlentities(OAuthConfig::localTime($c['first_seen_at'] ?? $c['created_at'])) ?>; fetched <?= $c['fetched_at'] ? timeAgo(OAuthConfig::localTime($c['fetched_at'])) : 'never' ?>;
+                                    <?= !empty($c['document_fresh']) ? 'cached until ' . nullable_htmlentities(OAuthConfig::localTime($c['document_expires_at'])) : 'cache expired (fetched again on next use)' ?></div>
+                                <?php if (!empty($c['last_error'])) { ?><div class="small text-danger">Last problem: <?= nullable_htmlentities($c['last_error']) ?> (<?= nullable_htmlentities(OAuthConfig::localTime($c['last_error_at'])) ?>)</div><?php } ?>
+                            <?php } else { ?>
+                            <div class="text-muted small text-break"><code><?= nullable_htmlentities($c['client_id']) ?></code></div>
+                            <?php } ?>
+                            <div class="small <?= (int) $c['active_grants'] > 0 ? 'fw-semibold' : 'text-muted' ?>"><?= (int) $c['active_grants'] ?> active connection(s) for <?= (int) $c['active_users'] ?> person(s)</div></td>
+                        <td class="small text-break"><?php foreach ($c['redirect_uris'] as $u) { ?><div><?= nullable_htmlentities($u) ?></div><?php } ?></td>
+                        <td class="small text-nowrap"><?= nullable_htmlentities(OAuthConfig::localTime($c['created_at'])) ?></td>
+                        <td class="small text-nowrap"><?= $c['last_activity_at'] ? timeAgo(OAuthConfig::localTime($c['last_activity_at'])) : 'Never' ?></td>
+                        <td class="text-end text-nowrap">
+                            <form action="post.php" method="post" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                <input type="hidden" name="client_id" value="<?= nullable_htmlentities($c['client_id']) ?>">
+                                <button type="submit" name="toggle_mcp_oauth_client" class="btn btn-sm btn-outline-secondary"><?= $c['disabled_at'] ? 'Enable' : 'Disable' ?></button>
+                            </form>
+                            <?php if ((int) $c['active_grants'] > 0) { ?>
+                                <form action="post.php" method="post" class="d-inline-block text-start" style="max-width:15rem">
+                                    <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                    <input type="hidden" name="client_id" value="<?= nullable_htmlentities($c['client_id']) ?>">
+                                    <div class="form-check small"><input class="form-check-input" type="checkbox" name="confirm_active_connections" value="1" id="del_<?= nullable_htmlentities(substr($c['client_id'], 0, 20)) ?>" required>
+                                        <label class="form-check-label" for="del_<?= nullable_htmlentities(substr($c['client_id'], 0, 20)) ?>">End <?= (int) $c['active_grants'] ?> active connection(s) of <?= (int) $c['active_users'] ?> person(s), last used <?= $c['last_activity_at'] ? nullable_htmlentities(timeAgo(OAuthConfig::localTime($c['last_activity_at']))) : 'never' ?></label></div>
+                                    <button type="submit" name="delete_mcp_oauth_client" class="btn btn-sm btn-outline-danger mt-1">Delete</button>
+                                </form>
+                            <?php } else { ?>
+                                <form action="post.php" method="post" class="d-inline" data-confirm-submit="Delete this app? It has no active connections (last used: <?= $c['last_activity_at'] ? nullable_htmlentities(timeAgo(OAuthConfig::localTime($c['last_activity_at']))) : 'never' ?>).<?= $c['registration_type'] === 'metadata' ? ' It can appear again the next time it connects while its host is trusted; use Disable to block it for good.' : '' ?>">
+                                    <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                    <input type="hidden" name="client_id" value="<?= nullable_htmlentities($c['client_id']) ?>">
+                                    <button type="submit" name="delete_mcp_oauth_client" class="btn btn-sm btn-outline-danger">Delete</button>
+                                </form>
+                            <?php } ?>
+                        </td>
+                    </tr>
+                <?php } ?>
+                </tbody></table></div>
+            <?php if ($unused_duplicates > 0) { ?>
+                <form action="post.php" method="post" class="mb-4" data-confirm-submit="Delete <?= (int) $unused_duplicates ?> unused duplicate app(s)? Only copies with no connection that were never used are removed; one copy of each app always stays.">
+                    <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                    <button type="submit" name="delete_unused_mcp_oauth_duplicates" class="btn btn-outline-warning"><i class="fa fa-broom me-2"></i>Delete <?= (int) $unused_duplicates ?> unused duplicate(s)</button>
+                    <span class="form-text ms-2">Apps with a connection, or that were ever used, are never touched.</span>
+                </form>
+            <?php } ?>
+        <?php } ?>
+        <h5 class="mb-2">Add an app yourself</h5>
+        <form action="post.php" method="post" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="row g-3">
+                <div class="col-lg-4">
+                    <label for="oauth_client_name" class="form-label">Name</label>
+                    <input type="text" class="form-control" id="oauth_client_name" name="client_name" maxlength="100" required placeholder="ToolHive">
+                </div>
+                <div class="col-lg-5">
+                    <label for="oauth_redirect_uris" class="form-label">Return addresses (one per line)</label>
+                    <textarea class="form-control" id="oauth_redirect_uris" name="redirect_uris" rows="2" required placeholder="http://localhost:8666/callback"></textarea>
+                    <div class="form-text">https, or http on localhost. Must match exactly what the app sends.</div>
+                </div>
+                <div class="col-lg-3">
+                    <label for="oauth_client_id" class="form-label">Client ID (optional)</label>
+                    <input type="text" class="form-control" id="oauth_client_id" name="client_id" maxlength="64" pattern="[A-Za-z0-9._\-]{8,64}" placeholder="generated">
+                    <div class="form-text">Leave empty to generate one.</div>
+                </div>
+            </div>
+            <button type="submit" name="add_mcp_oauth_client" class="btn btn-outline-primary mt-3"><i class="fa fa-plus me-2"></i>Add app</button>
+        </form>
+    </div>
+</div>
+<?php } ?>
+
+<?php if (!$oauth['builtin']) { ?>
+<div class="card mb-3">
+    <div class="card-header py-3"><h4 class="card-title mb-0"><i class="fas fa-fw fa-stethoscope me-2"></i>Health checks</h4></div>
+    <div class="card-body">
+        <?php if (!$checks) { ?>
+            <p class="text-muted mb-0">Press <strong>Save and run checks</strong> above. It contacts your identity provider and this server's own address, and takes a few seconds.</p>
+        <?php } else { ?>
+            <p class="text-muted small">Last run <?= nullable_htmlentities(date('Y-m-d H:i:s', (int) $checks['at'])) ?>.</p>
+            <ul class="list-group list-group-flush">
+            <?php foreach ($checks['checks'] as $c) { ?>
+                <li class="list-group-item px-0 d-flex gap-3">
+                    <span class="badge bg-<?= $badge[$c['status']] ?? 'secondary' ?> align-self-start" style="min-width:3.2rem"><?= nullable_htmlentities(strtoupper($c['status'])) ?></span>
+                    <div><strong><?= nullable_htmlentities($c['label']) ?></strong><div class="text-muted small"><?= nullable_htmlentities($c['detail']) ?></div></div>
+                </li>
+            <?php } ?>
+            </ul>
+        <?php } ?>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header py-3"><h4 class="card-title mb-0"><i class="fas fa-fw fa-user-clock me-2"></i>People who tried to connect <span class="badge bg-secondary"><?= count($pending) ?></span></h4></div>
+    <div class="card-body">
+        <?php if (!$pending) { ?>
+            <p class="text-muted mb-0">Nobody is waiting. When someone signs in from an MCP client but is not linked to an agent yet, they appear here and you link them in one click. Their sign-in has already been verified by your identity provider.</p>
+        <?php } else { ?>
+            <div class="table-responsive"><table class="table align-middle mb-0">
+                <thead><tr><th>Person</th><th>Last tried</th><th>Link to agent</th><th></th></tr></thead>
+                <tbody>
+                <?php foreach ($pending as $p) { ?>
+                    <tr>
+                        <td><strong><?= nullable_htmlentities($p['display_name'] ?: 'Unnamed') ?></strong><div class="text-muted small"><?= nullable_htmlentities($p['email'] ?: 'no email in token') ?></div>
+                            <div class="text-muted small text-break">ID <?= nullable_htmlentities($p['subject']) ?></div></td>
+                        <td class="small"><?= nullable_htmlentities($p['last_seen_at']) ?><div class="text-muted"><?= (int) $p['attempts'] ?> attempt(s)</div></td>
+                        <td>
+                            <form action="post.php" method="post" class="d-flex gap-2">
+                                <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                <input type="hidden" name="pending_id" value="<?= (int) $p['mcp_unlinked_id'] ?>">
+                                <select name="user_id" class="form-select form-select-sm" required aria-label="Agent to link">
+                                    <option value="">Choose agent&hellip;</option>
+                                    <?php foreach ($linkable as $a) { ?>
+                                        <option value="<?= (int) $a['user_id'] ?>"><?= nullable_htmlentities($a['user_name']) ?> (<?= nullable_htmlentities($a['user_email']) ?>)</option>
+                                    <?php } ?>
+                                </select>
+                                <button type="submit" name="link_mcp_identity" class="btn btn-sm btn-primary">Link</button>
+                            </form>
+                        </td>
+                        <td>
+                            <form action="post.php" method="post">
+                                <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                <input type="hidden" name="pending_id" value="<?= (int) $p['mcp_unlinked_id'] ?>">
+                                <button type="submit" name="dismiss_mcp_identity" class="btn btn-sm btn-outline-secondary">Dismiss</button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php } ?>
+                </tbody></table></div>
+            <p class="form-text mt-2 mb-0">Nothing is preselected. Pick the agent yourself, and check it is the right person before you press Link: the email shown comes from the sign-in provider and is only a hint.</p>
+        <?php } ?>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header py-3"><h4 class="card-title mb-0"><i class="fas fa-fw fa-link me-2"></i>Linked agents <span class="badge bg-secondary"><?= count($linked) ?></span></h4></div>
+    <div class="card-body">
+        <?php if (!$linked) { ?>
+            <p class="text-muted mb-0">No agent is linked yet.</p>
+        <?php } else { ?>
+            <div class="table-responsive"><table class="table align-middle mb-0">
+                <thead><tr><th>Agent</th><th>Identity</th><th></th></tr></thead><tbody>
+                <?php foreach ($linked as $l) { ?>
+                    <tr>
+                        <td><strong><?= nullable_htmlentities($l['user_name']) ?></strong>
+                            <?php if (!$l['user_status'] || $l['user_archived_at']) { ?><span class="badge bg-secondary ms-1">Disabled</span><?php } ?>
+                            <div class="text-muted small"><?= nullable_htmlentities($l['user_email']) ?></div></td>
+                        <td class="small text-break text-muted"><?= nullable_htmlentities($l['user_oidc_subject']) ?></td>
+                        <td class="text-end">
+                            <form action="post.php" method="post" data-confirm-submit="Unlink this agent? Their MCP access stops immediately.">
+                                <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+                                <input type="hidden" name="user_id" value="<?= (int) $l['user_id'] ?>">
+                                <button type="submit" name="unlink_mcp_agent" class="btn btn-sm btn-outline-danger">Unlink</button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php } ?>
+                </tbody></table></div>
+        <?php } ?>
+    </div>
+</div>
+
+<?php } /* external-provider cards */ ?>
+
+<div class="card mb-3">
+    <div class="card-header py-3"><h4 class="card-title mb-0"><i class="fas fa-fw fa-history me-2"></i>Recent activity</h4></div>
+    <div class="card-body">
+        <?php if (!$activity) { ?>
+            <p class="text-muted mb-0">No MCP calls yet.</p>
+        <?php } else { ?>
+            <div class="table-responsive"><table class="table table-sm mb-0">
+                <thead><tr><th>When</th><th>Agent</th><th>Call</th></tr></thead><tbody>
+                <?php foreach ($activity as $a) { ?>
+                    <tr><td class="small text-nowrap"><?= nullable_htmlentities($a['created_at']) ?></td><td class="small">#<?= (int) $a['actor_user_id'] ?></td><td class="small"><?= nullable_htmlentities($a['summary']) ?></td></tr>
+                <?php } ?>
+                </tbody></table></div>
+        <?php } ?>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header py-3"><h4 class="card-title mb-0"><i class="fas fa-fw fa-life-ring me-2"></i>Setup help</h4></div>
+    <div class="card-body">
+        <details class="mb-3"><summary class="fw-semibold">Authentik settings that matter</summary>
+            <ul class="mt-2 mb-0">
+                <li>Create a scope mapping with scope name <code>mcp:read</code> and select it on the provider.</li>
+                <li>Client type <strong>Public</strong> (PKCE), with the redirect address your MCP client documents.</li>
+                <li>Set a <strong>Signing Key</strong> (an RSA certificate). Without one, tokens are not accepted.</li>
+                <li>Subject mode: <strong>Based on the User's UUID</strong>. Keep token validity at 60 minutes or less.</li>
+                <li>Audience here is the provider's <strong>Client ID</strong>. Issuer mode: each provider has a different issuer.</li>
+                <li>Your MCP client must let you enter a Client ID by hand, because Authentik does not offer automatic client registration.</li>
+            </ul>
+        </details>
+        <details><summary class="fw-semibold">Web server setup (nginx)</summary>
+            <p class="mt-2">If the health check says the address returns 404, add these blocks to this site's nginx configuration, then test and reload nginx. Apache users need nothing: the bundled <code>.htaccess</code> already has the rules.</p>
+            <div class="position-relative">
+            <button type="button" class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2 js-copy-text" data-copy-target="mcp-nginx">Copy</button>
+            <pre id="mcp-nginx" class="border rounded p-3 pe-5 small mb-0" style="overflow-x:auto">location = /mcp {
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME $document_root/mcp_server/index.php;
+    fastcgi_param SCRIPT_NAME /mcp_server/index.php;
+    fastcgi_pass unix:/run/php/php8.4-fpm.sock;   # use your site's PHP-FPM socket
+    fastcgi_buffering off;
+}
+location = /.well-known/oauth-protected-resource {
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME $document_root/mcp_server/index.php;
+    fastcgi_param SCRIPT_NAME /mcp_server/index.php;
+    fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+}
+# Only for the built-in sign-in (RFC 8414 metadata):
+location = /.well-known/oauth-authorization-server {
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME $document_root/mcp_server/index.php;
+    fastcgi_param SCRIPT_NAME /mcp_server/index.php;
+    fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+}</pre>
+            </div>
+            <p class="text-muted small mt-2 mb-0">This RivetMSP install does not ship <code>mcp_server/</code> yet (the read-only MCP resource server, the part that actually answers tool calls): this page configures the OAuth/administration side only. The routes above have no effect until that script is added.</p>
+        </details>
+    </div>
+</div>
+
+<?php } ?>
+
+<?php require_once "../includes/footer.php";
