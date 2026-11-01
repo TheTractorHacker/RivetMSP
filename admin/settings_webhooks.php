@@ -2,91 +2,100 @@
 require_once "includes/inc_all_admin.php";
 require_once "includes/webhook_events.php";
 require_once "../includes/event_bus.php";
-require_once "includes/webhook_form_lib.php";
-?>
+require_once "includes/webhook_form_parts.php";
 
-<link rel="stylesheet" href="/css/webhook_form.css?v=<?= @filemtime(__DIR__ . '/../css/webhook_form.css') ?: time() ?>">
-<?php
-$sql_wh = mysqli_query($mysqli, "SELECT w.*,
-        COALESCE(d.delivered, 0) + COALESCE(q.delivered, 0) AS delivered,
-        COALESCE(d.failed, 0) + COALESCE(q.failed, 0) AS failed,
-        COALESCE(j.pending, 0) + COALESCE(q.pending, 0) AS pending,
-        ld.http_status AS last_http, ld.created_at AS last_at
-    FROM webhooks w
-    LEFT JOIN (
-        SELECT webhook_id,
-            SUM(http_status BETWEEN 200 AND 299) AS delivered,
-            SUM(http_status IS NULL OR http_status NOT BETWEEN 200 AND 299) AS failed
-        FROM webhook_deliveries
-        WHERE created_at > NOW() - INTERVAL 7 DAY
-        GROUP BY webhook_id
-    ) d ON d.webhook_id = w.webhook_id
-    LEFT JOIN (
-        SELECT CAST(JSON_VALUE(payload, '$.webhook_id') AS UNSIGNED) AS wid, COUNT(*) AS pending
-        FROM integration_jobs
-        WHERE job_type = 'webhook.deliver' AND status IN ('pending', 'running')
-        GROUP BY wid
-    ) j ON j.wid = w.webhook_id
-    LEFT JOIN (
-        SELECT queue_webhook_id,
-            SUM(queue_status = 'delivered') AS delivered,
-            SUM(queue_status = 'failed') AS failed,
-            SUM(queue_status = 'pending') AS pending
-        FROM webhook_queue
-        WHERE queue_created_at > NOW() - INTERVAL 7 DAY
-        GROUP BY queue_webhook_id
-    ) q ON q.queue_webhook_id = w.webhook_id
-    LEFT JOIN webhook_deliveries ld ON ld.delivery_id = (SELECT MAX(x.delivery_id) FROM webhook_deliveries x WHERE x.webhook_id = w.webhook_id)
-    ORDER BY w.webhook_id ASC");
-$wh_count = mysqli_num_rows($sql_wh);
-?>
+use RivetCore\Webhooks\Destinations;
 
-<div class="card whf-list" data-whf-list>
-    <div class="card-header py-3 d-flex flex-wrap align-items-center gap-2">
+$wh_asset = static fn (string $f): string => '/' . $f . '?v=' . (is_file(__DIR__ . '/../' . $f) ? filemtime(__DIR__ . '/../' . $f) : time());
+$wh_popular = ['n8n', 'slack', 'discord', 'teams', 'ntfy', 'home-assistant', 'generic-json'];
+?>
+<link rel="stylesheet" href="<?= $wh_asset('css/webhook_form.css') ?>">
+<style nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
+    .webhook-actions { white-space: nowrap; }
+</style>
+
+<div class="card">
+    <div class="card-header py-3 d-flex align-items-center gap-3">
         <h3 class="card-title me-auto mb-0"><i class="fas fa-fw fa-satellite-dish me-2"></i>Webhooks</h3>
-        <?php if ($wh_count > 0) { ?>
-            <div class="wh-search whf-list-search">
-                <i class="fas fa-search wh-search-icon" aria-hidden="true"></i>
-                <input type="search" class="form-control form-control-sm" data-whf-list-search placeholder="Search webhooks" aria-label="Search webhooks" autocomplete="off">
-            </div>
-        <?php } ?>
         <a href="webhook_guides.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-book me-1"></i>Guides</a>
-        <a class="btn btn-primary btn-sm" href="webhook_form.php">
+        <a href="webhook_new.php" class="btn btn-primary btn-sm">
             <i class="fas fa-plus me-1"></i>Add Webhook
         </a>
     </div>
-    <?php if ($wh_count == 0) {
-        $wh_pop = array_values(array_filter(array_map(static fn ($pid) => \RivetCore\Webhooks\Destinations::get($pid), RIVET_WEBHOOK_POPULAR)));
-        ?>
-        <div class="card-body">
-            <div class="whf-empty">
-                <div class="whf-empty-mark" aria-hidden="true"><i class="fas fa-satellite-dish"></i></div>
-                <h4>No webhooks yet</h4>
-                <p class="text-muted mb-3">Send tickets, alerts and other events to n8n, Slack, Discord, Teams, ntfy, Home Assistant and more. It takes about a minute: pick a platform, paste its address, choose the events.</p>
-                <a class="btn btn-primary btn-lg mb-3" href="webhook_form.php"><i class="fas fa-plus me-1" aria-hidden="true"></i>Add your first webhook</a>
-                <div class="whf-shortcuts" aria-label="Popular platforms">
-                    <?php foreach ($wh_pop as $pd) { [$pc, $pcol] = rivetWebhookBrand($pd->id, $pd->category); ?>
-                        <a class="whf-shortcut" href="webhook_form.php?dest=<?= nullable_htmlentities(urlencode($pd->id)) ?>"><span class="whf-icon" style="--whf-brand:<?= nullable_htmlentities($pcol) ?>" aria-hidden="true"><i class="<?= nullable_htmlentities($pc) ?>"></i></span><?= nullable_htmlentities($pd->name) ?></a>
-                    <?php } ?>
-                </div>
-            </div>
+    <ul class="nav nav-tabs px-3" role="tablist">
+        <li class="nav-item"><a class="nav-link active" aria-current="page" href="settings_webhooks.php">Webhooks</a></li>
+        <li class="nav-item"><a class="nav-link" href="webhook_guides.php">Guides</a></li>
+    </ul>
+    <?php
+    $sql_wh = mysqli_query($mysqli, "SELECT w.*,
+            COALESCE(d.delivered, 0) + COALESCE(q.delivered, 0) AS delivered,
+            COALESCE(d.failed, 0) + COALESCE(q.failed, 0) AS failed,
+            COALESCE(j.pending, 0) + COALESCE(q.pending, 0) AS pending
+        FROM webhooks w
+        LEFT JOIN (
+            SELECT webhook_id,
+                SUM(http_status BETWEEN 200 AND 299) AS delivered,
+                SUM(http_status IS NULL OR http_status NOT BETWEEN 200 AND 299) AS failed
+            FROM webhook_deliveries
+            WHERE created_at > NOW() - INTERVAL 7 DAY
+            GROUP BY webhook_id
+        ) d ON d.webhook_id = w.webhook_id
+        LEFT JOIN (
+            SELECT CAST(JSON_VALUE(payload, '$.webhook_id') AS UNSIGNED) AS wid, COUNT(*) AS pending
+            FROM integration_jobs
+            WHERE job_type = 'webhook.deliver' AND status IN ('pending', 'running')
+            GROUP BY wid
+        ) j ON j.wid = w.webhook_id
+        LEFT JOIN (
+            SELECT queue_webhook_id,
+                SUM(queue_status = 'delivered') AS delivered,
+                SUM(queue_status = 'failed') AS failed,
+                SUM(queue_status = 'pending') AS pending
+            FROM webhook_queue
+            WHERE queue_created_at > NOW() - INTERVAL 7 DAY
+            GROUP BY queue_webhook_id
+        ) q ON q.queue_webhook_id = w.webhook_id
+        ORDER BY w.webhook_id ASC");
+    // The newest delivery of every webhook (one query): its result is the "last delivery" badge.
+    $wh_last = [];
+    $sql_last = mysqli_query($mysqli, "SELECT webhook_id, http_status, created_at FROM webhook_deliveries WHERE delivery_id IN (SELECT MAX(delivery_id) FROM webhook_deliveries GROUP BY webhook_id)");
+    while ($sql_last && ($lr = mysqli_fetch_assoc($sql_last))) {
+        $wh_last[(int) $lr['webhook_id']] = $lr;
+    }
+        $wh_total = mysqli_num_rows($sql_wh);
+    ?>
+    <?php if ($wh_total == 0) { ?>
+    <div class="card-body whl-empty">
+        <div class="whl-empty-icon"><i class="fas fa-satellite-dish" aria-hidden="true"></i></div>
+        <h4 class="mb-1">No webhooks yet</h4>
+        <p class="text-muted mb-3 mx-auto" style="max-width: 36rem;">Send selected events to n8n, Node-RED, ntfy, Discord, Telegram, Slack, Microsoft Teams, Home Assistant and more, or to any endpoint as signed JSON or your own template. It takes four short steps and each platform comes with its own setup guide.</p>
+        <a href="webhook_new.php" class="btn btn-primary btn-lg"><i class="fas fa-plus me-1"></i>Add your first webhook</a>
+        <div class="whl-shortcuts" aria-label="Popular platforms">
+            <?php foreach ($wh_popular as $pid) { if (($pd = Destinations::get($pid)) !== null) { [$bs, $bi] = webhookBrandIcon($pd); ?>
+            <a class="btn btn-outline-secondary btn-sm" href="webhook_new.php?dest=<?= rawurlencode($pd->id) ?>&amp;step=connect"><i class="<?= htmlspecialchars($bs . ' ' . $bi) ?>" aria-hidden="true"></i><?= htmlspecialchars($pd->name) ?></a>
+            <?php } } ?>
         </div>
+    </div>
     <?php } else { ?>
-    <div class="card-body pb-0">
-        <p class="text-muted mb-3">Send selected events to another service, each with a preset and a setup guide (<a href="webhook_guides.php">see the guides</a>). Delivery counts show the last seven days.</p>
+    <div class="whl-toolbar">
+        <div class="input-group" style="max-width: 22rem;">
+            <span class="input-group-text"><i class="fas fa-search" aria-hidden="true"></i></span>
+            <input type="search" class="form-control" placeholder="Search webhooks (name, platform, host)" aria-label="Search webhooks" autocomplete="off" data-whl-search>
+        </div>
+        <span class="text-secondary small ms-auto" data-whl-count aria-live="polite"><?= $wh_total ?> webhook<?= $wh_total == 1 ? '' : 's' ?>. Delivery counts show the last seven days.</span>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-        <table class="table table-striped table-borderless table-hover align-middle mb-0 whf-table">
+        <table class="table table-striped table-borderless table-hover align-middle mb-0" data-whl-table>
             <thead class="text-dark">
                 <tr>
-                    <th>Webhook</th>
-                    <th>Address</th>
-                    <th>Events</th>
+                    <th>Name</th>
+                    <th class="whl-hide-sm">Address</th>
+                    <th class="whl-hide-sm">Events</th>
                     <th>Last delivery</th>
-                    <th>7 days</th>
+                    <th class="whl-hide-sm">Recent Deliveries</th>
                     <th>On</th>
-                    <th></th>
+                    <th><span class="visually-hidden">Actions</span></th>
                 </tr>
             </thead>
             <tbody>
@@ -94,73 +103,100 @@ $wh_count = mysqli_num_rows($sql_wh);
             while ($wh = mysqli_fetch_assoc($sql_wh)) {
                 $wid     = intval($wh['webhook_id']);
                 $wname   = nullable_htmlentities($wh['webhook_name']);
+                $wdest   = (string) $wh['webhook_destination'] !== '' ? Destinations::get((string) $wh['webhook_destination']) : null;
+                $wdest_eff = Destinations::get(rivetWebhookEffectiveDestination($wh));
+                // Every address is stored encrypted and only its scheme and host are ever shown.
                 $wurl_plain = decryptSetting((string) $wh['webhook_url']);
-                $wurl    = nullable_htmlentities(rivetWebhookValueSealed((string) $wh['webhook_url']) ? rivetWebhookUrlMasked($wurl_plain) : $wurl_plain);
-                $wdest   = (string) $wh['webhook_destination'] !== '' ? \RivetCore\Webhooks\Destinations::get((string) $wh['webhook_destination']) : null;
+                $wurl    = nullable_htmlentities(rivetWebhookValueSealed((string) $wh['webhook_url']) ? rivetWebhookUrlMasked($wurl_plain) : rivetWebhookUrlMasked($wurl_plain));
                 $wenabled = intval($wh['webhook_enabled']);
-                $wevents = array_filter(array_map('trim', explode(',', $wh['webhook_events'])));
+                $wevents = array_values(array_filter(array_map('trim', explode(',', $wh['webhook_events']))));
                 $wsum    = rivetWebhookEventsSummary((string) $wh['webhook_events']);
-                [$wicon, $wcolor] = $wdest ? rivetWebhookBrand($wdest->id, $wdest->category) : ['fas fa-code', '#64748B'];
-
+                $ev_label = in_array('*', $wevents, true) ? 'All events' : ($wsum['count'] . ($wsum['count'] == 1 ? ' event' : ' events'));
+                $wextra  = json_decode((string) ($wh['webhook_extra'] ?? ''), true);
+                [$wbs, $wbi] = webhookBrandIcon($wdest_eff);
+                $last = $wh_last[$wid] ?? null;
                 $delivered = intval($wh['delivered']);
                 $failed    = intval($wh['failed']);
                 $pending   = intval($wh['pending']);
-                $has_last  = $wh['last_at'] !== null;
-                $last_ok   = $has_last && intval($wh['last_http']) >= 200 && intval($wh['last_http']) < 300;
+                $search = strtolower($wh['webhook_name'] . ' ' . ($wdest_eff->name ?? '') . ' ' . strip_tags($wurl));
                 ?>
-                <tr data-whf-row class="<?= $wenabled ? '' : 'whf-row-off' ?>" data-search="<?= nullable_htmlentities(strtolower($wh['webhook_name'] . ' ' . ($wdest->name ?? 'generic') . ' ' . rivetWebhookUrlMasked($wurl_plain) . ' ' . implode(' ', $wevents))) ?>">
+                <tr class="whl-row<?= $wenabled ? '' : ' is-off' ?>" data-whl-row data-whl-text="<?= nullable_htmlentities($search) ?>">
                     <td>
-                        <div class="whf-rowname">
-                            <span class="whf-icon" style="--whf-brand:<?= nullable_htmlentities($wcolor) ?>" aria-hidden="true"><i class="<?= nullable_htmlentities($wicon) ?>"></i></span>
-                            <div>
-                                <a href="webhook_form.php?id=<?= $wid ?>" class="fw-bold text-reset text-decoration-none"><?= $wname ?></a>
-                                <div class="small text-muted"><?= $wdest ? nullable_htmlentities($wdest->name) : 'Generic JSON (older)' ?></div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="whl-row-icon"><i class="<?= htmlspecialchars($wbs . ' ' . $wbi) ?>" aria-hidden="true"></i></span>
+                            <div class="min-w-0">
+                                <a class="whl-name text-reset" href="webhook_edit.php?id=<?= $wid ?>"><?= $wname ?></a>
+                                <?php if ($wdest !== null) { ?><span class="badge text-bg-info ms-1"><?= nullable_htmlentities($wdest->name) ?></span><?php } else { ?><span class="badge text-bg-secondary ms-1">Generic JSON (older)</span><?php } ?>
+                                <div class="d-md-none mt-1"><span class="whl-chip"><i class="fas fa-bell" aria-hidden="true"></i><?= $ev_label ?></span></div>
+                                <?php if (\RivetCore\Webhooks\UrlPolicy::isPlainHttp($wurl_plain)) { $whttp_ok = (is_array($wextra) && ($wextra['allow_http'] ?? false) === true); ?>
+                                    <div class="small <?= $whttp_ok ? 'text-warning-emphasis' : 'text-danger' ?>"><i class="fas fa-unlock me-1" aria-hidden="true"></i><?= $whttp_ok ? 'Plain http allowed for this destination (unencrypted).' : 'Not delivered: this address is plain http://. Edit the webhook to allow it, or change it to https://.' ?></div>
+                                <?php } ?>
                             </div>
                         </div>
                     </td>
-                    <td class="webhook-url" title="<?= $wurl ?>"><?= $wurl ?></td>
-                    <td class="webhook-events">
-                        <span class="whf-evchip" title="<?= nullable_htmlentities(implode(', ', $wevents)) ?>"><?= nullable_htmlentities($wsum['label']) ?><span class="whf-evcount"><?= (int) $wsum['count'] ?></span></span>
+                    <td class="whl-hide-sm whl-host" title="<?= $wurl ?>"><?= $wurl ?></td>
+                    <td class="whl-hide-sm" data-events="<?= nullable_htmlentities(implode(',', $wevents)) ?>">
+                        <span class="whl-chip" title="<?= nullable_htmlentities(implode(', ', array_map(static fn ($e) => $e === '*' ? 'All events' : $e, $wevents))) ?>"><i class="fas fa-bell" aria-hidden="true"></i><?= $ev_label ?></span>
+                        <?php foreach (array_slice($wevents, 0, 2) as $ev) {
+                            echo '<span class="badge ' . (str_contains($ev, '*') ? 'text-bg-primary' : 'text-bg-secondary') . ' ms-1 d-none d-xl-inline">' . htmlspecialchars($ev === '*' ? 'All events' : $ev) . '</span>';
+                        }
+                        if (count($wevents) > 2) { echo '<span class="badge text-bg-light ms-1 d-none d-xl-inline" title="' . htmlspecialchars(implode(', ', array_slice($wevents, 2))) . '">+' . (count($wevents) - 2) . ' more</span>'; } ?>
                     </td>
                     <td>
-                        <?php if (!$has_last) { ?>
-                            <span class="badge text-bg-secondary">None yet</span>
-                        <?php } else { ?>
-                            <span class="badge <?= $last_ok ? 'text-bg-success' : 'text-bg-danger' ?>"><?= intval($wh['last_http']) ? 'HTTP ' . intval($wh['last_http']) : 'No response' ?></span>
-                            <span class="small text-muted text-nowrap" title="<?= nullable_htmlentities($wh['last_at']) ?>"><?= nullable_htmlentities(timeAgo($wh['last_at'])) ?></span>
+                        <?php if (!$last) { ?>
+                            <span class="text-secondary small">No deliveries yet</span>
+                        <?php } else {
+                            $lh = intval($last['http_status']);
+                            echo $lh >= 200 && $lh < 300 ? '<span class="badge text-bg-success">OK ' . $lh . '</span>' : '<span class="badge text-bg-danger">' . ($lh > 0 ? 'Failed ' . $lh : 'No response') . '</span>'; ?>
+                            <span class="text-secondary small ms-1 whl-hide-sm" title="<?= nullable_htmlentities($last['created_at']) ?>"><?= timeAgo($last['created_at']) ?></span>
                         <?php } ?>
                     </td>
-                    <td>
+                    <td class="whl-hide-sm">
                         <span class="badge text-bg-success" title="Delivered (7d)"><?= $delivered ?></span>
                         <?php if ($pending > 0) { ?><span class="badge text-bg-warning" title="Pending"><?= $pending ?></span><?php } ?>
                         <?php if ($failed > 0) { ?><span class="badge text-bg-danger" title="Failed"><?= $failed ?></span><?php } ?>
                     </td>
                     <td>
-                        <label class="whf-switch" title="<?= $wenabled ? 'Enabled' : 'Disabled' ?>: switch to change it right away">
-                            <input type="checkbox" role="switch" data-whf-toggle="<?= $wid ?>" aria-label="Enabled: <?= $wname ?>" <?= $wenabled ? 'checked' : '' ?>>
-                            <span class="whf-switch-track" aria-hidden="true"></span><span class="visually-hidden" data-whf-toggle-label><?= $wenabled ? 'Enabled' : 'Disabled' ?></span>
-                        </label>
+                        <div class="form-check form-switch whl-switch mb-0" title="<?= $wenabled ? 'Enabled: click to turn off' : 'Disabled: click to turn on' ?>">
+                            <input type="checkbox" class="form-check-input" role="switch" <?= $wenabled ? 'checked' : '' ?> data-whl-toggle data-id="<?= $wid ?>" aria-label="<?= $wenabled ? 'Enabled' : 'Disabled' ?>: <?= $wname ?>">
+                            <span class="visually-hidden" data-whl-state><?= $wenabled ? 'Enabled' : 'Disabled' ?></span>
+                        </div>
                     </td>
                     <td class="text-end webhook-actions">
-                        <div class="whf-menu">
-                            <button type="button" class="btn btn-sm btn-light" data-whf-menu aria-haspopup="true" aria-expanded="false" aria-label="Actions for <?= $wname ?>"><i class="fas fa-ellipsis-v" aria-hidden="true"></i></button>
-                            <div class="whf-menu-list" role="menu" hidden>
-                                <button type="button" class="whf-menu-item" role="menuitem" data-wh-test-id="<?= $wid ?>" data-wh-name="<?= $wname ?>" data-tools-url="webhook_tools.php"><i class="fas fa-fw fa-paper-plane" aria-hidden="true"></i> Send test</button>
-                                <a class="whf-menu-item" role="menuitem" href="webhook_form.php?id=<?= $wid ?>"><i class="fas fa-fw fa-edit" aria-hidden="true"></i> Edit</a>
-                                <button type="button" class="whf-menu-item" role="menuitem" data-whf-duplicate="<?= $wid ?>"><i class="fas fa-fw fa-clone" aria-hidden="true"></i> Duplicate</button>
-                                <a class="whf-menu-item whf-menu-danger confirm-link" role="menuitem" href="post.php?delete_webhook=<?= $wid ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>"><i class="fas fa-fw fa-trash" aria-hidden="true"></i> Delete</a>
-                            </div>
+                        <div class="dropdown whl-menu">
+                            <button class="btn btn-sm btn-light" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false" aria-label="Actions for <?= $wname ?>" title="Actions"><i class="fas fa-ellipsis-v" aria-hidden="true"></i></button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <form action="post.php" method="post">
+                                        <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                                        <input type="hidden" name="webhook_id" value="<?= $wid ?>">
+                                        <button type="submit" name="test_webhook" class="dropdown-item" title="Send a test event now"><i class="fas fa-paper-plane" aria-hidden="true"></i> Send test</button>
+                                    </form>
+                                </li>
+                                <li><a class="dropdown-item" href="webhook_edit.php?id=<?= $wid ?>"><i class="fas fa-edit" aria-hidden="true"></i> Edit</a></li>
+                                <li><a class="dropdown-item" href="webhook_edit.php?id=<?= $wid ?>&amp;tab=deliveries"><i class="fas fa-bolt" aria-hidden="true"></i> Deliveries</a></li>
+                                <li>
+                                    <form action="post.php" method="post">
+                                        <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                                        <input type="hidden" name="webhook_id" value="<?= $wid ?>">
+                                        <button type="submit" name="duplicate_webhook" class="dropdown-item"><i class="far fa-clone" aria-hidden="true"></i> Duplicate</button>
+                                    </form>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a href="post.php?delete_webhook=<?= $wid ?>&amp;csrf_token=<?= $_SESSION['csrf_token'] ?>" class="dropdown-item text-danger confirm-link"><i class="fas fa-trash" aria-hidden="true"></i> Delete</a></li>
+                            </ul>
                         </div>
                     </td>
                 </tr>
             <?php } ?>
-                <tr data-whf-list-none hidden><td colspan="7" class="text-center text-muted py-4">No webhook matches your search.</td></tr>
+            <tr class="d-none" data-whl-none><td colspan="7" class="text-center text-muted py-4">No webhook matches that search.</td></tr>
             </tbody>
         </table>
         </div>
     </div>
     <?php } ?>
 </div>
+
 
 <?php
 $wh_nets = rivetWebhookAllowedNetworks($mysqli);
@@ -293,7 +329,7 @@ if (isset($sql_wh) && mysqli_num_rows($sql_wh) > 0 && $legacy_queue_rows > 0) { 
                         <td><?= $http_badge ?></td>
                         <td><?= intval($drow['duration_ms']) ?> ms</td>
                         <td class="text-truncate" style="max-width:260px;" title="<?= nullable_htmlentities($drow['response_body_snippet']) ?>"><?= nullable_htmlentities($drow['response_body_snippet']) ?></td>
-                        <td class="text-end"><?php if ((string) $drow['request_payload_json'] !== '') { ?><button type="button" class="btn btn-sm btn-light" data-wh-payload-id="<?= intval($drow['delivery_id']) ?>" data-tools-url="webhook_tools.php" title="View the request body that was sent (secrets hidden)"><i class="fas fa-eye me-1"></i>Payload</button><?php } ?></td>
+                        <td class="text-end text-nowrap"><?php if ((string) $drow['request_payload_json'] !== '') { ?><button type="button" class="btn btn-sm btn-light ajax-modal" data-modal-size="lg" data-modal-url="modals/webhook/webhook_delivery.php?id=<?= intval($drow['delivery_id']) ?>" aria-label="View payload of delivery <?= intval($drow['delivery_id']) ?>" title="View payload"><i class="fas fa-eye" aria-hidden="true"></i></button><?php } ?></td>
                     </tr>
                 <?php }
             } ?>
@@ -304,12 +340,13 @@ if (isset($sql_wh) && mysqli_num_rows($sql_wh) > 0 && $legacy_queue_rows > 0) { 
 </div>
 <?php } ?>
 
-<dialog id="wh_dialog" class="wh-dialog" aria-labelledby="wh_dialog_title">
-    <div class="wh-dialog-head">
-        <h5 class="mb-0 me-auto" id="wh_dialog_title" data-wh-dialog-title></h5>
-        <button type="button" class="btn btn-light btn-sm" data-wh-dialog-close aria-label="Close">Close</button>
-    </div>
-    <div class="wh-dialog-body" data-wh-dialog-body></div>
-</dialog>
-
+<?php
+// Deep link from the guides page (settings_webhooks.php?add=n8n): continue on the Add Webhook page for that platform.
+$wh_add = (string) ($_GET['add'] ?? '');
+if ($wh_add !== '' && Destinations::has($wh_add)) { ?>
+<script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
+location.replace('webhook_new.php?dest=<?= rawurlencode($wh_add) ?>&step=connect');
+</script>
+<?php } ?>
+<script src="<?= $wh_asset('js/webhook_list.js') ?>" defer></script>
 <?php require_once "../includes/footer.php"; ?>

@@ -321,7 +321,8 @@
   var condsBox = $('[data-er-conds]', form);
 
   function currentEvent() {
-    var inp = $('.event-picker-values input[name="trigger_event"]', form);
+    // Shared event picker (js/event_picker.js): the chosen value lives in a hidden input inside [data-ep-values].
+    var inp = $('[data-ep-values] input[name="trigger_event"]', form);
     return inp ? inp.value : '';
   }
   function eventLabel(id) { return catalog[id] ? catalog[id].l : id; }
@@ -639,9 +640,12 @@
   form.addEventListener('focusout', function (e) { if (e.target.id === 'cfg_url') { ST.urlTouched = true; scheduleDescribe(); } });
   form.addEventListener('change', function (e) {
     if (e.target.name === 'action_type') { selectAction(); }
+    // The shared picker announces a new selection with a bubbling 'change' on its root (no custom event).
+    if (e.target.matches && e.target.matches('[data-event-picker]')) { onEventChosen(); return; }
     onChange();
   });
-  form.addEventListener('eventpicker:change', function () {
+  form.addEventListener('eventpicker:change', onEventChosen);
+  function onEventChosen() {
     var ev = currentEvent();
     if (ev === ST.event) return;
     ST.event = ev;
@@ -650,7 +654,7 @@
     if (wrap && ev) { wrap.open = false; sm.textContent = 'Choose a different event'; }
     rows().forEach(function (r) { buildValue(r); sync(r); });
     onChange();
-  });
+  }
 
   $('[data-er-add-cond]', form).addEventListener('click', function () {
     var r = addRow('', '');

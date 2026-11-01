@@ -1,439 +1,445 @@
-/*
- * Searchable event picker (markup from eventPickerField() in includes/event_picker.php; the catalog is an inline
- * <script type="application/json" class="event-picker-catalog"> built from RivetCore's EventCatalog).
- *
- * Modelled on the "Request API permissions" dialog: search box, expandable groups with counts and "n selected", per-group
- * select-all, every event with a name + id + one-line description, the selection as removable chips with a total.
- * The chosen values live in hidden <input name="..."> elements inside .event-picker-values. When everything is selected
- * the value is "*"; when a whole family (every ticket.* event) is selected it is the pattern "ticket.*"; otherwise ids.
- *
- * Pickers are initialised when they appear in the DOM (MutationObserver), so ones inside AJAX-loaded Bootstrap modals work
- * with no per-modal wiring. All interaction is delegated per picker root; nothing is bound on document except the observer.
- */
+// Searchable event picker. Markup: includes/event_picker.php (eventPickerField()). Vanilla; each picker is set up as it appears in the
+// page (a MutationObserver also catches AJAX-loaded modals). The catalog is fetched once per page from /modals/event_catalog.php.
+//
+// Selection model: `ids` (events ticked one by one) and `pats` (wildcard patterns such as "ticket.*" or "*"). An event is selected when it
+// is in `ids` or matched by a pattern. After every change `normalize()` folds a fully selected group into its pattern when the group
+// is a clean prefix ("ticket.*" covers exactly the ticket events), so what is stored stays short and also covers future events of that
+// family. Patterns this script did not create (e.g. "auth.login_*") are kept as they are until the user changes them.
 (function () {
   'use strict';
-  if (window.__eventPickerLoaded) return;
-  window.__eventPickerLoaded = true;
 
-  var catalog = null;
-  var uid = 0;
+  var catalogCache = {};
 
-  function loadCatalog() {
-    if (catalog) return catalog;
-    var els = document.querySelectorAll('script.event-picker-catalog');
-    var raw = null;
-    try { if (els.length) raw = JSON.parse(els[0].textContent); } catch (e) { raw = null; }
-    raw = raw || { groups: [], events: [] };
-    var byId = {}, families = {}, groupOrder = {};
-    raw.groups.forEach(function (g, i) { groupOrder[g.k] = i; });
-    raw.events.forEach(function (e) {
-      e.search = (e.i + ' ' + e.l + ' ' + (e.t || '') + ' ' + e.d).toLowerCase();
-      e.idl = e.i.toLowerCase();
-      e.ll = e.l.toLowerCase();
-      byId[e.i] = e;
-      var fam = e.i.split('.')[0];
-      (families[fam] = families[fam] || []).push(e.i);
-    });
-    catalog = { groups: raw.groups, events: raw.events, byId: byId, families: families };
-    return catalog;
+  function loadCatalog(url) {
+    if (catalogCache[url]) { return catalogCache[url]; }
+    catalogCache[url] = fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
+      .catch(function (e) { delete catalogCache[url]; throw e; });
+    return catalogCache[url];
   }
 
-  function el(tag, cls, attrs) {
-    var e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (attrs) for (var k in attrs) if (attrs[k] !== null && attrs[k] !== undefined) e.setAttribute(k, attrs[k]);
-    return e;
-  }
-  function txt(node, s) { node.textContent = s; return node; }
-  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
-
-  // Same ranking as EventCatalog::search(): id exact > id prefix > label prefix > id contains > label contains > tag > group > description.
-  function termScore(e, t, groupLabel) {
-    if (e.idl === t) return 100;
-    if (e.idl.indexOf(t) === 0) return 80;
-    if (e.ll.indexOf(t) === 0) return 70;
-    if (e.idl.indexOf(t) !== -1) return 50;
-    if (e.ll.indexOf(t) !== -1) return 40;
-    if ((e.t || '').toLowerCase().indexOf(t) !== -1) return 30;
-    if (groupLabel && groupLabel.toLowerCase().indexOf(t) !== -1) return 15;
-    if (e.d.toLowerCase().indexOf(t) !== -1) return 10;
-    return 0;
-  }
-  function score(e, terms, groupLabel) {
-    var total = 0;
-    for (var i = 0; i < terms.length; i++) {
-      var s = termScore(e, terms[i], groupLabel);
-      if (!s) return 0;
-      total += s;
-    }
-    return terms.length ? total : 1;
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) { n.className = cls; }
+    if (text !== undefined && text !== null) { n.textContent = text; }
+    return n;
   }
 
+  // "*" matches any run of characters, dots included (same rule as RivetCore EventCatalog::matchPattern()).
   function patternRegex(p) {
     return new RegExp('^' + p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
   }
 
-  function Picker(root) {
-    var cat = loadCatalog();
-    var self = this;
-    this.root = root;
-    this.cat = cat;
-    this.single = root.getAttribute('data-mode') === 'single';
-    this.field = root.getAttribute('data-field');
-    this.valuesBox = root.querySelector('.event-picker-values');
-    this.ui = root.querySelector('[data-event-picker-ui]');
-    this.sel = {};          // id -> true
-    this.raw = [];          // stored patterns that match nothing known (kept, never silently dropped)
-    this.expanded = {};
-    this.others = [];       // ids seen on this server / stored but not in the catalog
-    this.id = 'ep' + (++uid);
-
-    var otherEl = root.querySelector('.event-picker-other');
-    try { this.others = JSON.parse(otherEl ? otherEl.textContent : '[]') || []; } catch (e) { this.others = []; }
-    var otherSet = {};
-    this.others.forEach(function (o) { otherSet[o] = true; });
-
-    var stored = [].map.call(this.valuesBox.querySelectorAll('input'), function (i) { return i.value; });
-    stored.forEach(function (t) {
-      if (!t) return;
-      if (t.indexOf('*') === -1) {
-        if (cat.byId[t] || otherSet[t]) { self.sel[t] = true; } else { self.others.push(t); otherSet[t] = true; self.sel[t] = true; }
-        return;
-      }
-      var re = patternRegex(t), hit = false;
-      cat.events.forEach(function (e) { if (re.test(e.i)) { self.sel[e.i] = true; hit = true; } });
-      self.others.forEach(function (o) { if (re.test(o)) { self.sel[o] = true; hit = true; } });
-      if (!hit) self.raw.push(t);
-    });
-    if (this.single) {
-      var first = Object.keys(this.sel)[0];
-      this.sel = {}; this.raw = [];
-      if (first) this.sel[first] = true;
+  // Same idea as EventCatalog::search(): every term must match; id exact > id prefix > label prefix > id/label contains > tag > description.
+  function scoreEvent(e, terms) {
+    var total = 0;
+    for (var i = 0; i < terms.length; i++) {
+      var t = terms[i], id = e.id.toLowerCase(), label = e.label.toLowerCase(), s = 0;
+      if (id === t) { s = 100; }
+      else if (id.indexOf(t) === 0) { s = 80; }
+      else if (label.indexOf(t) === 0) { s = 70; }
+      else if (id.indexOf(t) !== -1 || label.indexOf(t) !== -1) { s = 50; }
+      else if ((e.tags || []).some(function (g) { return g.toLowerCase().indexOf(t) !== -1; })) { s = 30; }
+      else if ((e.description || '').toLowerCase().indexOf(t) !== -1) { s = 10; }
+      if (s === 0) { return 0; }
+      total += s;
     }
-    this.build();
-    // Groups that already hold a selection start open, the rest collapsed.
-    Object.keys(this.groups).forEach(function (k) {
-      self.expanded[k] = self.groups[k].events.some(function (e) { return self.sel[e.i]; });
-    });
-    this.render();
+    return total;
   }
 
-  Picker.prototype.groupLabel = function (k) {
-    for (var i = 0; i < this.cat.groups.length; i++) if (this.cat.groups[i].k === k) return this.cat.groups[i].l;
-    return k;
+  function Picker(root) {
+    this.root = root;
+    this.name = root.getAttribute('data-name');
+    this.single = root.getAttribute('data-mode') === 'single';
+    this.ids = new Set();
+    this.pats = new Set();
+    this.events = [];       // [{id, group, groupLabel, label, description, severity, since, tags}]
+    this.byId = {};
+    this.groups = [];       // [{key, label, ids:[], pattern:string|'' , open:bool, nodes}]
+    this.rows = {};         // id -> {row, box}
+    this.query = '';
+    this.valuesBox = root.querySelector('[data-ep-values]');
+    var self = this;
+    Array.prototype.forEach.call(this.valuesBox.querySelectorAll('input'), function (i) {
+      var v = (i.value || '').trim();
+      if (!v) { return; }
+      if (v.indexOf('*') !== -1) { self.pats.add(v); } else { self.ids.add(v); }
+    });
+    this.bind();
+    var urlAttr = root.getAttribute('data-catalog-url');
+    loadCatalog(urlAttr).then(function (cat) { self.build(cat); }).catch(function () {
+      self.q('[data-ep-groups]').textContent = '';
+      self.q('[data-ep-groups]').appendChild(el('div', 'ep-loading text-danger', 'The event list could not be loaded. Reload the page and try again.'));
+    });
+    this.renderSummary();
+  }
+
+  Picker.prototype.q = function (sel) { return this.root.querySelector(sel); };
+
+  Picker.prototype.allIds = function () { return this.events.map(function (e) { return e.id; }); };
+
+  Picker.prototype.matches = function (pat, id) {
+    if (pat === '*') { return true; }
+    if (!this._re) { this._re = {}; }
+    return (this._re[pat] || (this._re[pat] = patternRegex(pat))).test(id);
   };
 
-  Picker.prototype.build = function () {
-    var self = this, cat = this.cat, ui = this.ui;
-    ui.textContent = '';
-    ui.className = 'event-picker-ui ep-ready';
+  Picker.prototype.expand = function (pat) {
+    var self = this;
+    return this.allIds().filter(function (id) { return self.matches(pat, id); });
+  };
 
-    var tool = el('div', 'ep-toolbar');
-    var sw = el('div', 'ep-search');
-    sw.appendChild(el('i', 'fas fa-search ep-search-icon', { 'aria-hidden': 'true' }));
-    this.search = el('input', 'form-control ep-search-input', {
-      type: 'search', placeholder: 'Search events (e.g. ticket, login failed, backup)', autocomplete: 'off', spellcheck: 'false',
-      'aria-label': this.root.getAttribute('data-label') || 'Search events'
+  Picker.prototype.covered = function (id) {
+    if (this.ids.has(id)) { return true; }
+    var hit = false;
+    this.pats.forEach(function (p) { if (!hit && this.matches(p, id)) { hit = true; } }, this);
+    return hit;
+  };
+
+  Picker.prototype.build = function (cat) {
+    var self = this;
+    this.events = cat.events.slice();
+    var other = [];
+    try { other = JSON.parse(this.root.getAttribute('data-other') || '[]'); } catch (e) { other = []; }
+    var known = {};
+    this.events.forEach(function (e) { known[e.id] = true; });
+    other.forEach(function (id) {
+      if (known[id]) { return; }
+      self.events.push({ id: id, group: '_other', groupLabel: 'Other events seen on this server', label: id, description: 'Recorded in the audit trail on this server; not in the catalog.', severity: 'info', since: null, tags: [] });
     });
-    sw.appendChild(this.search);
-    tool.appendChild(sw);
-    var sum = el('div', 'ep-summary');
-    this.countEl = el('span', 'ep-count', { 'aria-live': 'polite' });
-    sum.appendChild(this.countEl);
-    this.clearBtn = el('button', 'btn btn-link btn-sm ep-clear', { type: 'button' });
-    this.clearBtn.textContent = 'Clear';
-    sum.appendChild(this.clearBtn);
-    tool.appendChild(sum);
-    ui.appendChild(tool);
+    this.events.forEach(function (e) { self.byId[e.id] = e; });
 
-    this.chips = el('div', 'ep-chips', { role: 'list', 'aria-label': this.single ? 'Selected event' : 'Selected events' });
-    ui.appendChild(this.chips);
+    var order = Object.keys(cat.groups);
+    order.push('_other');
+    order.forEach(function (key) {
+      var list = self.events.filter(function (e) { return e.group === key; });
+      if (!list.length) { return; }
+      self.groups.push({ key: key, label: list[0].groupLabel, ids: list.map(function (e) { return e.id; }), pattern: self.groupPattern(key, list), open: false });
+    });
 
-    if (!this.single) {
-      var all = el('label', 'ep-all');
-      this.allBox = el('input', 'form-check-input', { type: 'checkbox' });
-      all.appendChild(this.allBox);
-      var allText = el('span', 'ep-all-text');
-      allText.appendChild(txt(el('span', 'ep-all-label'), 'All events'));
-      allText.appendChild(txt(el('code', 'ep-id'), '*'));
-      allText.appendChild(txt(el('span', 'ep-desc'), 'Every event, including ones added later. Leave this off and tick groups or single events to be selective.'));
-      all.appendChild(allText);
-      this.allRow = all;
-      ui.appendChild(all);
-    }
-
-    this.groupsEl = el('div', 'ep-groups');
-    this.groups = {};
-    this.rows = {};
-    var buildGroup = function (key, label, events, isOther) {
-      var sec = el('section', 'ep-group', { 'data-group': key });
-      var head = el('div', 'ep-group-head');
-      var gcheck = null;
-      if (!self.single) {
-        gcheck = el('input', 'form-check-input ep-group-check', { type: 'checkbox', 'aria-label': 'Select all in ' + label });
-        head.appendChild(gcheck);
+    // A saved selection that names events this install no longer lists keeps them (they show as chips and are submitted unchanged).
+    this.ids.forEach(function (id) {
+      if (!self.byId[id]) {
+        self.byId[id] = { id: id, group: '_unknown', groupLabel: 'Unknown', label: id, description: '', severity: 'info', since: null, tags: [] };
       }
-      var bodyId = self.id + '-g-' + key;
-      var tog = el('button', 'ep-group-toggle', { type: 'button', 'aria-expanded': 'false', 'aria-controls': bodyId });
-      tog.appendChild(el('i', 'fas fa-chevron-right ep-chev', { 'aria-hidden': 'true' }));
-      tog.appendChild(txt(el('span', 'ep-group-name'), label));
-      var gcount = txt(el('span', 'ep-group-count'), plural(events.length, 'event', 'events'));
-      tog.appendChild(gcount);
-      var gsel = el('span', 'badge ep-group-sel');
-      tog.appendChild(gsel);
-      head.appendChild(tog);
-      sec.appendChild(head);
-      var body = el('div', 'ep-group-body', { id: bodyId, hidden: '' });
-      events.forEach(function (e) {
-        var row = el('label', 'ep-row', { 'data-id': e.i });
-        var input = el('input', 'form-check-input', { type: self.single ? 'radio' : 'checkbox', 'data-id': e.i });
-        if (self.single) input.setAttribute('name', self.id + '-radio');
-        row.appendChild(input);
-        var main = el('span', 'ep-row-main');
-        var line = el('span', 'ep-row-line');
-        line.appendChild(txt(el('span', 'ep-label'), e.l || e.i));
-        line.appendChild(txt(el('code', 'ep-id'), e.i));
-        if (e.s === 'critical' || e.s === 'warning') line.appendChild(txt(el('span', 'badge ep-sev ep-sev-' + e.s), e.s));
-        if (e.p) line.appendChild(txt(el('span', 'badge ep-planned', { title: 'Reserved name: not emitted everywhere yet.' }), 'planned'));
-        main.appendChild(line);
-        main.appendChild(txt(el('span', 'ep-desc'), e.d));
-        row.appendChild(main);
-        body.appendChild(row);
-        self.rows[e.i] = { row: row, input: input, ev: e, group: key };
-      });
-      sec.appendChild(body);
-      self.groupsEl.appendChild(sec);
-      self.groups[key] = { sec: sec, body: body, tog: tog, gsel: gsel, gcheck: gcheck, events: events, label: label, isOther: isOther, gcount: gcount };
-    };
-    var byGroup = {};
-    cat.events.forEach(function (e) { (byGroup[e.g] = byGroup[e.g] || []).push(e); });
-    cat.groups.forEach(function (g) { if (byGroup[g.k]) buildGroup(g.k, g.l, byGroup[g.k], false); });
-    if (this.others.length) {
-      var oe = this.others.map(function (id) { return { i: id, g: '_other', l: id, d: "Recorded in this server's audit trail; not part of the standard catalog.", s: 'info', idl: id.toLowerCase(), ll: id.toLowerCase(), search: id.toLowerCase() }; });
-      buildGroup('_other', 'Other events seen on this server', oe, true);
+    });
+    this.normalize();
+    this.renderGroups();
+    this.refresh();
+    // Open the groups that already hold a selection, so an edit form shows what is chosen.
+    this.groups.forEach(function (g) { if (g.count > 0 && !self.single) { self.setOpen(g, true); } });
+    if (this.single) {
+      var sel = Array.from(this.ids)[0];
+      this.groups.forEach(function (g) { if (sel && g.ids.indexOf(sel) !== -1) { self.setOpen(g, true); } });
     }
-    ui.appendChild(this.groupsEl);
+  };
 
-    this.empty = el('div', 'ep-empty text-muted', { hidden: '', role: 'status' });
-    ui.appendChild(this.empty);
+  // The wildcard that stands for exactly this group, or '' (e.g. "ticket.*" when every ticket.* event is in the group).
+  Picker.prototype.groupPattern = function (key, list) {
+    if (key === '_other' || list.length < 2) { return ''; }
+    var first = list[0].id, prefix = first;
+    list.forEach(function (e) { while (prefix && e.id.indexOf(prefix) !== 0) { prefix = prefix.slice(0, -1); } });
+    var cut = Math.max(prefix.lastIndexOf('.'), prefix.lastIndexOf('_'));
+    if (cut < 2) { return ''; }
+    var pat = prefix.slice(0, cut + 1) + '*';
+    var re = patternRegex(pat), inGroup = {};
+    list.forEach(function (e) { inGroup[e.id] = true; });
+    var all = this.events.filter(function (e) { return re.test(e.id); });
+    return all.length === list.length && all.every(function (e) { return inGroup[e.id]; }) ? pat : '';
+  };
 
-    this.bind();
+  Picker.prototype.normalize = function () {
+    if (this.single) { return; }
+    var self = this;
+    if (this.pats.has('*')) { this.pats.clear(); this.pats.add('*'); this.ids.clear(); return; }
+    var cands = ['*'];
+    this.groups.forEach(function (g) { if (g.pattern) { cands.push(g.pattern); } });
+    cands.forEach(function (c) {
+      if (self.pats.has(c)) { return; }
+      var exp = self.expand(c);
+      if (exp.length && exp.every(function (id) { return self.covered(id); })) {
+        if (c === '*') { self.pats.clear(); self.ids.clear(); self.pats.add('*'); return; }
+        self.pats.add(c);
+        exp.forEach(function (id) { self.ids.delete(id); });
+        // A narrower custom pattern is now redundant.
+        Array.from(self.pats).forEach(function (p) {
+          if (p !== c && p !== '*' && self.expand(p).every(function (id) { return self.matches(c, id); })) { self.pats.delete(p); }
+        });
+      }
+    });
+  };
+
+  Picker.prototype.setEvent = function (id, on) {
+    var self = this;
+    if (this.single) { this.ids.clear(); if (on) { this.ids.add(id); } return; }
+    if (on) { this.ids.add(id); return; }
+    this.ids.delete(id);
+    Array.from(this.pats).forEach(function (p) {
+      if (self.matches(p, id)) {
+        self.pats.delete(p);
+        self.expand(p).forEach(function (x) { if (x !== id) { self.ids.add(x); } });
+      }
+    });
+  };
+
+  Picker.prototype.visibleIds = function (g) {
+    var self = this;
+    return g.ids.filter(function (id) { return !self.query || self.rows[id].visible; });
   };
 
   Picker.prototype.bind = function () {
+    var self = this, root = this.root;
+    this.q('[data-ep-search]').addEventListener('input', function (e) { self.query = e.target.value; self.applySearch(); });
+    this.q('[data-ep-search]').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); }
+      if (e.key === 'Escape' && e.target.value) { e.target.value = ''; self.query = ''; self.applySearch(); e.stopPropagation(); }
+    });
+    var clear = this.q('[data-ep-clear]');
+    if (clear) { clear.addEventListener('click', function () { self.ids.clear(); self.pats.clear(); self.refresh(); }); }
+    var all = this.q('[data-ep-all]');
+    if (all) {
+      all.addEventListener('change', function () {
+        self.ids.clear(); self.pats.clear();
+        if (all.checked) { self.pats.add('*'); }
+        self.refresh();
+      });
+    }
+    root.addEventListener('click', function (e) {
+      var rm = e.target.closest('[data-ep-remove]');
+      if (rm) {
+        var v = rm.getAttribute('data-ep-remove');
+        if (self.pats.has(v)) { self.pats.delete(v); } else { self.setEvent(v, false); }
+        self.refresh();
+        return;
+      }
+      var head = e.target.closest('[data-ep-toggle]');
+      if (head) {
+        var g = self.groups[parseInt(head.getAttribute('data-ep-toggle'), 10)];
+        self.setOpen(g, !g.open);
+      }
+    });
+    root.addEventListener('change', function (e) {
+      var t = e.target;
+      if (t.matches('[data-ep-event]')) {
+        self.setEvent(t.value, t.checked);
+        self.normalize();
+        self.refresh();
+      } else if (t.matches('[data-ep-group]')) {
+        var g = self.groups[parseInt(t.getAttribute('data-ep-group'), 10)];
+        var ids = self.visibleIds(g);
+        var allOn = ids.every(function (id) { return self.covered(id); });
+        ids.forEach(function (id) { self.setEvent(id, !allOn); });
+        self.normalize();
+        self.refresh();
+      }
+    });
+  };
+
+  Picker.prototype.setOpen = function (g, open) {
+    g.open = open;
+    g.nodes.body.hidden = !open;
+    g.nodes.head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    g.nodes.caret.className = 'fas ' + (open ? 'fa-chevron-down' : 'fa-chevron-right') + ' ep-caret';
+  };
+
+  Picker.prototype.renderGroups = function () {
+    var self = this, host = this.q('[data-ep-groups]');
+    host.textContent = '';
+    this.groups.forEach(function (g, gi) {
+      var sec = el('section', 'ep-group');
+      var head = el('div', 'ep-group-head');
+      var bodyId = self.root.id + '-g' + gi;
+      var toggle = el('button', 'ep-group-toggle');
+      toggle.type = 'button';
+      toggle.setAttribute('data-ep-toggle', String(gi));
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.setAttribute('aria-controls', bodyId);
+      var caret = el('i', 'fas fa-chevron-right ep-caret');
+      caret.setAttribute('aria-hidden', 'true');
+      var title = el('span', 'ep-group-title', g.label);
+      var count = el('span', 'ep-group-count');
+      toggle.appendChild(caret); toggle.appendChild(title); toggle.appendChild(count);
+      head.appendChild(toggle);
+      var box = null;
+      if (!self.single) {
+        var lab = el('label', 'ep-group-all');
+        box = el('input', 'form-check-input');
+        box.type = 'checkbox';
+        box.setAttribute('data-ep-group', String(gi));
+        box.setAttribute('aria-label', 'Select all ' + g.label + ' events');
+        var txt = el('span', 'ep-group-all-text', 'Select all');
+        lab.appendChild(box); lab.appendChild(txt);
+        head.appendChild(lab);
+        if (g.pattern) { head.appendChild(el('code', 'ep-group-pattern', g.pattern)); }
+        g.nodes = { sec: sec, head: toggle, caret: caret, count: count, box: box, txt: txt };
+      } else {
+        g.nodes = { sec: sec, head: toggle, caret: caret, count: count, box: null, txt: null };
+      }
+      var body = el('div', 'ep-group-body');
+      body.id = bodyId;
+      body.hidden = true;
+      g.ids.forEach(function (id) {
+        var e = self.byId[id];
+        var row = el('label', 'ep-row');
+        var inp = el('input', 'form-check-input');
+        inp.type = self.single ? 'radio' : 'checkbox';
+        if (self.single) { inp.name = self.root.id + '-choice'; }
+        inp.value = id;
+        inp.setAttribute('data-ep-event', '');
+        var main = el('span', 'ep-row-main');
+        var line = el('span', 'ep-row-line');
+        line.appendChild(el('span', 'ep-row-label', e.label !== id ? e.label : ''));
+        line.appendChild(el('code', 'ep-row-id', id));
+        line.appendChild(el('span', 'ep-sev ep-sev-' + (e.severity || 'info'), e.severity || 'info'));
+        if (e.since === 'planned') {
+          var pl = el('span', 'ep-planned', 'planned');
+          pl.title = 'Reserved name: not emitted everywhere yet';
+          line.appendChild(pl);
+        }
+        main.appendChild(line);
+        if (e.description) { main.appendChild(el('span', 'ep-row-desc', e.description)); }
+        row.appendChild(inp); row.appendChild(main);
+        body.appendChild(row);
+        self.rows[id] = { row: row, box: inp, visible: true, score: 0 };
+      });
+      g.nodes.body = body;
+      sec.appendChild(head); sec.appendChild(body);
+      host.appendChild(sec);
+    });
+    host.appendChild(el('div', 'ep-none text-secondary', 'No events match your search.')).hidden = true;
+    this.noneNode = host.lastChild;
+  };
+
+  Picker.prototype.applySearch = function () {
     var self = this;
-    this.search.addEventListener('input', function () { self.filter(); });
-    this.search.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Enter') { ev.preventDefault(); }
-      else if (ev.key === 'Escape' && self.search.value) { ev.preventDefault(); ev.stopPropagation(); self.search.value = ''; self.filter(); }
-      else if (ev.key === 'ArrowDown') {
-        var first = self.ui.querySelector('.ep-row:not([hidden]) input');
-        var vis = self.ui.querySelector('.ep-group:not([hidden]) .ep-group-body:not([hidden]) .ep-row:not([hidden]) input');
-        if (vis || first) { ev.preventDefault(); (vis || first).focus(); }
-      }
+    var terms = this.query.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
+    var anyGroup = false;
+    this.groups.forEach(function (g, gi) {
+      var best = 0, shown = 0;
+      g.ids.forEach(function (id) {
+        var r = self.rows[id], s = terms.length ? scoreEvent(self.byId[id], terms) : 1;
+        r.visible = s > 0;
+        r.score = s;
+        r.row.hidden = !r.visible;
+        r.row.style.order = String(1000 - s);
+        if (r.visible) { shown++; best = Math.max(best, s); }
+      });
+      g.nodes.sec.hidden = shown === 0;
+      g.nodes.sec.style.order = String(1000 - best);
+      if (shown) { anyGroup = true; }
+      if (terms.length) { self.setOpen(g, shown > 0); }
     });
-    this.clearBtn.addEventListener('click', function () { self.sel = {}; self.raw = []; self.render(); self.changed(); });
-    if (this.allBox) this.allBox.addEventListener('change', function () {
-      self.sel = {}; self.raw = [];
-      if (self.allBox.checked) self.cat.events.forEach(function (e) { self.sel[e.i] = true; });
-      self.render(); self.changed();
-    });
-    this.groupsEl.addEventListener('click', function (ev) {
-      var tog = ev.target.closest && ev.target.closest('.ep-group-toggle');
-      if (tog) { var key = tog.parentNode.parentNode.getAttribute('data-group'); self.expanded[key] = !self.expanded[key]; self.applyExpanded(); }
-    });
-    this.groupsEl.addEventListener('change', function (ev) {
-      var t = ev.target;
-      if (t.classList.contains('ep-group-check')) {
-        var key = t.closest('.ep-group').getAttribute('data-group'), g = self.groups[key];
-        g.events.forEach(function (e) {
-          var r = self.rows[e.i];
-          if (r.row.hidden) return;   // while searching, select-all applies to what is shown
-          if (t.checked) self.sel[e.i] = true; else delete self.sel[e.i];
-        });
-        self.render(); self.changed(); return;
-      }
-      var id = t.getAttribute('data-id');
-      if (!id) return;
-      if (self.single) { self.sel = {}; self.sel[id] = true; }
-      else if (t.checked) self.sel[id] = true; else delete self.sel[id];
-      self.render(); self.changed();
-    });
-    this.chips.addEventListener('click', function (ev) {
-      var b = ev.target.closest && ev.target.closest('.ep-chip-remove');
-      if (!b) return;
-      var token = b.getAttribute('data-token');
-      self.removeToken(token);
-      self.render(); self.changed();
-    });
+    if (!terms.length) { this.groups.forEach(function (g) { self.setOpen(g, g.count > 0 && !self.single); }); }
+    this.noneNode.hidden = anyGroup || !this.events.length;
+    this.refresh();
   };
 
-  Picker.prototype.expand = function (token) {
-    var out = [], cat = this.cat;
-    if (token.indexOf('*') === -1) return [token];
-    var re = patternRegex(token);
-    cat.events.forEach(function (e) { if (re.test(e.i)) out.push(e.i); });
-    this.others.forEach(function (o) { if (re.test(o)) out.push(o); });
-    return out;
+  Picker.prototype.label = function (id) {
+    var e = this.byId[id];
+    return e && e.label && e.label !== id ? e.label : id;
   };
 
-  Picker.prototype.removeToken = function (token) {
+  Picker.prototype.renderSummary = function () {
     var self = this;
-    var i = this.raw.indexOf(token);
-    if (i !== -1) { this.raw.splice(i, 1); return; }
-    this.expand(token).forEach(function (id) { delete self.sel[id]; });
+    var total = 0;
+    if (this.events.length) {
+      total = this.events.filter(function (e) { return self.covered(e.id); }).length;
+      this.ids.forEach(function (id) { if (!self.byId[id] || self.byId[id].group === '_unknown') { total++; } });
+    } else { total = this.ids.size + this.pats.size; }
+    var n = this.single ? (this.ids.size ? 1 : 0) : total;
+    this.q('[data-ep-count]').textContent = this.single ? (n ? '1 event chosen' : 'No event chosen') : (n === 1 ? '1 event selected' : n + ' events selected');
+    var clear = this.q('[data-ep-clear]');
+    if (clear) { clear.hidden = n === 0; }
   };
 
-  // The values written to the form: "*", family patterns, ids, and any pattern we could not match to anything.
-  Picker.prototype.tokens = function () {
-    var cat = this.cat, sel = this.sel, out = [], self = this;
-    if (this.single) return Object.keys(sel).slice(0, 1);
-    var allIn = cat.events.length > 0 && cat.events.every(function (e) { return sel[e.i]; });
-    if (allIn) return ['*'].concat(this.raw);
-    var used = {};
-    Object.keys(cat.families).sort().forEach(function (fam) {
-      var ids = cat.families[fam];
-      if (ids.length > 1 && ids.every(function (i) { return sel[i]; })) {
-        out.push(fam + '.*');
-        ids.forEach(function (i) { used[i] = true; });
+  Picker.prototype.refresh = function () {
+    var self = this;
+    // hidden inputs: what the form submits
+    this.valuesBox.textContent = '';
+    var vals = this.single ? Array.from(this.ids) : Array.from(this.pats).concat(Array.from(this.ids));
+    if (this.single && !vals.length) { vals = ['']; }
+    vals.forEach(function (v) {
+      var i = document.createElement('input');
+      i.type = 'hidden'; i.name = self.name; i.value = v;
+      self.valuesBox.appendChild(i);
+    });
+    // required-ness for single mode forms: tell the browser nothing is chosen (the server re-checks)
+    var all = this.q('[data-ep-all]');
+    if (all) { all.checked = this.pats.has('*'); }
+
+    // rows and groups
+    this.groups.forEach(function (g) {
+      var n = 0;
+      g.ids.forEach(function (id) {
+        var on = self.covered(id);
+        if (on) { n++; }
+        var r = self.rows[id];
+        r.box.checked = on;
+        r.row.classList.toggle('is-selected', on);
+      });
+      g.count = n;
+      g.nodes.count.textContent = n > 0 ? n + ' of ' + g.ids.length + ' selected' : g.ids.length + (g.ids.length === 1 ? ' event' : ' events');
+      g.nodes.count.classList.toggle('has-selection', n > 0);
+      if (g.nodes.box) {
+        var vis = self.visibleIds(g), onVis = vis.filter(function (id) { return self.covered(id); }).length;
+        g.nodes.box.checked = vis.length > 0 && onVis === vis.length;
+        g.nodes.box.indeterminate = onVis > 0 && onVis < vis.length;
+        g.nodes.txt.textContent = self.query ? (g.nodes.box.checked ? 'Clear matches' : 'Select matches') : (g.nodes.box.checked ? 'Clear all' : 'Select all');
       }
     });
-    cat.events.forEach(function (e) { if (sel[e.i] && !used[e.i]) out.push(e.i); });
-    self.others.forEach(function (o) { if (sel[o] && !used[o]) out.push(o); });
-    return out.concat(this.raw);
-  };
-
-  Picker.prototype.render = function () {
-    var self = this, sel = this.sel, cat = this.cat;
-    Object.keys(this.rows).forEach(function (id) {
-      var r = self.rows[id];
-      r.input.checked = !!sel[id];
-      r.row.classList.toggle('ep-row-on', !!sel[id]);
-    });
-    Object.keys(this.groups).forEach(function (k) {
-      var g = self.groups[k], n = 0;
-      g.events.forEach(function (e) { if (sel[e.i]) n++; });
-      g.gsel.textContent = n ? n + ' selected' : '';
-      g.gsel.hidden = !n;
-      if (g.gcheck) { g.gcheck.checked = n === g.events.length && n > 0; g.gcheck.indeterminate = n > 0 && n < g.events.length; }
-      g.sec.classList.toggle('ep-group-has', n > 0);
-    });
-    var total = Object.keys(sel).length;
-    var catSel = cat.events.filter(function (e) { return sel[e.i]; }).length;
-    if (this.allBox) { this.allBox.checked = catSel === cat.events.length && cat.events.length > 0; this.allBox.indeterminate = catSel > 0 && catSel < cat.events.length; }
-    this.countEl.textContent = this.single ? (total ? '1 event chosen' : 'No event chosen')
-      : (catSel === cat.events.length && cat.events.length ? 'All ' + cat.events.length + ' events selected' : plural(total, 'event', 'events') + ' selected');
-    this.clearBtn.hidden = !total && !this.raw.length;
 
     // chips
-    var tokens = this.tokens();
-    this.chips.textContent = '';
-    tokens.forEach(function (t) {
-      var chip = el('span', 'ep-chip', { role: 'listitem' });
-      var label = t, title = t;
-      if (t === '*') { label = 'All events'; title = 'Every event (*)'; }
-      else if (t.indexOf('*') !== -1) {
-        var n = self.expand(t).length;
-        label = t; title = 'Every ' + t.replace('.*', '') + ' event (' + plural(n, 'event', 'events') + ', including ones added later)';
-        chip.classList.add('ep-chip-pattern');
-      } else if (cat.byId[t]) { title = cat.byId[t].l + ' - ' + cat.byId[t].d; }
-      chip.title = title;
-      chip.appendChild(txt(el('span', 'ep-chip-text'), label));
-      var rm = el('button', 'ep-chip-remove', { type: 'button', 'data-token': t, 'aria-label': 'Remove ' + label });
-      rm.appendChild(el('i', 'fas fa-times', { 'aria-hidden': 'true' }));
-      chip.appendChild(rm);
-      self.chips.appendChild(chip);
-    });
-    this.chips.hidden = !tokens.length;
-
-    // hidden inputs
-    this.valuesBox.textContent = '';
-    tokens.forEach(function (t) {
-      var inp = document.createElement('input');
-      inp.type = 'hidden'; inp.name = self.field; inp.value = t;
-      self.valuesBox.appendChild(inp);
-    });
-    this.applyExpanded();
-  };
-
-  Picker.prototype.changed = function () {
-    this.root.dispatchEvent(new CustomEvent('eventpicker:change', { bubbles: true, detail: { tokens: this.tokens() } }));
-  };
-
-  // Programmatic selection (quick-set chips of the webhook form): replace with these ids, or add/remove them.
-  Picker.prototype.selectedIds = function () { return Object.keys(this.sel); };
-  Picker.prototype.setSelection = function (ids) {
-    var self = this;
-    this.sel = {}; this.raw = [];
-    ids.forEach(function (i) { self.sel[i] = true; });
-    this.render(); this.changed();
-  };
-  Picker.prototype.addIds = function (ids, on) {
-    var self = this;
-    ids.forEach(function (i) { if (on) self.sel[i] = true; else delete self.sel[i]; });
-    this.render(); this.changed();
-  };
-
-  Picker.prototype.applyExpanded = function () {
-    var self = this, searching = !!this.terms().length;
-    Object.keys(this.groups).forEach(function (k) {
-      var g = self.groups[k];
-      var open = searching ? !g.sec.hidden : !!self.expanded[k];
-      g.body.hidden = !open;
-      g.tog.setAttribute('aria-expanded', open ? 'true' : 'false');
-      g.sec.classList.toggle('ep-open', open);
-    });
-  };
-
-  Picker.prototype.terms = function () {
-    return this.search ? (this.search.value || '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8) : [];
-  };
-
-  Picker.prototype.filter = function () {
-    var self = this, terms = this.terms(), shown = 0, total = 0, rank = [];
-    Object.keys(this.groups).forEach(function (k) {
-      var g = self.groups[k], best = 0, any = false;
-      g.events.forEach(function (e, idx) {
-        var r = self.rows[e.i], s = score(e, terms, g.isOther ? '' : g.label);
-        total++;
-        r.row.hidden = s === 0;
-        r.row.style.order = String(1000 - s);
-        if (s) { any = true; shown++; if (s > best) best = s; }
-      });
-      g.sec.hidden = !any;
-      rank.push([k, best]);
-    });
-    rank.sort(function (a, b) { return b[1] - a[1]; });
-    rank.forEach(function (r, i) { self.groups[r[0]].sec.style.order = String(terms.length ? i : this.indexOfGroup(r[0])); }, this);
-    this.empty.hidden = shown > 0;
-    if (!shown) this.empty.textContent = 'No events match "' + this.search.value + '". Try a shorter word, such as ticket, login or backup.';
-    this.applyExpanded();
-    if (terms.length) this.countHint(shown, total);
-  };
-  Picker.prototype.indexOfGroup = function (k) {
-    var keys = Object.keys(this.groups);
-    return keys.indexOf(k);
-  };
-  Picker.prototype.countHint = function () { /* the live region already reports the selection; the list itself shows matches */ };
-
-  function initAll(scope) {
-    var list = (scope || document).querySelectorAll('[data-event-picker]:not([data-ep-ready])');
-    for (var i = 0; i < list.length; i++) {
-      list[i].setAttribute('data-ep-ready', '1');
-      try { list[i].__picker = new Picker(list[i]); } catch (e) { if (window.console) console.error('event picker', e); }
+    var chips = this.q('[data-ep-chips]');
+    chips.textContent = '';
+    function chip(text, title, value, aria) {
+      var c = el('span', 'ep-chip');
+      c.setAttribute('role', 'listitem');
+      c.title = title || '';
+      c.appendChild(el('span', 'ep-chip-text', text));
+      var b = el('button', 'ep-chip-x');
+      b.type = 'button';
+      b.setAttribute('data-ep-remove', value);
+      b.setAttribute('aria-label', 'Remove ' + aria);
+      b.textContent = '\u00d7';
+      c.appendChild(b);
+      chips.appendChild(c);
     }
+    this.pats.forEach(function (p) {
+      var n = self.events.length ? self.expand(p).length : 0;
+      chip(p === '*' ? 'All events' : p, p === '*' ? 'Every event, including ones added later' : 'Every event matching ' + p + ' (' + n + ' now)', p, p === '*' ? 'all events' : p);
+      chips.lastChild.classList.add('ep-chip-pattern');
+      if (n) { chips.lastChild.querySelector('.ep-chip-text').textContent = (p === '*' ? 'All events' : p) + ' · ' + n; }
+    });
+    var shown = 0;
+    this.ids.forEach(function (id) {
+      if (shown++ < 60) { chip(self.label(id), id, id, self.label(id)); }
+    });
+    if (this.ids.size > 60) { chips.appendChild(el('span', 'ep-chip-more text-secondary', '+' + (this.ids.size - 60) + ' more')); }
+    chips.hidden = !chips.children.length;
+    this.renderSummary();
+    this.root.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  function init(root) {
+    if (root._eventPicker) { return; }
+    root._eventPicker = new Picker(root);
   }
 
-  // Needed at load for pickers already on the page, and afterwards for ones injected by AJAX modals.
+  function scan(scope) {
+    var list = (scope || document).querySelectorAll ? (scope || document).querySelectorAll('[data-event-picker]') : [];
+    Array.prototype.forEach.call(list, init);
+    if (scope && scope.matches && scope.matches('[data-event-picker]')) { init(scope); }
+  }
+
   function start() {
-    initAll(document);
-    if (window.MutationObserver) {
-      new MutationObserver(function (muts) {
-        for (var i = 0; i < muts.length; i++) {
-          if (muts[i].addedNodes.length) { initAll(document); return; }
-        }
-      }).observe(document.documentElement, { childList: true, subtree: true });
-    }
+    scan(document);
+    new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        Array.prototype.forEach.call(m.addedNodes, function (n) { if (n.nodeType === 1) { scan(n); } });
+      });
+    }).observe(document.body, { childList: true, subtree: true });
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', start); } else { start(); }
+  window.RivetEventPicker = { scan: scan };
 })();

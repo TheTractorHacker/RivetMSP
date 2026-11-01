@@ -1,7 +1,7 @@
 <?php
 
 /*
- * JSON helpers behind Administration > Event rules (admin only, POST + CSRF; same shape as webhook_tools.php):
+ * JSON helpers behind Administration > Event rules (admin only, POST + CSRF; same shape as the webhook endpoint modals/webhook/webhook_action.php):
  *   toggle / delete / duplicate   one rule (CSRF-protected, audited like the classic post handler)
  *   save                          validate + store the editor form; returns per-field errors instead of redirecting
  *   describe                      live sentence, per-field validation hints and a placeholder preview for an unsaved form

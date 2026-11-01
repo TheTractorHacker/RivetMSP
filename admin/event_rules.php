@@ -269,6 +269,14 @@ $page_data = [
                 <header class="er-step-head"><span class="er-num" aria-hidden="true">1</span><div><h5 id="er-h-when" class="mb-0">When</h5><p class="text-muted small mb-0">The event that starts this rule.</p></div></header>
                 <div class="er-step-body">
                     <div class="er-event-info" data-er-event-info hidden></div>
+                    <?php
+                    // js/event_rules.js reads event labels and the "planned" flag from this compact copy of the Core catalog (i, l, p).
+                    $er_cat = [];
+                    foreach (\RivetCore\Webhooks\EventCatalog::all() as $er_e) {
+                        $er_cat[] = ['i' => $er_e->id, 'l' => $er_e->label] + ($er_e->since === 'planned' ? ['p' => 1] : []);
+                    }
+                    echo '<script type="application/json" class="event-picker-catalog">' . json_encode(['events' => $er_cat], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) . '</script>' . "\n";
+                    ?>
                     <details class="er-picker-wrap" data-er-picker-wrap <?= $form['event'] === '' ? 'open' : '' ?>>
                         <summary class="er-picker-summary" data-er-picker-summary><?= $form['event'] === '' ? 'Choose the event' : 'Choose a different event' ?></summary>
                         <?php eventPickerField('trigger_event', $form['event'] !== '' ? [$form['event']] : [], ['mode' => 'single', 'id' => 'trigger_event_picker', 'other' => webhook_event_groups()['Other events seen on this server'] ?? [], 'label' => 'Search for the event that starts this rule']); ?>

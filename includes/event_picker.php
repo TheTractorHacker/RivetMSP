@@ -1,74 +1,83 @@
 <?php
 
 /*
- * Searchable event picker, in the shape of Microsoft's "Request API permissions" dialog: a search box, expandable groups (with a
- * per-group select-all and an "n selected" count), every event with a name, its id and a one-line description, and the selection
- * shown as removable chips with a total count.
+ * Searchable event picker (the shape of the Azure "Request API permissions" list): a search box, expandable groups with counts and
+ * "n selected", each event with its name, dotted id, one-line description and severity, per-group select all / none, a
+ * wildcard-aware "All events", and the selection shown as removable chips with a total. The behaviour lives in js/event_picker.js
+ * (loaded once by includes/footer.php, bound per picker as it appears, so AJAX-loaded modals work). The ~25 KB catalog is NOT
+ * embedded: the script fetches it once per page from /modals/event_catalog.php (versioned URL, cacheable).
  *
- * eventPickerField('webhook_events[]', $selected) prints a container plus hidden <input name="webhook_events[]"> elements holding the
- * chosen ids / patterns. The UI itself is built client side by js/event_picker.js from the RivetCore EventCatalog JSON, which is
- * emitted ONCE per page/response (static guard, like the icon catalog), so pickers inside AJAX-loaded modals work through delegation.
- * Stored values may be patterns: "*" (all events) and "ticket.*" (a whole family) are written when everything in them is selected.
- * Handlers must validate what they receive (admin/includes/webhook_form_lib.php: rivetWebhookCleanEvents()).
+ *   eventPickerField('webhook_events[]', $selected)                         several events or patterns ("ticket.*", "*")
+ *   eventPickerField('trigger_event', [$current], ['mode' => 'single'])    exactly one event
  *
- * Options: mode 'multi' (default) | 'single' (one event, e.g. the trigger of an event rule), id, other (list of event ids seen on
- * this server but not in the catalog), label (accessible name of the search box).
+ * The chosen values are submitted as hidden inputs with the given name (one per id or pattern; single mode: one). The markup already
+ * contains the current selection, so the form is correct even before the script has run. Handlers MUST re-validate every value
+ * (see rivetWebhookCleanEvents() in admin/includes/webhook_form_lib.php): the client is a convenience, not a gate.
  */
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-/** The catalog in the compact shape the picker script reads. */
-function eventPickerCatalogJson(): string
-{
-    $groups = [];
-    foreach (\RivetCore\Webhooks\EventCatalog::groups() as $key => $g) {
-        $groups[] = ['k' => $key, 'l' => $g['label']];
-    }
-    $events = [];
-    foreach (\RivetCore\Webhooks\EventCatalog::all() as $e) {
-        $row = ['i' => $e->id, 'g' => $e->group, 'l' => $e->label, 'd' => $e->description, 's' => $e->severity];
-        if ($e->tags) {
-            $row['t'] = implode(' ', $e->tags);
+if (!function_exists('eventPickerField')) {
+    /**
+     * @param list<string> $selected ids and/or patterns currently chosen
+     * @param array{mode?:string,id?:string,other?:list<string>,required?:bool,label?:string} $opts
+     */
+    function eventPickerField(string $name, array $selected, array $opts = []): void
+    {
+        static $seq = 0;
+        $seq++;
+        $mode = ($opts['mode'] ?? 'multi') === 'single' ? 'single' : 'multi';
+        $id = (string) ($opts['id'] ?? 'event-picker-' . $seq);
+        $other = $opts['other'] ?? null;
+        if ($other !== null) {
+            $other = array_values(array_filter(array_map('strval', $other), static fn (string $v): bool => preg_match('/^[a-z0-9_.]{1,150}$/', $v) === 1));
         }
-        if ($e->since === 'planned') {
-            $row['p'] = 1;
+        if ($other === null) {
+            require_once __DIR__ . '/../admin/includes/webhook_events.php';
+            $other = webhook_event_groups()['Other events seen on this server'] ?? [];
         }
-        $events[] = $row;
-    }
-
-    return (string) json_encode(['groups' => $groups, 'events' => $events], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP);
-}
-
-/**
- * @param list<string> $selected stored values (ids and/or patterns)
- * @param array{mode?:string,id?:string,other?:list<string>,label?:string} $options
- */
-function eventPickerField(string $name, array $selected, array $options = []): void
-{
-    static $catalog_emitted = false;
-
-    $h = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
-    $mode = ($options['mode'] ?? 'multi') === 'single' ? 'single' : 'multi';
-    $id = isset($options['id']) && $options['id'] !== '' ? preg_replace('/[^A-Za-z0-9_-]/', '', $options['id']) : 'event_picker_' . bin2hex(random_bytes(4));
-    $other = array_values(array_filter(array_map('strval', $options['other'] ?? []), static fn (string $v): bool => preg_match('/^[a-z0-9_.]{1,150}$/', $v) === 1));
-    $selected = array_values(array_filter(array_map('strval', $selected), static fn (string $v): bool => preg_match('/^[a-z0-9_.*-]{1,150}$/', $v) === 1));
-    if ($mode === 'single') {
-        $selected = array_slice($selected, 0, 1);
-    }
-
-    if (!$catalog_emitted) {
-        $catalog_emitted = true;
-        echo '<script type="application/json" class="event-picker-catalog">' . eventPickerCatalogJson() . '</script>' . "\n";
-    }
-    ?>
-    <div class="event-picker" id="<?= $h($id) ?>" data-event-picker data-mode="<?= $mode ?>" data-field="<?= $h($name) ?>" data-label="<?= $h($options['label'] ?? 'Search events') ?>">
-        <script type="application/json" class="event-picker-other"><?= json_encode($other, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
-        <div class="event-picker-values">
-            <?php foreach ($selected as $v) { ?><input type="hidden" name="<?= $h($name) ?>" value="<?= $h($v) ?>"><?php } ?>
+        $h = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+        $version = substr(md5(\RivetCore\Webhooks\EventCatalog::toJson()), 0, 12);
+        $url = '/modals/event_catalog.php?v=' . $version;
+        $selected = array_values(array_unique(array_filter(array_map('strval', $selected), static fn (string $s): bool => preg_match('/^[a-z0-9_.*-]{1,150}$/', $s) === 1)));
+        if ($mode === 'single') {
+            $selected = array_slice($selected, 0, 1);
+        }
+        ?>
+        <div class="event-picker" id="<?= $h($id) ?>" data-event-picker data-name="<?= $h($name) ?>" data-mode="<?= $mode ?>" data-catalog-url="<?= $h($url) ?>"
+             data-other="<?= $h((string) json_encode(array_values($other))) ?>"<?= !empty($opts['required']) ? ' data-required="1"' : '' ?>>
+            <div data-ep-values>
+                <?php foreach ($selected as $v) { ?><input type="hidden" name="<?= $h($name) ?>" value="<?= $h($v) ?>"><?php } ?>
+                <?php if ($mode === 'single' && !$selected) { ?><input type="hidden" name="<?= $h($name) ?>" value=""><?php } ?>
+            </div>
+            <div class="ep-toolbar">
+                <div class="ep-search">
+                    <i class="fas fa-search ep-search-icon" aria-hidden="true"></i>
+                    <input type="search" class="form-control" placeholder="Search events (e.g. ticket, login, backup)" aria-label="<?= $h((string) ($opts['label'] ?? 'Search events')) ?>" autocomplete="off" data-ep-search>
+                </div>
+                <div class="ep-summary" role="status" aria-live="polite" data-ep-count></div>
+                <?php if ($mode === 'multi') { ?><button type="button" class="btn btn-sm btn-link ep-clear" data-ep-clear>Clear</button><?php } ?>
+            </div>
+            <div class="ep-chips" role="list" aria-label="Selected events" data-ep-chips></div>
+            <?php if ($mode === 'multi') { ?>
+            <label class="ep-all"><input type="checkbox" class="form-check-input" data-ep-all> <span><strong>All events</strong> <code>*</code> <small class="text-secondary">including events added later</small></span></label>
+            <?php } ?>
+            <div class="ep-groups" data-ep-groups><div class="ep-loading"><i class="fas fa-spinner fa-spin me-1" aria-hidden="true"></i>Loading events...</div></div>
+            <noscript>
+                <?php // Without JavaScript the picker cannot run: a plain list keeps the form usable (it is submitted under the same name). ?>
+                <select class="form-select" name="<?= $h($name) ?>" <?= $mode === 'multi' ? 'multiple size="10"' : '' ?>>
+                    <?php if ($mode === 'single') { ?><option value="">Choose an event...</option><?php } ?>
+                    <?php $ns_groups = [];
+                    foreach (\RivetCore\Webhooks\EventCatalog::all() as $ns_e) { $ns_groups[$ns_e->groupLabel][] = $ns_e->id; }
+                    if ($other) { $ns_groups['Other events seen on this server'] = array_values($other); }
+                    foreach ($ns_groups as $ns_label => $ns_ids) { ?>
+                    <optgroup label="<?= $h($ns_label) ?>">
+                        <?php foreach ($ns_ids as $ns_id) { ?><option value="<?= $h($ns_id) ?>" <?= in_array($ns_id, $selected, true) ? 'selected' : '' ?>><?= $h($ns_id) ?></option><?php } ?>
+                    </optgroup>
+                    <?php } ?>
+                </select>
+            </noscript>
         </div>
-        <div class="event-picker-ui" data-event-picker-ui>
-            <div class="text-muted small">Loading events&hellip; <?= $selected ? '(' . $h(implode(', ', array_slice($selected, 0, 12))) . ($selected && count($selected) > 12 ? ', &hellip;' : '') . ')' : '' ?></div>
-        </div>
-    </div>
-    <?php
+        <?php
+    }
 }
