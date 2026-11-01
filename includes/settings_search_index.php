@@ -83,6 +83,7 @@ function getSettingsSearchIndex(): array {
         ['label' => 'Roles',                   'keywords' => ['role', 'permission'],                                                   'url' => '/admin/roles.php',                       'visible' => true],
         ['label' => 'Redis',                   'keywords' => ['redis', 'cache', 'rate limit', 'memory', 'live updates'],              'url' => '/admin/settings_redis.php',              'visible' => true],
         ['label' => 'Identity Provider (SSO)', 'keywords' => ['sso', 'saml', 'identity provider', 'single sign-on'],                    'url' => '/admin/identity_provider.php',           'visible' => (bool) $config_client_portal_enable],
+        ['label' => 'Remote MCP (AI tools)',   'keywords' => ['mcp', 'ai', 'claude', 'authentik', 'oauth', 'model context protocol'],    'url' => '/admin/settings_mcp.php',                'visible' => true],
     ];
 }
 
