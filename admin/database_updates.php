@@ -8241,3 +8241,31 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.130'");
     }
+
+    if ($rivetit_db_version() == '2.6.130') {
+        // DB 2.6.131: KB v2 slice 2 - media attachment serving + interactive embeds (GitHub #7), ported from RivetIT. Versions and
+        // review dates (slice 1) already shipped. This step only adds schema: the kb_article_attachments table it depends on
+        // already exists in RivetMSP (added alongside kb_categories, above), so attachments need no new column or table here -
+        // what was missing was a client-scoped SERVE endpoint (agent/kb_media.php, client/kb_media.php), not storage. Embeds are
+        // genuinely new: kb_article_embeds, RivetIT's "interactive KB escape hatch" - a per-article row of author-supplied,
+        // never-purified HTML, served sandboxed (CSP `sandbox allow-scripts`, no allow-same-origin) through its own endpoint
+        // (agent/kb_embed.php, client/kb_embed.php) rather than inline in the article body, carried over column-for-column from
+        // RivetIT's schema (kb_article_embed_sha256/kb_article_embed_text kept for parity with that lane even though this port's
+        // own serve/author path does not populate them yet - future embed-authoring work can use them without a second migration).
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `kb_article_embeds` (
+            `kb_article_embed_id` INT(11) NOT NULL AUTO_INCREMENT,
+            `kb_article_embed_kb_article_id` INT(11) NOT NULL,
+            `kb_article_embed_name` VARCHAR(255) NOT NULL,
+            `kb_article_embed_untrusted_html` LONGTEXT DEFAULT NULL,
+            `kb_article_embed_text` MEDIUMTEXT DEFAULT NULL,
+            `kb_article_embed_sha256` CHAR(64) NOT NULL DEFAULT '',
+            `kb_article_embed_height` INT(11) NOT NULL DEFAULT 480,
+            `kb_article_embed_created_by` INT(11) NOT NULL DEFAULT 0,
+            `kb_article_embed_created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `kb_article_embed_updated_at` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`kb_article_embed_id`),
+            KEY `kb_article_embed_kb_article_id` (`kb_article_embed_kb_article_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.131'");
+    }

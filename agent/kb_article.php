@@ -65,6 +65,13 @@ $sql_attachments = mysqli_query(
     "SELECT * FROM kb_article_attachments WHERE kb_article_attachment_kb_article_id = $kb_article_id ORDER BY kb_article_attachment_created_at ASC"
 );
 
+// Roadmap #7 ("KB v2" slice 2): interactive embeds, ported from RivetIT. Table is created by DB update 2.6.131;
+// mysqli_query() returning false (table truly absent on an un-migrated install) must not fatal the page.
+$sql_embeds = mysqli_query(
+    $mysqli,
+    "SELECT * FROM kb_article_embeds WHERE kb_article_embed_kb_article_id = $kb_article_id ORDER BY kb_article_embed_created_at ASC"
+) ?: null;
+
 ?>
 
 <div class="alga-theme">
@@ -175,10 +182,10 @@ $sql_attachments = mysqli_query(
                                 <i class="fas fa-fw fa-ellipsis-v"></i>
                             </button>
                             <div class="dropdown-menu">
-                                <a target="_blank" class="dropdown-item" href="../uploads/kb/<?php echo $kb_article_id; ?>/<?php echo $att_ref; ?>">
+                                <a target="_blank" class="dropdown-item" href="kb_media.php?att=<?php echo $att_id; ?>">
                                     <i class="fas fa-fw fa-eye me-2"></i>View
                                 </a>
-                                <a class="dropdown-item" download="<?php echo $att_name; ?>" href="../uploads/kb/<?php echo $kb_article_id; ?>/<?php echo $att_ref; ?>">
+                                <a class="dropdown-item" href="kb_media.php?att=<?php echo $att_id; ?>&download=1">
                                     <i class="fas fa-fw fa-download me-2"></i>Download
                                 </a>
                                 <div class="dropdown-divider"></div>
@@ -194,6 +201,43 @@ $sql_attachments = mysqli_query(
                 <div class="card-footer">
                     <button type="button" class="btn btn-secondary btn-block ajax-modal" data-modal-url="modals/kb_article/kb_article_attachment_add.php?kb_article_id=<?php echo $kb_article_id; ?>">
                         <i class="fas fa-fw fa-upload me-2"></i>Upload Attachment
+                    </button>
+                </div>
+            </div>
+
+            <div class="card card-sidebar mt-3 d-print-none">
+                <div class="card-header">
+                    <h5 class="card-title mb-0"><i class="fas fa-fw fa-puzzle-piece me-2"></i>Embeds</h5>
+                </div>
+                <?php if ($sql_embeds && mysqli_num_rows($sql_embeds) > 0) { ?>
+                <ul class="list-group list-group-flush">
+                    <?php while ($embed = mysqli_fetch_assoc($sql_embeds)) {
+                        $embed_id = intval($embed['kb_article_embed_id']);
+                        $embed_name = nullable_htmlentities($embed['kb_article_embed_name']);
+                    ?>
+                    <li class="list-group-item d-flex align-items-center justify-content-between">
+                        <span class="text-truncate me-2"><i class="fas fa-fw fa-cube me-1"></i><?php echo $embed_name; ?></span>
+                        <div class="dropdown dropleft text-center">
+                            <button class="btn btn-secondary btn-sm" type="button" data-bs-toggle="dropdown" data-boundary="window">
+                                <i class="fas fa-fw fa-ellipsis-v"></i>
+                            </button>
+                            <div class="dropdown-menu">
+                                <a target="_blank" class="dropdown-item" href="kb_embed.php?id=<?php echo $embed_id; ?>">
+                                    <i class="fas fa-fw fa-eye me-2"></i>Open
+                                </a>
+                                <div class="dropdown-divider"></div>
+                                <a class="dropdown-item text-danger confirm-link" href="post.php?delete_kb_article_embed=<?php echo $embed_id; ?>&kb_article_id=<?php echo $kb_article_id; ?>&csrf_token=<?php echo $_SESSION['csrf_token']; ?>">
+                                    <i class="fas fa-fw fa-trash me-2"></i>Delete
+                                </a>
+                            </div>
+                        </div>
+                    </li>
+                    <?php } ?>
+                </ul>
+                <?php } ?>
+                <div class="card-footer">
+                    <button type="button" class="btn btn-secondary btn-block ajax-modal" data-modal-url="modals/kb_article/kb_article_embed_add.php?kb_article_id=<?php echo $kb_article_id; ?>">
+                        <i class="fas fa-fw fa-plus me-2"></i>Add Embed
                     </button>
                 </div>
             </div>

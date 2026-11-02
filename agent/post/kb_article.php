@@ -196,6 +196,94 @@ if (isset($_GET['delete_kb_article_attachment'])) {
     redirect();
 }
 
+if (isset($_POST['add_kb_article_embed'])) {
+
+    // Roadmap #7 ("KB v2" slice 2): interactive embeds, ported from RivetIT.
+    validateCSRFToken($_POST['csrf_token']);
+
+    enforceUserPermission('module_kb', 2);
+
+    $kb_article_id = intval($_POST['kb_article_id']);
+
+    $kb_article_client_id = intval(getFieldById('kb_articles', $kb_article_id, 'kb_article_client_id'));
+    if ($kb_article_client_id) {
+        enforceClientAccess($kb_article_client_id);
+    }
+
+    $embed_name = sanitizeInput($_POST['embed_name'] ?? '');
+    // Deliberately NOT sanitizeInput() / strip_tags() on the HTML field - that would delete the feature
+    // (see agent/includes/kb_embed_serve.php's header for why this column is never purified). The sandboxed
+    // CSP the serve endpoint sends is the control, not input filtering.
+    $embed_html = (string) ($_POST['embed_html'] ?? '');
+    $embed_height = intval($_POST['embed_height'] ?? 480);
+    if ($embed_height < 120 || $embed_height > 4000) {
+        $embed_height = 480;
+    }
+
+    if ($embed_name === '' || trim($embed_html) === '') {
+        flash_alert("Name and HTML are both required", 'error');
+        redirect();
+    }
+
+    // 50 MB restates agent/includes/kb_embed_serve.php's KB_EMBED_MAX_BYTES serve-side cap, so a row can never
+    // be written larger than what the serve endpoint will later refuse.
+    if (strlen($embed_html) > 52428800) {
+        flash_alert("Embed HTML is too large", 'error');
+        redirect();
+    }
+
+    $name_escaped = mysqli_real_escape_string($mysqli, $embed_name);
+    $html_escaped = mysqli_real_escape_string($mysqli, $embed_html);
+    $sha256 = hash('sha256', $embed_html);
+
+    mysqli_query(
+        $mysqli,
+        "INSERT INTO kb_article_embeds
+            SET kb_article_embed_kb_article_id = $kb_article_id,
+                kb_article_embed_name = '$name_escaped',
+                kb_article_embed_untrusted_html = '$html_escaped',
+                kb_article_embed_sha256 = '$sha256',
+                kb_article_embed_height = $embed_height,
+                kb_article_embed_created_by = $session_user_id"
+    );
+
+    logAction("Knowledge Base", "Edit", "$session_name added embed $embed_name to KB article", 0, $kb_article_id);
+    flash_alert("Embed added", 'success');
+
+    redirect();
+}
+
+if (isset($_GET['delete_kb_article_embed'])) {
+
+    validateCSRFToken($_GET['csrf_token']);
+
+    enforceUserPermission('module_kb', 2);
+
+    $embed_id = intval($_GET['delete_kb_article_embed']);
+    $kb_article_id = intval($_GET['kb_article_id']);
+
+    $kb_article_client_id = intval(getFieldById('kb_articles', $kb_article_id, 'kb_article_client_id'));
+    if ($kb_article_client_id) {
+        enforceClientAccess($kb_article_client_id);
+    }
+
+    $embed = mysqli_fetch_assoc(mysqli_query(
+        $mysqli,
+        "SELECT kb_article_embed_name FROM kb_article_embeds
+         WHERE kb_article_embed_id = $embed_id AND kb_article_embed_kb_article_id = $kb_article_id LIMIT 1"
+    ));
+
+    if ($embed) {
+        mysqli_query($mysqli, "DELETE FROM kb_article_embeds WHERE kb_article_embed_id = $embed_id");
+
+        $name = sanitizeInput($embed['kb_article_embed_name']);
+        logAction("Knowledge Base", "Edit", "$session_name deleted embed $name from KB article", 0, $kb_article_id);
+        flash_alert("Embed deleted", 'error');
+    }
+
+    redirect();
+}
+
 if (isset($_GET['delete_kb_article'])) {
 
     validateCSRFToken($_GET['csrf_token']);
