@@ -28,6 +28,7 @@ final class JobCatalog
             'domain_refresher.php' => ['label' => 'Domain refresh', 'description' => 'Looks up domain expiry and DNS details and updates the records.', 'run_now' => true, 'note' => ''],
             'certificate_refresher.php' => ['label' => 'Certificate refresh', 'description' => 'Checks SSL certificates and updates their expiry dates.', 'run_now' => true, 'note' => ''],
             'metrics_rollup.php' => ['label' => 'Device metrics roll-up', 'description' => 'Summarizes and prunes old device metrics.', 'run_now' => true, 'note' => ''],
+            'mcp_actions_expire.php' => ['label' => 'MCP proposal expiry', 'description' => 'Marks overdue MCP write proposals as expired. Changes no ticket or other business data.', 'run_now' => true, 'note' => ''],
             'agent_build_check.php' => ['label' => 'Agent build follower', 'description' => 'Follows a build started from Agent updates and publishes it when asked to. Does nothing when no build is running.', 'run_now' => false, 'note' => ''],
             'restore_drill.php' => ['label' => 'Restore drill', 'description' => 'Restores the newest backup into a scratch database, verifies it, drops it and records the result and restore time.', 'run_now' => true, 'note' => 'Does nothing until the drill is enabled (Admin > Backup > Restore drill); never touches live data.'],
             'integration_worker.php' => ['label' => 'Integration job worker', 'description' => 'Processes queued integration jobs.', 'run_now' => true, 'note' => ''],
