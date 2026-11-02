@@ -2489,6 +2489,24 @@ CREATE TABLE `kb_article_attachments` (
   KEY `kb_article_attachment_kb_article_id` (`kb_article_attachment_kb_article_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `kb_article_embeds`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `kb_article_embeds` (
+  `kb_article_embed_id` int(11) NOT NULL AUTO_INCREMENT,
+  `kb_article_embed_kb_article_id` int(11) NOT NULL,
+  `kb_article_embed_name` varchar(255) NOT NULL,
+  `kb_article_embed_untrusted_html` longtext DEFAULT NULL,
+  `kb_article_embed_text` mediumtext DEFAULT NULL,
+  `kb_article_embed_sha256` char(64) NOT NULL DEFAULT '',
+  `kb_article_embed_height` int(11) NOT NULL DEFAULT 480,
+  `kb_article_embed_created_by` int(11) NOT NULL DEFAULT 0,
+  `kb_article_embed_created_at` datetime DEFAULT current_timestamp(),
+  `kb_article_embed_updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
+  PRIMARY KEY (`kb_article_embed_id`),
+  KEY `kb_article_embed_kb_article_id` (`kb_article_embed_kb_article_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `kb_articles`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;

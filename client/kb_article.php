@@ -54,6 +54,18 @@ if ($row) {
     exit();
 }
 
+// Roadmap #7 ("KB v2" slice 2): media attachments + embeds, ported from RivetIT. Read-only on the portal - the
+// article row above already proved this session may read $kb_article_id, which is the same scope
+// client/kb_media.php and client/kb_embed.php re-derive independently, per request, on their own.
+$sql_attachments = mysqli_query(
+    $mysqli,
+    "SELECT * FROM kb_article_attachments WHERE kb_article_attachment_kb_article_id = $kb_article_id ORDER BY kb_article_attachment_created_at ASC"
+);
+$sql_embeds = mysqli_query(
+    $mysqli,
+    "SELECT * FROM kb_article_embeds WHERE kb_article_embed_kb_article_id = $kb_article_id ORDER BY kb_article_embed_created_at ASC"
+) ?: null;
+
 ?>
 
 <ol class="breadcrumb d-print-none">
@@ -79,6 +91,50 @@ if ($row) {
         <?php echo $kb_article_content; ?>
     </div>
 </div>
+
+<?php if ($sql_attachments && mysqli_num_rows($sql_attachments) > 0) { ?>
+<div class="card kb-reader-card mt-3 d-print-none">
+    <div class="card-header">
+        <h5 class="card-title mb-0"><i class="fas fa-fw fa-paperclip me-2"></i>Attachments</h5>
+    </div>
+    <ul class="list-group list-group-flush">
+        <?php while ($att = mysqli_fetch_assoc($sql_attachments)) {
+            $att_id = intval($att['kb_article_attachment_id']);
+            $att_name = nullable_htmlentities($att['kb_article_attachment_name']);
+        ?>
+        <li class="list-group-item d-flex align-items-center justify-content-between">
+            <span class="text-truncate me-2"><i class="fas fa-fw fa-file me-1"></i><?php echo $att_name; ?></span>
+            <span>
+                <a target="_blank" class="btn btn-sm btn-secondary" href="kb_media.php?att=<?php echo $att_id; ?>"><i class="fas fa-fw fa-eye"></i></a>
+                <a class="btn btn-sm btn-secondary" href="kb_media.php?att=<?php echo $att_id; ?>&download=1"><i class="fas fa-fw fa-download"></i></a>
+            </span>
+        </li>
+        <?php } ?>
+    </ul>
+</div>
+<?php } ?>
+
+<?php if ($sql_embeds && mysqli_num_rows($sql_embeds) > 0) { ?>
+<div class="card kb-reader-card mt-3 d-print-none">
+    <div class="card-header">
+        <h5 class="card-title mb-0"><i class="fas fa-fw fa-puzzle-piece me-2"></i>Embeds</h5>
+    </div>
+    <div class="card-body">
+        <?php while ($embed = mysqli_fetch_assoc($sql_embeds)) {
+            $embed_id = intval($embed['kb_article_embed_id']);
+            $embed_name = nullable_htmlentities($embed['kb_article_embed_name']);
+            $embed_height = intval($embed['kb_article_embed_height'] ?? 480);
+            if ($embed_height < 120 || $embed_height > 4000) {
+                $embed_height = 480;
+            }
+        ?>
+        <p class="text-secondary small mb-1"><?php echo $embed_name; ?></p>
+        <iframe src="kb_embed.php?id=<?php echo $embed_id; ?>" sandbox="allow-scripts" referrerpolicy="no-referrer" loading="lazy"
+                style="width:100%;height:<?php echo $embed_height; ?>px;border:0;" class="mb-3"></iframe>
+        <?php } ?>
+    </div>
+</div>
+<?php } ?>
 
 <?php
 require_once "includes/footer.php";
