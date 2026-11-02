@@ -50,7 +50,7 @@ $csrf = $_SESSION['csrf_token'];
         <span class="badge bg-<?= $mcp_state[1] ?> fs-6"><?= $mcp_state[0] ?></span>
     </div>
     <div class="card-body">
-        <p class="text-muted mb-3">Lets AI tools such as Claude read <?= htmlspecialchars(defined('APP_NAME') ? APP_NAME : 'RivetMSP') ?> (tickets, assets, contacts, knowledge base) as one of your agents, with that agent's own permissions. It is read-only. People sign in either with <?= htmlspecialchars(defined('APP_NAME') ? APP_NAME : 'RivetMSP') ?> itself (built-in sign-in, no other service needed) or through your own identity provider, for example Authentik.</p>
+        <p class="text-muted mb-3">Lets AI tools such as Claude read <?= htmlspecialchars(defined('APP_NAME') ? APP_NAME : 'RivetMSP') ?> (tickets, assets, contacts, knowledge base) as one of your agents, with that agent's own permissions. It is read-only unless you turn on write actions below, and even then every change waits for a technician to approve it. People sign in either with <?= htmlspecialchars(defined('APP_NAME') ? APP_NAME : 'RivetMSP') ?> itself (built-in sign-in, no other service needed) or through your own identity provider, for example Authentik.</p>
 
         <?php if (!$mcp['schema_ready'] || !$tables_ready || !$oauth['schema_ready']) { ?>
             <div class="alert alert-warning mb-0">Run the database update first (Administration &rarr; Updates), then reload this page.</div>
@@ -128,6 +128,46 @@ $csrf = $_SESSION['csrf_token'];
             <input type="text" class="form-control" id="mcp_as_url" value="<?= nullable_htmlentities($as_metadata_url) ?>" readonly>
             <button class="btn btn-outline-secondary js-copy-text" type="button" data-copy-target="mcp_as_url">Copy</button>
         </div>
+        <?php } ?>
+    </div>
+</div>
+
+<?php
+$write_ready = \RivetMSP\Mcp\WriteConfig::tableReady($mysqli);
+$write_on = $write_ready && \RivetMSP\Mcp\WriteConfig::enabled($mysqli);
+$write_self = \RivetMSP\Mcp\WriteConfig::selfApprove($mysqli);
+$write_hours = \RivetMSP\Mcp\WriteConfig::expiryHours($mysqli);
+$write_pending = $write_ready ? (new \RivetMSP\Mcp\PendingActions($mysqli))->pendingCount((int) $session_user_id) : 0;
+?>
+<div class="card mb-3" id="write-actions">
+    <div class="card-header py-3 d-flex align-items-center justify-content-between">
+        <h4 class="card-title mb-0"><i class="fas fa-fw fa-user-check me-2"></i>Write actions (approval required)</h4>
+        <span class="badge bg-<?= $write_on ? 'success' : 'secondary' ?>"><?= $write_on ? 'On' : 'Off' ?></span>
+    </div>
+    <div class="card-body">
+        <p class="text-muted">Lets an MCP app <em>propose</em> a small set of ticket changes: a reply or internal note, a status / priority / assignee change, or a new ticket. A proposal never changes anything by itself. It waits on the <a href="/agent/mcp_actions.php">AI actions</a> page until a technician with write access to tickets and to that client approves it; approving re-checks that technician's own permissions and client access. Nothing here touches credentials, invoices, billing or users, and nothing is deleted. An app must also ask for the separate <code>mcp:write</code> permission when a person connects it; connecting for read-only access never includes it.</p>
+        <?php if (!$write_ready) { ?>
+            <div class="alert alert-warning mb-0">Run the database update first (Administration &rarr; Updates), then reload this page.</div>
+        <?php } else { ?>
+        <form action="post.php" method="post" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
+            <div class="form-check form-switch mb-2">
+                <input type="checkbox" class="form-check-input" id="mcp_write_enabled" name="mcp_write_enabled" value="1" <?= $write_on ? 'checked' : '' ?>>
+                <label class="form-check-label" for="mcp_write_enabled">Let MCP apps propose changes (off by default)</label>
+            </div>
+            <div class="form-check form-switch mb-3">
+                <input type="checkbox" class="form-check-input" id="mcp_write_self_approve" name="mcp_write_self_approve" value="1" <?= $write_self ? 'checked' : '' ?>>
+                <label class="form-check-label" for="mcp_write_self_approve">Allow the person who queued a proposal to approve it themselves (off by default; with it off, a second technician must approve)</label>
+            </div>
+            <div class="mb-3" style="max-width:16rem">
+                <label for="mcp_write_expiry_hours" class="form-label">Proposals expire after (hours)</label>
+                <input type="number" class="form-control" id="mcp_write_expiry_hours" name="mcp_write_expiry_hours" min="1" max="<?= \RivetMSP\Mcp\WriteConfig::MAX_EXPIRY_HOURS ?>" value="<?= intval($write_hours) ?>">
+            </div>
+            <button type="submit" name="save_mcp_write_settings" class="btn btn-primary"><i class="fa fa-check me-2"></i>Save</button>
+            <?php if ($write_on) { ?>
+                <a href="/agent/mcp_actions.php" class="btn btn-outline-secondary ms-2">Open the approvals page<?= $write_pending ? ' (' . intval($write_pending) . ' waiting)' : '' ?></a>
+            <?php } ?>
+        </form>
         <?php } ?>
     </div>
 </div>

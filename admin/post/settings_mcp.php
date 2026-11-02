@@ -100,6 +100,28 @@ if (isset($_POST['save_mcp_oauth_settings'])) {
     redirect();
 }
 
+if (isset($_POST['save_mcp_write_settings'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    if (!\RivetMSP\Mcp\WriteConfig::tableReady($mysqli) || !OAuthConfig::load($mysqli)['schema_ready']) {
+        flash_alert('Run the database update first.', 'error');
+        redirect();
+    }
+    $write_enabled = isset($_POST['mcp_write_enabled']) ? '1' : '0';
+    $write_self = isset($_POST['mcp_write_self_approve']) ? '1' : '0';
+    $write_hours = intval($_POST['mcp_write_expiry_hours'] ?? 0);
+    if ($write_hours < 1 || $write_hours > \RivetMSP\Mcp\WriteConfig::MAX_EXPIRY_HOURS) {
+        flash_alert('Enter a number of hours between 1 and ' . \RivetMSP\Mcp\WriteConfig::MAX_EXPIRY_HOURS . '.', 'error');
+        redirect();
+    }
+    OAuthConfig::set($mysqli, 'write_enabled', $write_enabled);
+    OAuthConfig::set($mysqli, 'write_self_approve', $write_self);
+    OAuthConfig::set($mysqli, 'write_expiry_hours', (string) $write_hours);
+    logAction('Settings', 'Edit', "$session_name edited Remote MCP write actions (" . ($write_enabled === '1' ? 'on' : 'off') . ', self-approval ' . ($write_self === '1' ? 'on' : 'off') . ", expiry {$write_hours}h)");
+    $mcpAudit->log('mcp.write_settings_changed', (int) $session_user_id, 'settings', 'mcp_write', 'update', 'Remote MCP write action settings changed', ['enabled' => $write_enabled === '1', 'self_approve' => $write_self === '1', 'expiry_hours' => $write_hours]);
+    flash_alert('Write action settings saved.');
+    redirect();
+}
+
 if (isset($_POST['trust_claude_cimd']) || isset($_POST['save_mcp_cimd_mode']) || isset($_POST['add_mcp_cimd_host']) || isset($_POST['remove_mcp_cimd_host'])) {
     validateCSRFToken($_POST['csrf_token']);
     if (!OAuthConfig::load($mysqli)['schema_ready']) {

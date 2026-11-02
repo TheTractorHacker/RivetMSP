@@ -4,13 +4,8 @@ declare(strict_types=1);
 
 namespace RivetMSP\Mcp;
 
-use RivetCore\Audit\AuditService;
 use RivetCore\Mcp\NotFoundException;
 use RivetCore\Mcp\ToolPipeline;
-use RivetCore\Redis\RateLimiter;
-use RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter;
-use RivetMSP\Core\Adapter\Http\ServerRequestContext;
-use RivetMSP\Core\Adapter\Redis\GlobalRedisClientProvider;
 
 /** Raised inside a tool body when the requested record does not exist or is outside the caller's scope. */
 final class McpNotFound extends NotFoundException
@@ -31,15 +26,11 @@ final class McpNotFound extends NotFoundException
  *      to it.
  * No tool writes, and none ever selects a secret (contact_pin, credential vault rows, PINs are never touched).
  *
- * This is the write-tool extension point for a later PR: add new #[-free] tool methods here, each wrapped in
- * run(), using pipeline()->run() for the audit/rate-limit/permission envelope. A write tool additionally needs
- * its own CSRF-equivalent idempotency story (OAuth bearer calls have no session CSRF token) - see the project
- * tracking issue before adding one blindly.
+ * Write tools do NOT live here: see WriteTools (propose-then-approve; nothing in this class ever mutates). Both
+ * share McpPipeline (the single choke point) and McpAccess (permission + client scope).
  */
 final class ReadTools
 {
-    private const RATE_LIMIT = 60;   // calls per user per window
-    private const RATE_WINDOW = 60;  // seconds
     private const MAX_ROWS = 25;
 
     private ?ToolPipeline $pipeline = null;
@@ -122,15 +113,7 @@ final class ReadTools
     /** The shared pipeline (rate limit -> permission -> scoped read -> audit -> envelope) lives in RivetCore. */
     private function pipeline(): ToolPipeline
     {
-        $request = new ServerRequestContext();
-
-        return $this->pipeline ??= new ToolPipeline(
-            new RateLimiter(new GlobalRedisClientProvider(), 'rivetmsp:'),
-            new AuditService(new MysqliDatabaseAdapter($this->db), $request),
-            $request,
-            self::RATE_LIMIT,
-            self::RATE_WINDOW,
-        );
+        return $this->pipeline ??= McpPipeline::make($this->db);
     }
 
     /** @param callable(int):bool $allow @param callable(int):mixed $body */
@@ -141,44 +124,26 @@ final class ReadTools
 
     /* ---------------------------------------------------------------- permissions and scope */
 
-    /** Mirrors lookupUserPermission()/enforceUserPermission(), but for an explicit user id (no $_SESSION). Fails closed to 0. */
     private function modulePermission(int $userId, string $module): int
     {
-        $u = $this->rows('SELECT u.user_role_id, r.role_is_admin
-            FROM users u LEFT JOIN user_roles r ON r.role_id = u.user_role_id
-            WHERE u.user_id = ? AND u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL', 'i', [$userId]);
-        if (!$u) {
-            return 0;
-        }
-        if ((int) ($u[0]['role_is_admin'] ?? 0) === 1) {
-            return 3;
-        }
-        $roleId = (int) ($u[0]['user_role_id'] ?? 0);
-        if ($roleId <= 0) {
-            return 0;
-        }
-        $lvl = $this->rows('SELECT p.user_role_permission_level AS lvl FROM user_role_permissions p
-            JOIN modules m ON m.module_id = p.module_id WHERE p.user_role_id = ? AND m.module_name = ?', 'is', [$roleId, $module]);
-
-        return (int) ($lvl[0]['lvl'] ?? 0);
+        return McpAccess::modulePermission($this->db, $userId, $module);
     }
 
     private function can(int $userId, string $module, int $level = 1): bool
     {
-        return $this->modulePermission($userId, $module) >= $level;
+        return McpAccess::can($this->db, $userId, $module, $level);
     }
 
-    /** Same client restriction the signed-in agent's own pages apply: no rows in user_client_permissions means all clients. */
+    /** Same client restriction the signed-in agent's own pages apply (see McpAccess). */
     private static function clientScope(string $clientColumn): string
     {
-        return "(NOT EXISTS (SELECT 1 FROM user_client_permissions ucp WHERE ucp.user_id = ?)
-                 OR EXISTS (SELECT 1 FROM user_client_permissions ucp WHERE ucp.user_id = ? AND ucp.client_id = $clientColumn))";
+        return McpAccess::clientScope($clientColumn);
     }
 
     /** A client that opted out of AI access (clients.client_ai_opt_out) is excluded from every tool's results, for every caller. */
     private static function aiOptOutExcluded(string $clientAlias = 'c'): string
     {
-        return "IFNULL($clientAlias.client_ai_opt_out, 0) = 0";
+        return McpAccess::aiOptOutExcluded($clientAlias);
     }
 
     private static function like(string $q): string

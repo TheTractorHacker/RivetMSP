@@ -18,6 +18,8 @@ use RivetMSP\Mcp\McpConfig;
 final class OAuthConfig
 {
     public const SCOPE = 'mcp:read';
+    /** Explicit opt-in, only offered while the write feature is on (WriteConfig); mcp:read never implies it. */
+    public const SCOPE_WRITE = 'mcp:write';
     public const ACCESS_TTL = 900;            // seconds; access tokens live 15 minutes at most
     public const CODE_TTL = 60;               // seconds; authorization codes
     public const REFRESH_TTL = 2592000;       // seconds; 30 days, renewed by every rotation

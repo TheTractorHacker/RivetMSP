@@ -5,7 +5,8 @@
  * the OAuth administration side (src/Mcp/OAuth/*, admin/settings_mcp.php) was built for: the protected-resource
  * metadata document and the MCP endpoint itself.
  *
- * v1 scope / what is intentionally NOT here yet (see GitHub issue #13's follow-up for write tools):
+ * v1 scope / what is intentionally NOT here yet. Write tools exist (GitHub issue #28) but only as PROPOSALS a technician must approve
+ * (src/Mcp/WriteTools.php), off by default, and only for tokens granted mcp:write.
  *  - Only the built-in authorization server (RivetMSP as its own OAuth 2.1 AS, "Built-in sign-in" on
  *    settings_mcp.php) is accepted. An external identity provider's JWTs (the Issuer URL / Audience fields on
  *    the same page) are NOT validated by this file - that needs a JWKS-fetching JWT validator and discovery
@@ -55,8 +56,11 @@ require_once $DOCUMENT_ROOT . '/vendor/autoload.php';
 
 use RivetMSP\Mcp\BuiltinTokenAuth;
 use RivetMSP\Mcp\McpConfig;
+use RivetMSP\Mcp\McpWriteActions;
 use RivetMSP\Mcp\OAuth\OAuthConfig;
 use RivetMSP\Mcp\ReadTools;
+use RivetMSP\Mcp\WriteConfig;
+use RivetMSP\Mcp\WriteTools;
 
 // Fail closed: the module switch (Administration > Settings > Remote MCP) must be on and
 // RIVETMSP_MCP_ENABLED must not be 0.
@@ -87,7 +91,7 @@ if ($path === '/.well-known/oauth-protected-resource') {
     echo json_encode([
         'resource' => $resource,
         'authorization_servers' => [OAuthConfig::issuer($config_base_url)],
-        'scopes_supported' => [OAuthConfig::SCOPE],
+        'scopes_supported' => WriteConfig::enabled($mysqli) ? [OAuthConfig::SCOPE, OAuthConfig::SCOPE_WRITE] : [OAuthConfig::SCOPE],
         'bearer_methods_supported' => ['header'],
     ], JSON_UNESCAPED_SLASHES);
     exit;
@@ -110,17 +114,15 @@ $_SERVER['RIVET_REQUEST_ID'] = $request_id;
 header('X-Request-ID: ' . $request_id);
 header('Content-Type: application/json');
 
-/** Bearer -> resolved RivetMSP agent user id, or null (the caller is told once, then every tool denies with the same envelope). */
-function mcp_authenticated_user_id(\mysqli $mysqli, string $resource): ?int
+/** Bearer -> resolved identity {user_id, scopes, client_id}, or null (the caller is told once, then every tool denies with the same envelope). */
+function mcp_authenticated(\mysqli $mysqli, string $resource): ?array
 {
     $headers = function_exists('getallheaders') ? getallheaders() : [];
     $auth = $headers['Authorization'] ?? ($_SERVER['HTTP_AUTHORIZATION'] ?? '');
     if (!is_string($auth) || !preg_match('/^Bearer\s+(.+)$/i', trim($auth), $m)) {
         return null;
     }
-    $result = (new BuiltinTokenAuth($mysqli, $resource))->validate(trim($m[1]));
-
-    return $result['user_id'] ?? null;
+    return (new BuiltinTokenAuth($mysqli, $resource))->validate(trim($m[1]));
 }
 
 function mcp_json_error(mixed $id, int $code, string $message): never
@@ -179,7 +181,14 @@ switch ($method) {
             http_response_code(202);
             exit;
         }
-        echo json_encode(['jsonrpc' => '2.0', 'id' => $id, 'result' => ['tools' => ReadTools::definitions()]], JSON_UNESCAPED_SLASHES);
+        // Write tools are advertised only while the feature is on AND this bearer was granted mcp:write; a read-only token
+        // (or no token) sees the read tools alone.
+        $listed = ReadTools::definitions();
+        $who = mcp_authenticated($mysqli, $resource);
+        if ($who !== null && in_array(OAuthConfig::SCOPE_WRITE, $who['scopes'], true)) {
+            $listed = array_merge($listed, WriteTools::definitionsFor($mysqli));
+        }
+        echo json_encode(['jsonrpc' => '2.0', 'id' => $id, 'result' => ['tools' => $listed]], JSON_UNESCAPED_SLASHES);
         exit;
 
     case 'tools/call':
@@ -195,8 +204,13 @@ switch ($method) {
         // Authorization happens here, not earlier: every JSON-RPC method above (initialize, tools/list, ping)
         // is answerable without a resolved identity, but a tool call always goes through ToolPipeline with the
         // resolved user id (or null, which ToolPipeline turns into PERMISSION_DENIED) - never skipped.
-        $userId = mcp_authenticated_user_id($mysqli, $resource);
-        $envelope = (new ReadTools($mysqli))->call($name, $args, $userId);
+        $who = mcp_authenticated($mysqli, $resource);
+        $userId = $who['user_id'] ?? null;
+        // Write tools (propose-then-approve) are a separate class with their own scope + feature gate; a read tool name never
+        // reaches it and a write tool name never reaches ReadTools.
+        $envelope = McpWriteActions::isWriteTool($name)
+            ? (new WriteTools($mysqli))->call($name, $args, $userId, (string) ($who['client_id'] ?? ''), $who['scopes'] ?? [])
+            : (new ReadTools($mysqli))->call($name, $args, $userId);
         echo json_encode(['jsonrpc' => '2.0', 'id' => $id, 'result' => [
             'content' => [['type' => 'text', 'text' => json_encode($envelope['data'] ?? $envelope['errors'], JSON_UNESCAPED_SLASHES)]],
             'structuredContent' => $envelope,

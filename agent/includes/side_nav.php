@@ -14,7 +14,7 @@ $in_reports_section = (strpos($_SERVER["PHP_SELF"], '/agent/reports/') !== false
 $section_pages = [
     'organization'  => ['clients.php', 'compliance_clients.php', 'workflow_runs.php', 'workflow_run.php'],
     'crm'           => ['pipeline.php', 'opportunities.php', 'campaigns.php', 'segments.php'],
-    'service_desk'  => ['tickets.php', 'ticket.php', 'recurring_tickets.php', 'service_catalog.php', 'csat.php', 'mail_requests.php', 'problems.php', 'problem_details.php', 'changes.php', 'change_details.php'],
+    'service_desk'  => ['tickets.php', 'ticket.php', 'recurring_tickets.php', 'service_catalog.php', 'csat.php', 'mail_requests.php', 'mcp_actions.php', 'problems.php', 'problem_details.php', 'changes.php', 'change_details.php'],
     'work'          => ['projects.php', 'project_details.php', 'calendar.php'],
     'billing'       => ['quotes.php', 'quote.php', 'invoices.php', 'invoice.php', 'recurring_invoices.php', 'recurring_invoice.php', 'revenues.php', 'products.php'],
     'finance'       => ['payments.php', 'vendors.php', 'expenses.php', 'recurring_expenses.php', 'accounts.php', 'transfers.php', 'trips.php'],
@@ -180,6 +180,15 @@ foreach ($section_pages as $key => $pages) {
                                 <span class="ms-auto badge text-light" data-bs-toggle="tooltip" title="Unknown-sender emails awaiting review"><?php echo $num_mail_requests; ?></span>
                             <?php } ?>
                         </a>
+                        <?php if (\RivetMSP\Mcp\WriteConfig::enabled($mysqli) && lookupUserPermission('module_support') >= 2) { $num_mcp_actions = (new \RivetMSP\Mcp\PendingActions($mysqli))->pendingCount((int) $session_user_id); ?>
+                        <a href="/agent/mcp_actions.php" class="dropdown-item<?php if ($current_page == "mcp_actions.php") { echo " active"; } ?>">
+                            <span class="dropdown-item-icon"><i class="fas fa-user-check"></i></span>
+                            <span class="text-truncate">AI actions</span>
+                            <?php if ($num_mcp_actions) { ?>
+                                <span class="ms-auto badge text-light" data-bs-toggle="tooltip" title="MCP proposals awaiting approval"><?php echo $num_mcp_actions; ?></span>
+                            <?php } ?>
+                        </a>
+                        <?php } ?>
                         <?php if (\RivetMSP\Core\CoreBridge::enabled('core.itsm.enabled')) { ?>
                         <a href="/agent/problems.php" class="dropdown-item<?php if ($current_page == "problems.php" || $current_page == "problem_details.php") { echo " active"; } ?>">
                             <span class="dropdown-item-icon"><i class="fas fa-exclamation-circle"></i></span>

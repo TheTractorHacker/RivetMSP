@@ -1814,6 +1814,9 @@ require_once dirname(__DIR__) . '/cron/metrics_rollup.php';
 // Render + enqueue any report_schedules that are due.
 require_once dirname(__DIR__) . '/cron/report_scheduler.php';
 
+// Expire stale MCP write proposals (propose-then-approve, GitHub #28). Housekeeping only; changes no business data.
+require_once dirname(__DIR__) . '/cron/mcp_actions_expire.php';
+
 // Fire due CRM follow-up reminders (activity_reminder_at) to the activity owner.
 require_once dirname(__DIR__) . '/cron/crm_reminders.php';
 

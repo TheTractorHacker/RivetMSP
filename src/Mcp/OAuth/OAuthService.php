@@ -2,6 +2,8 @@
 
 namespace RivetMSP\Mcp\OAuth;
 
+use RivetMSP\Mcp\WriteConfig;
+
 /**
  * The OAuth 2.1 authorization server for Remote MCP: dynamic client registration (RFC 7591), authorization-code + PKCE
  * (S256 only), token issue with refresh-token rotation and reuse detection, revocation (RFC 7009). It is HTTP-free: the
@@ -105,15 +107,51 @@ final class OAuthService
         return mb_check_encoding($s, 'UTF-8') && !preg_match('/[\x00-\x1f\x7f]/', $s);
     }
 
-    /** @return list<string>|null the supported scopes asked for (default mcp:read), or null when none of them is supported */
-    private static function grantedScopes(?string $requested): ?array
+    /**
+     * @return list<string>|null the supported scopes asked for (default mcp:read only), or null when none of them is supported.
+     * mcp:write is an explicit opt-in: it is granted only when the client asks for it by name AND the write feature is on
+     * (otherwise it counts as an unknown scope). It is never added by default and mcp:read never implies it. A write token
+     * always carries mcp:read as well, because the resource server requires mcp:read on every token.
+     */
+    private function grantedScopes(?string $requested): ?array
     {
         $asked = $requested === null || trim($requested) === '' ? [OAuthConfig::SCOPE] : preg_split('/ +/', trim($requested));
+        $offered = [OAuthConfig::SCOPE];
+        if (WriteConfig::enabled($this->db)) {
+            $offered[] = OAuthConfig::SCOPE_WRITE;
+        }
         // offline_access is how some clients ask for a refresh token; RivetIT always issues one, so it is simply ignored.
-        $supported = array_values(array_unique(array_filter($asked, static fn ($s) => $s === OAuthConfig::SCOPE)));
-        $unknown = array_diff($asked, [OAuthConfig::SCOPE, 'offline_access']);
+        $supported = array_values(array_unique(array_filter($asked, static fn ($s) => in_array($s, $offered, true))));
+        $unknown = array_diff($asked, [OAuthConfig::SCOPE, 'offline_access'], $offered);
 
-        return $supported !== [] ? $supported : ($unknown === [] ? [OAuthConfig::SCOPE] : null);
+        if ($supported === []) {
+            return $unknown === [] ? [OAuthConfig::SCOPE] : null;
+        }
+        if (!in_array(OAuthConfig::SCOPE, $supported, true)) {
+            array_unshift($supported, OAuthConfig::SCOPE);
+        }
+
+        return $supported;
+    }
+
+    /**
+     * What the consent screen must show for a granted scope string: one entry per scope, the elevated one flagged so it can
+     * be rendered as a separate, clearly worded opt-in (never merged into the read-only wording).
+     *
+     * @return list<array{scope:string,label:string,description:string,elevated:bool}>
+     */
+    public static function consentScopes(string $scope): array
+    {
+        $out = [];
+        foreach (array_filter(explode(' ', $scope)) as $s) {
+            if ($s === OAuthConfig::SCOPE) {
+                $out[] = ['scope' => $s, 'label' => 'Read', 'description' => 'Read tickets, assets, contacts and knowledge base articles you can access.', 'elevated' => false];
+            } elseif ($s === OAuthConfig::SCOPE_WRITE) {
+                $out[] = ['scope' => $s, 'label' => 'Propose changes', 'description' => 'Propose ticket replies, status/priority/assignee changes and new tickets. Nothing changes until a technician approves each proposal.', 'elevated' => true];
+            }
+        }
+
+        return $out;
     }
 
     /* ------------------------------------------------------------------ discovery */
@@ -131,7 +169,7 @@ final class OAuthService
             'code_challenge_methods_supported' => ['S256'],
             'token_endpoint_auth_methods_supported' => ['none'],
             'revocation_endpoint_auth_methods_supported' => ['none'],
-            'scopes_supported' => [OAuthConfig::SCOPE],
+            'scopes_supported' => WriteConfig::enabled($this->db) ? [OAuthConfig::SCOPE, OAuthConfig::SCOPE_WRITE] : [OAuthConfig::SCOPE],
             'authorization_response_iss_parameter_supported' => true,
         ];
         if ($registrationEnabled) {
@@ -443,9 +481,9 @@ final class OAuthService
         if (!hash_equals($this->resource, $resource)) {
             return $fail('invalid_target', 'The resource must be ' . $this->resource . '.');
         }
-        $scopes = self::grantedScopes($v['scope'] ?? null);
+        $scopes = $this->grantedScopes($v['scope'] ?? null);
         if ($scopes === null) {
-            return $fail('invalid_scope', ('The only scope ' . (defined('APP_NAME') ? APP_NAME : 'RivetMSP') . ' offers is ') . OAuthConfig::SCOPE . '.');
+            return $fail('invalid_scope', ('The scopes ' . (defined('APP_NAME') ? APP_NAME : 'RivetMSP') . ' offers are ') . implode(', ', WriteConfig::enabled($this->db) ? [OAuthConfig::SCOPE, OAuthConfig::SCOPE_WRITE] : [OAuthConfig::SCOPE]) . '.');
         }
 
         return ['ok' => true, 'client' => $client, 'redirect_uri' => $redirect, 'scope' => implode(' ', $scopes),

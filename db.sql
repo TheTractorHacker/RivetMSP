@@ -2877,6 +2877,34 @@ CREATE TABLE `mcp_oauth_tokens` (
   KEY `idx_mcp_oauth_tokens_expires` (`expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `mcp_pending_actions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `mcp_pending_actions` (
+  `action_id` int(11) NOT NULL AUTO_INCREMENT,
+  `requested_by` int(11) NOT NULL,
+  `oauth_client_id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+  `tool` varchar(60) NOT NULL,
+  `args_json` text NOT NULL,
+  `args_hash` char(64) NOT NULL,
+  `target_client_id` int(11) NOT NULL DEFAULT 0,
+  `target_ticket_id` int(11) DEFAULT NULL,
+  `status` enum('pending','approved','rejected','expired','executed','failed') NOT NULL DEFAULT 'pending',
+  `idempotency_key` char(64) NOT NULL,
+  `decided_by` int(11) DEFAULT NULL,
+  `decided_at` datetime DEFAULT NULL,
+  `executed_at` datetime DEFAULT NULL,
+  `result_json` text DEFAULT NULL,
+  `result_message` varchar(500) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `expires_at` datetime NOT NULL,
+  PRIMARY KEY (`action_id`),
+  UNIQUE KEY `uniq_mcp_pending_idempotency` (`idempotency_key`),
+  KEY `idx_mcp_pending_status_expires` (`status`,`expires_at`),
+  KEY `idx_mcp_pending_requester` (`requested_by`,`status`),
+  KEY `idx_mcp_pending_client` (`target_client_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `mcp_unlinked_identities`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
