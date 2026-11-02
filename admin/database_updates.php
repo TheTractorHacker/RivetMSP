@@ -8241,3 +8241,59 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.130'");
     }
+
+    if ($rivetit_db_version() == '2.6.130') {
+        // DB 2.6.131: Intune device sync, slice 2 of GitHub roadmap #10 (slice 1 was the per-client Entra/Intune tenant
+        // credential storage already shipped: microsoft_integrations with a UNIQUE client_id, agent/intune_settings.php).
+        // This step adds the two tables the sync engine itself needs, ported from RivetIT's single-global-tenant
+        // src/Integrations/Microsoft/* (asset_intune_links, intune_sync_log) - both scoped to ONE client per
+        // microsoft_integrations row here, unlike RivetIT's unscoped originals. intune_sync_log additionally carries its
+        // own client_id column (RivetIT's version has none - it only ever had one tenant) so a sync log for one client's
+        // tenant can never be confused with another's without a join back through microsoft_integrations.
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `asset_intune_links` (
+          `id` int(11) NOT NULL AUTO_INCREMENT,
+          `asset_id` int(11) NOT NULL,
+          `microsoft_integration_id` int(11) NOT NULL,
+          `intune_device_id` varchar(100) NOT NULL,
+          `azure_ad_device_id` varchar(100) DEFAULT NULL,
+          `hostname` varchar(200) DEFAULT NULL,
+          `serial_number` varchar(200) DEFAULT NULL,
+          `os_name` varchar(100) DEFAULT NULL,
+          `manufacturer` varchar(200) DEFAULT NULL,
+          `model` varchar(200) DEFAULT NULL,
+          `management_agent` varchar(100) DEFAULT NULL,
+          `compliance_state` varchar(50) DEFAULT NULL,
+          `is_encrypted` tinyint(1) DEFAULT NULL,
+          `primary_user_upn` varchar(200) DEFAULT NULL,
+          `enrolled_at` datetime DEFAULT NULL,
+          `intune_last_sync_at` datetime DEFAULT NULL,
+          `last_sync` datetime DEFAULT NULL,
+          `raw_data_json` longtext DEFAULT NULL,
+          `created_at` datetime DEFAULT current_timestamp(),
+          `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`id`),
+          UNIQUE KEY `asset_integration` (`asset_id`,`microsoft_integration_id`),
+          KEY `intune_device_id` (`intune_device_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `intune_sync_log` (
+          `id` int(11) NOT NULL AUTO_INCREMENT,
+          `microsoft_integration_id` int(11) NOT NULL,
+          `client_id` int(11) NOT NULL DEFAULT 0,
+          `started_at` datetime DEFAULT current_timestamp(),
+          `finished_at` datetime DEFAULT NULL,
+          `status` varchar(20) DEFAULT 'running',
+          `devices_created` int(11) DEFAULT 0,
+          `devices_updated` int(11) DEFAULT 0,
+          `devices_matched` int(11) DEFAULT 0,
+          `devices_skipped` int(11) DEFAULT 0,
+          `errors` text DEFAULT NULL,
+          `error_code` varchar(40) DEFAULT NULL,
+          `triggered_by` int(11) DEFAULT 0,
+          PRIMARY KEY (`id`),
+          KEY `idx_intune_sync_log_integration` (`microsoft_integration_id`,`started_at`),
+          KEY `idx_intune_sync_log_client` (`client_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.131'");
+    }
