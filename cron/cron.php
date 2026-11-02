@@ -1794,6 +1794,16 @@ require_once dirname(__DIR__) . '/cron/pax8_sync.php';
 
 /*
  * ###############################################################################################################
+ *  INTUNE DEVICE SYNC (roadmap #10 slice 2 - pull-only, PER CLIENT TENANT; gated on each client's own
+ *  microsoft_integrations.enabled + .intune_sync_enabled flags, and on its own 1h internal throttle -
+ *  see cron/intune_sync.php)
+ * ###############################################################################################################
+ */
+
+require_once dirname(__DIR__) . '/cron/intune_sync.php';
+
+/*
+ * ###############################################################################################################
  *  ANALYTICS DELIVERY (daily metrics rollup + scheduled/emailed reports)
  * ###############################################################################################################
  */
