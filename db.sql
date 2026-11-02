@@ -3565,7 +3565,9 @@ CREATE TABLE `recurring_invoice_items` (
   `item_tax_id` int(11) NOT NULL DEFAULT 0,
   `item_product_id` int(11) NOT NULL DEFAULT 0,
   `item_recurring_invoice_id` int(11) NOT NULL,
-  PRIMARY KEY (`item_id`)
+  `item_pax8_subscription_id` varchar(64) DEFAULT NULL,
+  PRIMARY KEY (`item_id`),
+  KEY `idx_item_pax8_subscription` (`item_pax8_subscription_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `recurring_invoices`;
@@ -6480,6 +6482,7 @@ CREATE TABLE `pax8_integrations` (
   `access_token_enc` text DEFAULT NULL,
   `token_expires_at` datetime DEFAULT NULL,
   `enabled` tinyint(1) NOT NULL DEFAULT 0,
+  `billing_sync_enabled` tinyint(1) NOT NULL DEFAULT 0,
   `last_synced_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
@@ -6491,10 +6494,13 @@ CREATE TABLE `pax8_client_map` (
   `pax8_company_id` varchar(64) NOT NULL,
   `pax8_company_name` varchar(255) DEFAULT NULL,
   `client_id` int(11) DEFAULT NULL,
+  `billing_sync_enabled` tinyint(1) NOT NULL DEFAULT 0,
+  `recurring_invoice_id` int(11) DEFAULT NULL,
   `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`map_id`),
   UNIQUE KEY `uniq_pax8_company` (`pax8_company_id`),
-  KEY `idx_pax8_map_client` (`client_id`)
+  KEY `idx_pax8_map_client` (`client_id`),
+  KEY `idx_pax8_map_recurring_invoice` (`recurring_invoice_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 DROP TABLE IF EXISTS `pax8_subscriptions`;
 CREATE TABLE `pax8_subscriptions` (
@@ -6513,6 +6519,19 @@ CREATE TABLE `pax8_subscriptions` (
   UNIQUE KEY `uniq_pax8_subscription` (`pax8_subscription_id`),
   KEY `idx_pax8_sub_company` (`pax8_company_id`),
   KEY `idx_pax8_sub_client` (`client_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+DROP TABLE IF EXISTS `pax8_billing_rules`;
+CREATE TABLE `pax8_billing_rules` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `product_name` varchar(255) NOT NULL,
+  `pricing_mode` enum('fixed','markup') NOT NULL DEFAULT 'markup',
+  `sell_price` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `markup_percent` decimal(6,2) NOT NULL DEFAULT 0.00,
+  `enabled` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_pax8_billing_rule_product` (`product_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `unifi_sync_log`;

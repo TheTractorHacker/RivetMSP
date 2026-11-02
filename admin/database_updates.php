@@ -8241,3 +8241,43 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.130'");
     }
+
+    if ($rivetit_db_version() == '2.6.130') {
+        // Roadmap #25 part 2: Pax8 -> client-invoice billing-back. The existing Pax8 integration (DB 2.6.113)
+        // is pull-only cost/COGS reconciliation; this is the missing other direction - actually updating a
+        // client's recurring-invoice license line items from their current Pax8 subscription counts. Off by
+        // default at two levels (global switch on pax8_integrations + a per-mapped-client switch on
+        // pax8_client_map) so turning Pax8 on at all never silently starts rewriting a live client invoice -
+        // same "opt-in, never a surprise" shape as roadmap #24's contract-pause gating.
+        //
+        // pax8_billing_rules: admin-maintained price-per-license mapping, keyed by Pax8's product_name
+        // (e.g. "Microsoft 365 Business Premium") - the only sane join key available without a Pax8 SKU/catalog
+        // pull, which this integration doesn't do. A subscription whose product has no enabled rule is simply
+        // never billed-back (logged as skipped, not guessed at).
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `pax8_billing_rules` (
+          `id` int(11) NOT NULL AUTO_INCREMENT,
+          `product_name` varchar(255) NOT NULL,
+          `pricing_mode` enum('fixed','markup') NOT NULL DEFAULT 'markup',
+          `sell_price` decimal(10,2) NOT NULL DEFAULT 0.00,
+          `markup_percent` decimal(6,2) NOT NULL DEFAULT 0.00,
+          `enabled` tinyint(1) NOT NULL DEFAULT 1,
+          `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
+          PRIMARY KEY (`id`),
+          UNIQUE KEY `uniq_pax8_billing_rule_product` (`product_name`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "ALTER TABLE `pax8_integrations` ADD COLUMN IF NOT EXISTS `billing_sync_enabled` tinyint(1) NOT NULL DEFAULT 0");
+        mysqli_query($mysqli, "ALTER TABLE `pax8_client_map`
+            ADD COLUMN IF NOT EXISTS `billing_sync_enabled` tinyint(1) NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS `recurring_invoice_id` int(11) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `pax8_client_map` ADD INDEX IF NOT EXISTS `idx_pax8_map_recurring_invoice` (`recurring_invoice_id`)");
+
+        // Tags a recurring_invoice_items row as Pax8-managed (tied to pax8_subscriptions.pax8_subscription_id) so
+        // the sync can tell its own auto-generated license lines apart from anything an admin added by hand on
+        // the same recurring invoice, and can archive a line cleanly when a license is cancelled in Pax8.
+        mysqli_query($mysqli, "ALTER TABLE `recurring_invoice_items` ADD COLUMN IF NOT EXISTS `item_pax8_subscription_id` varchar(64) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `recurring_invoice_items` ADD INDEX IF NOT EXISTS `idx_item_pax8_subscription` (`item_pax8_subscription_id`)");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.131'");
+    }
