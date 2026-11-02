@@ -145,3 +145,229 @@ if (!function_exists('pax8ReconciliationRows')) {
         return $out;
     }
 }
+
+/*
+ * Roadmap #25 part 2: Pax8 -> client-invoice billing-back.
+ *
+ * The functions above are pull-only cost/COGS reconciliation. These add the missing other
+ * direction: when a client's Pax8 subscription/license count changes, update or create the
+ * matching recurring-invoice line item(s) for that client's M365 licensing.
+ *
+ * Gated at TWO levels so turning Pax8 on (or mapping a new client) never silently starts
+ * rewriting a live client invoice - same "opt-in, never a surprise" shape as roadmap #24's
+ * contract-pause gating:
+ *   1. pax8_integrations.billing_sync_enabled - a single global switch, default off.
+ *   2. pax8_client_map.billing_sync_enabled - per mapped client, default off even once the
+ *      global switch is on. Both must be 1 or a client's sync is skipped entirely.
+ *
+ * Pricing: pax8_billing_rules maps a Pax8 product_name (e.g. "Microsoft 365 Business Premium")
+ * to either a flat sell_price per seat or a markup_percent over Pax8's unit_cost. A subscription
+ * whose product has no enabled rule is never billed-back - it is counted as skipped, not guessed
+ * at with some default price.
+ *
+ * Every line item this writes carries item_pax8_subscription_id, tying it back to the Pax8
+ * subscription that produced it. That is how re-syncing tells its own auto-managed lines apart
+ * from anything an admin added to the same recurring invoice by hand, and how a cancelled Pax8
+ * license gets its line item archived (item_archived_at) rather than silently left stale.
+ */
+
+if (!function_exists('pax8BillingRules')) {
+    /** All configured billing rules, keyed by Pax8 product_name. */
+    function pax8BillingRules(mysqli $mysqli): array {
+        $out = [];
+        $res = mysqli_query($mysqli, "SELECT * FROM pax8_billing_rules");
+        while ($res && ($row = mysqli_fetch_assoc($res))) {
+            $out[$row['product_name']] = $row;
+        }
+        return $out;
+    }
+}
+
+if (!function_exists('pax8ComputeSellPrice')) {
+    /** The per-unit price to bill the client for one subscription, given its rule + Pax8 unit_cost. */
+    function pax8ComputeSellPrice(array $rule, float $unit_cost): float {
+        if (($rule['pricing_mode'] ?? 'markup') === 'fixed') {
+            return round((float) $rule['sell_price'], 2);
+        }
+        $markup = (float) ($rule['markup_percent'] ?? 0);
+        return round($unit_cost * (1 + ($markup / 100)), 2);
+    }
+}
+
+if (!function_exists('pax8SaveBillingRule')) {
+    /** Upsert a billing rule by product_name (admin/settings_pax8.php Billing Rules tab). */
+    function pax8SaveBillingRule(mysqli $mysqli, string $product_name, string $pricing_mode, float $sell_price, float $markup_percent, bool $enabled): void {
+        $name_esc = mysqli_real_escape_string($mysqli, $product_name);
+        $mode = $pricing_mode === 'fixed' ? 'fixed' : 'markup';
+        $enabled_sql = $enabled ? 1 : 0;
+        mysqli_query($mysqli, "INSERT INTO pax8_billing_rules (product_name, pricing_mode, sell_price, markup_percent, enabled)
+            VALUES ('$name_esc', '$mode', " . floatval($sell_price) . ", " . floatval($markup_percent) . ", $enabled_sql)
+            ON DUPLICATE KEY UPDATE pricing_mode = '$mode', sell_price = " . floatval($sell_price) . ", markup_percent = " . floatval($markup_percent) . ", enabled = $enabled_sql");
+    }
+}
+
+if (!function_exists('pax8CreateBillingRecurringInvoice')) {
+    /**
+     * Create the dedicated recurring invoice a mapped client's Pax8 license line items get
+     * written to, the first time billing sync runs for that client. Mirrors the "new recurring
+     * invoice" handler in agent/post/recurring_invoice.php (same atomic next-number counter,
+     * same prefix/currency globals) so this looks exactly like one an admin created by hand.
+     */
+    function pax8CreateBillingRecurringInvoice(mysqli $mysqli, int $client_id): int {
+        global $config_recurring_invoice_prefix, $session_company_currency;
+
+        mysqli_query($mysqli, "
+            UPDATE settings
+            SET
+                config_recurring_invoice_next_number = LAST_INSERT_ID(config_recurring_invoice_next_number),
+                config_recurring_invoice_next_number = config_recurring_invoice_next_number + 1
+            WHERE company_id = 1
+        ");
+        $recurring_invoice_number = mysqli_insert_id($mysqli);
+
+        $prefix_sql   = mysqli_real_escape_string($mysqli, (string) ($config_recurring_invoice_prefix ?? ''));
+        $currency_sql = mysqli_real_escape_string($mysqli, (string) ($session_company_currency ?? 'USD'));
+
+        mysqli_query($mysqli, "INSERT INTO recurring_invoices SET
+            recurring_invoice_prefix = '$prefix_sql', recurring_invoice_number = $recurring_invoice_number,
+            recurring_invoice_scope = 'Pax8 M365 Licensing (auto-managed)', recurring_invoice_frequency = 'month',
+            recurring_invoice_next_date = CURDATE(), recurring_invoice_status = 1, recurring_invoice_amount = 0.00,
+            recurring_invoice_currency_code = '$currency_sql', recurring_invoice_category_id = 0, recurring_invoice_client_id = " . intval($client_id));
+
+        $recurring_invoice_id = (int) mysqli_insert_id($mysqli);
+        mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Active',
+            history_description = 'Recurring Invoice created automatically by Pax8 billing sync',
+            history_recurring_invoice_id = $recurring_invoice_id");
+        logAction("Pax8", "Create", "Pax8 billing sync created recurring invoice for automated M365 license billing", $client_id, $recurring_invoice_id);
+
+        return $recurring_invoice_id;
+    }
+}
+
+if (!function_exists('pax8RecalcRecurringInvoiceAmount')) {
+    /** Recompute recurring_invoice_amount from its (non-archived) items, same formula used throughout agent/post/recurring_invoice.php. */
+    function pax8RecalcRecurringInvoiceAmount(mysqli $mysqli, int $recurring_invoice_id): void {
+        $discount = (float) (mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT recurring_invoice_discount_amount FROM recurring_invoices WHERE recurring_invoice_id = $recurring_invoice_id"))['recurring_invoice_discount_amount'] ?? 0);
+        $total = (float) (mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COALESCE(SUM(item_total), 0) AS t FROM recurring_invoice_items WHERE item_recurring_invoice_id = $recurring_invoice_id AND item_archived_at IS NULL"))['t'] ?? 0);
+        $amount = round($total - $discount, 2);
+        mysqli_query($mysqli, "UPDATE recurring_invoices SET recurring_invoice_amount = $amount WHERE recurring_invoice_id = $recurring_invoice_id");
+    }
+}
+
+if (!function_exists('pax8BillingSyncForClient')) {
+    /**
+     * Sync one mapped client's active Pax8 subscriptions into their dedicated recurring
+     * invoice's line items. Returns ['skipped'=>string] if gated off, else
+     * ['added'=>int,'updated'=>int,'archived'=>int,'skipped_no_rule'=>int,'recurring_invoice_id'=>int].
+     */
+    function pax8BillingSyncForClient(mysqli $mysqli, int $client_id): array {
+        $integration = getPax8Integration($mysqli);
+        if (!$integration || intval($integration['billing_sync_enabled']) !== 1) {
+            return ['skipped' => 'global billing sync is disabled'];
+        }
+
+        $map = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM pax8_client_map WHERE client_id = " . intval($client_id) . " LIMIT 1"));
+        if (!$map || intval($map['billing_sync_enabled']) !== 1) {
+            return ['skipped' => 'billing sync is not enabled for this client'];
+        }
+
+        $rules = pax8BillingRules($mysqli);
+
+        $recurring_invoice_id = intval($map['recurring_invoice_id'] ?? 0);
+        if ($recurring_invoice_id <= 0 || !mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT recurring_invoice_id FROM recurring_invoices WHERE recurring_invoice_id = $recurring_invoice_id AND recurring_invoice_archived_at IS NULL"))) {
+            $recurring_invoice_id = pax8CreateBillingRecurringInvoice($mysqli, $client_id);
+            mysqli_query($mysqli, "UPDATE pax8_client_map SET recurring_invoice_id = $recurring_invoice_id WHERE map_id = " . intval($map['map_id']));
+        }
+
+        $added = 0; $updated = 0; $archived = 0; $skipped_no_rule = 0;
+        $seen_subscription_ids = [];
+
+        $subs_res = mysqli_query($mysqli, "SELECT * FROM pax8_subscriptions WHERE client_id = " . intval($client_id) . " AND status = 'ACTIVE'");
+        while ($subs_res && ($sub = mysqli_fetch_assoc($subs_res))) {
+            $product_name = (string) $sub['product_name'];
+            $rule = $rules[$product_name] ?? null;
+            if (!$rule || intval($rule['enabled']) !== 1) {
+                $skipped_no_rule++;
+                continue;
+            }
+
+            $sub_id_esc = mysqli_real_escape_string($mysqli, $sub['pax8_subscription_id']);
+            $seen_subscription_ids[] = $sub['pax8_subscription_id'];
+
+            $quantity = (float) $sub['quantity'];
+            $sell_price = pax8ComputeSellPrice($rule, (float) $sub['unit_cost']);
+            $subtotal = round($sell_price * $quantity, 2);
+            $name_esc = mysqli_real_escape_string($mysqli, $product_name);
+
+            $existing = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM recurring_invoice_items WHERE item_recurring_invoice_id = $recurring_invoice_id AND item_pax8_subscription_id = '$sub_id_esc' LIMIT 1"));
+
+            if (!$existing) {
+                mysqli_query($mysqli, "INSERT INTO recurring_invoice_items SET
+                    item_name = '$name_esc', item_description = 'Pax8-managed: synced from Pax8 subscription',
+                    item_quantity = $quantity, item_price = $sell_price, item_subtotal = $subtotal, item_tax = 0,
+                    item_total = $subtotal, item_order = 0, item_tax_id = 0,
+                    item_recurring_invoice_id = $recurring_invoice_id, item_pax8_subscription_id = '$sub_id_esc'");
+                $added++;
+                logAction("Pax8", "Create", "Pax8 billing sync added line item \"$product_name\" x$quantity @ " . number_format($sell_price, 2) . " to recurring invoice", $client_id, $recurring_invoice_id);
+                continue;
+            }
+
+            $was_archived = !empty($existing['item_archived_at']);
+            $qty_changed  = abs((float) $existing['item_quantity'] - $quantity) > 0.001;
+            $price_changed = abs((float) $existing['item_price'] - $sell_price) > 0.001;
+
+            if ($was_archived || $qty_changed || $price_changed) {
+                mysqli_query($mysqli, "UPDATE recurring_invoice_items SET
+                    item_name = '$name_esc', item_quantity = $quantity, item_price = $sell_price,
+                    item_subtotal = $subtotal, item_total = $subtotal, item_archived_at = NULL
+                    WHERE item_id = " . intval($existing['item_id']));
+                $updated++;
+                $old_qty = (float) $existing['item_quantity'];
+                $old_price = (float) $existing['item_price'];
+                logAction("Pax8", "Edit", "Pax8 billing sync updated line item \"$product_name\" on recurring invoice: qty $old_qty -> $quantity, price " . number_format($old_price, 2) . " -> " . number_format($sell_price, 2), $client_id, $recurring_invoice_id);
+            }
+        }
+
+        // Archive any Pax8-managed line item on this recurring invoice whose subscription is no
+        // longer active/present (cancelled in Pax8) - never delete, so the invoice history stays intact.
+        $seen_sql = empty($seen_subscription_ids) ? "''" : "'" . implode("','", array_map(fn ($id) => mysqli_real_escape_string($mysqli, $id), $seen_subscription_ids)) . "'";
+        $stale_res = mysqli_query($mysqli, "SELECT item_id, item_name FROM recurring_invoice_items
+            WHERE item_recurring_invoice_id = $recurring_invoice_id AND item_pax8_subscription_id IS NOT NULL
+              AND item_pax8_subscription_id NOT IN ($seen_sql) AND item_archived_at IS NULL");
+        while ($stale_res && ($row = mysqli_fetch_assoc($stale_res))) {
+            mysqli_query($mysqli, "UPDATE recurring_invoice_items SET item_archived_at = NOW() WHERE item_id = " . intval($row['item_id']));
+            $archived++;
+            logAction("Pax8", "Edit", "Pax8 billing sync archived line item \"{$row['item_name']}\" - no longer an active Pax8 subscription", $client_id, $recurring_invoice_id);
+        }
+
+        if ($added > 0 || $updated > 0 || $archived > 0) {
+            pax8RecalcRecurringInvoiceAmount($mysqli, $recurring_invoice_id);
+        }
+
+        return ['added' => $added, 'updated' => $updated, 'archived' => $archived, 'skipped_no_rule' => $skipped_no_rule, 'recurring_invoice_id' => $recurring_invoice_id];
+    }
+}
+
+if (!function_exists('pax8BillingSyncAll')) {
+    /** Runs pax8BillingSyncForClient() for every mapped+enabled client. Returns an aggregate summary. */
+    function pax8BillingSyncAll(mysqli $mysqli): array {
+        $totals = ['clients' => 0, 'added' => 0, 'updated' => 0, 'archived' => 0, 'skipped_no_rule' => 0];
+        $integration = getPax8Integration($mysqli);
+        if (!$integration || intval($integration['billing_sync_enabled']) !== 1) {
+            return $totals;
+        }
+        $res = mysqli_query($mysqli, "SELECT client_id FROM pax8_client_map WHERE client_id IS NOT NULL AND billing_sync_enabled = 1");
+        while ($res && ($row = mysqli_fetch_assoc($res))) {
+            $result = pax8BillingSyncForClient($mysqli, intval($row['client_id']));
+            if (isset($result['skipped'])) {
+                continue;
+            }
+            $totals['clients']++;
+            $totals['added'] += $result['added'];
+            $totals['updated'] += $result['updated'];
+            $totals['archived'] += $result['archived'];
+            $totals['skipped_no_rule'] += $result['skipped_no_rule'];
+        }
+        return $totals;
+    }
+}
