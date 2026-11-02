@@ -88,13 +88,23 @@ if ($csp_sent !== '' && stripos($csp_sent, 'script-src') === false) {
                                      of which this page has none. Safe.
    --------------------------------------------------------------------------- */
 ?>
+<?php
+// Client Portal Branding (Issue #21, MSP-wide white-label): optional overrides for the
+// display name / logo / accent shown to clients, each falling back to the existing
+// company name / logo / admin Theme accent when unset. See admin/settings_portal_branding.php
+// and includes/load_global_settings.php ($config_portal_*).
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/theme_accent.php';
+$portal_display_name = (!empty($config_portal_display_name)) ? $config_portal_display_name : ($session_company_name ?? '');
+$portal_logo = (!empty($config_portal_logo)) ? $config_portal_logo : ($session_company_logo ?? null);
+$portal_accent_hex = itflow_theme_accent_hex($config_theme ?? '', !empty($config_portal_accent) ? $config_portal_accent : ($config_theme_accent_custom ?? null));
+?>
 <html lang="en"
       data-bs-theme="<?= (!empty($config_theme_dark_default)) ? 'dark' : 'light' ?>"
       data-accent="<?= nullable_htmlentities($config_theme ?? '') ?>">
 <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title><?php echo nullable_htmlentities($session_company_name); ?> | Client Portal</title>
+    <title><?php echo nullable_htmlentities($portal_display_name); ?> | Client Portal</title>
 
     <!-- Tell the browser to be responsive to screen width -->
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -165,6 +175,46 @@ if ($csp_sent !== '' && stripos($csp_sent, 'script-src') === false) {
          --tblr-*. MUST load after the design layer so the mappings win. -->
     <link rel="stylesheet" href="/css/itflow.bind-tabler.css?v=<?= filemtime($_SERVER['DOCUMENT_ROOT'] . '/css/itflow.bind-tabler.css') ?>">
 
+    <!-- Client Portal Branding (Issue #21): portal-only accent override, emitted last so it wins over
+         the preset/custom accent baked into the stylesheets above. Only emitted when a portal accent
+         actually resolves to a hex (a custom portal color, or - as the fallback - the admin accent). -->
+    <?php if ($portal_accent_hex !== ''):
+        $par = hexdec(substr($portal_accent_hex, 1, 2));
+        $pag = hexdec(substr($portal_accent_hex, 3, 2));
+        $pab = hexdec(substr($portal_accent_hex, 5, 2));
+        $pdarken  = max(0, min(255, (int) round($par * 0.82)));
+        $pdarken_g = max(0, min(255, (int) round($pag * 0.82)));
+        $pdarken_b = max(0, min(255, (int) round($pab * 0.82)));
+        $plighten  = max(0, min(255, (int) round($par + (255 - $par) * 0.28)));
+        $plighten_g = max(0, min(255, (int) round($pag + (255 - $pag) * 0.28)));
+        $plighten_b = max(0, min(255, (int) round($pab + (255 - $pab) * 0.28)));
+    ?>
+    <style nonce="<?php echo $csp_nonce; ?>">
+    :root {
+        --color-accent: <?php echo $portal_accent_hex; ?>;
+        --color-accent-rgb: <?php echo "$par, $pag, $pab"; ?>;
+        --color-accent-hover: <?php echo sprintf('#%02X%02X%02X', $pdarken, $pdarken_g, $pdarken_b); ?>;
+        --color-accent-soft: rgba(<?php echo "$par, $pag, $pab"; ?>, .12);
+        --bs-primary: <?php echo $portal_accent_hex; ?>;
+        --bs-primary-rgb: <?php echo "$par, $pag, $pab"; ?>;
+        --bs-link-color: <?php echo $portal_accent_hex; ?>;
+        --bs-link-color-rgb: <?php echo "$par, $pag, $pab"; ?>;
+    }
+    body.dark-mode {
+        --color-accent: <?php echo $portal_accent_hex; ?>;
+        --color-accent-rgb: <?php echo "$par, $pag, $pab"; ?>;
+        --color-accent-hover: <?php echo sprintf('#%02X%02X%02X', $plighten, $plighten_g, $plighten_b); ?>;
+        --color-accent-soft: rgba(<?php echo "$par, $pag, $pab"; ?>, .22);
+    }
+    :root[data-bs-theme="dark"] {
+        --bs-primary: <?php echo $portal_accent_hex; ?>;
+        --bs-primary-rgb: <?php echo "$par, $pag, $pab"; ?>;
+        --bs-link-color: <?php echo $portal_accent_hex; ?>;
+        --bs-link-color-rgb: <?php echo "$par, $pag, $pab"; ?>;
+    }
+    </style>
+    <?php endif; ?>
+
 <script src="/js/rivet_dialog.js"></script>
 </head>
 <?php
@@ -190,12 +240,12 @@ if ($csp_sent !== '' && stripos($csp_sent, 'script-src') === false) {
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark client-portal-nav" data-bs-theme="dark">
     <div class="container">
         <a class="navbar-brand d-flex align-items-center" href="index.php">
-            <?php if ($session_company_logo) { ?>
-                <img height="28" class="me-2" src="<?php echo "/uploads/settings/$session_company_logo"; ?>" alt="">
+            <?php if ($portal_logo) { ?>
+                <img height="28" class="me-2" src="<?php echo "/uploads/settings/" . nullable_htmlentities($portal_logo); ?>" alt="">
             <?php } else { ?>
                 <img src="<?= nullable_htmlentities(APP_LOGO_MARK_URL) ?>" width="28" height="28" class="me-2" alt="<?= nullable_htmlentities(APP_NAME) ?>">
             <?php } ?>
-            <?php echo nullable_htmlentities($session_company_name); ?>
+            <?php echo nullable_htmlentities($portal_display_name); ?>
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent">
             <span class="navbar-toggler-icon"></span>
@@ -335,7 +385,7 @@ if ($csp_sent !== '' && stripos($csp_sent, 'script-src') === false) {
             <?php } ?>
             <div>
                 <h4 class="mb-0">Welcome back, <strong><?php echo stripslashes(nullable_htmlentities($session_contact_name)); ?></strong></h4>
-                <small class="text-muted"><?php echo nullable_htmlentities($session_company_name); ?> Client Portal</small>
+                <small class="text-muted"><?php echo nullable_htmlentities($portal_display_name); ?> Client Portal</small>
             </div>
         </div>
     </div>

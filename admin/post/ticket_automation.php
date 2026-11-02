@@ -36,7 +36,7 @@ if (isset($_POST['add_rule'])) {
     $actions = [];
     $action_names = $_POST['action_name'] ?? [];
     $action_vals  = $_POST['action_value'] ?? [];
-    $no_value_actions = ['notify_assignee', 'close_ticket', 'create_ticket_from_alert', 'acknowledge_alert', 'ai_triage', 'dispatch_assign'];
+    $no_value_actions = ['notify_assignee', 'close_ticket', 'create_ticket_from_alert', 'acknowledge_alert', 'ai_triage', 'ai_sentiment', 'dispatch_assign'];
     foreach ($action_names as $i => $an) {
         $an = trim((string) $an);
         if ($an === '') continue;
@@ -112,7 +112,7 @@ if (isset($_POST['edit_rule'])) {
     $actions = [];
     $action_names = $_POST['action_name'] ?? [];
     $action_vals  = $_POST['action_value'] ?? [];
-    $no_value_actions = ['notify_assignee', 'close_ticket', 'create_ticket_from_alert', 'acknowledge_alert', 'ai_triage', 'dispatch_assign'];
+    $no_value_actions = ['notify_assignee', 'close_ticket', 'create_ticket_from_alert', 'acknowledge_alert', 'ai_triage', 'ai_sentiment', 'dispatch_assign'];
     foreach ($action_names as $i => $an) {
         $an = trim((string) $an);
         if ($an === '') continue;

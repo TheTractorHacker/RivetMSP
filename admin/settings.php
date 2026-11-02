@@ -12,6 +12,7 @@ $settings_groups = [
             ['Language & region', 'Time zone, currency, and date formats.', 'settings_localization.php', 'fa-globe'],
             ['Theme', 'Colors, light and dark mode, and favicon.', 'settings_theme.php', 'fa-paint-brush'],
             ['Appearance', 'Branding and display options.', 'settings_appearance.php', 'fa-palette'],
+            ['Client Portal Branding', 'Logo, accent color, and display name shown to clients in the portal.', 'settings_portal_branding.php', 'fa-tablet-alt', (bool) $config_client_portal_enable],
             ['Defaults', 'Starting page and default accounts.', 'settings_default.php', 'fa-cogs'],
             ['Modules', 'Turn app features on or off.', 'settings_module.php', 'fa-cube'],
         ],

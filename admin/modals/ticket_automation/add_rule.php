@@ -185,6 +185,7 @@ ob_start();
         ['add_tag',                  'Add tag to ticket (tag ID)'],
         ['add_note',                 'Add automation note to ticket'],
         ['ai_triage',                'AI triage — suggest category/priority/assignee (posts a note)'],
+        ['ai_sentiment',             'AI sentiment — suggest customer tone (posts a note)'],
         ['notify_assignee',          'Notify assigned technician'],
         ['close_ticket',              'Close ticket'],
         ['add_worksheet',             'Add worksheet from template to ticket'],
@@ -242,7 +243,7 @@ ob_start();
         var isScr = action.value === 'run_script';
         var isNone = action.value === 'notify_assignee' || action.value === 'close_ticket'
                   || action.value === 'create_ticket_from_alert' || action.value === 'acknowledge_alert'
-                  || action.value === 'ai_triage' || action.value === 'dispatch_assign';
+                  || action.value === 'ai_triage' || action.value === 'ai_sentiment' || action.value === 'dispatch_assign';
 
         text.style.display = (isWS || isScr) ? 'none' : '';
         text.disabled      = (isWS || isScr);

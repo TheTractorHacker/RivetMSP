@@ -199,6 +199,7 @@ ob_start();
         ['add_tag',                  'Add tag to ticket (tag ID)'],
         ['add_note',                 'Add automation note to ticket'],
         ['ai_triage',                'AI triage — suggest category/priority/assignee (posts a note)'],
+        ['ai_sentiment',             'AI sentiment — suggest customer tone (posts a note)'],
         ['notify_assignee',          'Notify assigned technician'],
         ['close_ticket',              'Close ticket'],
         ['add_worksheet',             'Add worksheet from template to ticket'],
@@ -207,7 +208,7 @@ ob_start();
         ['acknowledge_alert',         'Acknowledge RMM alert'],
     ];
 
-    var NO_VALUE_ACTIONS = ['notify_assignee', 'close_ticket', 'create_ticket_from_alert', 'acknowledge_alert', 'ai_triage', 'dispatch_assign'];
+    var NO_VALUE_ACTIONS = ['notify_assignee', 'close_ticket', 'create_ticket_from_alert', 'acknowledge_alert', 'ai_triage', 'ai_sentiment', 'dispatch_assign'];
 
     var trigger  = document.getElementById('ruleTrigger');
     var hint     = document.getElementById('triggerHint');
