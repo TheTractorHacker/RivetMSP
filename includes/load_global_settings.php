@@ -221,6 +221,13 @@ $config_theme_accent_custom = $row['config_theme_accent_custom'] ?? null;   // #
 $config_theme_card_radius = $row['config_theme_card_radius'] ?? null;       // e.g. "14px", overrides --card-radius when set
 $config_theme_dark_default = intval($row['config_theme_dark_default'] ?? 0); // company-wide default dark mode (per-user pref can opt into dark)
 
+// Client Portal Branding (Issue #21, MSP-wide white-label): optional overrides shown only to clients in
+// the client portal. Each falls back to the existing company name/logo/admin accent when unset - see
+// admin/settings_portal_branding.php and client/includes/header.php.
+$config_portal_display_name = (string) ($row['config_portal_display_name'] ?? '');
+$config_portal_logo = (string) ($row['config_portal_logo'] ?? '');
+$config_portal_accent = (string) ($row['config_portal_accent'] ?? '');
+
 // Telemetry
 $config_telemetry = intval($row['config_telemetry']);
 

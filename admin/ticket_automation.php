@@ -76,6 +76,7 @@ $action_labels = [
     'add_tag'                  => 'Add tag',
     'add_note'                 => 'Add automation note',
     'ai_triage'                => 'AI triage (suggest)',
+    'ai_sentiment'             => 'AI sentiment (suggest)',
     'notify_assignee'          => 'Notify assigned tech',
     'close_ticket'             => 'Close ticket',
     'add_worksheet'            => 'Add worksheet from template',

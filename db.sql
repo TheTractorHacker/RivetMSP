@@ -5555,6 +5555,9 @@ CREATE TABLE `settings` (
   `config_module_enable_mcp` tinyint(1) NOT NULL DEFAULT 0,
   `config_mcp_issuer` varchar(255) NOT NULL DEFAULT '',
   `config_mcp_audience` varchar(255) NOT NULL DEFAULT '',
+  `config_portal_display_name` varchar(200) DEFAULT NULL,
+  `config_portal_logo` varchar(255) DEFAULT NULL,
+  `config_portal_accent` varchar(7) DEFAULT NULL,
   PRIMARY KEY (`company_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;

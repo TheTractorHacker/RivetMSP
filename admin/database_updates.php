@@ -8241,3 +8241,15 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.130'");
     }
+
+    if ($rivetit_db_version() == '2.6.130') {
+        // DB 2.6.131: Client Portal Branding (Issue #21) - MSP-wide white-label settings for the client
+        // portal, separate from the admin-side Theme/Appearance accent so an MSP can brand the portal
+        // its clients see without necessarily changing its own admin UI. All three are optional and
+        // fall back to the existing company name / logo / admin accent when unset.
+        mysqli_query($mysqli, "ALTER TABLE `settings`
+            ADD COLUMN IF NOT EXISTS `config_portal_display_name` varchar(200) DEFAULT NULL,
+            ADD COLUMN IF NOT EXISTS `config_portal_logo` varchar(255) DEFAULT NULL,
+            ADD COLUMN IF NOT EXISTS `config_portal_accent` varchar(7) DEFAULT NULL");
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.131'");
+    }

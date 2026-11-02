@@ -341,6 +341,91 @@ function automationExecuteAction($mysqli, array $action, array &$context, array 
             logAction("Automation", "AI Triage", "Rule '$rule_name': posted AI triage suggestion on ticket $tid", $client_id, $tid);
             return "posted AI triage suggestion on ticket #$tid";
 
+        case 'ai_sentiment':
+            // AI-assisted sentiment analysis (Issue #27). Exact same pattern/shape as 'ai_triage'
+            // above: SUGGEST MODE only - classify the customer's tone and post an internal
+            // Automation note. Never mutates the ticket. Never fatals - any AI failure
+            // (disabled, unconfigured, timeout, bad JSON) is a silent no-op so it can never
+            // block the ticket-created/reply dispatch that calls it.
+            if (!$tid) return null;
+            require_once __DIR__ . '/ai_functions.php';
+
+            // Subject + body come from the dispatch context; fall back to the row - same as ai_triage.
+            $subject = trim((string) ($context['subject'] ?? ''));
+            $body    = (string) ($context['details'] ?? '');
+            if ($subject === '' && $body === '') {
+                $trow = mysqli_fetch_assoc(mysqli_query($mysqli,
+                    "SELECT ticket_subject, ticket_details FROM tickets WHERE ticket_id = $tid LIMIT 1"));
+                if ($trow) {
+                    $subject = trim((string) $trow['ticket_subject']);
+                    $body    = (string) $trow['ticket_details'];
+                }
+            }
+            $body = trim(strip_tags($body));
+
+            $valid_sentiments = ['positive', 'neutral', 'negative', 'frustrated', 'urgent'];
+
+            $prompt = "You are an IT helpdesk sentiment analysis assistant. Read the following support "
+                . "ticket and classify the customer's tone.\n\n"
+                . "Valid sentiment labels: Positive, Neutral, Negative, Frustrated, Urgent\n\n"
+                . "Ticket subject: $subject\n"
+                . "Ticket body: $body\n\n"
+                . "Respond with STRICT JSON only, no prose and no code fences, in exactly this shape:\n"
+                . '{"sentiment": "<one of the valid labels>", "confidence": "<Low|Medium|High>", "reason": "<short reason, max 15 words>"}' . "\n"
+                . "Use the exact labels from the list above.";
+
+            $messages = [
+                ['role' => 'system', 'content' => 'You analyze IT support ticket sentiment and reply with strict JSON only.'],
+                ['role' => 'user',   'content' => $prompt],
+            ];
+
+            $ai = aiChat($messages, 'General', ['temperature' => 0, 'max_tokens' => 200, 'client_id' => $client_id]);
+            if (empty($ai['ok'])) {
+                // AI disabled/unconfigured/failed - silent no-op by design (must never block the
+                // dispatch), but log the real reason so a broken provider/model config is diagnosable.
+                if (!empty($ai['error']) && $ai['error'] !== 'AI is disabled') {
+                    error_log("Automation ai_sentiment failed for ticket $tid: " . $ai['error']);
+                }
+                return null;
+            }
+
+            // Extract the JSON object (tolerate stray code fences / prose).
+            $raw = trim((string) $ai['content']);
+            if (preg_match('/\{.*\}/s', $raw, $mjson)) {
+                $raw = $mjson[0];
+            }
+            $decoded = json_decode($raw, true);
+            if (!is_array($decoded)) {
+                return null;
+            }
+
+            $sentiment_in = strtolower(trim((string) ($decoded['sentiment'] ?? '')));
+            if (!in_array($sentiment_in, $valid_sentiments, true)) {
+                return null; // nothing validated - don't post an empty/garbage suggestion
+            }
+            $sentiment_label = ucfirst($sentiment_in);
+
+            $confidence_in = strtolower(trim((string) ($decoded['confidence'] ?? '')));
+            $confidence_label = in_array($confidence_in, ['low', 'medium', 'high'], true) ? ucfirst($confidence_in) : null;
+
+            $reason = trim((string) ($decoded['reason'] ?? ''));
+            $reason = mb_substr($reason, 0, 160);
+
+            $note = '🤖 AI Sentiment: ' . $sentiment_label;
+            if ($confidence_label !== null) {
+                $note .= ' (confidence: ' . $confidence_label . ')';
+            }
+            if ($reason !== '') {
+                $note .= ' — ' . $reason;
+            }
+            $note_esc = mysqli_real_escape_string($mysqli, $note);
+            mysqli_query($mysqli,
+                "INSERT INTO ticket_replies (ticket_reply, ticket_reply_type, ticket_reply_ticket_id, ticket_reply_by, ticket_reply_created_at)
+                 VALUES ('$note_esc', 'Automation', $tid, 0, NOW())"
+            );
+            logAction("Automation", "AI Sentiment", "Rule '$rule_name': posted AI sentiment ($sentiment_label) on ticket $tid", $client_id, $tid);
+            return "posted AI sentiment suggestion on ticket #$tid";
+
         case 'notify_assignee':
             if ($tid) {
                 appNotify("Automation", "Rule '$rule_name' triggered on ticket #$tid", "/agent/ticket.php?ticket_id=$tid", $client_id);
