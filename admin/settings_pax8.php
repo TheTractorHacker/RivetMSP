@@ -110,6 +110,9 @@ if (isset($_POST['sync_pax8_billing_now'])) {
             throw new Pax8Exception('Enable Automated Billing (Connection tab) first.');
         }
         $result = pax8BillingSyncAll($mysqli);
+        if (!empty($result['locked'])) {
+            throw new Pax8Exception('A billing sync is already running. Try again in a minute.');
+        }
         logAction("Pax8", "Sync", "$session_name ran a Pax8 billing sync: {$result['added']} line item(s) added, {$result['updated']} updated, {$result['archived']} archived across {$result['clients']} client(s)");
         flash_alert("Pax8 billing sync complete: {$result['added']} added, {$result['updated']} updated, {$result['archived']} archived across {$result['clients']} client(s). {$result['skipped_no_rule']} subscription(s) skipped (no billing rule).");
     } catch (Throwable $e) {
@@ -140,7 +143,9 @@ if (isset($_POST['save_pax8_client_mapping'])) {
     // Per-client billing-sync switch - unmapping a client (client_id = NULL) always forces this
     // off too, so a company that gets unmapped can never keep auto-updating a stale invoice.
     $billing_sync_enabled = ($client_id > 0 && isset($_POST['billing_sync_enabled'])) ? 1 : 0;
-    mysqli_query($mysqli, "UPDATE pax8_client_map SET client_id = $client_sql, billing_sync_enabled = $billing_sync_enabled WHERE map_id = $map_id");
+    // Re-pointing a company at a different client drops the stored recurring invoice (it belongs to the old client); the
+    // next sync then creates a fresh one. MySQL evaluates SET left to right, so this must come before client_id.
+    mysqli_query($mysqli, "UPDATE pax8_client_map SET recurring_invoice_id = IF(client_id <=> $client_sql, recurring_invoice_id, NULL), client_id = $client_sql, billing_sync_enabled = $billing_sync_enabled WHERE map_id = $map_id");
     logAction("Pax8", "Edit", "$session_name updated a Pax8 company -> client mapping" . ($billing_sync_enabled ? " (automated billing enabled)" : ""), $client_id);
     flash_alert("Mapping saved");
     redirect($client_mapping_path);

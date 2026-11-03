@@ -274,7 +274,10 @@ if (!function_exists('pax8BillingSyncForClient')) {
         $rules = pax8BillingRules($mysqli);
 
         $recurring_invoice_id = intval($map['recurring_invoice_id'] ?? 0);
-        if ($recurring_invoice_id <= 0 || !mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT recurring_invoice_id FROM recurring_invoices WHERE recurring_invoice_id = $recurring_invoice_id AND recurring_invoice_archived_at IS NULL"))) {
+        // The stored invoice must still belong to the client being synced: a mapping that was re-pointed at a different
+        // client must never keep writing line items onto the previous client's invoice.
+        $client_id_int = intval($client_id);
+        if ($recurring_invoice_id <= 0 || !mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT recurring_invoice_id FROM recurring_invoices WHERE recurring_invoice_id = $recurring_invoice_id AND recurring_invoice_client_id = $client_id_int AND recurring_invoice_archived_at IS NULL"))) {
             $recurring_invoice_id = pax8CreateBillingRecurringInvoice($mysqli, $client_id);
             mysqli_query($mysqli, "UPDATE pax8_client_map SET recurring_invoice_id = $recurring_invoice_id WHERE map_id = " . intval($map['map_id']));
         }
@@ -349,24 +352,39 @@ if (!function_exists('pax8BillingSyncForClient')) {
 }
 
 if (!function_exists('pax8BillingSyncAll')) {
-    /** Runs pax8BillingSyncForClient() for every mapped+enabled client. Returns an aggregate summary. */
+    /**
+     * Runs pax8BillingSyncForClient() for every mapped+enabled client. Returns an aggregate summary.
+     * Serialised with a MySQL named lock (works without Redis, freed if the connection drops) so the cron run and the
+     * manual "Sync Billing Now" button can never interleave their check-then-insert on line items. If another run
+     * holds the lock the totals come back with 'locked' => true and nothing is touched.
+     */
     function pax8BillingSyncAll(mysqli $mysqli): array {
         $totals = ['clients' => 0, 'added' => 0, 'updated' => 0, 'archived' => 0, 'skipped_no_rule' => 0];
         $integration = getPax8Integration($mysqli);
         if (!$integration || intval($integration['billing_sync_enabled']) !== 1) {
             return $totals;
         }
-        $res = mysqli_query($mysqli, "SELECT client_id FROM pax8_client_map WHERE client_id IS NOT NULL AND billing_sync_enabled = 1");
-        while ($res && ($row = mysqli_fetch_assoc($res))) {
-            $result = pax8BillingSyncForClient($mysqli, intval($row['client_id']));
-            if (isset($result['skipped'])) {
-                continue;
+
+        $got = mysqli_fetch_row(mysqli_query($mysqli, "SELECT GET_LOCK('rivet_pax8_billing_sync', 0)"));
+        if (!$got || intval($got[0]) !== 1) {
+            $totals['locked'] = true;
+            return $totals;
+        }
+        try {
+            $res = mysqli_query($mysqli, "SELECT client_id FROM pax8_client_map WHERE client_id IS NOT NULL AND billing_sync_enabled = 1");
+            while ($res && ($row = mysqli_fetch_assoc($res))) {
+                $result = pax8BillingSyncForClient($mysqli, intval($row['client_id']));
+                if (isset($result['skipped'])) {
+                    continue;
+                }
+                $totals['clients']++;
+                $totals['added'] += $result['added'];
+                $totals['updated'] += $result['updated'];
+                $totals['archived'] += $result['archived'];
+                $totals['skipped_no_rule'] += $result['skipped_no_rule'];
             }
-            $totals['clients']++;
-            $totals['added'] += $result['added'];
-            $totals['updated'] += $result['updated'];
-            $totals['archived'] += $result['archived'];
-            $totals['skipped_no_rule'] += $result['skipped_no_rule'];
+        } finally {
+            mysqli_query($mysqli, "SELECT RELEASE_LOCK('rivet_pax8_billing_sync')");
         }
         return $totals;
     }
