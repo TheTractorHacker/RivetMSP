@@ -64,7 +64,7 @@ $sql_payment_years = mysqli_query($mysqli, "SELECT DISTINCT YEAR(payment_date) A
         $sql_clients = mysqli_query($mysqli, $sql_clients);
         ?>
 
-        <div class="table-responsive-sm">
+        <div class="table-responsive">
             <table class="table table-striped">
                 <thead>
                 <tr>

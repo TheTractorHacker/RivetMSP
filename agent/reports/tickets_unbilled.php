@@ -37,7 +37,7 @@ $rows = 0;
                 </select>
             </form>
 
-            <div class="table-responsive-sm">
+            <div class="table-responsive">
                 <table class="table table-striped">
                     <thead>
                     <tr>

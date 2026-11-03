@@ -174,7 +174,7 @@ $sql_schedules = mysqli_query($mysqli, "SELECT * FROM report_schedules ORDER BY 
         <?php } ?>
 
         <!-- Existing schedules -->
-        <div class="table-responsive-sm px-3 pb-3">
+        <div class="table-responsive px-3 pb-3">
             <table class="table table-striped">
                 <thead>
                     <tr>

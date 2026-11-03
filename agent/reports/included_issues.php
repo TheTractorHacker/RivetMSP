@@ -75,7 +75,7 @@ function renderIssuesUsageCells(array $u): void {
             </select>
         </form>
 
-        <div class="table-responsive-sm">
+        <div class="table-responsive">
             <table class="table table-striped table-sm">
                 <thead>
                     <tr>

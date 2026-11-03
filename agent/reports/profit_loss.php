@@ -68,7 +68,7 @@ $expense_categories[] = ['category_id' => 0, 'category_name' => 'Uncategorized']
 
                 </select>
             </form>
-            <div class="table-responsive-sm">
+            <div class="table-responsive">
                 <table class="table table-sm">
                     <thead class="text-dark">
                     <tr>
@@ -451,7 +451,7 @@ $expense_categories[] = ['category_id' => 0, 'category_name' => 'Uncategorized']
             <!-- Wave 2: Net margin + prior-year comparison -->
             <div class="px-3 pb-2">
                 <h6 class="mt-2"><i class="fas fa-not-equal me-2"></i>Year-over-Year Summary &amp; Net Margin</h6>
-                <div class="table-responsive-sm">
+                <div class="table-responsive">
                     <table class="table table-sm table-striped">
                         <thead class="text-dark">
                             <tr>
@@ -513,7 +513,7 @@ $expense_categories[] = ['category_id' => 0, 'category_name' => 'Uncategorized']
             <div class="px-3 pb-3">
                 <h6 class="mt-2"><i class="fas fa-user-tie me-2"></i>Client Profitability (<?php echo intval($year); ?>) &mdash; Revenue vs Labor Value</h6>
                 <small class="text-muted d-block mb-2">Revenue = payments received this year. Labor value = time logged &times; labor-type rate (billing rate, not internal wage cost).</small>
-                <div class="table-responsive-sm">
+                <div class="table-responsive">
                     <table class="table table-sm table-striped">
                         <thead>
                             <tr>

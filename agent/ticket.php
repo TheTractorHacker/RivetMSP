@@ -1463,7 +1463,7 @@ if (isset($_GET['ticket_id'])) {
                             <input type="text" inputmode="numeric" maxlength="2" id="seconds" name="seconds" placeholder="00" form="ticketReplyForm" class="form-control form-control-sm text-center" style="max-width:3.5rem;">
                         </div>
                         <div class="btn-group btn-block mb-3">
-                            <button type="button" class="btn btn-outline-purple" id="startStopTimer"><i class="fas fa-play me-1"></i>Start</button>
+                            <button type="button" class="btn btn-outline-purple" id="startStopTimer" aria-label="Start or stop the ticket timer"><i class="fas fa-play me-1"></i>Start</button>
                             <button type="button" class="btn btn-outline-purple" id="resetTimer"><i class="fas fa-redo-alt me-1"></i>Reset</button>
                         </div>
                         <?php if ($lt_reply_rows) { ?>

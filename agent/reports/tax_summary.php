@@ -48,7 +48,7 @@ $sql_tax = mysqli_query($mysqli, "SELECT `tax_name` FROM `taxes`");
                 </select>
             </form>
 
-            <div class="table-responsive-sm">
+            <div class="table-responsive">
                 <table class="table table-sm">
                     <thead class="text-dark">
                     <tr>

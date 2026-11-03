@@ -179,7 +179,7 @@ $cap_hours_per_tech = $report['capacity']['capacity_hours_per_tech'];
         <!-- Per-technician detail -->
         <div class="px-3 pb-3">
             <h6 class="mt-2"><i class="fas fa-user-cog me-2"></i>Per-Technician Detail</h6>
-            <div class="table-responsive-sm">
+            <div class="table-responsive">
                 <table class="table table-striped">
                     <thead>
                         <tr>

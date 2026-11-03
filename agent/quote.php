@@ -408,7 +408,7 @@ if (isset($_GET['quote_id'])) {
                                                 </select>
                                             </td>
                                             <td class="text-center">
-                                                <button class="btn btn-secondary text-success" type="submit" name="add_quote_item">
+                                                <button class="btn btn-secondary text-success" type="submit" name="add_quote_item" aria-label="Add item to quote" title="Add item">
                                                     <i class="fa fa-check"></i>
                                                 </button>
                                             </td>

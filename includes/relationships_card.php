@@ -71,7 +71,7 @@ $rel_types = \RivetMSP\Links\EntityTypes::all();
                 <ul class="list-unstyled mb-3" data-rel-vendors="1">
                     <?php foreach ($rel_vendors as $v) { ?>
                         <li class="mb-1">
-                            <a href="vendor_details.php?<?php echo $v['client_id'] > 0 ? 'client_id=' . (int) $v['client_id'] . '&' : ''; ?>vendor_id=<?php echo (int) $v['vendor_id']; ?>"><?php echo $rel_h($v['name']); ?></a>
+                            <a class="ajax-modal" href="#" data-modal-url="modals/vendor/vendor_details.php?id=<?php echo (int) $v['vendor_id']; ?>"><?php echo $rel_h($v['name']); ?></a>
                             <?php foreach ($v['roles'] as $role) { ?>
                                 <span class="badge text-bg-light border ms-1"><?php echo $rel_h($role); ?><?php echo ($v['primary'] && $role === 'support') ? ' (primary)' : ''; ?></span>
                                 <?php if ($rel_view['can_write'] && !($v['primary'] && $role === 'support')) { ?>

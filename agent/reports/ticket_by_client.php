@@ -59,7 +59,7 @@ $sql_clients = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients
                     <h3 class="card-title"><i class="fas fa-fw fa-chart-area me-2"></i>Yearly (<?php echo $year; ?>)</h3>
                 </div>
                 <div class="card-body">
-                    <div class="table-responsive-sm">
+                    <div class="table-responsive">
                         <table class="table table-striped">
                             <thead>
                             <tr>
@@ -180,7 +180,7 @@ $sql_clients = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients
                     <h3 class="card-title"><i class="fas fa-fw fa-chart-area me-2"></i>Monthly (<?php echo date("F", mktime(1, 1, 1, $month, 1)) . ' ' . $year; ?>)</h3>
                 </div>
                 <div class="card-body">
-                    <div class="table-responsive-sm">
+                    <div class="table-responsive">
                         <table class="table table-striped">
                             <thead>
                             <tr>

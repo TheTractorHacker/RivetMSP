@@ -4,7 +4,11 @@
 // Expects a multipart POST with a single "file" field, returns
 // {"location": "..."} on success or {"error": {"message": "..."}} on failure.
 
-require_once "includes/inc_all.php";
+// A JSON endpoint: load config, functions and the login check only. includes/inc_all.php renders the whole page shell (header, navbar, sidebar)
+// before this script runs, so TinyMCE received HTML in front of the JSON and the upload always failed.
+require_once $_SERVER['DOCUMENT_ROOT'] . '/config.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/functions.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/check_login.php';
 
 enforceUserPermission('module_kb');
 

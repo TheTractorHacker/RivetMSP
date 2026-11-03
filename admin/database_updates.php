@@ -475,7 +475,7 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         foreach ($sql_logins as $row) {
             $login_id = $row['login_id'];
             $login_username = $row['login_username'];
-            $login_encrypted_username = encryptLoginEntry($row['login_username']);
+            $login_encrypted_username = function_exists('encryptLoginEntry') ? encryptLoginEntry($row['login_username']) : $row['login_username'];   // helper removed from later releases: keep the value instead of fataling on an old upgrade
             mysqli_query($mysqli, "UPDATE logins SET login_username = '$login_encrypted_username' WHERE login_id = '$login_id'");
         }
 

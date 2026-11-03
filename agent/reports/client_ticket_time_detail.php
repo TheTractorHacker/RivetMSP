@@ -191,7 +191,7 @@ $result = $stmt->get_result();
 </div>
 
 <div class="card">
-    <div class="table-responsive-sm">
+    <div class="table-responsive">
         <table class="table table-striped table-sm">
             <thead class="bg-dark">
             <tr>

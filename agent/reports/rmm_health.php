@@ -159,7 +159,7 @@ $sev_bg = array_map(function ($s) use ($severity_colors) {
         <!-- Status breakdown -->
         <div class="px-3">
             <h6 class="mt-2"><i class="fas fa-tasks me-2"></i>Alerts by Status</h6>
-            <div class="table-responsive-sm">
+            <div class="table-responsive">
                 <table class="table table-striped table-sm">
                     <thead><tr><th>Status</th><th class="text-end">Count</th></tr></thead>
                     <tbody>
@@ -179,7 +179,7 @@ $sev_bg = array_map(function ($s) use ($severity_colors) {
         <div class="row px-3 pb-3">
             <div class="col-md-6">
                 <h6 class="mt-2"><i class="fas fa-server me-2"></i>Noisiest Assets</h6>
-                <div class="table-responsive-sm">
+                <div class="table-responsive">
                     <table class="table table-striped table-sm">
                         <thead><tr><th>Asset</th><th class="text-end">Alerts</th><th class="text-end">Avg MTTR</th></tr></thead>
                         <tbody>
@@ -199,7 +199,7 @@ $sev_bg = array_map(function ($s) use ($severity_colors) {
             </div>
             <div class="col-md-6">
                 <h6 class="mt-2"><i class="fas fa-building me-2"></i>Noisiest Clients</h6>
-                <div class="table-responsive-sm">
+                <div class="table-responsive">
                     <table class="table table-striped table-sm">
                         <thead><tr><th>Client</th><th class="text-end">Alerts</th><th class="text-end">&rarr; Ticket</th></tr></thead>
                         <tbody>
