@@ -213,7 +213,7 @@
    :root and body.dark-mode alike, which is why the seam is easy to miss.) */
 .badge-primary   { color: #fff; background-color: var(--if-primary, var(--tblr-primary, #0d9488)) !important; }
 .badge-secondary { color: #fff; background-color: var(--tblr-secondary, #6b7280) !important; }
-.badge-success   { color: #fff; background-color: var(--tblr-success, #2fb344) !important; }
+.badge-success   { color: #000; background-color: var(--tblr-success, #2fb344) !important; }
 .badge-danger    { color: #fff; background-color: var(--tblr-danger, #d63939) !important; }
 .badge-warning   { color: #000; background-color: var(--tblr-warning, #f59f00) !important; }
 .badge-info      { color: #000; background-color: var(--tblr-info, #4299e1) !important; }

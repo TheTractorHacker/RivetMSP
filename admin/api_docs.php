@@ -50,7 +50,7 @@ $slug = fn($tag) => 'tag-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($tag))
     --c-surface: #11181d;
     --c-border: #1f2b31;
     --c-ink: #d8e2e4;
-    --c-muted: #6b8087;
+    --c-muted: #8aa0a8;
     --c-accent: #5eead4;
     --c-get: #7ee787;
     --c-post: #79c0ff;

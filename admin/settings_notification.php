@@ -225,7 +225,7 @@ require_once "includes/inc_all_admin.php";
             <!-- Expiration Alerts -->
             <div class="notif-section">
                 <div class="notif-section-header">
-                    <span class="section-icon bg-warning text-white"><i class="fas fa-globe"></i></span>
+                    <span class="section-icon bg-warning text-dark"><i class="fas fa-globe"></i></span>
                     Expiration Alerts
                 </div>
                 <div class="notif-section-body">

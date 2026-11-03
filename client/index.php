@@ -413,7 +413,7 @@ if ($session_contact_primary == 1 || $session_contact_is_technical_contact) {
                                         <?php if ($alert['expired']) { ?>
                                             <span class="badge text-bg-danger">Expired</span>
                                         <?php } else { ?>
-                                            <span class="badge text-bg-warning text-white">Expiring Soon</span>
+                                            <span class="badge text-bg-warning">Expiring Soon</span>
                                         <?php } ?>
                                     </td>
                                 </tr>

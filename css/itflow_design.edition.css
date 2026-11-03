@@ -181,3 +181,10 @@
 .card-body > .kb-empty:last-child {
     padding-top: 1.5rem;
 }
+
+/* A scroll container must also be the containing block of absolutely positioned descendants (TomSelect's hidden accessible <select>,
+   its dropdown), otherwise they escape the clip and make the whole page scroll sideways on phones (quote view at 360px). */
+.table-responsive { position: relative; }
+
+/* White on the success green is 2.9:1; black is 7:1 (same treatment the BS4 shim gives .badge-success). */
+.badge.text-bg-success { color: #000 !important; }

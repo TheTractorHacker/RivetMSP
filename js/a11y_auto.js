@@ -82,6 +82,7 @@
     function run(root) {
         root = root || document;
         root.querySelectorAll('button, a.btn, a.ajax-modal, a[data-bs-toggle="dropdown"], a.btn-tool').forEach(nameButton);
+        root.querySelectorAll('iframe.tox-edit-area__iframe:not([title])').forEach(function (f) { f.setAttribute('title', 'Rich text editor'); });   // TinyMCE leaves its iframe unnamed
         root.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button]), select, textarea').forEach(nameField);
     }
 
