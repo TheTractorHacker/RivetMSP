@@ -4,6 +4,9 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+- **Dashboard (like RivetIT, plus a money band).** `agent/dashboard.php` now redirects to the new `agent/my_dashboard.php`, a per-user widget dashboard ported from RivetIT: add, remove, hide, resize and drag to reorder widgets, switch bar widgets to bar/pie charts, Reset to default, Year picker. Widgets: tickets by status/priority/category/technician, SLA at risk, my tickets, created vs closed, resolution time, CSAT, assets, expiring items, needs attention, projects, RMM, clients, and MSP money widgets (Ready to bill, Overdue invoices, Quotes waiting on a yes, Unpaid invoices, Cash flow). Above the widgets sits a **Waiting on you** band: ready to bill (estimate: logged time x client rate), overdue (still unpaid) and quotes waiting, each with the three biggest items and one action; roles without the financial section get "Your day" (assigned to me, past due, unassigned). Everything honours a user's client restriction. DB 2.6.136 adds `dashboard_layouts` (one JSON row per user; no row = default layout). The old fixed Financial/Technical sections are gone: their content is available as widgets.
+- **Fixes found in a full-page scan:** Administration > Settings > Pax8 required the wrong footer path and died at the end of the page; recurring-invoice pages printed an empty JS array literal (syntax error) when the invoice is not editable.
+
 **Security: TinyMCE 8.5.0 → 8.5.1 (no database change).** Fixes three stored-XSS CVEs (CVE-2026-47759, CVE-2026-47761,
 CVE-2026-47762) disclosed against the vendored editor bundle (`plugins/tinymce/`, audit finding C4). Verified provenance against
 the npm registry's recorded SHA-1/SHA-512 for the official `tinymce@8.5.1` package before swapping in the bundle; no local

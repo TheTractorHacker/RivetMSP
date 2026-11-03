@@ -2877,6 +2877,16 @@ CREATE TABLE `mcp_oauth_tokens` (
   KEY `idx_mcp_oauth_tokens_expires` (`expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `dashboard_layouts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `dashboard_layouts` (
+  `layout_user_id` int(11) NOT NULL,
+  `layout_widgets` text DEFAULT NULL,
+  `layout_updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`layout_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `mcp_pending_actions`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;

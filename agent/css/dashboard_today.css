@@ -1,0 +1,43 @@
+/* Dashboard "Today" board (agent/includes/dashboard_today.php). Edition-owned: not part of the shared design layer.
+   Colours come from the --if-* tokens so light and dark follow the theme; the three segment colours are semantic (bill = accent, late = red, quote = teal). */
+.td-board {
+    --td-bill: var(--if-primary, #2563eb);
+    --td-late: #c93232;
+    --td-quote: #0b7f98;
+    background: var(--if-surface, #fff);
+    border: 1px solid var(--if-border, #e3e9ea);
+    border-radius: var(--if-radius, 12px);
+    box-shadow: var(--if-shadow, 0 1px 2px rgba(20,35,42,.04));
+    padding: 1.25rem 1.5rem 1.5rem;
+}
+:root[data-bs-theme="dark"] .td-board { --td-late: #f26d6d; --td-quote: #4cc3dc; --td-bill: #7aa7ff; }
+.td-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.td-title { font-size: 1.35rem; font-weight: 700; margin: 0; color: var(--if-ink, inherit); }
+.td-sub { margin: .15rem 0 0; color: var(--if-muted, #4b5d64); font-size: .85rem; }
+.td-total { display: flex; align-items: baseline; gap: .5rem; text-align: right; }
+.td-total-num { font-size: 2.1rem; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: var(--if-ink, inherit); }
+.td-total-label { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--if-muted, #4b5d64); }
+.td-bar { display: flex; gap: 3px; height: 10px; margin-bottom: 1.25rem; border-radius: 999px; overflow: hidden; }
+.td-seg { min-width: 6px; border-radius: 2px; }
+.td-seg-bill { background: var(--td-bill); }
+.td-seg-late { background: var(--td-late); }
+.td-seg-quote { background: var(--td-quote); }
+.td-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.td-col { display: flex; flex-direction: column; min-width: 0; padding: 1rem 1.1rem 1.1rem; border-radius: var(--if-radius-sm, 8px); background: var(--if-bg, #eef2f2); }
+.td-col-title { display: flex; align-items: center; gap: .5rem; font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 .5rem; color: var(--if-muted, #4b5d64); }
+.td-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.td-figure { font-size: 1.9rem; line-height: 1.1; font-weight: 700; font-variant-numeric: tabular-nums; margin: 0; color: var(--if-ink, inherit); }
+.td-basis { margin: .2rem 0 .75rem; font-size: .8rem; color: var(--if-muted, #4b5d64); }
+.td-rows { list-style: none; margin: 0 0 1rem; padding: 0; border-top: 1px solid var(--if-border, #e3e9ea); }
+.td-rows li { border-bottom: 1px solid var(--if-border, #e3e9ea); }
+.td-rows a { display: flex; justify-content: space-between; align-items: baseline; gap: .75rem; padding: .5rem .15rem; text-decoration: none; color: var(--if-ink, inherit); border-radius: 4px; }
+.td-rows a:hover, .td-rows a:focus-visible { background: color-mix(in srgb, var(--td-bill) 10%, transparent); }
+.td-row-main { display: flex; flex-direction: column; min-width: 0; }
+.td-row-label { font-weight: 600; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-row-meta { font-size: .78rem; color: var(--if-muted, #4b5d64); }
+.td-row-amt { font-variant-numeric: tabular-nums; font-weight: 600; font-size: .9rem; white-space: nowrap; }
+.td-cta { margin-top: auto; align-self: flex-start; }
+.td-clear { margin: .5rem 0 0; color: var(--if-muted, #4b5d64); font-size: .9rem; }
+.td-clear i { color: var(--td-quote); }
+@media (max-width: 991.98px) { .td-cols { grid-template-columns: 1fr; } .td-board { padding: 1rem; } .td-total-num { font-size: 1.7rem; } }
+@media (prefers-reduced-motion: no-preference) { .td-seg { transition: flex-grow .4s ease; } }

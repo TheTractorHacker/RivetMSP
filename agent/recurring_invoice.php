@@ -493,7 +493,7 @@ require_once "../includes/footer.php";
 <script src="../plugins/jquery-ui/jquery-ui.min.js"></script>
 <script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
     $(function() {
-        var availableProducts = <?php echo $json_products?>;
+        var availableProducts = <?php echo $json_products ?? '[]' ?>;
 
         $("#name").autocomplete({
             source: availableProducts,
