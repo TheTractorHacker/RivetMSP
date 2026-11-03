@@ -58,9 +58,18 @@ if (isset($_POST['add_quote_copy'])) {
     enforceUserPermission('module_sales', 2);
 
     $quote_id = intval($_POST['quote_id']);
-    $client_id = intval($_POST['client_id']);
     $date = sanitizeInput($_POST['date']);
     $expire = sanitizeInput($_POST['expire']);
+
+    // The client comes from the source quote, never from the request: a restricted agent must not be able to
+    // copy another client's quote (scope, note, amounts) by naming a client they do have access to.
+    $sql = mysqli_query($mysqli,"SELECT * FROM quotes WHERE quote_id = $quote_id");
+    $row = mysqli_fetch_assoc($sql);
+    if (!$row) {
+        flash_alert('Quote not found.', 'error');
+        redirect('quotes.php');
+    }
+    $client_id = intval($row['quote_client_id']);
 
     enforceClientAccess();
 
@@ -75,8 +84,6 @@ if (isset($_POST['add_quote_copy'])) {
 
     $quote_number = mysqli_insert_id($mysqli);
 
-    $sql = mysqli_query($mysqli,"SELECT * FROM quotes WHERE quote_id = $quote_id");
-    $row = mysqli_fetch_assoc($sql);
     $original_quote_prefix = sanitizeInput($row['quote_prefix']);
     $original_quote_number = sanitizeInput($row['quote_number']);
     $quote_discount_amount = floatval($row['quote_discount_amount']);
