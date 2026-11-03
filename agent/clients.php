@@ -125,6 +125,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                         <div class="btn-group me-2">
                             <a href="?leads=0" class="btn btn-<?php if ($leads_filter == 0){ echo "primary"; } else { echo "default"; } ?>" title="Clients"><i class="fa fa-fw fa-user-friends"></i><span class="d-none d-sm-inline ms-2">Clients</span></a>
                             <a href="?leads=1" class="btn btn-<?php if ($leads_filter == 1){ echo "primary"; } else { echo "default"; } ?>"><i class="fa fa-fw fa-bullhorn"></i><span class="d-none d-sm-inline ms-2">Leads</span></a>
+                            <a href="leads_board.php" class="btn btn-default" title="Lead pipeline board"><i class="fa fa-fw fa-columns"></i><span class="d-none d-sm-inline ms-2">Board</span></a>
                         </div>
 
                         <div class="btn-group">
