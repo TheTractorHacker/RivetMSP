@@ -4,6 +4,8 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.49] - 2026-11-03
+
 ### Added
 - Lead pipeline board (agent/leads_board.php): leads as cards in stage columns (New to Lost), drag a card to change its stage (saved at once, reverted with a message if the save fails) and drop it on the green bar to convert it to a client. Reachable from the Leads list via the new Board button.
 
