@@ -187,4 +187,4 @@
 .table-responsive { position: relative; }
 
 /* White on the success green is 2.9:1; black is 7:1 (same treatment the BS4 shim gives .badge-success). */
-.badge.text-bg-success { color: #000 !important; }
+.badge.text-bg-success, .badge.badge-success { color: #000 !important; }
