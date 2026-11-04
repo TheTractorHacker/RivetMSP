@@ -55,7 +55,7 @@ $settings_groups = [
             ['Calendar sync', 'Connect Outlook calendars.', 'settings_calendar_sync.php', 'fa-calendar-alt'],
             ['Webhooks', 'Send events to other systems.', 'settings_webhooks.php', 'fa-satellite-dish'],
             ['AI', 'Configure AI features.', 'settings_ai.php', 'fa-robot'],
-            ['Remote MCP', ('Let AI tools read ' . htmlspecialchars(defined('APP_NAME') ? APP_NAME : 'RivetMSP') . ' through your sign-in provider.'), 'settings_mcp.php', 'fa-plug'],
+            ['Remote MCP', ('Let AI tools read ' . htmlspecialchars(defined('APP_NAME') ? APP_NAME : 'RivetMSP') . ' through your sign-in provider.'), 'settings_mcp.php', 'fa-link'],
             ['Telemetry', 'Manage usage data sharing.', 'settings_telemetry.php', 'fa-chart-line'],
         ],
     ],
