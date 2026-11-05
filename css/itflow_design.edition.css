@@ -188,3 +188,8 @@
 
 /* White on the success green is 2.9:1; black is 7:1 (same treatment the BS4 shim gives .badge-success). */
 .badge.text-bg-success, .badge.badge-success { color: #000 !important; }
+
+/* FullCalendar header (title + prev/next + view buttons) is one non-wrapping row and pushes the page sideways on phones. */
+@media (max-width: 575.98px) {
+    .fc .fc-header-toolbar { flex-wrap: wrap; justify-content: center; gap: .5rem; }
+}
