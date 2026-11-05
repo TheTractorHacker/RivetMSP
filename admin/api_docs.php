@@ -165,6 +165,8 @@ $slug = fn($tag) => 'tag-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($tag))
     .api-toc-col { flex: 0 0 auto; border-right: 0; border-top: 1px solid var(--c-border); order: 2; }
     .api-toc { position: static; max-height: none; }
     .api-main-col { order: 1; }
+    .api-path-heading { flex-wrap: wrap; overflow-wrap: anywhere; }
+    .api-path-heading span { min-width: 0; }
   }
 
   @media (prefers-reduced-motion: reduce) { .api-console * { transition: none !important; } }
@@ -205,7 +207,7 @@ $slug = fn($tag) => 'tag-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($tag))
                     <li>Errors return <code>{"error": "..."}</code></li>
                     <li>Lists return <code>{"data": [...], "total": N}</code></li>
                     <li>Creates return <code>{"id": N}</code>; simple mutations return <code>{"ok": true}</code></li>
-                    <li>Rate limit: 300 requests/60s per caller (<code>429</code> with <code>Retry-After</code>)</li>
+                    <li>Rate limit: <?= (int) $config_api_rate_limit_per_minute > 0 ? (int) $config_api_rate_limit_per_minute . ' requests/60s per caller' : 'none' ?> (<code>429</code> with <code>Retry-After</code>; set on <a href="/admin/api_keys.php">API Keys</a>)</li>
                 </ul>
             </div>
         </div>

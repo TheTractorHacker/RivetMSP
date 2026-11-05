@@ -209,3 +209,8 @@ thead th > .form-check, thead td > .form-check { margin-bottom: 0; }
 /* Links inside running text, alerts and the breadcrumb are told apart from the text by more than colour. */
 .admin-breadcrumb a, .alert a:not(.btn), .card-body p a:not(.btn):not(.nav-link) { text-decoration: underline; }
 :root[data-bs-theme="dark"] .admin-directory__add { color: #7aa7ff; }
+/* Phone: a scrolling table keeps its cells on one line instead of wrapping emails and role names letter by letter. */
+@media (max-width: 767.98px) {
+  .table-responsive-sm > table td, .table-responsive-sm > table th,
+  .table-responsive-sm form > table td, .table-responsive-sm form > table th { white-space: nowrap; }
+}
