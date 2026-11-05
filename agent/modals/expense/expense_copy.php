@@ -25,7 +25,7 @@ ob_start();
 ?>
 
 <div class="modal-header bg-dark">
-    <h5 class="modal-title"><i class='fas fa-fw fa-copy me-2'></i>Copying expense</h5>
+    <h5 class="modal-title"><i class='fas fa-fw fa-copy me-2'></i>Copying Expense</h5>
     <button type="button" class="close text-white" data-bs-dismiss="modal">
         <span>&times;</span>
     </button>

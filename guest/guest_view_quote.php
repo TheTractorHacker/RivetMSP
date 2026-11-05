@@ -181,8 +181,8 @@ if ($quote_status == "Draft" || $quote_status == "Sent" || $quote_status == "Vie
         <div class="row mb-3">
             <div class="col-md-12">
                 <div class="card">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
+                    <div class="table-responsive" tabindex="0" role="region" aria-label="Quote line items">
+                        <table class="table table-hover mb-0 guest-items">
                             <thead class="bg-light">
                             <tr>
                                 <th>Item</th>

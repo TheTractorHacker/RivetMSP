@@ -191,3 +191,5 @@
 /* Legacy <button class="close">&times;</button> inside a flex .modal-header sat right next to the title (the shim's float does nothing in a flex row). */
 .modal-header > .close { float: none; margin-left: auto; }
 .modal-header.bg-dark .close { color: #fff; opacity: .85; }
+/* Guest quote/invoice line items: on phones keep each cell on one line (the table scrolls) instead of wrapping item names letter by letter. */
+@media (max-width: 575.98px) { .guest-items th, .guest-items td { white-space: nowrap; } }

@@ -86,7 +86,7 @@ $sql_docs = mysqli_query(
 ob_start();
 ?>
 <div class="modal-header bg-dark">
-    <h5 class="modal-title text-white"><i class="fa fa-fw fa-stream me-2"></i>Editing service: <strong><?php echo $service_name; ?></strong></h5>
+    <h5 class="modal-title text-white"><i class="fa fa-fw fa-stream me-2"></i>Editing Service: <strong><?php echo $service_name; ?></strong></h5>
     <button type="button" class="close text-white" data-bs-dismiss="modal">
         <span aria-hidden="true">&times;</span>
     </button>

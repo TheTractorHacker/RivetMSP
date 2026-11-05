@@ -947,7 +947,7 @@ if (isset($_GET['export_invoice_pdf'])) {
     }
     $html .= '</td>
         <td width="60%" align="right">
-            <span style="font-size:18pt; font-weight:bold;">Invoice</span><br>
+            <span style="font-size:18pt; font-weight:bold;">INVOICE</span><br>
             <span style="font-size:14pt;">' . $invoice_prefix . $invoice_number . '</span><br>';
     if (strtolower($invoice_status) === 'paid') {
         $html .= '<span style="color:green; font-weight:bold;">PAID</span><br>';

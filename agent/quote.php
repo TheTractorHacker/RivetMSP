@@ -524,7 +524,7 @@ if (isset($_GET['quote_id'])) {
     </div>
     <?php } ?>
 
-    <div class="row mb-3">
+    <div class="row mt-3 mb-3">
         <div class="col-sm d-print-none">
             <div class="card">
                 <div class="card-header text-bold">

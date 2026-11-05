@@ -569,7 +569,7 @@ if (isset($_GET['invoice_id'])) {
             <div class="d-none d-print-block text-center text-secondary"><?php echo nl2br(nullable_htmlentities($config_invoice_footer)); ?></div>
         </div>
     </div>
-    <div class="row d-print-none mb-3">
+    <div class="row d-print-none mt-3 mb-3">
         <div class="col-sm">
             <div class="card">
                 <div class="card-header text-bold">
