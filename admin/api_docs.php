@@ -104,7 +104,7 @@ $slug = fn($tag) => 'tag-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($tag))
   .api-toc a:hover { background: rgba(94, 234, 212, .07); color: var(--c-accent); }
   .api-toc a .cnt { color: var(--c-muted); }
   .api-toc-legend {
-    font-size: .68rem; color: var(--c-muted); border-top: 1px solid var(--c-border);
+    font-size: .75rem; color: var(--c-muted); border-top: 1px solid var(--c-border);
     margin: .7rem .9rem 0; padding-top: .6rem; line-height: 1.9;
   }
   .api-toc-legend .api-verb { display: inline-block; min-width: 3.2em; margin-right: .4em; }
@@ -127,7 +127,7 @@ $slug = fn($tag) => 'tag-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($tag))
 
   .api-section-heading {
     font-family: var(--if-mono); text-transform: uppercase; letter-spacing: .1em;
-    font-size: .72rem; font-weight: 700; color: var(--c-accent);
+    font-size: .75rem; font-weight: 700; color: var(--c-accent);
     padding: 1.2rem 1.1rem .55rem; margin: 0;
     border-top: 1px solid var(--c-border);
   }
@@ -142,14 +142,14 @@ $slug = fn($tag) => 'tag-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($tag))
   .api-copy:hover { color: var(--c-accent); }
 
   .api-row { display: flex; align-items: baseline; gap: .7rem; padding: .3rem 1.1rem .45rem 2.5rem; flex-wrap: wrap; }
-  .api-verb { font-weight: 700; font-size: .74rem; min-width: 3.4em; flex-shrink: 0; }
+  .api-verb { font-weight: 700; font-size: .75rem; min-width: 3.4em; flex-shrink: 0; }
   .api-verb.get { color: var(--c-get); }
   .api-verb.post { color: var(--c-post); }
   .api-verb.put { color: var(--c-put); }
   .api-verb.delete { color: var(--c-delete); }
   .api-op-body { min-width: 0; }
   .api-summary { color: var(--c-ink); font-family: var(--if-sans); font-size: .84rem; }
-  .api-meta { margin-top: .2rem; font-size: .72rem; color: var(--c-muted); }
+  .api-meta { margin-top: .2rem; font-size: .75rem; color: var(--c-muted); }
   .api-meta .api-flag::before { content: "\00b7"; margin-right: .3em; }
   .api-meta .api-flag { margin-right: .8em; }
   .api-meta .api-flag-public { color: var(--c-accent); }
