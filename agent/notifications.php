@@ -155,7 +155,7 @@ $push_device_count = intval(mysqli_fetch_assoc($sql_push_devices)['cnt']);
             <!-- Content -->
             <div class="flex-grow-1 min-width-0">
                 <div class="d-flex align-items-center flex-wrap mb-1" style="gap:.4rem;">
-                    <span class="badge text-bg-secondary rounded-pill" style="font-size:.7rem;"><?= $notification_type ?></span>
+                    <span class="badge text-bg-secondary rounded-pill" style="font-size:.75rem;"><?= $notification_type ?></span>
                     <?php if ($client_name) { ?>
                     <a href="client_overview.php?client_id=<?= $client_id ?>" class="text-muted small">
                         <i class="fas fa-building me-1"></i><?= $client_name ?>

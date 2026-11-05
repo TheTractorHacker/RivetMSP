@@ -1,4 +1,5 @@
 <?php
+if (!isset($mysqli)) { http_response_code(403); exit('Direct file access is not allowed'); } // include-only partial of tickets.php
 require_once __DIR__ . '/../includes/sla_functions.php'; // slaDueState() for the SLA badge
 // Pre-load all techs for inline assignment dropdowns
 $_techs_list = [];
@@ -389,6 +390,7 @@ foreach ($_cat_subs as $_pid => $_subs) {
                                         <?php } else { ?>
                                         <a href="#"
                                             class="ajax-modal"
+                                            title="Billable: <?= $ticket_billable == 1 ? 'yes' : 'no' ?>" aria-label="Change billable status"
                                             data-modal-url="modals/ticket/ticket_billable.php?id=<?= $ticket_id ?>">
                                             <?php
                                             if ($ticket_billable == 1) {
@@ -459,7 +461,7 @@ foreach ($_cat_subs as $_pid => $_subs) {
                                     <?php if (lookupUserPermission("module_support") >= 2 && empty($ticket_closed_at)) { ?>
                                     <div class="dropdown">
                                         <span class="badge rounded-pill tkt-pill-badge <?= tagTextClass($ticket_status_color) ?> dropdown-toggle"
-                                              style="background-color:<?= $ticket_status_color ?>;cursor:pointer;"
+                                              style="background-color:<?= tagSafeBg($ticket_status_color) ?>;cursor:pointer;"
                                               data-bs-toggle="dropdown" data-boundary="window">
                                             <?= $ticket_status_name ?>
                                         </span>
@@ -474,7 +476,7 @@ foreach ($_cat_subs as $_pid => $_subs) {
                                         </div>
                                     </div>
                                     <?php } else { ?>
-                                    <span class="badge rounded-pill tkt-pill-badge <?= tagTextClass($ticket_status_color) ?>" style="background-color:<?= $ticket_status_color ?>">
+                                    <span class="badge rounded-pill tkt-pill-badge <?= tagTextClass($ticket_status_color) ?>" style="background-color:<?= tagSafeBg($ticket_status_color) ?>">
                                         <?= $ticket_status_name ?>
                                     </span>
                                     <?php } ?>
@@ -525,7 +527,7 @@ foreach ($_cat_subs as $_pid => $_subs) {
                                 </td>
 
                                 <!-- Ticket Last Response -->
-                                <td>
+                                <td class="text-nowrap">
                                     <div title="<?php echo $ticket_reply_created_at; ?>">
                                         <?php echo $ticket_reply_created_at_time_ago; ?>
                                     </div>
@@ -533,7 +535,7 @@ foreach ($_cat_subs as $_pid => $_subs) {
                                 </td>
 
                                 <!-- Ticket Created At -->
-                                <td>
+                                <td class="text-nowrap">
                                     <?php echo $ticket_created_at_time_ago; ?>
                                     <br>
                                     <small class="text-secondary"><?php echo date("$config_date_format $config_time_format", strtotime($ticket_created_at)); ?></small>

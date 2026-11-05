@@ -305,7 +305,7 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
         .ticket-stat-box .ticket-stat-label {
             display: block;
             min-width: 0;
-            font-size: .6875rem;
+            font-size: .75rem;
             line-height: 1.25;
             text-transform: uppercase;
             letter-spacing: .04em;
@@ -321,7 +321,7 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
            against the card in dark mode). */
         /* Status, priority, board and assignee pills in the list stay on one line instead of breaking mid-word ("Ope n") */
         .table .badge.rounded-pill { white-space: nowrap; }
-        .table-tight td.ticket-subject-cell { min-width: 16rem; }
+        .table-tight td.ticket-subject-cell { min-width: 8rem; }
         .ticket-count-pill {
             display: inline-flex;
             align-items: center;
@@ -412,13 +412,14 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
         }
         .ticket-views-group-label {
             margin: .85rem .5rem .35rem;
-            font-size: .6875rem;
+            font-size: .75rem;
             font-weight: 600;
             letter-spacing: .06em;
             text-transform: uppercase;
             color: var(--color-text-muted);
         }
-        .table-tight td, .table-tight th {
+        .table-tight td, .table-tight th,
+        .table.table-tight > :not(caption) > * > * {
             padding: .35rem .5rem;
         }
     </style>

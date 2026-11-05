@@ -247,3 +247,27 @@ thead th > .form-check, thead td > .form-check { margin-bottom: 0; }
   .table-responsive-sm > table td, .table-responsive-sm > table th,
   .table-responsive-sm form > table td, .table-responsive-sm form > table th { white-space: nowrap; }
 }
+
+/* FullCalendar header (title + prev/next + view buttons) is one non-wrapping row and pushes the page sideways on phones. */
+@media (max-width: 575.98px) {
+    .fc .fc-header-toolbar { flex-wrap: wrap; justify-content: center; gap: .5rem; }
+}
+
+/* Calendar in dark mode: day numbers/links and the outline-primary "Subscribe Now" button used the light-theme blue (#2563eb), about 3:1 on the dark card. */
+:root[data-bs-theme="dark"] .fc .fc-daygrid-day-number,
+:root[data-bs-theme="dark"] .fc .fc-col-header-cell-cushion { color: var(--color-text, #e5e7eb); }
+:root[data-bs-theme="dark"] .fc .fc-day-other .fc-daygrid-day-number { color: var(--color-text-muted, #9ca3af); }
+:root[data-bs-theme="dark"] .btn-outline-primary { color: #8ab4ff; border-color: #8ab4ff; }
+:root[data-bs-theme="dark"] .btn-outline-danger { color: #ff8f8f; border-color: #ff8f8f; }
+:root[data-bs-theme="dark"] .btn-outline-info { color: #7dd3ef; border-color: #7dd3ef; }
+:root[data-bs-theme="dark"] .nav-tabs .nav-link.active, :root[data-bs-theme="dark"] .nav-link[data-comment-filter].active { color: #8ab4ff; }
+
+/* Dark mode: the secondary grey is light (#93a6ab) so white text on it is 2.5:1, and .text-dark is remapped to a light colour,
+   which left badges on light/green fills unreadable. Pin dark ink on those fills. */
+:root[data-bs-theme="dark"] .badge.badge-secondary,
+:root[data-bs-theme="dark"] .bg-secondary.text-white { color: #0d1417 !important; }
+:root[data-bs-theme="dark"] .badge.text-dark { color: #0d1417 !important; }
+
+/* Light theme: Tabler's warning/info text colours are 2.1:1 and 3:1 on white. Darker shades for text elements only (icons keep the brand colour). */
+:root:not([data-bs-theme="dark"]) :is(h1,h2,h3,h4,h5,h6,span,small,div,a,strong,td).text-warning { color: #8a5700 !important; }
+:root:not([data-bs-theme="dark"]) #ticket_collision_viewing { color: #0b6477; }

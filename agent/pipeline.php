@@ -71,7 +71,7 @@ while ($row = mysqli_fetch_assoc($sql)) {
         display: flex;
         overflow-x: auto;
         box-sizing: border-box;
-        min-width: 400px;
+        min-width: 0;
         padding-bottom: 8px;
     }
     #pipeline-board .kanban-column {

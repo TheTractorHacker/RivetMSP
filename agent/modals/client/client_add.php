@@ -142,7 +142,7 @@ ob_start();
                     <div class="form-row">
                         <div class="form-group col-md-6 mb-2">
                             <label>Lead Source</label>
-                            <input type="text" class="form-control" name="lead_source" placeholder="e.g. Website, Referral, Cold Call" maxlength="60">
+                            <input type="text" class="form-control" name="lead_source" placeholder="e.g. Website, Referral" maxlength="60">
                         </div>
                         <div class="form-group col-md-6 mb-2">
                             <label>Lead Status</label>
@@ -345,7 +345,7 @@ ob_start();
                                     <span class="input-group-text"><i class="fa fa-fw fa-mobile-alt"></i></span>
                                 </div>
                                 <input type="tel" class="form-control col-2" name="contact_mobile_country_code" placeholder="+" maxlength="4">
-                                <input type="tel" class="form-control" name="contact_mobile" placeholder="Mobile Phone Number">
+                                <input type="tel" class="form-control" name="contact_mobile" placeholder="Mobile Number">
                             </div>
                         </div>
                     </div>
@@ -415,7 +415,7 @@ ob_start();
     </div>
     <div class="modal-footer">
         <button type="submit" name="add_client" class="btn btn-primary text-bold js-prompt-primary-contact"><i class="fa fa-check me-2"></i>Create <?php echo $leads_filter == 1 ? "Lead" : "Client"; ?></button>
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal"><i class="fa fa-times me-2"></i>Close</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal"><i class="fa fa-times me-2"></i>Cancel</button>
     </div>
 </form>
 
