@@ -195,3 +195,5 @@
 /* Event rules: the recipes wrapper is a plain block (heading, hint, then .er-recipe-grid). The legacy grid rule for .er-recipes
    made the heading, hint and the card grid three squeezed columns. */
 #er-recipes.er-recipes { display: block; }
+/* Endpoint agent tab attention dot: a round 10px dot, not a stretched pill. */
+.ea-tab-dot.badge { display: inline-block; width: 10px; height: 10px; min-width: 0; padding: 0 !important; vertical-align: middle; border-radius: 50%; }
