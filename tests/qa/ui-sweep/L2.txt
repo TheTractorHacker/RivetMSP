@@ -1,0 +1,15 @@
+agent/invoices.php
+agent/quotes.php
+agent/payments.php
+agent/revenues.php
+agent/expenses.php
+agent/recurring_expenses.php
+agent/recurring_invoices.php
+agent/products.php?type=product
+agent/accounts.php
+agent/transfers.php
+agent/trips.php
+agent/contracts.php?client_id=11
+agent/invoice.php?invoice_id=6
+agent/quote.php?quote_id=2
+admin/tax.php

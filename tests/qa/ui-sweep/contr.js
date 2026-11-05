@@ -1,0 +1,11 @@
+const m=require('./m2.js');
+const txt=(p)=>p.evaluate(()=>[...document.querySelectorAll('.toast,.alert')].map(e=>e.innerText.replace(/\s+/g,' ').slice(0,140)));
+(async()=>{const {b,p}=await m.ctxPage();await m.go(p,'agent/contracts.php?client_id=11');await p.screenshot({path:m.IMG+'/contracts_l.png',fullPage:true});
+console.log('toolbar',await p.evaluate(()=>[...document.querySelectorAll('.card-header .btn')].map(x=>x.innerText.trim()+'=>'+(x.dataset.modalUrl||''))));
+await m.openModal(p,'modals/contract/contract_add.php?client_id=11','lg');console.log(JSON.stringify(await m.audit(p)));await m.shotModal(p,'contract_add');
+let r=await m.submit(p);console.log('empty',r,!!(await p.$('.modal.show')));
+await m.fillModal(p,{val:{contract_name:'QA-UI Contract',contract_type:'Managed Services',contract_status:'Active',contract_value:'1200',contract_renewal_frequency:'Annual',contract_start_date:'2026-11-01',contract_end_date:'2027-10-31',contract_renewal_date:'2027-10-01',contract_details:'QA-UI terms'}});
+console.log('create',await m.submit(p),await txt(p));
+await m.go(p,'agent/contracts.php?client_id=11');
+console.log(await p.evaluate(()=>[...document.querySelectorAll('tbody tr')].map(r=>r.innerText.replace(/\s+/g,' ').slice(0,100)+' || '+[...r.querySelectorAll('a')].map(a=>a.innerText.trim()+'=>'+(a.dataset.modalUrl||a.getAttribute('href')||'').replace(/csrf.*/,'')).join(' ; '))));
+console.log(p.errs);await b.close();})();
