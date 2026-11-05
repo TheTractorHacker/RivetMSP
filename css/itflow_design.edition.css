@@ -219,3 +219,4 @@ body.client-portal.dark-mode .btn-outline-primary:hover { color: #fff; backgroun
 /* Login / password-reset links: the teal accent on white is 3.7:1 at 14px (AA needs 4.5:1). */
 .page-center .card a:not(.btn), .login-box .card a:not(.btn) { color: #0f766e; }
 .portal-doc-preview { max-height: 600px; width: auto; max-width: 100%; }
+.portal-kpis > .col-lg { max-width: 25%; } @media (max-width: 991.98px) { .portal-kpis > .col-lg { max-width: none; } }

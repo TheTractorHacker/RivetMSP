@@ -21,7 +21,7 @@ $stripe_provider_query = mysqli_query($mysqli, "
 $stripe_provider = mysqli_fetch_assoc($stripe_provider_query);
 
 if (!$stripe_provider) {
-    echo "Stripe payment error - Stripe provider is not configured.";
+    echo '<div class="row mb-4"><div class="col"><h3><i class="fas fa-fw fa-credit-card me-2"></i>Saved Payments</h3></div></div><div class="card"><div class="card-body text-center text-muted py-4">Online payments are not set up yet. Please contact us if you would like to pay by card.</div></div>';
     include_once 'includes/footer.php';
     exit();
 }
@@ -53,7 +53,7 @@ while ($row = mysqli_fetch_assoc($saved_methods_query)) {
 
 // Stripe not properly configured
 if (!$stripe_public_key || !$stripe_secret_key) {
-    echo "Stripe payment error - Stripe credentials missing. Please contact support.";
+    echo '<div class="row mb-4"><div class="col"><h3><i class="fas fa-fw fa-credit-card me-2"></i>Saved Payments</h3></div></div><div class="card"><div class="card-body text-center text-muted py-4">Online payments are temporarily unavailable. Please contact support.</div></div>';
     include_once 'includes/footer.php';
     exit();
 }

@@ -47,7 +47,7 @@ require_once 'includes/inc_all.php';
 <?php if ($_SESSION['login_method'] == 'local'): ?>
         <div class="col-lg-6">
             <div class="card card-outline card-primary h-100">
-                <div class="card-header"><h5 class="card-title mb-0">Change password</h5></div>
+                <div class="card-header"><h4 class="card-title h5 mb-0">Change password</h4></div>
                 <div class="card-body">
                     <form action="post.php" method="post" autocomplete="off">
                         <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">

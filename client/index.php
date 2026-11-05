@@ -212,7 +212,7 @@ if ($session_contact_primary == 1 || $session_contact_is_technical_contact) {
 </div>
 
 <!-- Stat boxes -->
-<div class="row mb-3">
+<div class="row mb-3 portal-kpis">
 
     <div class="col-lg col-md-6 col-12">
         <a class="small-box <?php echo $open_tickets_count > 0 ? 'bg-info' : 'bg-secondary'; ?>" href="tickets.php">

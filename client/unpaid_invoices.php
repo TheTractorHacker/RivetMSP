@@ -94,7 +94,7 @@ $balance = $invoice_amounts - $amount_paid;
                 <th>Amount</th>
                 <th>Date</th>
                 <th>Due</th>
-                <th></th>
+                <th><span class="visually-hidden">Actions</span></th>
             </tr>
             </thead>
             <tbody>
