@@ -1,0 +1,11 @@
+const h=require('./h.js');const I='/home/sysadmin/ui-sweep-adminother-img/';
+(async()=>{const b=await h.launch();const ctx=await b.newContext({viewport:{width:1920,height:1080},storageState:I+'state.json'});const page=await ctx.newPage();
+await page.goto(h.BASE+'/admin/canned_responses.php');
+const row=page.locator('tr:has-text("QA-UI-ADM")').first();await row.locator('[data-bs-toggle=dropdown]').click();await page.waitForTimeout(300);
+await page.screenshot({path:I+'confirm_menu.png',clip:{x:1000,y:400,width:920,height:500}});
+await row.locator('a:has-text("Delete")').first().click();await page.waitForTimeout(900);
+await page.screenshot({path:I+'confirm_dlg.png'});
+console.log(await page.evaluate(()=>{const d=document.querySelector('.modal.show,[role=dialog],[role=alertdialog]');return d?d.outerHTML.slice(0,600):'none'}));
+console.log('focus',await page.evaluate(()=>document.activeElement.outerHTML.slice(0,100)));
+await page.keyboard.press('Escape');await page.waitForTimeout(500);console.log('esc closes?',await page.evaluate(()=>!document.querySelector('.modal.show,[role=dialog],[role=alertdialog]')));
+await b.close();})();

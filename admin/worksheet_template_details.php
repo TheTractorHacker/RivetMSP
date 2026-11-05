@@ -6,7 +6,8 @@ $template_id = intval($_GET['id'] ?? 0);
 
 $sql = mysqli_query($mysqli, "SELECT * FROM worksheet_templates WHERE worksheet_template_id = $template_id LIMIT 1");
 if (mysqli_num_rows($sql) == 0) {
-    header("Location: worksheet_template.php");
+    echo "<center><h1 class='text-secondary mt-5'>Nothing to see here</h1><a class='btn btn-lg btn-secondary mt-3' href='worksheet_template.php'><i class='fa fa-fw fa-arrow-left'></i> Back to Worksheet Templates</a></center>";
+    require_once "../includes/footer.php";
     exit;
 }
 $row = mysqli_fetch_assoc($sql);

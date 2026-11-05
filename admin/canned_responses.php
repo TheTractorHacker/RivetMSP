@@ -61,7 +61,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                     $canned_response_id = intval($row['canned_response_id']);
                     $canned_response_name = nullable_htmlentities($row['canned_response_name']);
                     $canned_response_message = $row['canned_response_message'];
-                    $canned_response_message_preview = nullable_htmlentities(mb_strimwidth(strip_tags($canned_response_message), 0, 120, '...'));
+                    $canned_response_message_preview = nullable_htmlentities(mb_strimwidth(preg_replace('/\s+/', ' ', strip_tags(preg_replace('/<(br|\/p|\/div|\/li|\/h[1-6])\b[^>]*>/i', ' ', $canned_response_message))), 0, 120, '...'));
 
                     ?>
                     <tr>

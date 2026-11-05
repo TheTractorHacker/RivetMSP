@@ -62,6 +62,9 @@ $sql = mysqli_query($mysqli, "SELECT wt.*,
                         </td>
                     </tr>
                 <?php } ?>
+                <?php if (mysqli_num_rows($sql) === 0) { ?>
+                <tr><td colspan="5" class="text-center text-secondary py-4">No client workflow templates yet. Click <strong>New Template</strong> to add one.</td></tr>
+                <?php } ?>
             </tbody>
         </table>
     </div>
