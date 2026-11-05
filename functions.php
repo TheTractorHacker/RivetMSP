@@ -5012,6 +5012,8 @@ function redirect($url = null, $permanent = false) {
 function flash_alert(string $message, string $type = 'success'): void {
     // Messages are built from sanitizeInput()ed names, so a quote arrives as \' or \" and used to show up with the backslash in the toast.
     $message = str_replace(["\\'", '\\"'], ["'", '"'], $message);
+    // Several handlers pass 'alert', which toastr has no method for (the page threw and showed no message at all); it means a warning.
+    if (!in_array($type, ['success', 'error', 'info', 'warning'], true)) { $type = 'warning'; }
     $_SESSION['alert_type'] = $type;
     $_SESSION['alert_message'] = $message;
 }
