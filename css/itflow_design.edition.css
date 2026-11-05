@@ -200,3 +200,5 @@
 /* Legacy <button class="close">&times;</button> inside a flex .modal-header sat right next to the title (the shim's float does nothing in a flex row). */
 .modal-header > .close { float: none; margin-left: auto; }
 .modal-header.bg-dark .close { color: #fff; opacity: .85; }
+/* Select-all checkbox in a table header sat above the header text (form-check bottom margin). */
+thead th > .form-check, thead td > .form-check { margin-bottom: 0; }
