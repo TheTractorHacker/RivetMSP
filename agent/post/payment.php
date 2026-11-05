@@ -671,7 +671,7 @@ if (isset($_GET['add_payment_stripe'])) {
     $stripe_pm = sanitizeInput($stripe_client_details['stripe_pm']);
 
     // Sanity checks
-    if (!$config_stripe_enable || !$stripe_id || !$stripe_pm) {
+    if (empty($config_stripe_enable) || !$stripe_id || !$stripe_pm) {
         flash_alert("Stripe not enabled or no client card saved", 'error');
         redirect();
     } elseif ($invoice_status !== 'Sent' && $invoice_status !== 'Viewed') {
@@ -1019,7 +1019,7 @@ if (isset($_GET['delete_payment'])) {
     logAction("Invoice", "Edit", "$session_name deleted Payment on Invoice $invoice_prefix$invoice_number", $client_id, $invoice_id);
 
     flash_alert("Payment deleted", 'error');
-    if ($config_stripe_enable) {
+    if (!empty($config_stripe_enable)) {
        flash_alert("Payment deleted - Stripe payments must be manually refunded in Stripe", 'error');
     }
 
