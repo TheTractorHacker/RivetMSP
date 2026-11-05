@@ -48,7 +48,7 @@ function tagTextClass($hex_color) {
         $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
     }
     if (!preg_match('/^[0-9a-fA-F]{6}$/', $hex)) {
-        return 'text-light'; // unparseable color - fall back to the old default
+        return 'text-white'; // unparseable color - fall back to the old default
     }
 
     // WCAG relative luminance (https://www.w3.org/TR/WCAG21/#dfn-relative-luminance)
@@ -69,7 +69,29 @@ function tagTextClass($hex_color) {
     $dark_luminance = 0.01806564208421097; // relative luminance of #212529
     $contrast_dark  = ($luminance + 0.05) / ($dark_luminance + 0.05);
 
-    return $contrast_white >= $contrast_dark ? 'text-light' : 'text-dark';
+    // text-white, not text-light: text-light renders #f9fafb, which costs the 4.5:1 AA margin on mid-tone pills like #6c757d
+    return $contrast_white >= $contrast_dark ? 'text-white' : 'text-dark';
+}
+
+// Background colour that keeps white pill text at WCAG AA (4.5:1): darkens a mid-tone colour like #007bff
+// (3.97:1 with white) step by step; colours that already pass, or that tagTextClass() pairs with dark text, are returned unchanged.
+function tagSafeBg($hex_color) {
+    $hex = ltrim((string) $hex_color, '#');
+    if (strlen($hex) === 3) {
+        $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+    }
+    if (!preg_match('/^[0-9a-fA-F]{6}$/', $hex) || tagTextClass($hex) !== 'text-white') {
+        return $hex_color;
+    }
+    $rgb = [hexdec(substr($hex, 0, 2)), hexdec(substr($hex, 2, 2)), hexdec(substr($hex, 4, 2))];
+    for ($i = 0; $i < 20; $i++) {
+        $lin = array_map(function ($c) { $c /= 255; return $c <= 0.03928 ? $c / 12.92 : (($c + 0.055) / 1.055) ** 2.4; }, $rgb);
+        if (1.05 / (0.2126 * $lin[0] + 0.7152 * $lin[1] + 0.0722 * $lin[2] + 0.05) >= 4.5) {
+            break;
+        }
+        $rgb = array_map(function ($c) { return (int) round($c * 0.94); }, $rgb);
+    }
+    return sprintf('#%02x%02x%02x', $rgb[0], $rgb[1], $rgb[2]);
 }
 
 // Curated set of preset tag colors offered in the tag color picker
