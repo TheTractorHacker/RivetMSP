@@ -1,0 +1,13 @@
+const L=require('./lib.js');
+(async()=>{const b=await L.launch();const ctx=await L.ctxFor(b,'admin',{width:1920,height:1080});const p=await ctx.newPage();const log=[];L.watch(p,log);
+await p.goto(L.BASE+'/agent/recurring_tickets.php',{waitUntil:'networkidle'});
+await p.click('.ajax-modal:has-text("New Recurring")');await p.waitForSelector('.modal.show form');await p.waitForTimeout(700);
+await p.fill('.modal.show input[name=subject]','QA-UI Recurring');
+await L.setSel(p,'.modal.show','client_id','QA-UI Client A');await p.waitForTimeout(800);
+const fr=await p.evaluate(()=>[...document.querySelector('.modal.show select[name=frequency]').options].map(o=>o.value+':'+o.textContent).join('|'));console.log(fr);
+await L.setSel(p,'.modal.show','frequency','Monthly');await p.evaluate(()=>{document.querySelector('.modal.show input[name=start_date]').value='2026-12-01'});
+await p.click('.modal.show button[type=submit]');await p.waitForLoadState('networkidle');await p.waitForTimeout(800);
+await p.screenshot({path:L.SCR+'/img/te_rt.png'});console.log(p.url(),(await p.evaluate(()=>document.body.innerText)).includes('QA-UI Recurring'),log.join(';'));
+await p.goto(L.BASE+'/agent/leads_board.php',{waitUntil:'networkidle'});await p.screenshot({path:L.SCR+'/img/te_lead.png'});
+console.log((await p.evaluate(()=>document.body.innerText)).includes('QA-UI Lead A'));
+await b.close()})();
