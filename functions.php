@@ -452,7 +452,27 @@ function getCanonicalVaultKey($mysqli): ?string {
 // Persists the canonical site encryption master key (admin-only action).
 function setCanonicalVaultKey($mysqli, string $master_key): void {
     $esc = mysqli_real_escape_string($mysqli, encryptSetting($master_key, \RivetMSP\Crypto\SettingsCrypto::VAULT_CANONICAL_KEY));
+
+    // UPDATE first, INSERT only when there is genuinely no row. An INSERT ... ON DUPLICATE KEY UPDATE is wrong here: under
+    // STRICT_TRANS_TABLES the proposed row is validated before the duplicate is detected, and
+    // settings.config_current_database_version is NOT NULL with no default.
+    // setup/index.php calls this from the ?user step (the only moment the freshly minted master key is in scope), before the
+    // ?company step creates the settings row, so the fallback seeds the row.
     mysqli_query($mysqli, "UPDATE settings SET config_vault_canonical_key = '$esc', config_vault_canonical_key_set_at = NOW() WHERE company_id = 1");
+    if (mysqli_affected_rows($mysqli) > 0) {
+        return;
+    }
+
+    // affected_rows is also 0 when the row exists but the value is unchanged, so check existence explicitly.
+    $exists = mysqli_query($mysqli, "SELECT 1 FROM settings WHERE company_id = 1 LIMIT 1");
+    if ($exists && mysqli_num_rows($exists) > 0) {
+        return;
+    }
+
+    $version_esc = mysqli_real_escape_string($mysqli, defined('LATEST_DATABASE_VERSION') ? LATEST_DATABASE_VERSION : '0.0.0');
+    mysqli_query($mysqli,
+        "INSERT INTO settings (company_id, config_current_database_version, config_vault_canonical_key, config_vault_canonical_key_set_at)
+         VALUES (1, '$version_esc', '$esc', NOW())");
 }
 
 // Self-heals a missing/unusable user_specific_encryption_ciphertext (e.g. NULL on
