@@ -193,3 +193,9 @@
 @media (max-width: 575.98px) {
     .fc .fc-header-toolbar { flex-wrap: wrap; justify-content: center; gap: .5rem; }
 }
+
+/* Calendar in dark mode: day numbers/links and the outline-primary "Subscribe Now" button used the light-theme blue (#2563eb), about 3:1 on the dark card. */
+:root[data-bs-theme="dark"] .fc .fc-daygrid-day-number,
+:root[data-bs-theme="dark"] .fc .fc-col-header-cell-cushion { color: var(--color-text, #e5e7eb); }
+:root[data-bs-theme="dark"] .fc .fc-day-other .fc-daygrid-day-number { color: var(--color-text-muted, #9ca3af); }
+:root[data-bs-theme="dark"] .card .btn-outline-primary { color: #8ab4ff; border-color: #8ab4ff; }
