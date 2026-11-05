@@ -173,7 +173,7 @@ $backup_ready = $backup_passphrase_ready && (int) $config_backup_allow_unencrypt
                                    <?= $config_backup_allow_unencrypted_override ? 'checked' : '' ?>>
                             <label class="form-check-label" for="backup_allow_unencrypted">Allow unencrypted in-app backups</label>
                         </div>
-                        <small class="text-warning">
+                        <small class="text-warning-emphasis">
                             <i class="fas fa-triangle-exclamation me-1"></i>Off by default: this builder's zip holds the database dump and uploaded files
                             as plain, unencrypted zip content - only the small manifest above (carrying the settings key) is passphrase-encrypted. With
                             this off, "Download Backup", "Save to Server" and the automatic schedule all refuse to run. Turn this on only if you

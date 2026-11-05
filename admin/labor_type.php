@@ -53,6 +53,9 @@ $sql = mysqli_query($mysqli, "SELECT * FROM labor_types WHERE labor_type_archive
                     </td>
                 </tr>
                 <?php } ?>
+                <?php if (mysqli_num_rows($sql) === 0) { ?>
+                <tr><td colspan="4" class="text-center text-secondary py-4">No labor types yet. Click <strong>New Labor Type</strong> to add one.</td></tr>
+                <?php } ?>
                 </tbody>
             </table>
         </div>

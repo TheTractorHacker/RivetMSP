@@ -72,6 +72,9 @@ $sql = mysqli_query($mysqli, "SELECT mr.*, m.mailbox_name, m.mailbox_email,
                     </td>
                 </tr>
                 <?php } ?>
+                <?php if (mysqli_num_rows($sql) === 0) { ?>
+                <tr><td colspan="6" class="text-center text-secondary py-4">No mail requests waiting for review.</td></tr>
+                <?php } ?>
                 </tbody>
             </table>
         </div>

@@ -158,7 +158,7 @@ $remember_token_count = mysqli_num_rows($sql_remember_tokens);
                 <tr><td colspan="5" class="text-muted text-center py-3">No tracked sessions yet.</td></tr>
             <?php } foreach ($sec_sessions as $sx) { ?>
                 <tr>
-                    <td class="ps-3 small"><?= nullable_htmlentities(mb_strimwidth((string) $sx['session_user_agent'], 0, 60, '...')) ?>
+                    <td class="ps-3 small" title="<?= nullable_htmlentities((string) $sx['session_user_agent']) ?>"><?= getWebBrowser((string) $sx['session_user_agent']) ?> &middot; <?= getOS((string) $sx['session_user_agent']) ?>
                         <?php if ($sx['is_current']) { ?><span class="badge text-bg-success ms-1">This browser</span><?php } ?></td>
                     <td class="text-muted small"><?= nullable_htmlentities($sx['session_ip']) ?></td>
                     <td class="text-muted small"><?= nullable_htmlentities($sx['session_created_at']) ?></td>
@@ -408,7 +408,7 @@ document.addEventListener('click', function (e) {
                     <td class="text-muted small"><?= $tok['token_created_at'] ?></td>
                     <td class="text-muted small"><?= $tok['token_last_used_at'] ?? 'Never' ?></td>
                     <td class="text-end">
-                        <button class="btn btn-xs btn-danger js-revoke-api-token"
+                        <button class="btn btn-sm btn-outline-danger js-revoke-api-token"
                                 data-token-id="<?= $tok['token_id'] ?>"
                                 data-csrf="<?= $_SESSION['csrf_token'] ?>">
                             <i class="fas fa-times"></i> Revoke

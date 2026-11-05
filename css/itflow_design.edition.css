@@ -188,3 +188,19 @@
 
 /* White on the success green is 2.9:1; black is 7:1 (same treatment the BS4 shim gives .badge-success). */
 .badge.text-bg-success, .badge.badge-success { color: #000 !important; }
+
+/* UI sweep (admin/chrome): white on the success green fails WCAG AA for badges that
+   use bg-success without the text-bg-* helper; inline code inside small/muted text stays readable (was 10.5px). */
+.badge.bg-success { color: #000 !important; }
+code, kbd, samp { font-size: max(.875em, 11.5px); }
+
+/* Event rules: Core styles .er-recipes as the card grid, but the edition markup wraps heading + blurb + .er-recipe-grid in it, which
+   squeezed the recipe cards into a narrow third column. The wrapper is a plain block; .er-recipe-grid does the layout. */
+#er-recipes.er-recipes { display: block; }
+
+/* Dark theme contrast: yellow badges keep black text (text-dark flips light in dark mode), the pale grey secondary badge takes black
+   text, and outline-primary / directory "+ New" links use a lighter blue (#2563eb is 3.2:1 on the dark surfaces). */
+.badge.bg-warning, .badge.text-bg-warning { color: #000 !important; }
+[data-bs-theme="dark"] .badge.bg-secondary, [data-bs-theme="dark"] .badge.text-bg-secondary { color: #000 !important; }
+[data-bs-theme="dark"] .btn-outline-primary:not(:hover):not(:focus):not(.active),
+[data-bs-theme="dark"] .admin-directory__add { color: #8db3ff; border-color: #8db3ff; }

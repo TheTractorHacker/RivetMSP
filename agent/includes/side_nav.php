@@ -61,8 +61,8 @@ foreach ($section_pages as $key => $pages) {
         <div class="collapse navbar-collapse" id="sidebar-menu">
             <ul class="navbar-nav pt-lg-2">
 
-                <li class="nav-item<?php if ($current_page == "dashboard.php") { echo " active"; } ?>">
-                    <a href="/agent/dashboard.php" class="nav-link<?php if ($current_page == "dashboard.php") { echo " active"; } ?>">
+                <li class="nav-item<?php if ($current_page == "dashboard.php" || $current_page == "my_dashboard.php") { echo " active"; } ?>">
+                    <a href="/agent/dashboard.php" class="nav-link<?php if ($current_page == "dashboard.php" || $current_page == "my_dashboard.php") { echo " active"; } ?>">
                         <span class="nav-link-icon"><i class="fas fa-tachometer-alt"></i></span>
                         <span class="nav-link-title">Dashboard</span>
                     </a>
@@ -105,7 +105,7 @@ foreach ($section_pages as $key => $pages) {
                         <?php if (\RivetMSP\Core\CoreBridge::enabled('core.workflow.enabled')) { ?>
                         <a href="/agent/workflow_runs.php" class="dropdown-item<?php if ($current_page == "workflow_runs.php" || $current_page == "workflow_run.php") { echo " active"; } ?>">
                             <span class="dropdown-item-icon"><i class="fas fa-tasks"></i></span>
-                            <span class="text-truncate">Onboarding &amp; Offboarding</span>
+                            <span class="text-truncate" title="Onboarding &amp; Offboarding">Onboarding &amp; Offboarding</span>
                         </a>
                         <?php } ?>
                     </div>

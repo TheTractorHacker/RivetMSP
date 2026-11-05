@@ -1077,7 +1077,7 @@ $show_login_form = (!$show_role_choice && !$show_mfa_form);
             </form>
 
             <?php if($config_client_portal_enable == 1){ ?>
-                <hr>
+                <?php if ((!empty($config_smtp_host) || !empty($config_smtp_provider)) || !empty($azure_client_id) || $oidc_portal_ready || isset($_GET['sso_error'])) { ?><hr><?php } // no empty divider when there is nothing below it ?>
                 <?php if ((!empty($config_smtp_host) || !empty($config_smtp_provider))) { ?>
                     <a href="client/login_reset.php">Forgot password?</a>
                 <?php } ?>
