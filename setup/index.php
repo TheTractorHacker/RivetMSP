@@ -440,6 +440,10 @@ if (isset($_POST['add_user'])) {
 
     mysqli_query($mysqli,"INSERT INTO users SET user_name = '$name', user_email = '$email', user_password = '$password', user_specific_encryption_ciphertext = '$user_specific_encryption_ciphertext', user_role_id = 3");
 
+    // Persist the canonical copy now, while the freshly minted master key is in scope: the ?company step is a separate
+    // request and cannot recover it.
+    setCanonicalVaultKey($mysqli, $site_encryption_master_key);
+
     mkdirMissing("../uploads/users/1");
 
     //Check to see if a file is attached
@@ -451,7 +455,7 @@ if (isset($_POST['add_user'])) {
         $file_name = $_FILES['file']['name'];
         $file_size = $_FILES['file']['size'];
         $file_type = $_FILES['file']['type'];
-        $file_extension = strtolower(end(explode('.',$_FILES['file']['name'])));
+        $file_extension = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
 
         // sanitize file-name
         $new_file_name = md5(time() . $file_name) . '.' . $file_extension;
@@ -519,7 +523,7 @@ if (isset($_POST['add_company_settings'])) {
         $file_name = $_FILES['file']['name'];
         $file_size = $_FILES['file']['size'];
         $file_type = $_FILES['file']['type'];
-        $file_extension = strtolower(end(explode('.',$_FILES['file']['name'])));
+        $file_extension = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
 
         // sanitize file-name
         $new_file_name = md5(time() . $file_name) . '.' . $file_extension;
@@ -553,12 +557,11 @@ if (isset($_POST['add_company_settings'])) {
     }
 
     $latest_database_version = LATEST_DATABASE_VERSION;
-    mysqli_query($mysqli,"INSERT INTO settings SET company_id = 1, config_current_database_version = '$latest_database_version', config_invoice_prefix = 'INV-', config_invoice_next_number = 1, config_recurring_invoice_prefix = 'REC-', config_invoice_overdue_reminders = '1,3,7', config_quote_prefix = 'QUO-', config_quote_next_number = 1, config_default_net_terms = 30, config_ticket_next_number = 1, config_ticket_prefix = 'TCK-'");
+    mysqli_query($mysqli,"INSERT INTO settings SET company_id = 1, config_current_database_version = '$latest_database_version', config_invoice_prefix = 'INV-', config_invoice_next_number = 1, config_recurring_invoice_prefix = 'REC-', config_invoice_overdue_reminders = '1,3,7', config_quote_prefix = 'QUO-', config_quote_next_number = 1, config_default_net_terms = 30, config_ticket_next_number = 1, config_ticket_prefix = 'TCK-'
+        ON DUPLICATE KEY UPDATE config_current_database_version = VALUES(config_current_database_version), config_invoice_prefix = VALUES(config_invoice_prefix), config_invoice_next_number = VALUES(config_invoice_next_number), config_recurring_invoice_prefix = VALUES(config_recurring_invoice_prefix), config_invoice_overdue_reminders = VALUES(config_invoice_overdue_reminders), config_quote_prefix = VALUES(config_quote_prefix), config_quote_next_number = VALUES(config_quote_next_number), config_default_net_terms = VALUES(config_default_net_terms), config_ticket_next_number = VALUES(config_ticket_next_number), config_ticket_prefix = VALUES(config_ticket_prefix)");
 
-    // Seed the canonical copy of the site encryption master key. This is the only
-    // place (besides scripts/setup_cli.php) a brand-new master key is ever minted -
-    // every other self-heal path syncs from this canonical copy instead.
-    setCanonicalVaultKey($mysqli, $site_encryption_master_key);
+    // The canonical vault key was seeded in the ?user step (add_user): $site_encryption_master_key only exists in that
+    // earlier request. The ON DUPLICATE KEY above deliberately leaves config_vault_canonical_key alone.
 
     // Create Categories
     // Expense Categories Examples
