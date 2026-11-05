@@ -15,18 +15,18 @@ if ($client_id) {
     enforceUserPermission('module_financial');
 }
 
-$name = sanitizeInput($row['vendor_name']);
-$description = sanitizeInput($row['vendor_description']);
-$account_number = sanitizeInput($row['vendor_account_number']);
-$contact_name = sanitizeInput($row['vendor_contact_name']);
+$name = nullable_htmlentities($row['vendor_name']);
+$description = nullable_htmlentities($row['vendor_description']);
+$account_number = nullable_htmlentities($row['vendor_account_number']);
+$contact_name = nullable_htmlentities($row['vendor_contact_name']);
 $phone = preg_replace("/[^0-9]/", '',$row['vendor_phone']);
 $extension = preg_replace("/[^0-9]/", '',$row['vendor_extension']);
 $email = nullable_htmlentities($row['vendor_email']);
 $website = nullable_htmlentities($row['vendor_website']);
-$hours = sanitizeInput($row['vendor_hours']);
-$sla = sanitizeInput($row['vendor_sla']);
-$code = sanitizeInput($row['vendor_code']);
-$notes = sanitizeInput($row['vendor_notes']);
+$hours = nullable_htmlentities($row['vendor_hours']);
+$sla = nullable_htmlentities($row['vendor_sla']);
+$code = nullable_htmlentities($row['vendor_code']);
+$notes = nullable_htmlentities($row['vendor_notes']);
 
 // Generate the HTML form content using output buffering.
 ob_start();
