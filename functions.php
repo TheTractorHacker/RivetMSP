@@ -2812,7 +2812,7 @@ function getMonthlyTax($tax_name, $month, $year, $mysqli)
             LEFT JOIN payments ON invoices.invoice_id = payments.payment_invoice_id
             WHERE YEAR(payments.payment_date) = $year AND MONTH(payments.payment_date) = $month
             AND invoices.invoice_amount > 0
-            AND invoice_items.item_tax_id = (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
+            AND invoice_items.item_tax_id IN (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
     $result = mysqli_query($mysqli, $sql);
     $row = mysqli_fetch_assoc($result);
     return $row['monthly_tax'] ?? 0;
@@ -2831,7 +2831,7 @@ function getQuarterlyTax($tax_name, $quarter, $year, $mysqli)
             LEFT JOIN payments ON invoices.invoice_id = payments.payment_invoice_id
             WHERE YEAR(payments.payment_date) = $year AND MONTH(payments.payment_date) BETWEEN $start_month AND $end_month
             AND invoices.invoice_amount > 0
-            AND invoice_items.item_tax_id = (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
+            AND invoice_items.item_tax_id IN (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
     $result = mysqli_query($mysqli, $sql);
     $row = mysqli_fetch_assoc($result);
     return $row['quarterly_tax'] ?? 0;
@@ -2846,7 +2846,7 @@ function getTotalTax($tax_name, $year, $mysqli)
             LEFT JOIN payments ON invoices.invoice_id = payments.payment_invoice_id
             WHERE YEAR(payments.payment_date) = $year
             AND invoices.invoice_amount > 0
-            AND invoice_items.item_tax_id = (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
+            AND invoice_items.item_tax_id IN (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
     $result = mysqli_query($mysqli, $sql);
     $row = mysqli_fetch_assoc($result);
     return $row['total_tax'] ?? 0;

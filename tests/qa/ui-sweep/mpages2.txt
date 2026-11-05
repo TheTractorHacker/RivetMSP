@@ -1,0 +1,16 @@
+agent/racks.php?client_id=1
+agent/structured_docs.php?client_id=1
+agent/services.php?client_id=1
+agent/service_catalog.php
+agent/project_kanban.php
+agent/project_gantt.php
+agent/credentials.php?client_id=1
+agent/domains.php?client_id=1
+agent/certificates.php?client_id=1
+agent/software.php?client_id=1
+agent/networks.php?client_id=1
+agent/files.php?client_id=1
+agent/kb_article.php?id=2
+agent/asset_details.php?client_id=1&asset_id=26
+agent/project_details.php?project_id=5
+agent/vendors.php?client_id=1

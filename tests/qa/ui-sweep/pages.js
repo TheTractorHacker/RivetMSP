@@ -10,10 +10,10 @@ let errs=[];p.on('console',m=>{if(m.type()==='error')errs.push('C:'+m.text().sli
 p.on('response',r=>{if(r.status()>=400)errs.push(r.status()+' '+r.url().replace(h.BASE,'').slice(0,100))});
 for(const u of paths){errs=[];
  try{await p.goto(h.BASE+'/'+u,{waitUntil:'networkidle',timeout:30000}).catch(()=>{});
- if(process.env.LIGHT)await p.evaluate(()=>{document.documentElement.setAttribute('data-bs-theme','light');document.body.classList.remove('dark-mode')});if(dark)await p.evaluate(()=>{document.documentElement.setAttribute('data-bs-theme','dark');document.body.classList.add('dark-mode')});
+ if(!process.env.DARK)await p.evaluate(()=>{document.documentElement.setAttribute('data-bs-theme','light');document.body.classList.remove('dark-mode')});if(dark)await p.evaluate(()=>{document.documentElement.setAttribute('data-bs-theme','dark');document.body.classList.add('dark-mode')});
  await p.waitForTimeout(300);
  const a=await h.audit(p,!!process.env.AXE);
- const name=tag+'_'+u.replace(/[^a-z0-9]+/gi,'_').slice(0,60)+(process.env.LIGHT?'_L':(dark?'_d':'_l'))+'_'+w;
+ const name=tag+'_'+u.replace(/[^a-z0-9]+/gi,'_').slice(0,60)+(dark?'_d':'_L')+'_'+w;
  const mx=process.env.MAXH?+process.env.MAXH:1000;
  const bh=await p.evaluate(()=>{let m=0;document.querySelectorAll('.page-body .card, .page-body .small-box, .page-body table, .page-body form, .page-body .alert').forEach(c=>{const r=c.getBoundingClientRect();if(r.height>0)m=Math.max(m,r.bottom+scrollY)});return Math.ceil(m||600)});
  const x0=w>=1000?256:0;

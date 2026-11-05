@@ -145,6 +145,7 @@
    (not instead of) .prettyContent so pretty_content.js's table/img-fluid
    hook keeps working unchanged. ---- */
 .kb-reader-card { border-top: 3px solid var(--color-accent); }
+.kb-reader-card .card-header { display: block; }
 .kb-reader-meta { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; font-size: .82rem; color: var(--if-muted); margin-top: .35rem; }
 
 .kb-prose { font-size: 1rem; line-height: 1.75; color: var(--if-ink); max-width: 74ch; }
