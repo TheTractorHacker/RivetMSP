@@ -1458,7 +1458,7 @@ if (isset($_GET['asset_id'])) {
                                     $document_description = nullable_htmlentities($row['document_description']);
                                     $document_created_by = nullable_htmlentities($row['user_name']);
                                     $document_created_at = nullable_htmlentities($row['document_created_at']);
-                                    $document_updated_at = nullable_htmlentities($row['document_updated_at']);
+                                    $document_updated_at = nullable_htmlentities($row['document_updated_at'] ?: $row['document_created_at']);
 
                                     $linked_documents[] = $document_id;
 

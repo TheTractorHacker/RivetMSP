@@ -36,6 +36,8 @@ if (isset($_POST['upload_files'])) {
         'key', 'bat', 'stk', 'swb'
     ];
 
+    $rejected_files = [];
+
     // Loop through each uploaded file
     foreach ($_FILES['file']['name'] as $index => $originalName) {
 
@@ -95,7 +97,14 @@ if (isset($_POST['upload_files'])) {
             logAction("File", "Upload", "$session_name uploaded file $file_name", $client_id, $file_id);
 
             flash_alert("Uploaded file <strong>$file_name</strong>");
+        } elseif ($single_file['tmp_name'] !== '') {
+            // Rejected (type not on the allow-list, or over the size limit): say so rather than redirecting as if nothing happened
+            $rejected_files[] = nullable_htmlentities($originalName);
         }
+    }
+
+    if (!empty($rejected_files)) {
+        flash_alert("Not uploaded (file type not allowed or too large): <strong>" . implode(', ', $rejected_files) . "</strong>", 'error');
     }
 
     redirect();

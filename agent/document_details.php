@@ -122,7 +122,7 @@ $page_title = $row['document_name'];
                         <div class="float-end">
                             <div>
                                 Date:
-                                <strong><?= date('Y-m-d', strtotime($document_updated_at)); ?></strong>
+                                <strong><?= date('Y-m-d', strtotime($document_updated_at ?: $document_created_at)); ?></strong>
                             </div>
                             <?php if($document_created_by_name) { ?>
                             <div>
@@ -190,17 +190,17 @@ $page_title = $row['document_name'];
     <div class="col-md-3 d-print-none">
         <div class="row">
             <div class="col-12 mb-3">
-                <button type="button" class="btn btn-primary ajax-modal me-1"
+                <button type="button" class="btn btn-primary ajax-modal me-1" title="Edit" aria-label="Edit"
                     data-modal-size="lg"
                     data-modal-url="modals/document/document_edit.php?id=<?= $document_id ?>">
                     <i class="fas fa-fw fa-edit" title="Edit"></i>
                 </button>
-                <button type="button" class="btn btn-secondary me-1" data-bs-toggle="modal" data-bs-target="#shareModal"
+                <button type="button" class="btn btn-secondary me-1" title="Share" aria-label="Share" data-bs-toggle="modal" data-bs-target="#shareModal"
                     data-share-modal='<?= json_encode(['client_id' => (int) $client_id, 'item_type' => 'Document', 'item_id' => (int) $document_id], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG) ?>'>
                     <i class="fas fa-fw fa-share" title="Share"></i>
                 </button>
-                <a class="btn btn-success me-1" href="post.php?export_document=<?= $document_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>"><i class='fas fa-fw fa-file-pdf' title="PDF Export"></i></a>
-                <button type="button" class="btn btn-secondary me-4 js-print-page"><i class="fas fa-fw fa-print" title="Print"></i></button>
+                <a class="btn btn-success me-1" title="PDF Export" aria-label="PDF Export" href="post.php?export_document=<?= $document_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>"><i class='fas fa-fw fa-file-pdf' title="PDF Export"></i></a>
+                <button type="button" class="btn btn-secondary me-4 js-print-page" title="Print" aria-label="Print"><i class="fas fa-fw fa-print" title="Print"></i></button>
                 <a class="btn btn-warning me-1 confirm-link" href="post.php?archive_document=<?= $document_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>" title="Archive"><i class='fas fa-fw fa-archive'></i></a>
                 <a class="btn btn-danger confirm-link" href="post.php?delete_document=<?= $document_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>&from=document_details" title="Delete"><i class='fas fa-fw fa-trash-alt'></i></a>
             </div>
