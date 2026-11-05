@@ -1,7 +1,7 @@
 // usage: node pages.js <listfile|comma paths> [tag] ; env VP=1920x1080 DARK=1 AXE=1
-process.env.QA_BASE='http://127.0.0.1:8213';
+process.env.QA_BASE='http://127.0.0.1:8218';
 const h=require('./h.js');const fs=require('fs');
-const IMG='/home/sysadmin/sweep-billing-img';
+const IMG='/home/sysadmin/sweep-docs-img';
 const arg=process.argv[2];const tag=process.argv[3]||'p';
 const paths=fs.existsSync(arg)?fs.readFileSync(arg,'utf8').split('\n').filter(Boolean):arg.split(',');
 const [w,hh]=(process.env.VP||'1920x1080').split('x').map(Number);const dark=!!process.env.DARK;

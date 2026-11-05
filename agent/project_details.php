@@ -386,16 +386,18 @@ if (isset($_GET['project_id'])) {
 
     <div class="card card-body">
         <?php if ($ticket_count) { ?>
-            <div class="progress" style="height: 20px;">
-                <i class="fa fas fa-fw fa-life-ring me-2"></i>
-                <div class="progress-bar bg-primary" style="width: <?php echo $tickets_closed_percent; ?>%;"><?php echo $closed_ticket_count; ?> / <?php echo $ticket_count; ?></div>
-            </div>
+            <div class="progress-meter">
+<i class="fa fas fa-fw fa-life-ring text-secondary" aria-hidden="true"></i>
+<div class="progress" role="progressbar" aria-valuenow="<?php echo (int) $tickets_closed_percent; ?>" aria-valuemin="0" aria-valuemax="100" aria-label="Tickets closed"><div class="progress-bar bg-primary" style="width: <?php echo $tickets_closed_percent; ?>%;"></div></div>
+<span class="progress-label"><?php echo $closed_ticket_count; ?> / <?php echo $ticket_count; ?></span>
+</div>
         <?php } ?>
         <?php if ($task_count) { ?>
-            <div class="progress mt-2" style="height: 20px;">
-                <i class="fa fas fa-fw fa-tasks me-2"></i>
-                <div class="progress-bar bg-secondary" style="width: <?php echo $tasks_completed_percent; ?>%;"><?php echo $completed_task_count; ?> / <?php echo $task_count; ?></div>
-            </div>
+            <div class="progress-meter mt-2">
+<i class="fa fas fa-fw fa-tasks text-secondary" aria-hidden="true"></i>
+<div class="progress" role="progressbar" aria-valuenow="<?php echo (int) $tasks_completed_percent; ?>" aria-valuemin="0" aria-valuemax="100" aria-label="Tasks completed"><div class="progress-bar bg-secondary" style="width: <?php echo $tasks_completed_percent; ?>%;"></div></div>
+<span class="progress-label"><?php echo $completed_task_count; ?> / <?php echo $task_count; ?></span>
+</div>
         <?php } ?>
         <?php if ($ticket_collaborators) { ?>
             <div class=mt-1>
@@ -418,8 +420,8 @@ if (isset($_GET['project_id'])) {
                         <span class="text-secondary"><i class="far fa-fw fa-clock me-2"></i>Hours</span>
                         <span><strong><?php echo number_format($actual_hours, 1); ?></strong> / <?php echo number_format($estimated_hours, 1); ?> hrs (<?php echo $hours_percent; ?>%)</span>
                     </div>
-                    <div class="progress mt-1" style="height: 20px;">
-                        <div class="progress-bar <?php echo $hours_percent > 100 ? 'bg-danger' : 'bg-info'; ?>" style="width: <?php echo min($hours_percent, 100); ?>%;"><?php echo $hours_percent; ?>%</div>
+                    <div class="progress mt-1" role="progressbar" aria-label="Hours used" aria-valuenow="<?php echo min((int) $hours_percent, 100); ?>" aria-valuemin="0" aria-valuemax="100" style="height: .6rem;">
+                        <div class="progress-bar <?php echo $hours_percent > 100 ? 'bg-danger' : 'bg-info'; ?>" style="width: <?php echo min($hours_percent, 100); ?>%;"></div>
                     </div>
                 </div>
                 <div class="col-md-6">
@@ -427,8 +429,8 @@ if (isset($_GET['project_id'])) {
                         <span class="text-secondary"><i class="fas fa-fw fa-dollar-sign me-2"></i>Budget</span>
                         <span><strong><?php echo numfmt_format_currency($currency_format, $burned_amount, $session_company_currency); ?></strong> / <?php echo numfmt_format_currency($currency_format, $project_budget_amount, $session_company_currency); ?> (<?php echo $budget_percent; ?>%)</span>
                     </div>
-                    <div class="progress mt-1" style="height: 20px;">
-                        <div class="progress-bar <?php echo $budget_percent > 100 ? 'bg-danger' : 'bg-success'; ?>" style="width: <?php echo min($budget_percent, 100); ?>%;"><?php echo $budget_percent; ?>%</div>
+                    <div class="progress mt-1" role="progressbar" aria-label="Budget used" aria-valuenow="<?php echo min((int) $budget_percent, 100); ?>" aria-valuemin="0" aria-valuemax="100" style="height: .6rem;">
+                        <div class="progress-bar <?php echo $budget_percent > 100 ? 'bg-danger' : 'bg-success'; ?>" style="width: <?php echo min($budget_percent, 100); ?>%;"></div>
                     </div>
                 </div>
             </div>
@@ -501,8 +503,9 @@ if (isset($_GET['project_id'])) {
                                     </div>
                                 </div>
                             </div>
-                            <div class="progress mt-2" style="height: 16px;">
-                                <div class="progress-bar <?php echo $ms_percent >= 100 ? 'bg-success' : 'bg-secondary'; ?>" style="width: <?php echo $ms_percent; ?>%;"><?php echo "$ms_done / $ms_total"; ?></div>
+                            <div class="progress-meter mt-2">
+                                <div class="progress" role="progressbar" aria-label="Milestone progress" aria-valuenow="<?php echo (int) $ms_percent; ?>" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar <?php echo $ms_percent >= 100 ? 'bg-success' : 'bg-secondary'; ?>" style="width: <?php echo $ms_percent; ?>%;"></div></div>
+                                <span class="progress-label"><?php echo "$ms_done / $ms_total"; ?></span>
                             </div>
                             <?php if ($ms_total > 0) { ?>
                                 <table class="table table-sm mt-2 mb-0">

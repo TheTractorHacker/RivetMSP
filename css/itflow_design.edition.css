@@ -188,3 +188,9 @@
 
 /* White on the success green is 2.9:1; black is 7:1 (same treatment the BS4 shim gives .badge-success). */
 .badge.text-bg-success, .badge.badge-success { color: #000 !important; }
+
+/* Progress meters (projects list/detail): the "x / y" count lived inside the bar, so a 0-25% bar clipped it and it rendered at 10.5px.
+   The count now sits beside the bar at a readable size; the bar itself is purely visual. */
+.progress-meter { display: flex; align-items: center; gap: .5rem; }
+.progress-meter .progress { flex: 1 1 auto; height: .6rem; min-width: 5rem; }
+.progress-meter .progress-label { flex: 0 0 auto; min-width: 3.25rem; font-size: .8125rem; font-variant-numeric: tabular-nums; text-align: right; }

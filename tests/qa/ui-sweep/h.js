@@ -2,7 +2,7 @@
 const pw = require('/home/sysadmin/.npm/_npx/db89d7302a373f10/node_modules/playwright-core');
 const fs = require('fs');
 const CHROME = '/home/sysadmin/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome';
-const BASE = process.env.QA_BASE || 'http://127.0.0.1:8191';
+const BASE = process.env.QA_BASE || 'http://127.0.0.1:8218';
 const AXE = fs.readFileSync(process.env.QA_AXE||'/tmp/claude-1000/-var-www-mw-itflow-foleyit-com/54173984-f66d-4dbd-83ec-7ff70d138957/scratchpad/axe.min.js','utf8');
 const USERS = { admin: ['alex.morgan@northwind-it.example', 'DemoAdmin#2026'], tech: ['priya.nair@northwind-it.example', 'DemoPass#2026'], portal: ['office@hdg.example', 'ShotsPortal#2026'] };
 async function launch() { return pw.chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] }); }
