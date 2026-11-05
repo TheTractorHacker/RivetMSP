@@ -242,6 +242,10 @@ if (isset($_POST['add_quote_item'])) {
     $name = sanitizeInput($_POST['name']);
     $description = sanitizeInput($_POST['description']);
     $qty = floatval($_POST['qty']);
+    if ($qty < 0) {
+        flash_alert("Quantity can not be negative", 'error');
+        redirect();
+    }
     $price = floatval($_POST['price']);
     $tax_id = intval($_POST['tax_id']);
     $item_order = intval($_POST['item_order']);
@@ -280,7 +284,7 @@ if (isset($_POST['add_quote_item'])) {
         $item_total = floatval($row['item_total']);
         $quote_amount = $quote_amount + $item_total;
     }
-    $new_quote_amount = $quote_amount - $quote_discount_amount;
+    $new_quote_amount = max(0, $quote_amount - $quote_discount_amount);
 
     mysqli_query($mysqli,"UPDATE quotes SET quote_amount = $new_quote_amount WHERE quote_id = $quote_id");
 
@@ -302,6 +306,10 @@ if (isset($_POST['edit_quote_item'])) {
     $name = sanitizeInput($_POST['name']);
     $description = sanitizeInput($_POST['description']);
     $qty = floatval($_POST['qty']);
+    if ($qty < 0) {
+        flash_alert("Quantity can not be negative", 'error');
+        redirect();
+    }
     $price = floatval($_POST['price']);
     $tax_id = intval($_POST['tax_id']);
     $product_id = intval($_POST['product_id']);
@@ -339,7 +347,7 @@ if (isset($_POST['edit_quote_item'])) {
     //Update Quote Balances by tallying up items
     $sql_quote_total = mysqli_query($mysqli,"SELECT SUM(item_total) AS quote_total FROM quote_items WHERE item_quote_id = $quote_id");
     $row = mysqli_fetch_assoc($sql_quote_total);
-    $new_quote_amount = floatval($row['quote_total']) - $quote_discount;
+    $new_quote_amount = max(0, floatval($row['quote_total']) - $quote_discount);
 
     mysqli_query($mysqli,"UPDATE quotes SET quote_amount = $new_quote_amount WHERE quote_id = $quote_id");
 
@@ -405,7 +413,12 @@ if (isset($_POST['edit_quote'])) {
         $item_total = floatval($row['item_total']);
         $quote_amount = $quote_amount + $item_total;
     }
-    $quote_amount = $quote_amount - $quote_discount;
+    // Discount must not be negative, nor exceed the line-item subtotal once items exist
+    if ($quote_discount < 0 || ($quote_amount > 0 && $quote_discount > $quote_amount)) {
+        flash_alert("Discount must be between 0 and the quote subtotal", 'error');
+        redirect();
+    }
+    $quote_amount = max(0, $quote_amount - $quote_discount);
 
     mysqli_query($mysqli,"UPDATE quotes SET quote_scope = '$scope', quote_date = '$date', quote_expire = '$expire', quote_discount_amount = '$quote_discount', quote_amount = '$quote_amount', quote_category_id = $category WHERE quote_id = $quote_id");
 
@@ -456,7 +469,7 @@ if (isset($_GET['delete_quote'])) {
 
     if (isset($_GET['client_id'])) {
         $client_id = intval($_GET['client_id']);
-        redirect("client_quotes.php?client_id=$client_id");
+        redirect("quotes.php?client_id=$client_id");
     } else {
         redirect("quotes.php");
     }
@@ -487,7 +500,7 @@ if (isset($_GET['delete_quote_item'])) {
 
     enforceClientAccess();
 
-    $new_quote_amount = floatval($row['quote_amount']) - $item_total;
+    $new_quote_amount = max(0, floatval($row['quote_amount']) - $item_total);
 
     mysqli_query($mysqli,"UPDATE quotes SET quote_amount = $new_quote_amount WHERE quote_id = $quote_id");
 

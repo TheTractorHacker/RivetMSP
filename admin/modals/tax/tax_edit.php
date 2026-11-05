@@ -32,7 +32,7 @@ ob_start();
 
         <div class="form-group">
             <label>Percent <strong class="text-danger">*</strong></label>
-            <input type="number" min="0" step="any" class="form-control col-md-4" name="percent" value="<?php echo $tax_percent; ?>">
+            <input type="number" min="0" max="100" step="any" class="form-control col-md-4" name="percent" required value="<?php echo $tax_percent; ?>">
         </div>
 
     </div>

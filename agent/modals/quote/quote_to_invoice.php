@@ -17,7 +17,7 @@ ob_start();
     <h5 class="modal-title">
         <i class="fas fa-fw fa-file me-2"></i>
         Quote <?= "$quote_prefix$quote_number" ?>
-        <i class="fas fa-arrow-right me-2"></i>Invoice
+        <i class="fas fa-arrow-right mx-2"></i>Invoice
     </h5>
     <button type="button" class="close text-white" data-bs-dismiss="modal">
         <span>&times;</span>

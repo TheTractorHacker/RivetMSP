@@ -124,10 +124,11 @@ $warn_date = date('Y-m-d', strtotime('+45 days'));
                             <i class="fas fa-file-pdf"></i>
                         </a>
                         <a href="#" class="btn btn-sm btn-secondary ajax-modal ms-1"
-                            data-modal-url="modals/contract/contract_edit.php?contract_id=<?= $cid ?>">
+                            data-modal-url="modals/contract/contract_edit.php?contract_id=<?= $cid ?>"
+                            title="Edit">
                             <i class="fas fa-edit"></i>
                         </a>
-                        <a href="post.php?delete_contract=<?= $cid ?>&client_id=<?= $cclient_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>" class="btn btn-sm btn-danger confirm-link ms-1">
+                        <a href="post.php?delete_contract=<?= $cid ?>&client_id=<?= $cclient_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>" class="btn btn-sm btn-danger confirm-link ms-1" title="Delete">
                             <i class="fas fa-trash"></i>
                         </a>
                     </td>

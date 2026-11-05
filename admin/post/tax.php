@@ -13,6 +13,11 @@ if (isset($_POST['add_tax'])) {
     $name = sanitizeInput($_POST['name']);
     $percent = floatval($_POST['percent']);
 
+    if (!is_numeric($_POST['percent'] ?? '') || $percent < 0 || $percent > 100) {
+        flash_alert("Tax percent must be a number between 0 and 100", 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"INSERT INTO taxes SET tax_name = '$name', tax_percent = $percent");
 
     $tax_id = mysqli_insert_id($mysqli);
@@ -32,6 +37,11 @@ if (isset($_POST['edit_tax'])) {
     $tax_id = intval($_POST['tax_id']);
     $name = sanitizeInput($_POST['name']);
     $percent = floatval($_POST['percent']);
+
+    if (!is_numeric($_POST['percent'] ?? '') || $percent < 0 || $percent > 100) {
+        flash_alert("Tax percent must be a number between 0 and 100", 'error');
+        redirect();
+    }
 
     mysqli_query($mysqli,"UPDATE taxes SET tax_name = '$name', tax_percent = $percent WHERE tax_id = $tax_id");
 

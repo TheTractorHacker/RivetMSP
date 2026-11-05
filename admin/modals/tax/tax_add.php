@@ -22,7 +22,7 @@ ob_start();
         </div>
         <div class="form-group">
             <label>Percent <strong class="text-danger">*</strong></label>
-            <input type="number" min="0" step="any" class="form-control col-md-4" name="percent">
+            <input type="number" min="0" max="100" step="any" class="form-control col-md-4" name="percent" required>
         </div>
     </div>
     <div class="modal-footer">

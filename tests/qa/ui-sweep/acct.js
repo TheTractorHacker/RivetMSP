@@ -1,0 +1,11 @@
+const m=require('./m2.js');
+const txt=(p)=>p.evaluate(()=>[...document.querySelectorAll('.toast,.alert')].map(e=>e.innerText.replace(/\s+/g,' ').slice(0,140)));
+(async()=>{const {b,p}=await m.ctxPage();
+await m.go(p,'agent/accounts.php');await p.screenshot({path:m.IMG+'/accts.png',fullPage:true});
+console.log(await p.evaluate(()=>[...document.querySelectorAll('tbody tr')].map(r=>r.innerText.replace(/\s+/g,' ')).join('\n')));
+await m.openModal(p,'modals/account/account_add.php');console.log(JSON.stringify(await m.audit(p)));await m.shotModal(p,'acct_add');
+let r=await m.submit(p);console.log('empty',r,!!(await p.$('.modal.show')));
+await m.fillModal(p,{val:{name:'QA-UI Checking',opening_balance:'1000',notes:'QA'}});console.log('create',await m.submit(p),await txt(p));
+await m.go(p,'agent/accounts.php');
+console.log(await p.evaluate(()=>[...document.querySelectorAll('tbody tr')].map(r=>r.innerText.replace(/\s+/g,' ')+'|'+[...r.querySelectorAll('a')].map(a=>a.dataset.modalUrl||a.getAttribute('href')).join(',')).join('\n')));
+console.log(p.errs);await b.close();})();

@@ -26,7 +26,7 @@ ob_start();
 ?>
 
 <div class="modal-header bg-dark">
-    <h5 class="modal-title text-white"><i class="fas fa-fw fa-comment-dollar me-2"></i>Editing quote: <span class="text-bold"><?php echo "$quote_prefix$quote_number"; ?></span> - <span class="text"><?php echo $client_name; ?></span></h5>
+    <h5 class="modal-title text-white"><i class="fas fa-fw fa-comment-dollar me-2"></i>Editing Quote: <span class="text-bold"><?php echo "$quote_prefix$quote_number"; ?></span> - <span class="text"><?php echo $client_name; ?></span></h5>
     <button type="button" class="close text-white" data-bs-dismiss="modal">
         <span>&times;</span>
     </button>

@@ -28,7 +28,7 @@ if (isset($_POST['add_invoice'])) {
         redirect();
     }
 
-    $invoice_amount = 0 - $invoice_discount;     // Calc amount if discount is applied, otherwise wrongly shows 0
+    $invoice_amount = 0;     // Items are added afterwards; a discount alone must not produce a negative total
 
     // Get Net Terms
     $client_net_terms = intval(getFieldById('clients', $client_id, 'client_net_terms'));
@@ -103,7 +103,7 @@ if (isset($_POST['edit_invoice'])) {
         redirect();
     }
 
-    $invoice_amount = $invoice_amount - $invoice_discount;
+    $invoice_amount = max(0, $invoice_amount - $invoice_discount);
 
     mysqli_query($mysqli,"UPDATE invoices SET invoice_scope = '$scope', invoice_date = '$date', invoice_due = '$due', invoice_category_id = $category, invoice_discount_amount = '$invoice_discount', invoice_amount = '$invoice_amount' WHERE invoice_id = $invoice_id");
 
@@ -345,6 +345,11 @@ if (isset($_GET['delete_invoice'])) {
 
     flash_alert("Invoice <strong>$invoice_prefix$invoice_number</strong> deleted", 'error');
 
+    // Deleted from its own page: go to the list, not back to an invoice that no longer exists
+    if (basename((string) parse_url($_SERVER['HTTP_REFERER'] ?? '', PHP_URL_PATH)) === 'invoice.php') {
+        redirect("invoices.php?client_id=$client_id");
+    }
+
     redirect();
 
 }
@@ -359,6 +364,10 @@ if (isset($_POST['add_invoice_item'])) {
     $name = sanitizeInput($_POST['name']);
     $description = sanitizeInput($_POST['description']);
     $qty = floatval($_POST['qty']);
+    if ($qty < 0) {
+        flash_alert("Quantity can not be negative", 'error');
+        redirect();
+    }
     $price = floatval($_POST['price']);
     $tax_id = intval($_POST['tax_id']);
     $item_order = intval($_POST['item_order']);
@@ -436,7 +445,7 @@ if (isset($_POST['add_invoice_item'])) {
         $item_total = floatval($row['item_total']);
         $invoice_total = $invoice_total + $item_total;
     }
-    $new_invoice_amount = $invoice_total - $invoice_discount;
+    $new_invoice_amount = max(0, $invoice_total - $invoice_discount);
 
     mysqli_query($mysqli,"UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
 
@@ -486,6 +495,10 @@ if (isset($_POST['edit_invoice_item'])) {
     $name = sanitizeInput($_POST['name']);
     $description = sanitizeInput($_POST['description']);
     $qty = floatval($_POST['qty']);
+    if ($qty < 0) {
+        flash_alert("Quantity can not be negative", 'error');
+        redirect();
+    }
     $price = floatval($_POST['price']);
     $tax_id = intval($_POST['tax_id']);
     $product_id = intval($_POST['product_id']);
@@ -528,7 +541,7 @@ if (isset($_POST['edit_invoice_item'])) {
     //Update Invoice Balances by tallying up invoice items
     $sql_invoice_total = mysqli_query($mysqli,"SELECT SUM(item_total) AS invoice_total FROM invoice_items WHERE item_invoice_id = $invoice_id");
     $row = mysqli_fetch_assoc($sql_invoice_total);
-    $new_invoice_amount = floatval($row['invoice_total']) - $invoice_discount;
+    $new_invoice_amount = max(0, floatval($row['invoice_total']) - $invoice_discount);
 
     mysqli_query($mysqli,"UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
 
@@ -550,6 +563,10 @@ if (isset($_GET['delete_invoice_item'])) {
 
     $sql = mysqli_query($mysqli,"SELECT * FROM invoice_items WHERE item_id = $item_id");
     $row = mysqli_fetch_assoc($sql);
+    if (!$row) {
+        flash_alert("Item not found (it may already have been deleted)", 'error');
+        redirect();
+    }
     $invoice_id = intval($row['item_invoice_id']);
     $item_name = sanitizeInput($row['item_name']);
     $item_quantity = floatval($row['item_quantity']);
@@ -571,7 +588,7 @@ if (isset($_GET['delete_invoice_item'])) {
         redirect();
     }
 
-    $new_invoice_amount = floatval($row['invoice_amount']) - $item_total;
+    $new_invoice_amount = max(0, floatval($row['invoice_amount']) - $item_total);
 
     mysqli_query($mysqli,"UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
 
@@ -947,7 +964,7 @@ if (isset($_GET['export_invoice_pdf'])) {
     }
     $html .= '</td>
         <td width="60%" align="right">
-            <span style="font-size:18pt; font-weight:bold;">Invoice</span><br>
+            <span style="font-size:18pt; font-weight:bold;">INVOICE</span><br>
             <span style="font-size:14pt;">' . $invoice_prefix . $invoice_number . '</span><br>';
     if (strtolower($invoice_status) === 'paid') {
         $html .= '<span style="color:green; font-weight:bold;">PAID</span><br>';

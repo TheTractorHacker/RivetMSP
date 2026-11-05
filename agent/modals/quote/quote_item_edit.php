@@ -52,7 +52,7 @@ ob_start();
                     <label>Quantity <strong class="text-danger">*</strong></label>
                     <div class="input-group">
                         <div class="input-group-prepend">
-                            <span class="input-group-text"><i class="fa fa-fw fa-balance-scale"></i></span>
+                            <span class="input-group-text"><i class="fa fa-fw fa-hashtag"></i></span>
                         </div>
                         <input type="text" class="form-control" inputmode="decimal" pattern="[0-9]*\.?[0-9]{0,2}" name="qty" value="<?php echo number_format($item_quantity, 2); ?>" placeholder="0.00" required>
                     </div>
@@ -83,7 +83,7 @@ ob_start();
             <label>Tax <strong class="text-danger">*</strong></label>
             <div class="input-group">
                 <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fa fa-fw fa-piggy-bank"></i></span>
+                    <span class="input-group-text"><i class="fa fa-fw fa-balance-scale"></i></span>
                 </div>
                 <select class="form-control select2" name="tax_id" required>
                     <option value="0">No Tax</option>

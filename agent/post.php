@@ -11,6 +11,17 @@ require_once "../includes/check_login.php";
 // Define a variable that we can use to only allow running post files via inclusion (prevents people/bots poking them)
 define('FROM_POST_HANDLER', true);
 
+// A database rejection of the submitted values (value too long, bad format, missing required value) used to end as a blank HTTP 500
+// page. Log it and send the user back with a readable message instead. Other exceptions keep the default behaviour.
+set_exception_handler(function (Throwable $e) {
+    if ($e instanceof mysqli_sql_exception && in_array((int) $e->getCode(), [1048, 1264, 1265, 1292, 1366, 1406], true)) {
+        error_log('post.php rejected input: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+        flash_alert('Could not save: one of the values is too long or not in the expected format. Please shorten or correct it and try again.', 'error');
+        redirect();
+    }
+    throw $e;
+});
+
 
 // Determine which files we should load
 
