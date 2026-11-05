@@ -9,7 +9,7 @@ if (basename(dirname($_SERVER['REQUEST_URI'])) === 'admin') { ?>
 <?php } ?>
 <?php
 if (basename(dirname($_SERVER['REQUEST_URI'])) === 'guest') { ?>
-<p class="text-center">
+<p class="text-center text-muted small mt-3 mb-4">
     <?php echo nullable_htmlentities($session_company_name); ?>
 </p>
 <?php } ?>

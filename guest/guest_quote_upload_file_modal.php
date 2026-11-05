@@ -11,7 +11,7 @@
                 <div class="modal-body">
 
                     <div class="form-group">
-                        <input type="file" class="form-control-file" name="file[]" id="fileInput" accept=".pdf">
+                        <input type="file" class="form-control" name="file[]" id="fileInput" accept=".pdf">
                     </div>
 
                 </div>

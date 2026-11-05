@@ -531,7 +531,7 @@ if (isset($_POST['add_contact'])) {
     $contact_auth_method = sanitizeInput($_POST['contact_auth_method']);
 
     // Auth method is a fixed set; only the primary contact may grant technical/billing roles
-    if (!in_array($contact_auth_method, ['local', 'azure'], true)) {
+    if (!in_array($contact_auth_method, ['', 'local', 'azure'], true)) {
         flash_alert("Invalid authentication method", 'danger');
         redirect('contact_add.php');
     }
@@ -607,7 +607,7 @@ if (isset($_POST['edit_contact'])) {
     }
     $contact_user_id = intval($row['contact_user_id']);
 
-    if (!in_array($contact_auth_method, ['local', 'azure'], true)) {
+    if (!in_array($contact_auth_method, ['', 'local', 'azure'], true)) {
         flash_alert("Invalid authentication method", 'danger');
         redirect('contact_edit.php?id=' . $contact_id);
     }
