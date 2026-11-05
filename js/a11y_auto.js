@@ -15,6 +15,11 @@
     function visible(el) { return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); }
 
     function nameButton(btn) {
+        // Responsive buttons keep their label in a .d-none span on phones: the text exists but is not rendered, so name the control from it.
+        if (btn.textContent.trim() && !btn.innerText.trim() && !btn.getAttribute('aria-label') && !btn.getAttribute('aria-labelledby')) {
+            btn.setAttribute('aria-label', btn.textContent.replace(/\s+/g, ' ').trim());
+            return;
+        }
         if (btn.textContent.trim() || btn.getAttribute('aria-label') || btn.getAttribute('aria-labelledby')) return;
         var label = btn.getAttribute('title') || btn.getAttribute('data-bs-original-title');
         if (!label) {
