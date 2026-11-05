@@ -107,6 +107,15 @@ window.openAjaxModal = function (modalUrl, modalSize, options) {
         bootstrap.Popover.getOrCreateInstance(el, { container: 'body' });
       });
 
+      // A required field sitting on a hidden tab pane cannot be focused, so the browser blocks the submit without
+      // saying why ("An invalid form control is not focusable"). Switch to that pane so the message is visible.
+      modalEl.addEventListener('invalid', function (e) {
+        const pane = e.target.closest && e.target.closest('.tab-pane');
+        if (!pane || pane.classList.contains('active') || !pane.id) { return; }
+        const tabTrigger = modalEl.querySelector('a[href="#' + pane.id + '"], [data-bs-target="#' + pane.id + '"]');
+        if (tabTrigger) { bootstrap.Tab.getOrCreateInstance(tabTrigger).show(); }
+      }, true);
+
       const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
       modal.show();
 
