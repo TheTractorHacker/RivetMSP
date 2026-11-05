@@ -376,7 +376,7 @@ $has_locations    = mysqli_num_rows($sql_client_locations) > 0;
                  header "Full log" link is the single way out to the complete log -
                  the old card-footer pointed at exactly the same URL and cost 41px
                  of a row that was already ragged. -->
-            <div class="js-activity-scroll" style="max-height:264px;overflow-y:auto">
+            <div class="js-activity-scroll" tabindex="0" style="max-height:264px;overflow-y:auto">
                 <table class="table table-sm table-hover mb-0">
                     <tbody>
                     <?php while ($row = mysqli_fetch_assoc($sql_recent_activities)):
@@ -697,7 +697,7 @@ if ($has_stale || $has_expiring || $has_expired):
     <div class="<?= $alert_col_class ?>">
         <div class="card mb-3" style="border-left:4px solid #fd7e14">
             <div class="card-header p-2">
-                <h5 class="card-title mb-0" style="color:#fd7e14"><i class="fas fa-fw fa-exclamation-triangle me-2"></i>Expiring (45 days)</h5>
+                <h5 class="card-title mb-0" style="color:#b34700"><i class="fas fa-fw fa-exclamation-triangle me-2"></i>Expiring (45 days)</h5>
             </div>
             <div class="list-group list-group-flush">
                 <?php

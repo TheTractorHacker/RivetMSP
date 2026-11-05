@@ -13,7 +13,7 @@
 .lb-list:has(.lb-card) .lb-empty { display: none; }
 .lb-ghost { opacity: .45; }
 .lb-list.lb-over, .lb-convert.lb-over { outline: 2px dashed var(--tblr-primary, #206bc4); outline-offset: -4px; }
-.lb-convert { margin-top: .75rem; padding: 1rem; text-align: center; border: 2px dashed var(--tblr-success, #2fb344); border-radius: .5rem; color: var(--tblr-success, #2fb344); font-weight: 600; }
+.lb-convert { margin-top: .75rem; padding: 1rem; text-align: center; border: 2px dashed var(--tblr-success, #2fb344); border-radius: .5rem; color: #1e7a30; font-weight: 600; }
 .lb-convert.lb-over { background: rgba(47,179,68,.12); }
 .lb-card.lb-saving { opacity: .6; }
 @media (max-width: 767.98px) { .lb-board { grid-template-columns: repeat(6, 78vw); scroll-snap-type: x mandatory; } .lb-col { scroll-snap-align: start; } }

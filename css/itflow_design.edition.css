@@ -205,3 +205,7 @@
 :root[data-bs-theme="dark"] .badge.badge-secondary,
 :root[data-bs-theme="dark"] .bg-secondary.text-white { color: #0d1417 !important; }
 :root[data-bs-theme="dark"] .badge.text-dark { color: #0d1417 !important; }
+
+/* Light theme: Tabler's warning/info text colours are 2.1:1 and 3:1 on white. Darker shades for text elements only (icons keep the brand colour). */
+:root:not([data-bs-theme="dark"]) :is(h1,h2,h3,h4,h5,h6,span,small,div,a,strong,td).text-warning { color: #8a5700 !important; }
+:root:not([data-bs-theme="dark"]) #ticket_collision_viewing { color: #0b6477; }
