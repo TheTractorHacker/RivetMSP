@@ -24,7 +24,7 @@ $wg_verify = $wg_snip ? $wg_snip->verifySnippets : [];
         <h3 class="card-title me-auto mb-0"><i class="fas fa-fw fa-book me-2"></i>Webhook guides</h3>
         <a href="webhook_new.php" class="btn btn-primary btn-sm d-print-none"><i class="fas fa-plus me-1"></i>Add Webhook</a>
     </div>
-    <ul class="nav nav-tabs px-3 d-print-none" role="tablist">
+    <ul class="nav nav-tabs px-3 d-print-none">
         <li class="nav-item"><a class="nav-link" href="settings_webhooks.php">Webhooks</a></li>
         <li class="nav-item"><a class="nav-link active" aria-current="page" href="webhook_guides.php">Guides</a></li>
     </ul>

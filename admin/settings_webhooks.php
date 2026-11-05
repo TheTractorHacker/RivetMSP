@@ -22,7 +22,7 @@ $wh_popular = ['n8n', 'slack', 'discord', 'teams', 'ntfy', 'home-assistant', 'ge
             <i class="fas fa-plus me-1"></i>Add Webhook
         </a>
     </div>
-    <ul class="nav nav-tabs px-3" role="tablist">
+    <ul class="nav nav-tabs px-3">
         <li class="nav-item"><a class="nav-link active" aria-current="page" href="settings_webhooks.php">Webhooks</a></li>
         <li class="nav-item"><a class="nav-link" href="webhook_guides.php">Guides</a></li>
     </ul>

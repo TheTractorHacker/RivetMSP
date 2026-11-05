@@ -91,7 +91,7 @@ require_once "includes/inc_all_admin.php";
                         <div class="notif-row-control">
                             <div class="form-check form-check form-switch">
                                 <input type="checkbox" class="form-check-input" name="config_enable_cron" <?php if ($config_enable_cron) echo "checked"; ?> value="1" id="enableCronSwitch">
-                                <label class="form-check-label" for="enableCronSwitch"></label>
+                                <label class="form-check-label" for="enableCronSwitch"><span class="visually-hidden">Enable cron job</span></label>
                             </div>
                         </div>
                     </div>
@@ -128,7 +128,7 @@ require_once "includes/inc_all_admin.php";
                             <div class="form-check form-check form-switch">
                                 <input type="checkbox" class="form-check-input" name="config_ticket_client_general_notifications"
                                        <?php if ($config_ticket_client_general_notifications) echo "checked"; ?> value="1" id="clientNotifSwitch">
-                                <label class="form-check-label" for="clientNotifSwitch"></label>
+                                <label class="form-check-label" for="clientNotifSwitch"><span class="visually-hidden">Client portal notifications</span></label>
                             </div>
                         </div>
                     </div>
@@ -151,7 +151,7 @@ require_once "includes/inc_all_admin.php";
                             <div class="form-check form-check form-switch">
                                 <input type="checkbox" class="form-check-input" name="config_send_invoice_reminders"
                                        <?php if ($config_send_invoice_reminders) echo "checked"; ?> value="1" id="sendRemindersSwitch">
-                                <label class="form-check-label" for="sendRemindersSwitch"></label>
+                                <label class="form-check-label" for="sendRemindersSwitch"><span class="visually-hidden">Client overdue reminders</span></label>
                             </div>
                         </div>
                     </div>
@@ -164,7 +164,7 @@ require_once "includes/inc_all_admin.php";
                             <div class="form-check form-check form-switch">
                                 <input type="checkbox" class="form-check-input" name="config_invoice_overdue_reminders"
                                        <?php if (!empty($config_invoice_overdue_reminders)) echo "checked"; ?> value="1" id="overdueSwitch">
-                                <label class="form-check-label" for="overdueSwitch"></label>
+                                <label class="form-check-label" for="overdueSwitch"><span class="visually-hidden">Internal overdue alerts</span></label>
                             </div>
                         </div>
                     </div>
@@ -191,7 +191,7 @@ require_once "includes/inc_all_admin.php";
                             <div class="form-check form-check form-switch">
                                 <input type="checkbox" class="form-check-input" name="config_recurring_auto_send_invoice"
                                        <?php if ($config_recurring_auto_send_invoice) echo "checked"; ?> value="1" id="sendRecurringSwitch">
-                                <label class="form-check-label" for="sendRecurringSwitch"></label>
+                                <label class="form-check-label" for="sendRecurringSwitch"><span class="visually-hidden">Recurring invoice emails</span></label>
                             </div>
                         </div>
                     </div>
@@ -238,7 +238,7 @@ require_once "includes/inc_all_admin.php";
                             <div class="form-check form-check form-switch">
                                 <input type="checkbox" class="form-check-input" name="config_enable_alert_domain_expire"
                                        <?php if ($config_enable_alert_domain_expire) echo "checked"; ?> value="1" id="domainExpireSwitch">
-                                <label class="form-check-label" for="domainExpireSwitch"></label>
+                                <label class="form-check-label" for="domainExpireSwitch"><span class="visually-hidden">Domain and certificate expiry alerts</span></label>
                             </div>
                         </div>
                     </div>
