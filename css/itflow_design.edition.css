@@ -220,3 +220,30 @@ body.client-portal.dark-mode .btn-outline-primary:hover { color: #fff; backgroun
 .page-center .card a:not(.btn), .login-box .card a:not(.btn) { color: #0f766e; }
 .portal-doc-preview { max-height: 600px; width: auto; max-width: 100%; }
 .portal-kpis > .col-lg { max-width: 25%; } @media (max-width: 991.98px) { .portal-kpis > .col-lg { max-width: none; } }
+
+.badge.bg-success { color: #000 !important; }
+/* Links inside the pale info alert were 2.8:1. */
+.alert-info .alert-link, .alert-info a:not(.btn) { color: #0b4a8f; }
+:root[data-bs-theme="dark"] .alert-info .alert-link, :root[data-bs-theme="dark"] .alert-info a:not(.btn) { color: inherit; text-decoration: underline; }
+/* Event rules: the recipes wrapper is a plain block (heading, hint, then .er-recipe-grid). The legacy grid rule for .er-recipes
+   made the heading, hint and the card grid three squeezed columns. */
+#er-recipes.er-recipes { display: block; }
+/* Endpoint agent tab attention dot: a round 10px dot, not a stretched pill. */
+.ea-tab-dot.badge { display: inline-block; width: 10px; height: 10px; min-width: 0; padding: 0 !important; vertical-align: middle; border-radius: 50%; }
+/* Legacy <button class="close">&times;</button> inside a flex .modal-header sat right next to the title (the shim's float does nothing in a flex row). */
+.modal-header > .close { float: none; margin-left: auto; }
+.modal-header.bg-dark .close { color: #fff; opacity: .85; }
+/* Select-all checkbox in a table header sat above the header text (form-check bottom margin). */
+thead th > .form-check, thead td > .form-check { margin-bottom: 0; }
+/* Dark mode contrast: outline-primary text, secondary and warning badges. */
+:root[data-bs-theme="dark"] .btn-outline-primary:not(:hover) { color: #7aa7ff; }
+:root[data-bs-theme="dark"] .badge.bg-secondary { color: #0d1417 !important; }
+.badge.bg-warning { color: #000 !important; }
+/* Links inside running text, alerts and the breadcrumb are told apart from the text by more than colour. */
+.admin-breadcrumb a, .alert a:not(.btn), .card-body p a:not(.btn):not(.nav-link) { text-decoration: underline; }
+:root[data-bs-theme="dark"] .admin-directory__add { color: #7aa7ff; }
+/* Phone: a scrolling table keeps its cells on one line instead of wrapping emails and role names letter by letter. */
+@media (max-width: 767.98px) {
+  .table-responsive-sm > table td, .table-responsive-sm > table th,
+  .table-responsive-sm form > table td, .table-responsive-sm form > table th { white-space: nowrap; }
+}

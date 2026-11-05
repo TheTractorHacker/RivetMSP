@@ -62,7 +62,7 @@ $kb_portal_live = ($config_module_enable_kb == 1 && $config_client_portal_enable
 <div class="card">
     <div class="card-header py-3">
         <h3 class="card-title"><i class="fas fa-fw fa-book me-2"></i>Knowledge Base Settings</h3>
-        <div class="card-actions">
+        <div class="card-actions me-2">
             <a href="/agent/kb_articles.php" class="btn btn-outline-primary btn-sm">
                 <i class="fas fa-fw fa-list-ul me-1"></i>Browse Articles
             </a>

@@ -35,7 +35,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                 <button type="button" class="btn btn-primary ajax-modal" data-modal-url="modals/user/user_add.php">
                     <i class="fas fa-fw fa-user-plus me-2"></i>New User
                 </button>
-                <button type="button" class="btn btn-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown"></button>
+                <button type="button" class="btn btn-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-label="More user actions" title="More user actions"></button>
                 <div class="dropdown-menu">
                     <!--<a class="dropdown-item text-dark ajax-modal" href="#" data-modal-url="modals/user/user_invite.php"><i class="fas fa-paper-plane me-2"></i>Invite User</a>-->
                     <?php if ($num_rows[0] > 1) { ?>
@@ -47,7 +47,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                         <a class="dropdown-item text-danger ajax-modal" href="#"
                             data-modal-url="modals/user/user_all_reset_password.php"
                             data-modal-size="lg">
-                            <i class="fas fa-skull-crossbones me-2"></i>IR
+                            <i class="fas fa-skull-crossbones me-2"></i>IR: reset all passwords
                         </a>
                     <?php } ?>
                 </div>
@@ -205,7 +205,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                 </a>
                                 <?php if ($user_id !== $session_user_id) { // Disable/archive not allowed on self ?>
                                 <div class="dropdown dropleft">
-                                    <button class="btn btn-secondary btn-sm" type="button" data-bs-toggle="dropdown">
+                                    <button class="btn btn-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-label="More actions" title="More actions">
                                         <i class="fas fa-ellipsis-h"></i>
                                     </button>
                                     <div class="dropdown-menu">

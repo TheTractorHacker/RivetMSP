@@ -8,7 +8,7 @@ ob_start();
 
 <div class="modal-header">
     <h5 class="modal-title"><i class="fa fa-fw fa-file-alt me-2"></i>Creating Document Template</h5>
-    <button type="button" class="close" data-bs-dismiss="modal">
+    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">
         <span>&times;</span>
     </button>
 </div>

@@ -8,7 +8,7 @@ require_once "includes/inc_all_admin.php";
         </div>
         <div class="card-body">
 
-            <p><i>Provider, model and prompt are configured under <a href="ai_provider.php">AI Providers</a>. The settings below control the company-wide AI behaviour used by features such as ticket summaries, document template generation and the reword tool.</i></p>
+            <p class="text-muted">Provider, model and prompt are configured under <a href="ai_provider.php">AI Providers</a>. The settings below control the company-wide AI behaviour used by features such as ticket summaries, document template generation and the reword tool.</p>
 
             <form action="post.php" method="post" autocomplete="off">
                 <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token'] ?>">
@@ -51,7 +51,7 @@ require_once "includes/inc_all_admin.php";
 
                 <hr>
 
-                <button type="submit" name="edit_ai_settings" class="btn btn-primary text-bold float-end"><i class="fas fa-check me-2"></i>Save</button>
+                <button type="submit" name="edit_ai_settings" class="btn btn-primary text-bold"><i class="fas fa-check me-2"></i>Save</button>
 
             </form>
         </div>

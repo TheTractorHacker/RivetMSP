@@ -98,7 +98,7 @@ $q = static fn (array $extra): string => http_build_query(array_filter($extra, s
             <?php foreach ($assessment->automatic as $r) { if (!$in_fw($r['controls'])) { continue; } $href = $fix_href($r['fix_path']); ?>
                 <tr>
                     <td><strong><?= nullable_htmlentities($r['title']) ?></strong><div class="small text-muted"><?= nullable_htmlentities($r['category']) ?> &middot; <?= nullable_htmlentities($r['why']) ?></div></td>
-                    <td><span class="badge bg-<?= $status_badge[$r['status']] ?? 'secondary' ?>"><?= nullable_htmlentities($r['status_label']) ?></span></td>
+                    <td><span class="badge text-nowrap bg-<?= $status_badge[$r['status']] ?? 'secondary' ?>"><?= nullable_htmlentities($r['status_label']) ?></span></td>
                     <td><?= nullable_htmlentities($r['summary']) ?><?php if ($r['detail']) { ?><div class="small text-muted"><?= nullable_htmlentities($r['detail']) ?></div><?php } ?>
                         <?php if ($href && in_array($r['status'], ['warn', 'fail'], true)) { ?><a class="small" href="<?= nullable_htmlentities($href) ?>">Fix this &rarr;</a><?php } ?></td>
                     <td class="small text-muted d-none d-lg-table-cell"><?= nullable_htmlentities($controls_text($r['controls'])) ?></td>
@@ -119,7 +119,7 @@ $q = static fn (array $extra): string => http_build_query(array_filter($extra, s
             <?php foreach ($assessment->manual as $r) { if (!$in_fw($r['controls'])) { continue; } $sb = $state_badge[$r['state']] ?? [$r['state'], 'secondary']; ?>
                 <tr>
                     <td><strong><?= nullable_htmlentities($r['title']) ?></strong><div class="small text-muted"><?= nullable_htmlentities($r['category']) ?> &middot; every <?= (int) $r['interval_days'] ?> days &middot; <?= nullable_htmlentities($r['why']) ?></div></td>
-                    <td><span class="badge bg-<?= $sb[1] ?>"><?= nullable_htmlentities($sb[0]) ?></span></td>
+                    <td><span class="badge text-nowrap bg-<?= $sb[1] ?>"><?= nullable_htmlentities($sb[0]) ?></span></td>
                     <td class="small"><?php if ($r['reviewed_on']) { ?><?= nullable_htmlentities($r['reviewed_on']) ?> by <?= nullable_htmlentities((string) $r['reviewer_name']) ?><br>next due <?= nullable_htmlentities((string) $r['next_due_on']) ?><?php if ($r['note']) { ?><div class="text-muted"><?= nullable_htmlentities((string) $r['note']) ?></div><?php } ?><?php } else { ?>&mdash;<?php } ?></td>
                     <td class="small text-muted d-none d-lg-table-cell"><?= nullable_htmlentities($controls_text($r['controls'])) ?></td>
                     <td class="text-end"><button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#rev_<?= nullable_htmlentities($r['id']) ?>">Record review</button></td>

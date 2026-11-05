@@ -1739,7 +1739,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
      ═══════════════════════════════════════════════════════════════════════════ -->
 <div class="tab-pane <?= $active_tab === 'connection' ? 'show active' : '' ?>" id="tab-connection">
 
-    <div class="card mb-3" style="border-top:3px solid #2ca01c;">
+    <div class="card mb-3">
         <div class="card-header py-2 d-flex align-items-center">
             <h3 class="card-title me-auto"><i class="fas fa-fw fa-plug me-2"></i>Connection Status</h3>
             <?php if ($is_connected): ?>
@@ -1817,7 +1817,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
 
                 <div class="form-group">
                     <label>Accounting Provider</label>
-                    <select class="form-control" name="accounting_provider" <?php echo $is_connected ? 'disabled' : ''; ?>>
+                    <select class="form-control select2" name="accounting_provider" <?php echo $is_connected ? 'disabled' : ''; ?>>
                         <option value="quickbooks_online" <?php echo $acc_provider === 'quickbooks_online' ? 'selected' : ''; ?>>QuickBooks Online</option>
                         <option value="xero" <?php echo $acc_provider === 'xero' ? 'selected' : ''; ?>>Xero</option>
                     </select>
@@ -1846,7 +1846,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
                 <?php if ($acc_provider !== 'xero') { ?>
                 <div class="form-group">
                     <label>Environment</label>
-                    <select class="form-control" name="accounting_environment">
+                    <select class="form-control select2" name="accounting_environment">
                         <option value="production" <?php echo $acc_environment === 'production' ? 'selected' : ''; ?>>Production</option>
                         <option value="sandbox" <?php echo $acc_environment === 'sandbox' ? 'selected' : ''; ?>>Sandbox</option>
                     </select>
@@ -1936,7 +1936,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
     </div>
     <?php endif; ?>
 
-    <div class="card mb-3" style="border-top:3px solid #2ca01c;">
+    <div class="card mb-3">
         <div class="card-header py-2 d-flex align-items-center">
             <h3 class="card-title me-auto"><i class="fas fa-fw fa-link me-2"></i>Client &rarr; QuickBooks Customer</h3>
             <span class="badge text-bg-info"><?php echo intval($mapped_client_count); ?> of <?php echo intval($total_clients); ?> clients mapped</span>
@@ -2018,7 +2018,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Link <span id="ampLinkClientName"></span> to a QuickBooks Customer</h5>
-                    <button type="button" class="close" data-bs-dismiss="modal">&times;</button>
+                    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">&times;</button>
                 </div>
                 <div class="modal-body">
                     <div class="input-group mb-3">
@@ -2072,7 +2072,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
     <?php endif; ?>
 
     <?php if ($is_connected): ?>
-    <div class="card mb-3" style="border-top:3px solid #2ca01c;">
+    <div class="card mb-3">
         <div class="card-header py-2 d-flex align-items-center">
             <h3 class="card-title me-auto"><i class="fas fa-fw fa-cloud-download-alt me-2"></i>Import from QuickBooks</h3>
             <span class="badge text-bg-secondary"><?php echo count($qbo_unmapped_items); ?> not yet in RivetMSP</span>
@@ -2135,7 +2135,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
     </div>
     <?php endif; ?>
 
-    <div class="card mb-3" style="border-top:3px solid #2ca01c;">
+    <div class="card mb-3">
         <div class="card-header py-2 d-flex align-items-center">
             <h3 class="card-title me-auto"><i class="fas fa-fw fa-link me-2"></i>Product / Service &rarr; QuickBooks Item</h3>
             <span class="badge text-bg-info"><?php echo intval($mapped_product_count); ?> of <?php echo intval($total_products); ?> mapped</span>
@@ -2222,7 +2222,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Link <span id="aimLinkProductName"></span> to a QuickBooks Item</h5>
-                    <button type="button" class="close" data-bs-dismiss="modal">&times;</button>
+                    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">&times;</button>
                 </div>
                 <div class="modal-body">
                     <div class="input-group mb-3">
@@ -2275,7 +2275,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
     </div>
     <?php endif; ?>
 
-    <div class="card mb-3" style="border-top:3px solid #2ca01c;">
+    <div class="card mb-3">
         <div class="card-body d-flex flex-wrap align-items-center gap-2">
             <div class="me-auto">
                 <span class="badge text-bg-info">Pending: <?php echo intval($sync_counts['pending']); ?></span>
@@ -2305,7 +2305,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
     </div>
 
     <?php if ($is_connected): ?>
-    <div class="card mb-3" style="border-top:3px solid #2ca01c;">
+    <div class="card mb-3">
         <div class="card-header py-2 d-flex align-items-center">
             <h3 class="card-title me-auto"><i class="fas fa-fw fa-cloud-download-alt me-2"></i>Import Invoices from QuickBooks</h3>
             <span class="badge text-bg-secondary"><?php echo count($qbo_unmapped_invoices); ?> not yet in RivetMSP</span>
@@ -2448,7 +2448,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
     </div>
 
     <?php if ($is_connected): ?>
-    <div class="card mb-3" style="border-top:3px solid #2ca01c;">
+    <div class="card mb-3">
         <div class="card-header py-2 d-flex align-items-center">
             <h3 class="card-title me-auto"><i class="fas fa-fw fa-cloud-download-alt me-2"></i>Import Estimates from QuickBooks</h3>
             <span class="badge text-bg-secondary"><?php echo count($qbo_unmapped_quotes); ?> not yet in RivetMSP</span>
@@ -2589,7 +2589,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
     </div>
 
     <?php if ($is_connected): ?>
-    <div class="card mb-3" style="border-top:3px solid #2ca01c;">
+    <div class="card mb-3">
         <div class="card-header py-2 d-flex align-items-center">
             <h3 class="card-title me-auto"><i class="fas fa-fw fa-cloud-download-alt me-2"></i>Import Payments from QuickBooks</h3>
             <span class="badge text-bg-secondary"><?php echo count($qbo_unmapped_payments); ?> not yet in RivetMSP</span>

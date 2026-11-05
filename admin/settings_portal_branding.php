@@ -39,7 +39,7 @@ $portal_accent_preview = preg_match('/^#[0-9A-Fa-f]{6}$/', $portal_accent_raw)
             <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token'] ?>">
 
             <div class="row">
-                <div class="col-md-3 text-center">
+                <div class="col-md-3">
                     <?php if ($portal_logo) { ?>
                         <img class="img-thumbnail" src="<?php echo "../uploads/settings/$portal_logo"; ?>" alt="Portal logo">
                         <a href="post.php?remove_portal_logo&csrf_token=<?= $_SESSION['csrf_token'] ?>" class="btn btn-outline-danger btn-block">Remove Portal Logo</a>
