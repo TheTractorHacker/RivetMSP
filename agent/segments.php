@@ -138,6 +138,9 @@ $sql_segments = mysqli_query($mysqli, "SELECT * FROM crm_segments ORDER BY segme
                         </tbody>
                     </table>
                 </div>
+                <?php if (mysqli_num_rows($sql_segments) == 0) { ?>
+                    <div class="text-center text-muted py-4">No saved segments yet. Choose filters on the left and save one.</div>
+                <?php } ?>
             </div>
         </div>
     </div>
