@@ -193,3 +193,5 @@
 .modal-header.bg-dark .close { color: #fff; opacity: .85; }
 /* Guest quote/invoice line items: on phones keep each cell on one line (the table scrolls) instead of wrapping item names letter by letter. */
 @media (max-width: 575.98px) { .guest-items th, .guest-items td { white-space: nowrap; } }
+/* Records-per-page picker in list footers stretched across a third of the card; it only ever shows a number. */
+.card-footer .form-group > .ts-wrapper.auto-submit-select { width: 6.5rem; max-width: 100%; }
