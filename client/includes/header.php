@@ -386,7 +386,7 @@ $portal_accent_hex = itflow_theme_accent_hex($config_theme ?? '', !empty($config
                 </span>
             <?php } ?>
             <div>
-                <h4 class="mb-0">Welcome back, <strong><?php echo stripslashes(nullable_htmlentities($session_contact_name)); ?></strong></h4>
+                <h2 class="h4 mb-0">Welcome back, <strong><?php echo stripslashes(nullable_htmlentities($session_contact_name)); ?></strong></h2>
                 <small class="text-muted"><?php echo nullable_htmlentities($portal_display_name); ?> Client Portal</small>
             </div>
         </div>

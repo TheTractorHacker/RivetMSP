@@ -2,7 +2,8 @@
 require_once "includes/inc_all.php";
 
 if ($session_contact_primary == 0 && !$session_contact_is_technical_contact) {
-    header("Location: post.php?logout");
+    flash_alert("You do not have access to that page.", 'danger');
+    header("Location: index.php");
     exit();
 }
 
@@ -48,8 +49,8 @@ while ($cr = mysqli_fetch_assoc($contracts_sql)) {
             $doc_count = count($cr['docs']);
         ?>
             <div class="card mb-2 border">
-                <div class="card-header py-2" id="ch<?= $cid ?>" style="cursor:pointer;"
-                     data-bs-toggle="collapse" data-bs-target="#cc<?= $cid ?>" aria-expanded="<?= $i===0?'true':'false' ?>">
+                <div class="card-header py-2" id="ch<?= $cid ?>" style="cursor:pointer;" role="button" tabindex="0"
+                     data-bs-toggle="collapse" data-bs-target="#cc<?= $cid ?>" aria-controls="cc<?= $cid ?>" aria-expanded="<?= $i===0?'true':'false' ?>">
                     <div class="d-flex align-items-center flex-wrap gap-2">
                         <i class="fas fa-file-contract me-1 text-primary"></i>
                         <div>
@@ -106,4 +107,12 @@ while ($cr = mysqli_fetch_assoc($contracts_sql)) {
         <?php endif; ?>
     </div>
 </div>
+<script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
+// The accordion headers are role="button" divs: make Enter / Space toggle them like a real button.
+document.querySelectorAll('[role="button"][data-bs-toggle="collapse"]').forEach(function (el) {
+    el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+    });
+});
+</script>
 <?php require_once "includes/footer.php"; ?>

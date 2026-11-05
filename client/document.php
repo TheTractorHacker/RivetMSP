@@ -9,7 +9,8 @@ header("Content-Security-Policy: default-src 'self'; img-src 'self' data:");
 require_once "includes/inc_all.php";
 
 if ($session_contact_primary == 0 && !$session_contact_is_technical_contact) {
-    header("Location: post.php?logout");
+    flash_alert("You do not have access to that page.", 'danger');
+    header("Location: index.php");
     exit();
 }
 
@@ -43,7 +44,8 @@ if ($row) {
     $document_content = $purifier->purify($row['document_content']);
     $document_description = nullable_htmlentities($row['document_description']);
 } else {
-    header("Location: post.php?logout");
+    flash_alert("Document not found.", 'danger');
+    header("Location: documents.php");
     exit();
 }
 

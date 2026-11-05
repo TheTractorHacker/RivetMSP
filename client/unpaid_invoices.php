@@ -12,7 +12,8 @@ require_once "includes/inc_all.php";
 
 
 if ($session_contact_primary == 0 && !$session_contact_is_billing_contact) {
-    header("Location: post.php?logout");
+    flash_alert("You do not have access to that page.", 'danger');
+    header("Location: index.php");
     exit();
 }
 
@@ -21,10 +22,10 @@ $invoices_sql = mysqli_query($mysqli, "SELECT * FROM invoices WHERE invoice_clie
 
 // Payment Provider Active Query
 $sql_payment_provider = mysqli_query($mysqli, "SELECT * FROM payment_providers WHERE payment_provider_active = 1 LIMIT 1;");
-$row = mysqli_fetch_assoc($sql_payment_provider);
-$payment_provider_id = intval($row['payment_provider_id']);
-$payment_provider_active = intval($row['payment_provider_active']);
-$payment_provider_threshold = floatval($row['payment_provider_threshold']);
+$row = mysqli_fetch_assoc($sql_payment_provider) ?: [];
+$payment_provider_id = intval($row['payment_provider_id'] ?? 0);
+$payment_provider_active = intval($row['payment_provider_active'] ?? 0);
+$payment_provider_threshold = floatval($row['payment_provider_threshold'] ?? 0);
 
 // Saved Payment Methods
 $sql_saved_payment_methods = mysqli_query($mysqli, "

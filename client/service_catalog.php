@@ -64,7 +64,7 @@ $catalog_recent = serviceCatalogRecentForContact($mysqli, intval($session_contac
                             <?php if ($description) { ?><p class="card-text text-secondary small"><?= $description ?></p><?php } ?>
                         </div>
                         <?php if ($category_name || $default_priority || intval($row['requires_approval'])) { ?>
-                            <div class="card-footer bg-white">
+                            <div class="card-footer">
                                 <?php if ($category_name) { ?><span class="badge text-bg-secondary"><?= $category_name ?></span><?php } ?>
                                 <?php if ($default_priority) { ?><span class="badge text-bg-light"><?= $default_priority ?> Priority</span><?php } ?>
                                 <?php if (intval($row['requires_approval'])) { ?><span class="badge text-bg-warning">Needs approval</span><?php } ?>

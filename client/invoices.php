@@ -10,7 +10,8 @@ require_once "includes/inc_all.php";
 
 
 if ($session_contact_primary == 0 && !$session_contact_is_billing_contact) {
-    header("Location: post.php?logout");
+    flash_alert("You do not have access to that page.", 'danger');
+    header("Location: index.php");
     exit();
 }
 

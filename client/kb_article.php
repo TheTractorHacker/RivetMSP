@@ -105,8 +105,8 @@ $sql_embeds = mysqli_query(
         <li class="list-group-item d-flex align-items-center justify-content-between">
             <span class="text-truncate me-2"><i class="fas fa-fw fa-file me-1"></i><?php echo $att_name; ?></span>
             <span>
-                <a target="_blank" class="btn btn-sm btn-secondary" href="kb_media.php?att=<?php echo $att_id; ?>"><i class="fas fa-fw fa-eye"></i></a>
-                <a class="btn btn-sm btn-secondary" href="kb_media.php?att=<?php echo $att_id; ?>&download=1"><i class="fas fa-fw fa-download"></i></a>
+                <a target="_blank" class="btn btn-sm btn-secondary" title="View attachment" aria-label="View attachment" href="kb_media.php?att=<?php echo $att_id; ?>"><i class="fas fa-fw fa-eye"></i></a>
+                <a class="btn btn-sm btn-secondary" title="Download attachment" aria-label="Download attachment" href="kb_media.php?att=<?php echo $att_id; ?>&download=1"><i class="fas fa-fw fa-download"></i></a>
             </span>
         </li>
         <?php } ?>

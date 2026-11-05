@@ -212,3 +212,7 @@ body.client-portal .badge { flex-shrink: 0; }
 /* `overflow-wrap: anywhere` (Core) lets the table shrink columns below one word ("Domai/n"); break-word only splits a
    word that cannot fit, and the surrounding .table-responsive scrolls instead. */
 body.client-portal .table td, body.client-portal .table th { overflow-wrap: break-word; }
+/* Dark portal: white on the light-grey secondary badge was 2.5:1, and the accent blue outline button was 3.3:1 on the card. */
+body.client-portal.dark-mode .badge.badge-secondary, body.client-portal.dark-mode .badge.text-bg-secondary { background-color: #4b5b61 !important; color: #fff !important; }
+body.client-portal.dark-mode .btn-outline-primary { color: #9dbbff; border-color: #5b86e8; }
+body.client-portal.dark-mode .btn-outline-primary:hover { color: #fff; background-color: #2563eb; border-color: #2563eb; }

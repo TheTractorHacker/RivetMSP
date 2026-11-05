@@ -17,6 +17,11 @@ if (isset($_POST['add_ticket'])) {
 
     $subject = sanitizeInput($_POST['subject']);
     $details = mysqli_real_escape_string($mysqli, ($_POST['details']));
+    // Subject and Details are marked required, but the Details editor is TinyMCE (the browser cannot validate it)
+    if (trim($subject) === '' || trim(strip_tags($_POST['details'] ?? '', '<img>')) === '') {
+        flash_alert("Please enter a subject and describe the problem in Details", 'danger');
+        redirect();
+    }
     $category = intval($_POST['category']);
     if (!$category) {
         $category = getDefaultClientTicketCategoryId($mysqli);
@@ -1394,7 +1399,7 @@ if (isset($_POST['client_add_document'])) {
 
     logAction("Document", "Create", "Client contact $session_contact_name created document $document_name", $session_client_id, $document_id);
 
-    flash_alert("Document <strong>$document_name</strong> created successfully");
+    flash_alert("Document \"$document_name\" created successfully");
 
     redirect('documents.php');
 
@@ -1472,7 +1477,7 @@ if (isset($_POST['client_upload_document'])) {
 
                 logAction("Document", "Upload", "Client contact $session_contact_name uploaded document $document_name with file $file_name", $session_client_id, $document_id);
 
-                flash_alert("Document <strong>$document_name</strong> uploaded successfully");
+                flash_alert("Document \"$document_name\" uploaded successfully");
 
             } else {
                 flash_alert('Error uploading file. Please try again.', 'error');
