@@ -1,0 +1,15 @@
+const L=require('./lib.js');
+(async()=>{const b=await L.launch();const ctx=await L.ctxFor(b,'admin',{width:1920,height:1080});const p=await ctx.newPage();const log=[];L.watch(p,log);
+await p.goto(L.BASE+'/agent/tickets.php',{waitUntil:'networkidle'});
+await p.click('button.ajax-modal:has-text("New Ticket")');
+await p.waitForSelector('.modal.show form');await p.waitForTimeout(800);
+await p.fill('.modal.show input[name=subject]','QA-UI ticket one');
+await p.evaluate(()=>{const e=tinymce.activeEditor||tinymce.editors[0];e.setContent('<p>QA-UI body <b>bold</b></p>')});
+console.log(await L.setSel(p,'.modal.show','client_id','Summit'));await p.waitForTimeout(900);
+await p.click('.modal.show a:has-text("Contact")');await p.waitForTimeout(500);
+console.log(await p.evaluate(()=>[...document.querySelectorAll('.modal.show [name=contact]')].map(e=>[...e.options].map(o=>o.textContent).join('|'))));
+await p.screenshot({path:L.SCR+'/img/new_filled.png'});
+await Promise.all([p.waitForNavigation({timeout:15000}).catch(()=>{}),p.click('.modal.show button:has-text("Create")')]);
+await p.waitForLoadState('networkidle');await p.waitForTimeout(800);
+console.log(p.url());await p.screenshot({path:L.SCR+'/img/new_created.png'});
+console.log(JSON.stringify(log));await b.close()})();

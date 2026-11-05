@@ -493,6 +493,10 @@ if (isset($_POST['edit_ticket_priority'])) {
 
     customAction('ticket_update', $ticket_id);
 
+    flash_alert("Priority updated from <strong>$original_priority</strong> to <strong>$priority</strong>");
+
+    redirect();
+
 }
 
 if (isset($_POST['edit_ticket_delivery_method'])) {
@@ -525,9 +529,7 @@ if (isset($_POST['edit_ticket_delivery_method'])) {
 
     logAction("Ticket", "Edit", "$session_name set delivery method to " . ($delivery_method ?? 'Not set') . " for ticket $ticket_id", $client_id, $ticket_id);
 
-    redirect();
-
-    flash_alert("Priority updated from <strong>$original_priority</strong> to <strong>$priority</strong>");
+    flash_alert("Delivery method updated to <strong>" . nullable_htmlentities($delivery_method ?? 'Not set') . "</strong>");
 
     redirect();
 

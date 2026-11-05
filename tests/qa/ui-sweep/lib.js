@@ -44,3 +44,9 @@ function watch(page, log) {
   page.on('response', r => { if (r.status() >= 400) log.push(`http ${r.status()} ${r.url().replace(BASE, '').slice(0, 100)}`); });
 }
 module.exports = { pw, launch, ctxFor, audit, watch, BASE, SCR };
+// set a TomSelect/select by visible label substring
+module.exports.setSel = async (p, scope, name, label) => p.evaluate(([scope, name, label]) => {
+  const el = document.querySelector(scope + ' select[name="' + name + '"]'); if (!el) return 'noel';
+  const opt = [...el.options].find(o => o.textContent.includes(label)); if (!opt) return 'noopt:' + [...el.options].map(o => o.textContent).slice(0, 5).join('|');
+  if (el.tomselect) el.tomselect.setValue(opt.value); else { el.value = opt.value; el.dispatchEvent(new Event('change', { bubbles: true })); } return 'ok';
+}, [scope, name, label]);
