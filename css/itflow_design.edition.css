@@ -188,3 +188,6 @@
 
 /* White on the success green is 2.9:1; black is 7:1 (same treatment the BS4 shim gives .badge-success). */
 .badge.text-bg-success, .badge.badge-success { color: #000 !important; }
+/* Legacy <button class="close">&times;</button> inside a flex .modal-header sat right next to the title (the shim's float does nothing in a flex row). */
+.modal-header > .close { float: none; margin-left: auto; }
+.modal-header.bg-dark .close { color: #fff; opacity: .85; }
