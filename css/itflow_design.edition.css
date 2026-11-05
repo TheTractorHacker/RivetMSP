@@ -188,3 +188,27 @@
 
 /* White on the success green is 2.9:1; black is 7:1 (same treatment the BS4 shim gives .badge-success). */
 .badge.text-bg-success, .badge.badge-success { color: #000 !important; }
+
+/* ---- Client portal (body.client-portal) ---- */
+/* Core's `.table td { color: ... !important }` flattened .text-danger/.text-warning in light mode, so overdue and
+   expiring dates in table cells were plain black (bold only). Re-assert the semantic colour at higher specificity. */
+body:not(.dark-mode) .table td.text-danger, body:not(.dark-mode) .table td .text-danger { color: #b42318 !important; }
+body:not(.dark-mode) .table td.text-warning, body:not(.dark-mode) .table td .text-warning { color: #8a5300 !important; }
+/* Core paints every table link as body text (a row is not a call to action). In the portal the invoice, quote,
+   ticket and contact numbers/names are the ONLY way into the record, so they must look clickable. */
+body.client-portal .table tbody a:not(.btn):not(.badge):not(.dropdown-item) {
+    color: var(--color-link);
+    text-decoration: underline;
+    text-decoration-color: rgba(var(--bs-primary-rgb, 37, 99, 235), .35);
+    text-underline-offset: 2px;
+}
+body.client-portal .table tbody a:not(.btn):not(.badge):not(.dropdown-item):hover { text-decoration-color: currentColor; }
+/* Profile detail list */
+.portal-dl dt { font-weight: 600; color: var(--color-text-muted); padding-bottom: .5rem; }
+.portal-dl dd { padding-bottom: .5rem; margin-bottom: 0; overflow-wrap: anywhere; }
+/* Status pills in portal tables broke mid-word on phones ("Resol/ved"); keep them whole and let the table scroll instead. */
+body.client-portal .table td .badge { white-space: nowrap; overflow-wrap: normal; }
+body.client-portal .badge { flex-shrink: 0; }
+/* `overflow-wrap: anywhere` (Core) lets the table shrink columns below one word ("Domai/n"); break-word only splits a
+   word that cannot fit, and the surrounding .table-responsive scrolls instead. */
+body.client-portal .table td, body.client-portal .table th { overflow-wrap: break-word; }

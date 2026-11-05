@@ -26,14 +26,15 @@ while ($cr = mysqli_fetch_assoc($contracts_sql)) {
     $docs_by_contract[] = array_merge($cr, ['docs' => $docs]);
 }
 ?>
-<div class="container-fluid mt-3">
-<div class="card">
-    <div class="card-header">
-        <h4 class="mb-0"><i class="fas fa-file-contract me-2"></i>Contracts &amp; Documents</h4>
+<div class="row mb-4">
+    <div class="col">
+        <h3><i class="fas fa-fw fa-file-contract me-2"></i>Contracts &amp; Documents</h3>
     </div>
-    <div class="card-body p-0">
+</div>
+<div>
+    <div>
         <?php if (empty($docs_by_contract)): ?>
-            <p class="text-muted text-center py-4 mb-0">No contracts on file.</p>
+            <div class="card"><div class="card-body text-center text-muted py-4">No contracts on file.</div></div>
         <?php else: ?>
         <div class="accordion" id="contractAccordion">
         <?php foreach ($docs_by_contract as $i => $cr):
@@ -49,16 +50,16 @@ while ($cr = mysqli_fetch_assoc($contracts_sql)) {
             <div class="card mb-2 border">
                 <div class="card-header py-2" id="ch<?= $cid ?>" style="cursor:pointer;"
                      data-bs-toggle="collapse" data-bs-target="#cc<?= $cid ?>" aria-expanded="<?= $i===0?'true':'false' ?>">
-                    <div class="d-flex align-items-center">
-                        <i class="fas fa-file-contract me-3 text-primary"></i>
-                        <div class="flex-grow-1">
+                    <div class="d-flex align-items-center flex-wrap gap-2">
+                        <i class="fas fa-file-contract me-1 text-primary"></i>
+                        <div>
                             <strong><?= $cname ?></strong>
                             <span class="text-muted small ms-2"><?= $ctype ?></span>
                         </div>
-                        <span class="badge badge-<?= $badge ?> me-3"><?= $cstatus ?></span>
-                        <span class="text-muted small me-3"><?= $cstart ?> – <?= $cend ?></span>
+                        <span class="badge badge-<?= $badge ?>"><?= $cstatus ?></span>
+                        <span class="text-muted small"><?= $cstart ?> – <?= $cend ?></span>
                         <span class="badge text-bg-secondary"><?= $doc_count ?> doc<?= $doc_count!==1?'s':'' ?></span>
-                        <i class="fas fa-chevron-down ms-3 text-muted" style="font-size:12px;"></i>
+                        <i class="fas fa-chevron-down text-muted ms-auto" style="font-size:12px;"></i>
                     </div>
                 </div>
                 <div id="cc<?= $cid ?>" class="collapse <?= $i===0?'show':'' ?>" data-bs-parent="#contractAccordion">
@@ -104,6 +105,5 @@ while ($cr = mysqli_fetch_assoc($contracts_sql)) {
         </div>
         <?php endif; ?>
     </div>
-</div>
 </div>
 <?php require_once "includes/footer.php"; ?>

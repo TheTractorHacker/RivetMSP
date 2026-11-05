@@ -68,7 +68,7 @@ $assets_sql = mysqli_query($mysqli, "SELECT * FROM assets LEFT JOIN contacts ON 
                     ?>
 
                     <tr>
-                        <td>
+                        <td class="text-nowrap">
                             <a href="#"><?php echo $asset_name ?></a>
                             <br>
                             <small class="text-secondary"><?php echo $asset_description; ?></small>

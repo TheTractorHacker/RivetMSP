@@ -245,7 +245,7 @@ if ($ticket_row) {
                             ?>
                             <span class="fa-stack fa-2x">
                                     <i class="fa fa-circle fa-stack-2x text-secondary"></i>
-                                    <span class="fa fa-stack-1x text-white"><?php echo $user_initials; ?></span>
+                                    <span class="fa-stack-1x text-white fw-semibold" style="font-size:.55em;"><?php echo $user_initials; ?></span>
                                 </span>
                             <?php
                         }

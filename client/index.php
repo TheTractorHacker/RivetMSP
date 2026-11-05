@@ -173,7 +173,7 @@ $row = mysqli_fetch_assoc($sql_open_tickets_count);
 $open_tickets_count = intval($row['c']);
 
 // Recent tickets for this contact
-$sql_recent_tickets = mysqli_query($mysqli, "SELECT ticket_id, ticket_prefix, ticket_number, ticket_subject, ticket_status_name, ticket_updated_at FROM tickets LEFT JOIN ticket_statuses ON ticket_status = ticket_status_id WHERE ticket_client_id = $session_client_id AND ticket_contact_id = $session_contact_id ORDER BY ticket_id DESC LIMIT 5");
+$sql_recent_tickets = mysqli_query($mysqli, "SELECT ticket_id, ticket_prefix, ticket_number, ticket_subject, ticket_status_name, ticket_updated_at, ticket_created_at FROM tickets LEFT JOIN ticket_statuses ON ticket_status = ticket_status_id WHERE ticket_client_id = $session_client_id AND ticket_contact_id = $session_contact_id ORDER BY ticket_id DESC LIMIT 5");
 
 // Build a combined "needs attention" list for technical contacts
 $tech_alerts = [];
@@ -214,7 +214,7 @@ if ($session_contact_primary == 1 || $session_contact_is_technical_contact) {
 <!-- Stat boxes -->
 <div class="row mb-3">
 
-    <div class="col-lg-3 col-md-6 col-sm-12">
+    <div class="col-lg col-md-6 col-12">
         <a class="small-box <?php echo $open_tickets_count > 0 ? 'bg-info' : 'bg-secondary'; ?>" href="tickets.php">
             <div class="inner">
                 <h3><?php echo $open_tickets_count; ?></h3>
@@ -228,7 +228,7 @@ if ($session_contact_primary == 1 || $session_contact_is_technical_contact) {
 
     <?php if ($session_contact_primary == 1 || $session_contact_is_billing_contact) { ?>
 
-        <div class="col-lg-3 col-md-6 col-sm-12">
+        <div class="col-lg col-md-6 col-12">
             <a class="small-box <?php echo $balance > 0 ? 'bg-danger' : 'bg-success'; ?>" href="<?php echo $balance > 0 ? 'unpaid_invoices.php' : 'invoices.php'; ?>">
                 <div class="inner">
                     <h3><?php echo numfmt_format_currency($currency_format, $balance, $session_company_currency); ?></h3>
@@ -240,7 +240,7 @@ if ($session_contact_primary == 1 || $session_contact_is_technical_contact) {
             </a>
         </div>
 
-        <div class="col-lg-3 col-md-6 col-sm-12">
+        <div class="col-lg col-md-6 col-12">
             <a class="small-box bg-primary" href="recurring_invoices.php">
                 <div class="inner">
                     <h3><?php echo numfmt_format_currency($currency_format, $recurring_monthly, $session_company_currency); ?></h3>
@@ -256,7 +256,7 @@ if ($session_contact_primary == 1 || $session_contact_is_technical_contact) {
 
     <?php if ($session_contact_primary == 1 || $session_contact_is_technical_contact) { ?>
 
-        <div class="col-lg-3 col-md-6 col-sm-12">
+        <div class="col-lg col-md-6 col-12">
             <a class="small-box <?php echo count($tech_alerts) > 0 ? 'bg-warning' : 'bg-success'; ?>" href="#tech-alerts">
                 <div class="inner">
                     <h3><?php echo count($tech_alerts); ?></h3>
@@ -268,7 +268,7 @@ if ($session_contact_primary == 1 || $session_contact_is_technical_contact) {
             </a>
         </div>
 
-        <div class="col-lg-3 col-md-6 col-sm-12">
+        <div class="col-lg col-md-6 col-12">
             <a class="small-box bg-secondary" href="assets.php">
                 <div class="inner">
                     <h3><?php echo mysqli_num_rows($sql_assigned_assets); ?></h3>
@@ -287,7 +287,7 @@ if ($session_contact_primary == 1 || $session_contact_is_technical_contact) {
 <div class="row mb-3">
 
     <!-- Recent Tickets -->
-    <div class="col-lg-7 col-md-12">
+    <div class="col-lg-7 col-md-12 mb-3 mb-lg-0">
         <div class="card card-outline card-primary">
             <div class="card-header">
                 <h3 class="card-title"><i class="fas fa-fw fa-ticket-alt me-2"></i>Recent Tickets</h3>
@@ -319,7 +319,7 @@ if ($session_contact_primary == 1 || $session_contact_is_technical_contact) {
                                 $ticket_number = intval($row['ticket_number']);
                                 $ticket_subject = nullable_htmlentities($row['ticket_subject']);
                                 $ticket_status = nullable_htmlentities($row['ticket_status_name']);
-                                $ticket_updated_at = $row['ticket_updated_at'] ? timeAgo($row['ticket_updated_at']) : '-';
+                                $ticket_updated_at = ($row['ticket_updated_at'] ?: $row['ticket_created_at']) ? timeAgo($row['ticket_updated_at'] ?: $row['ticket_created_at']) : '-';
                             ?>
                                 <tr>
                                     <td class="text-nowrap"><a href="ticket.php?id=<?php echo $ticket_id; ?>">#<?php echo "$ticket_prefix$ticket_number"; ?></a></td>
@@ -435,9 +435,9 @@ if ($session_contact_primary == 1 || $session_contact_is_technical_contact) {
                 <h3 class="card-title"><i class="fas fa-fw fa-th-large me-2"></i>Quick Links</h3>
             </div>
             <div class="card-body">
-                <div class="row text-center">
+                <div class="row text-center justify-content-center">
 
-                    <div class="col-6 col-md-2 mb-3">
+                    <div class="col-6 col-md-4 col-lg mb-3">
                         <a href="tickets.php" class="text-decoration-none">
                             <i class="fas fa-2x fa-ticket-alt text-primary mb-2"></i>
                             <div>Tickets</div>
@@ -445,13 +445,13 @@ if ($session_contact_primary == 1 || $session_contact_is_technical_contact) {
                     </div>
 
                     <?php if ($session_contact_primary == 1 || $session_contact_is_billing_contact) { ?>
-                        <div class="col-6 col-md-2 mb-3">
+                        <div class="col-6 col-md-4 col-lg mb-3">
                             <a href="invoices.php" class="text-decoration-none">
                                 <i class="fas fa-2x fa-file-invoice-dollar text-primary mb-2"></i>
                                 <div>Invoices</div>
                             </a>
                         </div>
-                        <div class="col-6 col-md-2 mb-3">
+                        <div class="col-6 col-md-4 col-lg mb-3">
                             <a href="quotes.php" class="text-decoration-none">
                                 <i class="fas fa-2x fa-file-signature text-primary mb-2"></i>
                                 <div>Quotes</div>
@@ -460,19 +460,19 @@ if ($session_contact_primary == 1 || $session_contact_is_technical_contact) {
                     <?php } ?>
 
                     <?php if ($session_contact_primary == 1 || $session_contact_is_technical_contact) { ?>
-                        <div class="col-6 col-md-2 mb-3">
+                        <div class="col-6 col-md-4 col-lg mb-3">
                             <a href="assets.php" class="text-decoration-none">
                                 <i class="fas fa-2x fa-desktop text-primary mb-2"></i>
                                 <div>Assets</div>
                             </a>
                         </div>
-                        <div class="col-6 col-md-2 mb-3">
+                        <div class="col-6 col-md-4 col-lg mb-3">
                             <a href="domains.php" class="text-decoration-none">
                                 <i class="fas fa-2x fa-globe text-primary mb-2"></i>
                                 <div>Domains</div>
                             </a>
                         </div>
-                        <div class="col-6 col-md-2 mb-3">
+                        <div class="col-6 col-md-4 col-lg mb-3">
                             <a href="documents.php" class="text-decoration-none">
                                 <i class="fas fa-2x fa-file-alt text-primary mb-2"></i>
                                 <div>Documents</div>
@@ -480,7 +480,7 @@ if ($session_contact_primary == 1 || $session_contact_is_technical_contact) {
                         </div>
                     <?php } ?>
 
-                    <div class="col-6 col-md-2 mb-3">
+                    <div class="col-6 col-md-4 col-lg mb-3">
                         <a href="contacts.php" class="text-decoration-none">
                             <i class="fas fa-2x fa-address-book text-primary mb-2"></i>
                             <div>Contacts</div>

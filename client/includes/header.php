@@ -232,7 +232,7 @@ $portal_accent_hex = itflow_theme_accent_hex($config_theme ?? '', !empty($config
                     --color-* tokens on a dark Tabler palette.
    --------------------------------------------------------------------------- */
 ?>
-<body class="accent-<?php echo nullable_htmlentities($config_theme ?? ''); ?><?php if (!empty($config_theme_dark_default)) echo ' dark-mode'; ?>">
+<body class="client-portal accent-<?php echo nullable_htmlentities($config_theme ?? ''); ?><?php if (!empty($config_theme_dark_default)) echo ' dark-mode'; ?>">
 <div class="page">
 
 <!-- Navbar. A plain Bootstrap 5 navbar (it never used AdminLTE), kept verbatim.
@@ -249,7 +249,7 @@ $portal_accent_hex = itflow_theme_accent_hex($config_theme ?? '', !empty($config
             <?php } ?>
             <?php echo nullable_htmlentities($portal_display_name); ?>
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
         </button>
 
