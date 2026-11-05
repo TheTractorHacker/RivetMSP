@@ -63,7 +63,7 @@ ob_start();
 ?>
 <div class="modal-header">
     <h5 class="modal-title"><i class="fas fa-fw fa-robot me-2"></i>Editing: <strong><?= nullable_htmlentities($rule['rule_name']) ?></strong></h5>
-    <button type="button" class="close" data-bs-dismiss="modal"><span>&times;</span></button>
+    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close"><span>&times;</span></button>
 </div>
 <form action="/admin/post.php" method="POST" autocomplete="off">
     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">

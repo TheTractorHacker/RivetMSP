@@ -13,7 +13,7 @@ ob_start();
 
 <div class="modal-header">
     <h5 class="modal-title"><i class="fa fa-fw fa-copy me-2"></i>Apply Template: <?= $name ?></h5>
-    <button type="button" class="close" data-bs-dismiss="modal"><span>&times;</span></button>
+    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close"><span>&times;</span></button>
 </div>
 
 <form action="post.php" method="post" autocomplete="off">

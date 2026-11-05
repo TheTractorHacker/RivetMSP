@@ -538,7 +538,7 @@ require_once "includes/inc_all_admin.php";
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title"><i class="fab fa-microsoft me-2"></i>Microsoft 365 OAuth Setup Guide</h5>
-                <button type="button" class="close" data-bs-dismiss="modal">&times;</button>
+                <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">&times;</button>
             </div>
             <div class="modal-body">
 

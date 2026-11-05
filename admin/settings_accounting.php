@@ -2018,7 +2018,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Link <span id="ampLinkClientName"></span> to a QuickBooks Customer</h5>
-                    <button type="button" class="close" data-bs-dismiss="modal">&times;</button>
+                    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">&times;</button>
                 </div>
                 <div class="modal-body">
                     <div class="input-group mb-3">
@@ -2222,7 +2222,7 @@ $money = static function ($v, $ccy) use ($currency_format) {
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Link <span id="aimLinkProductName"></span> to a QuickBooks Item</h5>
-                    <button type="button" class="close" data-bs-dismiss="modal">&times;</button>
+                    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">&times;</button>
                 </div>
                 <div class="modal-body">
                     <div class="input-group mb-3">
