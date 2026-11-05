@@ -188,3 +188,7 @@
 
 /* White on the success green is 2.9:1; black is 7:1 (same treatment the BS4 shim gives .badge-success). */
 .badge.text-bg-success, .badge.badge-success { color: #000 !important; }
+.badge.bg-success { color: #000 !important; }
+/* Links inside the pale info alert were 2.8:1. */
+.alert-info .alert-link, .alert-info a:not(.btn) { color: #0b4a8f; }
+:root[data-bs-theme="dark"] .alert-info .alert-link, :root[data-bs-theme="dark"] .alert-info a:not(.btn) { color: inherit; text-decoration: underline; }
