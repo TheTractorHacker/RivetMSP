@@ -287,7 +287,7 @@ function rivetRmmHypervisorHostPage(array $vm, string $csrf, bool $manage): stri
     }
     $o .= '</div></div>';
     if ($h['cluster'] !== null && count($h['cluster']['nodes']) > 0) {
-        $o .= '<p class="small text-muted">Nodes: ' . rmmH(implode(', ', array_map('strval', $h['cluster']['nodes']))) . '</p>';
+        $o .= '<p class="small text-muted">Nodes: ' . rmmH(implode(', ', array_map(static fn ($n): string => is_array($n) ? (string) ($n['name'] ?? '') : (string) $n, $h['cluster']['nodes']))) . '</p>';
     }
 
     $srows = '';

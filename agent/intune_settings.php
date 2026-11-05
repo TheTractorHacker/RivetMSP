@@ -18,6 +18,12 @@
  * just a UI bug, and deserves its own focused pass rather than riding along with the schema/UI work here.
  */
 
+// These pages belong to one client: without a client_id the client shell rendered an empty page (and PHP warnings), so go to the client list.
+if (intval($_GET['client_id'] ?? 0) === 0) {
+    header('Location: /agent/clients.php');
+    exit;
+}
+
 require_once "includes/inc_all_client.php";   // sets $client_id, enforces module_client + enforceClientAccess()
 
 enforceUserPermission('module_support', 1);
@@ -95,7 +101,7 @@ if ($ms_id) {
 
                 <button type="submit" name="save_microsoft_integration" class="btn btn-primary text-bold"><i class="fas fa-check me-2"></i>Save</button>
                 <?php if ($ms_id) { ?>
-                    <a class="btn btn-danger confirm-link" href="post.php?delete_microsoft_integration=<?php echo $ms_id; ?>&client_id=<?php echo $client_id; ?>&csrf_token=<?php echo $_SESSION['csrf_token']; ?>">
+                    <a class="btn btn-danger confirm-link ms-2" href="post.php?delete_microsoft_integration=<?php echo $ms_id; ?>&client_id=<?php echo $client_id; ?>&csrf_token=<?php echo $_SESSION['csrf_token']; ?>">
                         <i class="fas fa-fw fa-trash-alt me-2"></i>Remove
                     </a>
                 <?php } ?>
