@@ -156,7 +156,7 @@ function rivetRmmAutoScriptsOn(): string
 /** The page title row: title and icon on the left, the page's buttons (already HTML) on the right, then an optional one-line explanation. */
 function rivetRmmAutoHeader(string $title, string $icon, string $actionsHtml = '', string $intro = ''): string
 {
-    return '<div class="d-flex align-items-center flex-wrap mb-3" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-' . rmmH($icon) . ' me-2" aria-hidden="true"></i>' . rmmH($title) . '</h4>'
+    return '<div class="d-flex align-items-center flex-wrap mb-3 rmm-page-head" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-' . rmmH($icon) . ' me-2" aria-hidden="true"></i>' . rmmH($title) . '</h4>'
         . $actionsHtml . '</div>' . ($intro !== '' ? '<p class="text-muted small mb-3">' . rmmH($intro) . '</p>' : '');
 }
 

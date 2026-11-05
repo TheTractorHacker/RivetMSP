@@ -96,7 +96,7 @@ function rivetRmmPolicyPackCard(array $vm, string $csrf, ?array $flash): string
     }
     $o .= '<form method="post" action="/agent/post/rmm_policy_pack.php" id="pp-form"><input type="hidden" name="csrf_token" value="' . $h($csrf) . '">';
     foreach ($vm['groups'] as $group => $items) {
-        $o .= '<h6 class="mt-3">' . $h($group) . '</h6><div class="table-responsive"><table class="table table-sm align-middle mb-2">'
+        $o .= '<h6 class="mt-3">' . $h($group) . '</h6><div class="table-responsive"><table class="table table-sm align-middle mb-2 rmm-pp-table">'
             . '<thead><tr><th scope="col"><span class="visually-hidden">Select</span></th><th scope="col">Name</th><th scope="col">Platform</th><th scope="col">State</th><th scope="col">Summary</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead><tbody>';
         foreach ($items as $it) {
             [$pillKind, $pillWords] = $it['state_words'];

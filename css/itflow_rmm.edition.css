@@ -38,3 +38,23 @@
 /* from css/itflow_rmm_remote.css: the MeshCentral agent state of a device (RivetCore 1.0.0-rc.12) - a node id has no break opportunities, so it must be allowed to wrap on a phone */
 .rmm-mesh-agent { overflow-wrap: anywhere; }
 .rmm-mesh-agent .alert > div, #mesh .alert > div { min-width: 0; overflow-wrap: anywhere; }
+
+/* Page title row: a page with no action button was 4px shorter than one with a button, so the title jumped when moving between sibling RMM pages. */
+.rmm-page-head { min-height: 28px; }
+
+/* Starter policies: each group is its own table, so with automatic widths the Name / Platform / State / Summary columns started at a different x in every group and "Not installed" wrapped onto two lines. */
+.rmm-pp-table { table-layout: fixed; }
+.rmm-pp-table th:nth-child(1), .rmm-pp-table td:nth-child(1) { width: 2.75rem; }
+.rmm-pp-table th:nth-child(2), .rmm-pp-table td:nth-child(2) { width: 24%; }
+.rmm-pp-table th:nth-child(3), .rmm-pp-table td:nth-child(3) { width: 6.5rem; }
+.rmm-pp-table th:nth-child(4), .rmm-pp-table td:nth-child(4) { width: 11rem; }
+.rmm-pp-table th:nth-child(6), .rmm-pp-table td:nth-child(6) { width: 15rem; }
+.rmm-pp-table td:nth-child(4) .badge { white-space: nowrap; }
+
+/* Filter-bar submit buttons were stretched to fill a whole grid column (a 260px wide "Filter"/"Apply"/"Save ring"). Keep them button-sized beside the fields. */
+@media (min-width: 768px) {
+  form .row.align-items-end > [class*="col-"] > .btn.w-100:only-child { width: auto !important; min-width: 5.5rem; }
+}
+
+/* Agent versions and rings: the label and its count were pushed to opposite ends of a half-page column. */
+.rmm-kv-list { max-width: 20rem; }

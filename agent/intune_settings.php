@@ -67,19 +67,19 @@ if ($ms_id) {
                 <input type="hidden" name="client_id" value="<?php echo $client_id; ?>">
 
                 <div class="form-group">
-                    <label>Tenant ID</label>
-                    <input type="text" class="form-control" name="tenant_id" value="<?php echo $ms_tenant_id; ?>" placeholder="e.g. 72f988bf-86f1-41af-91ab-2d7cd011db47">
+                    <label for="msTenantId">Tenant ID</label>
+                    <input type="text" class="form-control" id="msTenantId" name="tenant_id" value="<?php echo $ms_tenant_id; ?>" placeholder="e.g. 72f988bf-86f1-41af-91ab-2d7cd011db47">
                 </div>
                 <div class="form-group">
-                    <label>Application (Client) ID</label>
-                    <input type="text" class="form-control" name="azure_client_id" value="<?php echo $ms_azure_client_id; ?>">
-                    <small class="form-text text-muted">The Azure AD App Registration's own "Application (client) ID" - a different value from the department picked above.</small>
+                    <label for="msAzureClientId">Application (Client) ID</label>
+                    <input type="text" class="form-control" id="msAzureClientId" name="azure_client_id" value="<?php echo $ms_azure_client_id; ?>" placeholder="e.g. 0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b">
+                    <small class="form-text text-muted">The Azure AD App Registration's own "Application (client) ID" - a different value from the Tenant ID above.</small>
                 </div>
                 <div class="form-group">
-                    <label>Client Secret</label>
-                    <input type="password" class="form-control" name="client_secret" placeholder="<?php echo $ms_has_secret ? 'Stored - leave blank to keep current' : 'Enter client secret'; ?>" autocomplete="new-password">
+                    <label for="msClientSecret">Client Secret</label>
+                    <input type="password" class="form-control" id="msClientSecret" name="client_secret" placeholder="<?php echo $ms_has_secret ? 'Stored - leave blank to keep current' : 'Enter client secret'; ?>" autocomplete="new-password">
                 </div>
-                <div class="form-check form-switch mb-3">
+                <div class="form-check form-switch mb-1">
                     <input type="checkbox" class="form-check-input" name="enabled" value="1" id="msEnabled" <?php if ($ms_enabled) { echo "checked"; } ?>>
                     <label class="form-check-label" for="msEnabled">Enabled</label>
                 </div>

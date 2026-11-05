@@ -188,3 +188,6 @@
 
 /* White on the success green is 2.9:1; black is 7:1 (same treatment the BS4 shim gives .badge-success). */
 .badge.text-bg-success, .badge.badge-success { color: #000 !important; }
+
+/* A small select was 36px tall beside a 32px small input in the same filter row (line-height 20px vs 16px), so the row's controls and labels sat at different heights. */
+.form-select.form-select-sm { line-height: 16px; }

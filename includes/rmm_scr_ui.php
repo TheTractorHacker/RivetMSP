@@ -1556,7 +1556,7 @@ function rivetRmmScrApprovalsPage(array $vm, array $ctx): string
     $csrf = $ctx['csrf'];
     $self = '/agent/rmm_approvals.php';
     $badge = $vm['pending'] > 0 ? ' <span class="badge text-bg-warning ms-2" id="approvals-pending-count"><span class="visually-hidden">Pending requests: </span>' . (int) $vm['pending'] . '</span>' : '';
-    $o = '<div class="d-flex align-items-center flex-wrap mb-3" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-user-check me-2" aria-hidden="true"></i>Approvals' . $badge . '</h4></div>'
+    $o = '<div class="d-flex align-items-center flex-wrap mb-3 rmm-page-head" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-user-check me-2" aria-hidden="true"></i>Approvals' . $badge . '</h4></div>'
         . '<p class="text-muted small mb-3">A run on many devices, or of a script that needs approval, waits here until a second person approves it. Nobody can approve their own request. A request that nobody decides expires on its own.</p>';
     $words = ['pending_approval' => 'Waiting', 'approved' => 'Approved', 'rejected' => 'Rejected', 'cancelled' => 'Cancelled', 'expired' => 'Expired', 'all' => 'All'];
     $o .= '<form method="get" action="' . $self . '" class="card card-dark mb-3"><div class="card-body"><div class="row g-2 align-items-end"><div class="col-md-3"><label class="form-label" for="apr_state">State</label><select class="form-select" id="apr_state" name="state">';
