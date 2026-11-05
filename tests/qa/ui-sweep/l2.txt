@@ -1,0 +1,15 @@
+agent/credentials.php?client_id=1
+agent/domains.php?client_id=1
+agent/certificates.php?client_id=1
+agent/software.php?client_id=1
+agent/networks.php?client_id=1
+agent/network_drives.php?client_id=1
+agent/printers.php?client_id=1
+agent/racks.php?client_id=1
+agent/services.php?client_id=1
+agent/files.php?client_id=1
+agent/structured_docs.php?client_id=1
+agent/kb_article.php?id=2
+agent/asset_details.php?client_id=1&asset_id=26
+agent/projects.php
+agent/vendors.php

@@ -11,10 +11,10 @@ $client_id = intval($row['network_drive_client_id']);
 enforceUserPermission('module_support');
 enforceClientAccess($client_id);
 
-$name = sanitizeInput($row['network_drive_name']);
-$letter = sanitizeInput($row['network_drive_letter']);
-$path = sanitizeInput($row['network_drive_path']);
-$purpose = sanitizeInput($row['network_drive_purpose']);
+$name = nullable_htmlentities($row['network_drive_name']);
+$letter = nullable_htmlentities($row['network_drive_letter']);
+$path = nullable_htmlentities($row['network_drive_path']);
+$purpose = nullable_htmlentities($row['network_drive_purpose']);
 $notes = nullable_htmlentities($row['network_drive_notes']);
 
 // Generate the HTML form content using output buffering.

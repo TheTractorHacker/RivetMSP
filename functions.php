@@ -2332,8 +2332,8 @@ function getClientProfitability(mysqli $mysqli, $year)
 /**
  * Quarterly Profit & Loss summary for a single year (set-based). Mirrors the revenue
  * and expense definitions used by agent/reports/profit_loss.php's classic table so the
- * numbers reconcile: revenue = invoice-linked payments + categorised revenues; expenses
- * = categorised, vendor-attributed expenses. Used to drive the prior-year comparison
+ * numbers reconcile: revenue = invoice-linked payments + revenues; expenses = all expenses
+ * (uncategorized ones show on the classic table's Uncategorized row, so they count here too). Used to drive the prior-year comparison
  * column, net margin and the year-over-year chart.
  */
 function getProfitLossSummary(mysqli $mysqli, $year)
@@ -2354,7 +2354,7 @@ function getProfitLossSummary(mysqli $mysqli, $year)
     }
     $res = mysqli_query($mysqli,
         "SELECT QUARTER(revenue_date) AS q, SUM(revenue_amount) AS amt
-         FROM revenues WHERE revenue_category_id > 0 AND YEAR(revenue_date) = $year GROUP BY q");
+         FROM revenues WHERE YEAR(revenue_date) = $year GROUP BY q");
     while ($r = mysqli_fetch_assoc($res)) {
         $q = intval($r['q']);
         if ($q >= 1 && $q <= 4) {
@@ -2363,7 +2363,7 @@ function getProfitLossSummary(mysqli $mysqli, $year)
     }
     $res = mysqli_query($mysqli,
         "SELECT QUARTER(expense_date) AS q, SUM(expense_amount) AS amt
-         FROM expenses WHERE expense_category_id > 0 AND expense_vendor_id > 0 AND YEAR(expense_date) = $year GROUP BY q");
+         FROM expenses WHERE YEAR(expense_date) = $year GROUP BY q");
     while ($r = mysqli_fetch_assoc($res)) {
         $q = intval($r['q']);
         if ($q >= 1 && $q <= 4) {
@@ -2834,7 +2834,7 @@ function getMonthlyTax($tax_name, $month, $year, $mysqli)
             LEFT JOIN payments ON invoices.invoice_id = payments.payment_invoice_id
             WHERE YEAR(payments.payment_date) = $year AND MONTH(payments.payment_date) = $month
             AND invoices.invoice_amount > 0
-            AND invoice_items.item_tax_id = (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
+            AND invoice_items.item_tax_id IN (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
     $result = mysqli_query($mysqli, $sql);
     $row = mysqli_fetch_assoc($result);
     return $row['monthly_tax'] ?? 0;
@@ -2853,7 +2853,7 @@ function getQuarterlyTax($tax_name, $quarter, $year, $mysqli)
             LEFT JOIN payments ON invoices.invoice_id = payments.payment_invoice_id
             WHERE YEAR(payments.payment_date) = $year AND MONTH(payments.payment_date) BETWEEN $start_month AND $end_month
             AND invoices.invoice_amount > 0
-            AND invoice_items.item_tax_id = (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
+            AND invoice_items.item_tax_id IN (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
     $result = mysqli_query($mysqli, $sql);
     $row = mysqli_fetch_assoc($result);
     return $row['quarterly_tax'] ?? 0;
@@ -2868,7 +2868,7 @@ function getTotalTax($tax_name, $year, $mysqli)
             LEFT JOIN payments ON invoices.invoice_id = payments.payment_invoice_id
             WHERE YEAR(payments.payment_date) = $year
             AND invoices.invoice_amount > 0
-            AND invoice_items.item_tax_id = (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
+            AND invoice_items.item_tax_id IN (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
     $result = mysqli_query($mysqli, $sql);
     $row = mysqli_fetch_assoc($result);
     return $row['total_tax'] ?? 0;
@@ -5057,6 +5057,10 @@ function redirect($url = null, $permanent = false) {
 
 //Flash Alert Function
 function flash_alert(string $message, string $type = 'success'): void {
+    // Messages are built from sanitizeInput()ed names, so a quote arrives as \' or \" and used to show up with the backslash in the toast.
+    $message = str_replace(["\\'", '\\"'], ["'", '"'], $message);
+    // Several handlers pass 'alert', which toastr has no method for (the page threw and showed no message at all); it means a warning.
+    if (!in_array($type, ['success', 'error', 'info', 'warning'], true)) { $type = 'warning'; }
     $_SESSION['alert_type'] = $type;
     $_SESSION['alert_message'] = $message;
 }

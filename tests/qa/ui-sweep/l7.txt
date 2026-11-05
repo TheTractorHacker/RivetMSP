@@ -1,0 +1,14 @@
+agent/domain_details.php?client_id=1&id=1
+agent/domain_details.php?client_id=1&id=2
+agent/certificate_details.php?client_id=1&id=1
+agent/certificate_details.php?client_id=1&id=2
+agent/document_details.php?client_id=1&document_id=1
+agent/document_details.php?client_id=1&document_id=2
+agent/kb_article_versions.php?kb_article_id=2
+agent/kb_article.php?id=3
+agent/files.php?client_id=1&folder_id=1
+agent/domain_details.php?client_id=1&id=999
+agent/certificate_details.php?client_id=1&id=999
+agent/kb_article.php?id=999
+agent/asset_details.php?client_id=1&asset_id=999
+agent/project_details.php?project_id=999

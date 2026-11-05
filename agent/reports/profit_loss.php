@@ -54,7 +54,7 @@ $expense_categories[] = ['category_id' => 0, 'category_name' => 'Uncategorized']
         </div>
         <div class="card-body p-0">
             <form class="p-3">
-                <select class="form-control auto-submit-select" name="year">
+                <select class="form-control auto-submit-select" name="year" aria-label="Year">
                     <?php
 
                     while ($row = mysqli_fetch_assoc($sql_all_years)) {
@@ -80,7 +80,7 @@ $expense_categories[] = ['category_id' => 0, 'category_name' => 'Uncategorized']
                         <th class="text-end">Total</th>
                     </tr>
                     <tr>
-                        <th><br><br>Income</th>
+                        <th class="pt-4">Income</th>
                         <th colspan="5"></th>
                     </tr>
                     </thead>
@@ -287,7 +287,7 @@ $expense_categories[] = ['category_id' => 0, 'category_name' => 'Uncategorized']
                     </tr>
 
                     <tr>
-                        <th><br><br>Expenses</th>
+                        <th class="pt-4">Expenses</th>
                         <th colspan="5"></th>
                     </tr>
                     <?php
@@ -367,7 +367,7 @@ $expense_categories[] = ['category_id' => 0, 'category_name' => 'Uncategorized']
                     ?>
 
                     <tr>
-                        <th>Total Expenses<br><br><br></th>
+                        <th>Total Expenses</th>
                         <?php
 
                         $expense_total_amount_for_quarter_one = 0;

@@ -103,12 +103,12 @@ $priority_colors = [
             <label class="mb-0 me-1" for="reportDateRange-btn">Date range</label>
             <?php dateRangePickerField($date_range, 'canned_date', ['hide_groups' => ['Upcoming'], 'id' => 'reportDateRange']); ?>
             <label class="mb-0 ms-2 me-1" for="reportMaintenance">Maintenance (RMM) tickets</label>
-            <select class="form-select form-select-sm w-auto" name="maintenance" id="reportMaintenance">
+            <select class="form-select w-auto" style="min-width:8.5rem" name="maintenance" id="reportMaintenance">
                 <?php foreach (['include' => 'Include', 'exclude' => 'Exclude', 'only' => 'Only these'] as $mv => $ml) { ?>
                 <option value="<?= $mv ?>" <?= $report_maintenance === $mv ? 'selected' : '' ?>><?= $ml ?></option>
                 <?php } ?>
             </select>
-            <button type="submit" class="btn btn-sm btn-outline-secondary">Apply</button>
+            <button type="submit" class="btn btn-outline-secondary">Apply</button>
         </form>
 
         <div class="px-3 pb-2">

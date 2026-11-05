@@ -145,6 +145,7 @@
    (not instead of) .prettyContent so pretty_content.js's table/img-fluid
    hook keeps working unchanged. ---- */
 .kb-reader-card { border-top: 3px solid var(--color-accent); }
+.kb-reader-card .card-header { display: block; }
 .kb-reader-meta { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; font-size: .82rem; color: var(--if-muted); margin-top: .35rem; }
 
 .kb-prose { font-size: 1rem; line-height: 1.75; color: var(--if-ink); max-width: 74ch; }
@@ -315,3 +316,45 @@ code, kbd, samp { font-size: max(.875em, 11.5px); }
 @media (max-width: 575.98px) { .guest-items th, .guest-items td { white-space: nowrap; } }
 /* Records-per-page picker in list footers stretched across a third of the card; it only ever shows a number. */
 .card-footer .form-group > .ts-wrapper.auto-submit-select { width: 6.5rem; max-width: 100%; }
+
+/* Progress meters (projects list/detail): the "x / y" count lived inside the bar, so a 0-25% bar clipped it and it rendered at 10.5px.
+   The count now sits beside the bar at a readable size; the bar itself is purely visual. */
+.progress-meter { display: flex; align-items: center; gap: .5rem; }
+.progress-meter .progress { flex: 1 1 auto; height: .6rem; min-width: 5rem; }
+.progress-meter .progress-label { flex: 0 0 auto; min-width: 3.25rem; font-size: .8125rem; font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Report filter selects (year / month / view): a bare .form-control select stretched to the full card width and read as an empty text field.
+   Keep them compact and on one wrapped row; the selects carry aria-labels in the markup. */
+form:has(> select.auto-submit-select) { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+select.form-control.auto-submit-select { width: auto; min-width: 8rem; }
+
+/* .info-box.bg-orange (aging buckets) was missing from the shim's muted-tile list, so one tile in a row rendered solid orange. */
+.info-box.bg-orange {
+    background-color: var(--if-surface, #fff) !important;
+    color: var(--if-ink, #16232a) !important;
+    border: 1px solid var(--if-border, #e3e9ea);
+    border-inline-start-width: 3px;
+    border-inline-start-color: #ea580c;
+    box-shadow: var(--if-shadow);
+}
+.info-box.bg-orange .info-box-icon { color: #c2410c; }
+
+/* Row headers (<th> inside tbody: totals / sub-headings on Profit & Loss etc.) used Bootstrap's 4px th padding while the <td>s beside them use the table's
+   cell padding, so the label sat 8px left of the column above it. */
+.table > tbody > tr > th { padding: .7rem .75rem; }
+
+/* Fixed-width (fa-fw) icons set to display:block inside a text-center empty state stay on the left edge; centre them. */
+.text-center > i.fa-fw.d-block { margin-left: auto; margin-right: auto; }
+
+/* Credential names inside table cells: overflow-wrap:anywhere collapses the cell to one character wide on narrow screens; let the responsive table scroll instead. */
+.table td .cred-name { overflow-wrap: break-word; }
+
+/* Asset list: tags under the name, lined up with the text beside the device icon (2.5em icon + .75rem gap). */
+.asset-row-tags { margin-left: calc(2.5em + .75rem); }
+
+/* Outline-primary buttons on dark surfaces: the brand blue is 3.2:1 on the dark cards; use a lighter tint of it for text and border. */
+:root[data-bs-theme="dark"] .btn-outline-primary:not(:hover):not(:focus):not(.active):not(:active),
+body.dark-mode .btn-outline-primary:not(:hover):not(:focus):not(.active):not(:active) {
+    color: #7aa7ff;
+    border-color: #7aa7ff;
+}

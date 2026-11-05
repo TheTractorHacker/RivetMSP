@@ -415,6 +415,8 @@ if (isset($_GET['asset_id'])) {
 
         <style>
             #asset-details-content { font-size: 1.05rem; }
+            /* The header is a flex row from the card styles, which put the name, tag and description side by side in a 3-column card. */
+            #asset-details-content > .col-md-3 > .card:first-child > .card-header { display: block; }
             #asset-details-content .small,
             #asset-details-content small { font-size: 92%; }
             #asset-details-content [style*="font-size:11px"] { font-size: 12px !important; }
@@ -462,13 +464,13 @@ if (isset($_GET['asset_id'])) {
                             <div class="mt-2"><i class="fa fa-fw fa-barcode text-secondary me-2"></i><?= $asset_serial; ?></div>
                         <?php }
                         if ($asset_purchase_date) { ?>
-                            <div class="mt-2"><i class="fa fa-fw fa-shopping-cart text-secondary me-2"></i><?= date('Y-m-d', strtotime($asset_purchase_date)); ?></div>
+                            <div class="mt-2"><i class="fa fa-fw fa-shopping-cart text-secondary me-2" aria-hidden="true"></i><span class="text-secondary">Purchased</span> <?= date('Y-m-d', strtotime($asset_purchase_date)); ?></div>
                         <?php }
                         if ($asset_install_date) { ?>
-                            <div class="mt-2"><i class="fa fa-fw fa-calendar-check text-secondary me-2"></i><?= date('Y-m-d', strtotime($asset_install_date)); ?></div>
+                            <div class="mt-2"><i class="fa fa-fw fa-calendar-check text-secondary me-2" aria-hidden="true"></i><span class="text-secondary">Installed</span> <?= date('Y-m-d', strtotime($asset_install_date)); ?></div>
                         <?php }
                         if ($asset_warranty_expire) { ?>
-                            <div class="mt-2"><i class="fa fa-fw fa-exclamation-triangle text-secondary me-2"></i><?= date('Y-m-d', strtotime($asset_warranty_expire)); ?></div>
+                            <div class="mt-2"><i class="fa fa-fw fa-exclamation-triangle text-secondary me-2" aria-hidden="true"></i><span class="text-secondary">Warranty expires</span> <?= date('Y-m-d', strtotime($asset_warranty_expire)); ?></div>
                         <?php } ?>
                     </div>
                 </div>
@@ -1456,7 +1458,7 @@ if (isset($_GET['asset_id'])) {
                                     $document_description = nullable_htmlentities($row['document_description']);
                                     $document_created_by = nullable_htmlentities($row['user_name']);
                                     $document_created_at = nullable_htmlentities($row['document_created_at']);
-                                    $document_updated_at = nullable_htmlentities($row['document_updated_at']);
+                                    $document_updated_at = nullable_htmlentities($row['document_updated_at'] ?: $row['document_created_at']);
 
                                     $linked_documents[] = $document_id;
 

@@ -298,6 +298,10 @@ if (isset($_GET['client_id'])) {
         $num_software_expired = intval($row['num']);
 
     }
+} else {
+    // Client-scoped page opened without a client: there is no sidebar/header to build (blank page + undefined-variable warnings), so pick a client first.
+    header("Location: /agent/clients.php");
+    exit;
 }
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/header.php';

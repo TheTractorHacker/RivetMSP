@@ -26,7 +26,7 @@ $monthlyTotals = array_fill(1, 12, 0);  // Initialize monthly totals for each mo
     </div>
     <div class="card-body">
         <form class="mb-3">
-            <select class="form-control auto-submit-select" name="year">
+            <select class="form-control auto-submit-select" name="year" aria-label="Year">
                 <?php
 
                 while ($row = mysqli_fetch_assoc($sql_expense_years)) {
@@ -36,6 +36,7 @@ $monthlyTotals = array_fill(1, 12, 0);  // Initialize monthly totals for each mo
 
                 <?php } ?>
 
+            <?php if (mysqli_num_rows($sql_expense_years) == 0) { ?><option selected><?php echo intval($year); ?></option><?php } ?>
             </select>
         </form>
 
