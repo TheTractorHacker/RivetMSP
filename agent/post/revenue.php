@@ -74,7 +74,7 @@ if (isset($_GET['delete_revenue'])) {
 
     logAction("Revenue", "Delete", "$session_name deleted revenue $revenue_description");
 
-    flash_alert("Revenue removed", 'error');
+    flash_alert("Revenue deleted", 'error');
 
     redirect();
 
