@@ -411,7 +411,7 @@ document.addEventListener('click', function (e) {
                         <button class="btn btn-sm btn-outline-danger js-revoke-api-token"
                                 data-token-id="<?= $tok['token_id'] ?>"
                                 data-csrf="<?= $_SESSION['csrf_token'] ?>">
-                            <i class="fas fa-times"></i> Revoke
+                            <i class="fas fa-times me-1"></i>Revoke
                         </button>
                     </td>
                 </tr>

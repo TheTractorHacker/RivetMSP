@@ -3615,6 +3615,31 @@ function resolveTicketStatusId(int $status_id): int {
     return $status_id == 4 ? 5 : $status_id;
 }
 
+// Ends a request the role may not make. A full page load gets a small branded 403 page instead of two bare lines of text on a white screen;
+// modals, ajax fetches and post handlers keep the plain fragment they always returned.
+function denyAccess($detail) {
+    $is_document = (($_SERVER['HTTP_SEC_FETCH_DEST'] ?? 'document') === 'document')
+        && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET'
+        && empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+        && strpos((string) ($_SERVER['SCRIPT_NAME'] ?? ''), '/modals/') === false
+        && strpos((string) ($_SERVER['SCRIPT_NAME'] ?? ''), '/ajax') === false;
+    if (!$is_document) {
+        exit(WORDING_ROLECHECK_FAILED . "<br>" . $detail);
+    }
+    http_response_code(403);
+    $h = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES); };
+    echo '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+        . '<title>' . $h(defined('APP_NAME') ? APP_NAME : 'Access denied') . ' - Access denied</title>'
+        . '<link rel="stylesheet" href="/plugins/tabler/css/tabler.min.css"><link rel="stylesheet" href="/plugins/fontawesome-free/css/all.min.css"></head>'
+        . '<body class="d-flex flex-column" style="min-height:100vh;background:#eef2f2"><div class="page page-center"><div class="container-tight py-4 text-center">'
+        . '<div class="empty"><div class="empty-icon text-danger" style="font-size:3rem" aria-hidden="true"><i class="fas fa-lock"></i></div>'
+        . '<h1 class="empty-title">' . $h(WORDING_ROLECHECK_FAILED) . '</h1>'
+        . '<p class="empty-subtitle text-secondary">' . $h($detail) . '</p>'
+        . '<div class="empty-action"><a href="javascript:history.back()" class="btn btn-outline-secondary me-2">Go back</a>'
+        . '<a href="/agent/clients.php" class="btn btn-primary">Home</a></div></div></div></div></body></html>';
+    exit;
+}
+
 // Ensures a user has access to a module (e.g. module_support) with at least the required permission level provided (defaults to read)
 function enforceUserPermission($module, $check_access_level = 1) {
     $permitted_access_level = lookupUserPermission($module);
@@ -3627,7 +3652,7 @@ function enforceUserPermission($module, $check_access_level = 1) {
             "2" => "write",
             "3" => "full"
         ];
-        exit(WORDING_ROLECHECK_FAILED . "<br>Tell your admin: $map[$check_access_level] access to $module is not permitted for your role.");
+        denyAccess("Tell your admin: $map[$check_access_level] access to $module is not permitted for your role.");
     }
 }
 
@@ -3693,7 +3718,7 @@ function enforceClientAccess($client_id = null) {
 function enforceAdminPermission() {
     global $session_is_admin;
     if (!isset($session_is_admin) || !$session_is_admin) {
-        exit(WORDING_ROLECHECK_FAILED . "<br>Tell your admin: Your role does not have admin access.");
+        denyAccess("Tell your admin: Your role does not have admin access.");
     }
     return true;
 }

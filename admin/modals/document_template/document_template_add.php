@@ -18,7 +18,7 @@ ob_start();
     <div class="modal-body">
 
         <div class="form-group">
-            <input type="text" class="form-control" name="name" placeholder="Template name" maxlength="200">
+            <input type="text" class="form-control" name="name" placeholder="Template name" maxlength="200" required>
         </div>
 
         <div class="form-group">

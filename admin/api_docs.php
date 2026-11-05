@@ -135,10 +135,11 @@ $slug = fn($tag) => 'tag-' . preg_replace('/[^a-z0-9]+/', '-', strtolower($tag))
   .api-section-heading .cnt { color: var(--c-muted); font-weight: 500; letter-spacing: 0; text-transform: none; margin-left: .5rem; }
 
   .api-path-heading {
-    display: flex; align-items: center; gap: .5rem; padding: .55rem 1.1rem .15rem;
+    display: flex; align-items: center; gap: .5rem; padding: .55rem 1.1rem .15rem; min-width: 0;
     font-size: .86rem; font-weight: 600; color: var(--c-ink);
   }
-  .api-copy { border: 0; background: none; color: var(--c-muted); padding: 0; cursor: pointer; font-size: .78rem; line-height: 1; }
+  .api-path-heading > span { min-width: 0; overflow-wrap: anywhere; }
+  .api-copy { flex-shrink: 0; border: 0; background: none; color: var(--c-muted); padding: 0; cursor: pointer; font-size: .78rem; line-height: 1; }
   .api-copy:hover { color: var(--c-accent); }
 
   .api-row { display: flex; align-items: baseline; gap: .7rem; padding: .3rem 1.1rem .45rem 2.5rem; flex-wrap: wrap; }

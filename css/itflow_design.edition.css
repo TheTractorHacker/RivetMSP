@@ -204,3 +204,20 @@ code, kbd, samp { font-size: max(.875em, 11.5px); }
 [data-bs-theme="dark"] .badge.bg-secondary, [data-bs-theme="dark"] .badge.text-bg-secondary { color: #000 !important; }
 [data-bs-theme="dark"] .btn-outline-primary:not(:hover):not(:focus):not(.active),
 [data-bs-theme="dark"] .admin-directory__add { color: #8db3ff; border-color: #8db3ff; }
+
+/* BS4-style modal close button: .close floats, which a flex .modal-header ignores, so the X sat glued to the title. Push it to the right edge. */
+.modal-header .close { float: none; margin-left: auto; }
+
+/* Phones: Tabler's own sidebar hamburger stacked above the top bar, whose hamburger does the same job (two menu buttons, two bars). While the menu is
+   closed only the top-bar button shows; once open, Tabler's toggler (now a close X) is visible again. */
+@media (max-width: 991.98px) {
+    .navbar-vertical .navbar-toggler[aria-expanded="false"], .navbar-vertical .navbar-toggler.collapsed { display: none; }
+}
+
+/* Phones: a long page list (audit log, 23 pages) pushed past the viewport, and a card header with a title plus two buttons (Mailboxes)
+   squeezed the title to one letter per line. Let both wrap. */
+.pagination { flex-wrap: wrap; }
+@media (max-width: 575.98px) {
+    .card-header:has(> .card-tools) { flex-wrap: wrap; gap: .5rem; }
+    .card-header > .card-tools { display: flex; flex-wrap: wrap; gap: .5rem; margin-left: auto; max-width: 100%; flex-shrink: 1; }
+}

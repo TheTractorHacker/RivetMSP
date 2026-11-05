@@ -194,6 +194,7 @@ if (isset($_POST['edit_your_user_preferences'])) {
 
     $calendar_first_day = intval($_POST['calendar_first_day']);
     $dark_mode = intval($_POST['dark_mode'] ?? 0);
+    $extended_log_description = '';
 
     // Calendar
     $records_per_page = in_array(intval($_POST['records_per_page'] ?? 10), [10,25,50,100])
@@ -216,7 +217,8 @@ if (isset($_POST['edit_your_user_preferences'])) {
     }
 
     // Disable extension access
-    if (!isset($_POST['extension'])) {
+    // Only when the submitting form actually has the extension control; the preferences form does not, and used to wipe the key on every save.
+    if (isset($_POST['extension_form']) && !isset($_POST['extension'])) {
         mysqli_query($mysqli, "UPDATE users SET user_extension_key = '' WHERE user_id = $session_user_id");
         $extended_log_description .= "disabled browser extension access";
     }
