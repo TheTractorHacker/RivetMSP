@@ -31,6 +31,7 @@ $admin_settings_labels = [
     'settings_localization.php' => 'Language & region',
     'settings_theme.php' => 'Theme',
     'settings_appearance.php' => 'Appearance',
+    'settings_portal_branding.php' => 'Client Portal Branding',
     'settings_default.php' => 'Defaults',
     'settings_module.php' => 'Modules',
     'settings_ticket.php' => 'Ticketing',

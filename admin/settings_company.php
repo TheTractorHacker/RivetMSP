@@ -34,7 +34,7 @@ $company_initials = nullable_htmlentities(initials($company_name));
                 <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token'] ?>">
 
                     <div class="row">
-                        <div class="col-md-3 text-center">
+                        <div class="col-md-3">
                             <?php if ($company_logo) { ?>
                                 <img class="img-thumbnail" src="<?php echo "../uploads/settings/$company_logo"; ?>">
                                 <a href="post.php?remove_company_logo&csrf_token=<?= $_SESSION['csrf_token'] ?>" class="btn btn-outline-danger btn-block">Remove Logo</a>
