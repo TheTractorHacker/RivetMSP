@@ -38,3 +38,52 @@
 /* from css/itflow_rmm_remote.css: the MeshCentral agent state of a device (RivetCore 1.0.0-rc.12) - a node id has no break opportunities, so it must be allowed to wrap on a phone */
 .rmm-mesh-agent { overflow-wrap: anywhere; }
 .rmm-mesh-agent .alert > div, #mesh .alert > div { min-width: 0; overflow-wrap: anywhere; }
+
+/* Page title row: a page with no action button was 4px shorter than one with a button, so the title jumped when moving between sibling RMM pages. */
+.rmm-page-head { min-height: 28px; }
+
+/* Starter policies: each group is its own table, so with automatic widths the Name / Platform / State / Summary columns started at a different x in every group and "Not installed" wrapped onto two lines. */
+.rmm-pp-table { table-layout: fixed; }
+.rmm-pp-table th:nth-child(1), .rmm-pp-table td:nth-child(1) { width: 2.75rem; }
+.rmm-pp-table th:nth-child(2), .rmm-pp-table td:nth-child(2) { width: 24%; }
+.rmm-pp-table th:nth-child(3), .rmm-pp-table td:nth-child(3) { width: 6.5rem; }
+.rmm-pp-table th:nth-child(4), .rmm-pp-table td:nth-child(4) { width: 11rem; }
+.rmm-pp-table th:nth-child(6), .rmm-pp-table td:nth-child(6) { width: 15rem; }
+.rmm-pp-table td:nth-child(4) .badge { white-space: nowrap; }
+
+/* Filter-bar submit buttons were stretched to fill a whole grid column (a 260px wide "Filter"/"Apply"/"Save ring"). Keep them button-sized beside the fields. */
+@media (min-width: 768px) {
+  form .row.align-items-end > [class*="col-"] > .btn.w-100:only-child,
+  form.row.align-items-end > [class*="col-"] > .btn.w-100:only-child { width: auto !important; min-width: 5.5rem; }
+}
+
+/* Agent versions and rings: the label and its count were pushed to opposite ends of a half-page column. */
+.rmm-kv-list { max-width: 20rem; }
+
+/* Required fields on the RMM pages: the inputs carry `required` but no label said so. */
+.rmm-page .form-label:has(+ [required])::after,
+.rmm-page .form-label:has(+ .input-group [required])::after { content: " *"; color: var(--tblr-danger); font-weight: 600; }
+
+/* Key/value tables ("About this script", "Definition", device details): the key column took 40% of the card, leaving the value far from its label, and the key sat lower than the first line of a taller value. */
+@media (min-width: 768px) {
+  .rmm-page table .rmm-dl-key { width: 14rem; }
+}
+.rmm-page table:has(.rmm-dl-key) > tbody > tr > th,
+.rmm-page table:has(.rmm-dl-key) > tbody > tr > td { vertical-align: top; }
+.rmm-page table:has(.rmm-dl-key) > tbody > tr > th.rmm-dl-key { padding: 11.2px 12px; }
+
+/* Nothing on the RMM pages is allowed to be smaller than 12px (badges, inline code, small help text and the stat tile captions were 10 to 10.7px). */
+.rmm-page .badge, .rmm-page .info-box-text, .rmm-page .rmm-ib-sub { font-size: max(12px, .75rem); }
+.rmm-page code { font-size: max(12px, .85em); }
+.rmm-page .small, .rmm-page small, .rmm-page .form-text, .rmm-page .text-break { font-size: max(12px, .875em); }
+.rmm-page .fs-6 { font-size: 12px !important; }
+
+/* WCAG AA: white on the success green is 2.7:1, white on the grey secondary badge 2.5:1, light text on the info blue 2.6:1, and the primary blue outline button is 3.2 to 3.6:1 on the dark page. */
+.rmm-page .badge.bg-success, .rmm-page .badge.bg-info { color: #000 !important; }
+[data-bs-theme="dark"] .rmm-page .badge.bg-secondary { color: #0d1417 !important; }
+[data-bs-theme="dark"] .rmm-page .btn-outline-primary { color: #8fb2ff; border-color: #8fb2ff; }
+[data-bs-theme="dark"] .rmm-page .btn-outline-primary:hover { color: #0d1417; background: #8fb2ff; }
+.rmm-page .info-box .info-box-text, .rmm-page .info-box-text { font-size: 12px !important; }
+/* A row header (th) in a body row had 4px of vertical padding next to 11px on its value, so the two never lined up. */
+.rmm-page .table > tbody > tr > th { padding-top: 11.2px; padding-bottom: 11.2px; vertical-align: top; }
+.rmm-page .table > tbody > tr > td { vertical-align: middle; }

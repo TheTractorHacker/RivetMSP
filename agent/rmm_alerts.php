@@ -82,6 +82,7 @@ $has_active_filter = $filter_severity || $filter_client || $filter_search || $fi
                 <?php if ($cnt['crit_cnt']): ?><span class="badge text-bg-light me-1"><?= intval($cnt['crit_cnt']) ?> critical</span><?php endif; ?>
                 <?php if ($cnt['err_cnt']): ?><span class="badge text-bg-light me-1"><?= intval($cnt['err_cnt']) ?> error</span><?php endif; ?>
                 <?php if ($cnt['warn_cnt']): ?><span class="badge text-bg-light"><?= intval($cnt['warn_cnt']) ?> warning</span><?php endif; ?>
+                <?php if (!$cnt['crit_cnt'] && !$cnt['err_cnt'] && !$cnt['warn_cnt']): ?>Click to view<?php endif; ?>
             </span>
         </div></a>
     </div>

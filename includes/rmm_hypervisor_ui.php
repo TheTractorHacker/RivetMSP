@@ -114,7 +114,7 @@ function rivetRmmHvBackupPill(?array $b): string
         return '<span class="text-muted">none</span>';
     }
 
-    return rivetRmmUiPill(['ok' => 'ok', 'warning' => 'warn', 'failed' => 'crit'][$b['result']] ?? 'off', ucfirst($b['result']) . ' ' . rivetRmmUiTime($b['at']));
+    return rivetRmmUiPill(['ok' => 'ok', 'warning' => 'warn', 'failed' => 'crit'][$b['result']] ?? 'off', ucfirst($b['result'])) . ' <span class="text-muted small">' . rivetRmmUiTime($b['at']) . '</span>';
 }
 
 // ------------------------------------------------------------------ hosts (fleet-wide)
@@ -159,8 +159,8 @@ function rivetRmmHypervisorHostsPage(array $vm): string
     }
     $o .= '</select></div><div class="col-md-2"><label class="form-label" for="hv_platform">Platform</label><select class="form-select" id="hv_platform" name="platform"><option value="">Any</option>'
         . '<option value="proxmox"' . ($vm['platform'] === 'proxmox' ? ' selected' : '') . '>Proxmox VE</option><option value="hyperv"' . ($vm['platform'] === 'hyperv' ? ' selected' : '') . '>Hyper-V</option></select></div>'
-        . '<div class="col-md-2 form-check mb-2"><input class="form-check-input" type="checkbox" id="hv_problems" name="problems" value="1"' . ($vm['problems'] ? ' checked' : '') . '><label class="form-check-label" for="hv_problems">Problems only</label></div>'
-        . '<div class="col-md-2"><button class="btn btn-outline-primary w-100" type="submit">Apply</button></div></div></div></form>';
+        . '<div class="col-md-auto"><div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="hv_problems" name="problems" value="1"' . ($vm['problems'] ? ' checked' : '') . '><label class="form-check-label" for="hv_problems">Problems only</label></div></div>'
+        . '<div class="col-md-auto"><button class="btn btn-primary" type="submit">Apply</button></div></div></div></form>';
     if ($vm['error'] !== '') {
         return $o . '<div class="alert alert-danger" role="alert">' . rmmH($vm['error']) . '</div>';
     }
@@ -177,7 +177,7 @@ function rivetRmmHypervisorHostsPage(array $vm): string
     }
     if ($vm['data'] === []) {
         return $o . rivetRmmUiCard('Hosts', 'server', rivetRmmUiEmpty('fas fa-server', 'No hypervisor host has reported yet',
-            'A host appears here once its agent announces the hypervisor capability, the switch above is on, and it has sent its first report (HYPERVISORS.md sections 1 and 9: try one host first).'), '', '', true);
+            'A host appears here once its agent announces the hypervisor capability, hypervisor visibility is switched on under Administration > Endpoint agent, and it has sent its first report. Try one host first.'), '', '', true);
     }
     $rows = '';
     foreach ($vm['data'] as $h) {
@@ -287,7 +287,7 @@ function rivetRmmHypervisorHostPage(array $vm, string $csrf, bool $manage): stri
     }
     $o .= '</div></div>';
     if ($h['cluster'] !== null && count($h['cluster']['nodes']) > 0) {
-        $o .= '<p class="small text-muted">Nodes: ' . rmmH(implode(', ', array_map('strval', $h['cluster']['nodes']))) . '</p>';
+        $o .= '<p class="small text-muted">Nodes: ' . rmmH(implode(', ', array_map(static fn ($n): string => is_array($n) ? (string) ($n['name'] ?? '') : (string) $n, $h['cluster']['nodes']))) . '</p>';
     }
 
     $srows = '';

@@ -472,7 +472,7 @@ function rivetRmmSoftwareCatalogPage(array $vm, array $ctx): string
                     $iaPkgs = array_column((array) ($iaR['data']['packages'] ?? []), null, 'package_id');
                     $iaPkg = $iaPkgs[(int) $vm['edit']['package_id']] ?? null;
                     if ($iaPkg !== null) {
-                        $o .= '<div class="card mb-3"><div class="card-header"><h5 class="card-title mb-0">Install with the agent</h5></div><div class="card-body">'
+                        $o .= '<div class="card mb-3"><div class="card-header py-2"><h6 class="mb-0">Install with the agent</h6></div><div class="card-body">'
                             . rivetRmmAutoInstallScopeForm($iaPkg, $csrf) . rivetRmmAutoInstallParamsPanel($iaPkg, $csrf) . '</div></div>';
                     }
                 }

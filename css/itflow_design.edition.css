@@ -271,3 +271,6 @@ thead th > .form-check, thead td > .form-check { margin-bottom: 0; }
 /* Light theme: Tabler's warning/info text colours are 2.1:1 and 3:1 on white. Darker shades for text elements only (icons keep the brand colour). */
 :root:not([data-bs-theme="dark"]) :is(h1,h2,h3,h4,h5,h6,span,small,div,a,strong,td).text-warning { color: #8a5700 !important; }
 :root:not([data-bs-theme="dark"]) #ticket_collision_viewing { color: #0b6477; }
+
+/* A small select was 36px tall beside a 32px small input in the same filter row (line-height 20px vs 16px), so the row's controls and labels sat at different heights. */
+.form-select.form-select-sm { line-height: 16px; }

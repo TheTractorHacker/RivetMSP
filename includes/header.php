@@ -378,7 +378,7 @@ function itflow_nav_icon_class($icon, $fallback = 'fa-link')
                            in dark mode.
    --------------------------------------------------------------------------- */
 ?>
-<body class="accent-<?php echo nullable_htmlentities($config_theme); ?><?php if ($effective_theme_dark) echo ' dark-mode'; ?>">
+<body class="accent-<?php echo nullable_htmlentities($config_theme); ?><?php if ($effective_theme_dark) echo ' dark-mode'; ?><?php if (preg_match('#/(rmm_[a-z_]+|settings_endpoint_agent|intune_settings|panel_deploy)\.php$#', (string) ($_SERVER['SCRIPT_NAME'] ?? ''))) echo ' rmm-page'; ?>">
     <?php
     /* -----------------------------------------------------------------------
        TABLER SHELL - part 1 of 3. Opens ONE wrapper (.page). Closes nothing.

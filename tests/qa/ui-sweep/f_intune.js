@@ -1,0 +1,12 @@
+const h = require('./h.js');
+(async () => { const b = await h.launch(); const c = await b.newContext({ viewport: { width: 1920, height: 1080 }, storageState:'/home/sysadmin/ui-sweep-rmm/shots/state.json' }); const p = await c.newPage();
+ const errs=[]; p.on('pageerror',e=>errs.push(String(e).slice(0,120))); p.on('console',m=>{if(m.type()==='error')errs.push(m.text().slice(0,120))});
+ const S=(n)=>p.screenshot({path:'/home/sysadmin/ui-sweep-rmm/shots/f_'+n+'.png', fullPage:true});
+ await p.goto(h.BASE+'/agent/intune_settings.php?client_id=1'); await p.waitForLoadState('networkidle');
+ await p.locator('button[name=save_microsoft_integration]').click(); await p.waitForLoadState('networkidle'); await p.waitForTimeout(500);
+ console.log('empty ->', p.url().replace(h.BASE,''), (await p.locator('.alert,.toast').allInnerTexts()).join('|').slice(0,200)); await S('intune_empty');
+ await p.fill('#msTenantId','qa-ui-tenant'); await p.fill('#msAzureClientId','qa-ui-app'); await p.fill('#msClientSecret','qa-ui-secret-x');
+ await p.locator('button[name=save_microsoft_integration]').click(); await p.waitForLoadState('networkidle'); await p.waitForTimeout(500);
+ console.log('saved ->', (await p.locator('.alert,.toast').allInnerTexts()).join('|').slice(0,200), await p.inputValue('#msTenantId'), await p.getAttribute('#msClientSecret','placeholder'));
+ await S('intune_saved');
+ console.log(errs); await b.close(); })();
