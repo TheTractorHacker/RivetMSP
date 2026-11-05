@@ -28,7 +28,7 @@ if (isset($_POST['add_invoice'])) {
         redirect();
     }
 
-    $invoice_amount = 0 - $invoice_discount;     // Calc amount if discount is applied, otherwise wrongly shows 0
+    $invoice_amount = 0;     // Items are added afterwards; a discount alone must not produce a negative total
 
     // Get Net Terms
     $client_net_terms = intval(getFieldById('clients', $client_id, 'client_net_terms'));
@@ -103,7 +103,7 @@ if (isset($_POST['edit_invoice'])) {
         redirect();
     }
 
-    $invoice_amount = $invoice_amount - $invoice_discount;
+    $invoice_amount = max(0, $invoice_amount - $invoice_discount);
 
     mysqli_query($mysqli,"UPDATE invoices SET invoice_scope = '$scope', invoice_date = '$date', invoice_due = '$due', invoice_category_id = $category, invoice_discount_amount = '$invoice_discount', invoice_amount = '$invoice_amount' WHERE invoice_id = $invoice_id");
 
@@ -436,7 +436,7 @@ if (isset($_POST['add_invoice_item'])) {
         $item_total = floatval($row['item_total']);
         $invoice_total = $invoice_total + $item_total;
     }
-    $new_invoice_amount = $invoice_total - $invoice_discount;
+    $new_invoice_amount = max(0, $invoice_total - $invoice_discount);
 
     mysqli_query($mysqli,"UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
 
@@ -528,7 +528,7 @@ if (isset($_POST['edit_invoice_item'])) {
     //Update Invoice Balances by tallying up invoice items
     $sql_invoice_total = mysqli_query($mysqli,"SELECT SUM(item_total) AS invoice_total FROM invoice_items WHERE item_invoice_id = $invoice_id");
     $row = mysqli_fetch_assoc($sql_invoice_total);
-    $new_invoice_amount = floatval($row['invoice_total']) - $invoice_discount;
+    $new_invoice_amount = max(0, floatval($row['invoice_total']) - $invoice_discount);
 
     mysqli_query($mysqli,"UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
 
@@ -571,7 +571,7 @@ if (isset($_GET['delete_invoice_item'])) {
         redirect();
     }
 
-    $new_invoice_amount = floatval($row['invoice_amount']) - $item_total;
+    $new_invoice_amount = max(0, floatval($row['invoice_amount']) - $item_total);
 
     mysqli_query($mysqli,"UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
 
