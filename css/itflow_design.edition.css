@@ -202,3 +202,10 @@
 .modal-header.bg-dark .close { color: #fff; opacity: .85; }
 /* Select-all checkbox in a table header sat above the header text (form-check bottom margin). */
 thead th > .form-check, thead td > .form-check { margin-bottom: 0; }
+/* Dark mode contrast: outline-primary text, secondary and warning badges. */
+:root[data-bs-theme="dark"] .btn-outline-primary:not(:hover) { color: #7aa7ff; }
+:root[data-bs-theme="dark"] .badge.bg-secondary { color: #0d1417 !important; }
+.badge.bg-warning { color: #000 !important; }
+/* Links inside running text, alerts and the breadcrumb are told apart from the text by more than colour. */
+.admin-breadcrumb a, .alert a:not(.btn), .card-body p a:not(.btn):not(.nav-link) { text-decoration: underline; }
+:root[data-bs-theme="dark"] .admin-directory__add { color: #7aa7ff; }
