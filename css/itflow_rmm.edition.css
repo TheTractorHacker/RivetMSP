@@ -83,3 +83,7 @@
 [data-bs-theme="dark"] .rmm-page .badge.bg-secondary { color: #0d1417 !important; }
 [data-bs-theme="dark"] .rmm-page .btn-outline-primary { color: #8fb2ff; border-color: #8fb2ff; }
 [data-bs-theme="dark"] .rmm-page .btn-outline-primary:hover { color: #0d1417; background: #8fb2ff; }
+.rmm-page .info-box .info-box-text, .rmm-page .info-box-text { font-size: 12px !important; }
+/* A row header (th) in a body row had 4px of vertical padding next to 11px on its value, so the two never lined up. */
+.rmm-page .table > tbody > tr > th { padding-top: 11.2px; padding-bottom: 11.2px; vertical-align: top; }
+.rmm-page .table > tbody > tr > td { vertical-align: middle; }

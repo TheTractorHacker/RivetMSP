@@ -114,7 +114,7 @@ function rivetRmmHvBackupPill(?array $b): string
         return '<span class="text-muted">none</span>';
     }
 
-    return rivetRmmUiPill(['ok' => 'ok', 'warning' => 'warn', 'failed' => 'crit'][$b['result']] ?? 'off', ucfirst($b['result']) . ' ' . rivetRmmUiTime($b['at']));
+    return rivetRmmUiPill(['ok' => 'ok', 'warning' => 'warn', 'failed' => 'crit'][$b['result']] ?? 'off', ucfirst($b['result'])) . ' <span class="text-muted small">' . rivetRmmUiTime($b['at']) . '</span>';
 }
 
 // ------------------------------------------------------------------ hosts (fleet-wide)
