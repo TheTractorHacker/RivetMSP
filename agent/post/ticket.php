@@ -2547,7 +2547,9 @@ if (isset($_POST['add_ticket_reply'])) {
         }
 
     } else {
+        // No reply text: nothing to log as a reply ($ticket_prefix/$ticket_number/$ticket_subject are only set when one was posted)
         flash_alert("Ticket updated");
+        redirect();
     }
 
     if ($ticket_reply_type == 'Labor') {
