@@ -149,42 +149,31 @@ $result = $stmt->get_result();
     <div class="card-header d-print-none">
         <!-- Filters -->
         <form class="mb-3">
-            <div class="row">
-                <div class="col-md-4 mb-2">
-                    <label class="mb-1">Date range</label>
+            <div class="d-flex flex-wrap align-items-end gap-3">
+                <div>
+                    <label class="mb-1 d-block">Date range</label>
                     <div><?php dateRangePickerField($report_range, 'canned_date', ['default' => 'thismonth', 'from_name' => 'from', 'to_name' => 'to', 'autosubmit' => false, 'hide_groups' => ['Upcoming']]); ?></div>
                 </div>
 
-                <div class="col-md-3 mb-2">
-                    <label class="mb-1">Billing time increment</label>
-                    <select class="form-control" name="billing_increment">
+                <div>
+                    <label class="mb-1 d-block" for="billing_increment">Billing time increment</label>
+                    <select class="form-control" id="billing_increment" name="billing_increment" style="min-width:13rem">
                         <option value="0.1"  <?php echo ($billing_increment_key === '0.1')  ? 'selected' : ''; ?>>0.1 hour (6 minutes)</option>
                         <option value="0.25" <?php echo ($billing_increment_key === '0.25') ? 'selected' : ''; ?>>0.25 hour (15 minutes)</option>
                         <option value="0.5"  <?php echo ($billing_increment_key === '0.5')  ? 'selected' : ''; ?>>0.5 hour (30 minutes)</option>
                     </select>
                 </div>
 
-                <div class="col-md-2 mb-2 d-flex align-items-end ml-auto">
-                    <button type="submit" class="btn btn-success btn-block">
+                <div class="form-check mb-2">
+                    <input type="checkbox" class="form-check-input" id="billable_only" name="billable_only" value="1" <?php if ($billable_only) echo 'checked'; ?>>
+                    <label class="form-check-label" for="billable_only">Billable tickets only</label>
+                </div>
+
+                <div class="ms-auto">
+                    <button type="submit" class="btn btn-success">
                         <i class="fas fa-fw fa-filter me-1"></i>Apply
                     </button>
                 </div>
-
-                <div class="col-md-4 mb-2 d-flex align-items-end">
-                    <div class="form-check form-check">
-                        <input
-                            type="checkbox"
-                            class="form-check-input"
-                            id="billable_only"
-                            name="billable_only"
-                            value="1"
-                            <?php if ($billable_only) echo 'checked'; ?>
-                        >
-                        <label class="form-check-label" for="billable_only">Billable tickets only</label>
-                    </div>
-                </div>
-
-
             </div>
         </form>
     </div>

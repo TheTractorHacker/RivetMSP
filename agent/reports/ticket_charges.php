@@ -57,7 +57,7 @@ while ($row = mysqli_fetch_assoc($sql_tickets)) {
         <div class="card-body">
             <form class="form-row align-items-center mb-3">
                 <div class="col-auto">
-                    <select class="form-control auto-submit-select" name="year">
+                    <select class="form-control auto-submit-select" name="year" aria-label="Year">
                         <?php
                         while ($row = mysqli_fetch_assoc($sql_charge_years)) {
                             $charge_year = intval($row['charge_year']); ?>

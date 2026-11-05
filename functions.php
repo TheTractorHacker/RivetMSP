@@ -2310,8 +2310,8 @@ function getClientProfitability(mysqli $mysqli, $year)
 /**
  * Quarterly Profit & Loss summary for a single year (set-based). Mirrors the revenue
  * and expense definitions used by agent/reports/profit_loss.php's classic table so the
- * numbers reconcile: revenue = invoice-linked payments + categorised revenues; expenses
- * = categorised, vendor-attributed expenses. Used to drive the prior-year comparison
+ * numbers reconcile: revenue = invoice-linked payments + revenues; expenses = all expenses
+ * (uncategorized ones show on the classic table's Uncategorized row, so they count here too). Used to drive the prior-year comparison
  * column, net margin and the year-over-year chart.
  */
 function getProfitLossSummary(mysqli $mysqli, $year)
@@ -2332,7 +2332,7 @@ function getProfitLossSummary(mysqli $mysqli, $year)
     }
     $res = mysqli_query($mysqli,
         "SELECT QUARTER(revenue_date) AS q, SUM(revenue_amount) AS amt
-         FROM revenues WHERE revenue_category_id > 0 AND YEAR(revenue_date) = $year GROUP BY q");
+         FROM revenues WHERE YEAR(revenue_date) = $year GROUP BY q");
     while ($r = mysqli_fetch_assoc($res)) {
         $q = intval($r['q']);
         if ($q >= 1 && $q <= 4) {
@@ -2341,7 +2341,7 @@ function getProfitLossSummary(mysqli $mysqli, $year)
     }
     $res = mysqli_query($mysqli,
         "SELECT QUARTER(expense_date) AS q, SUM(expense_amount) AS amt
-         FROM expenses WHERE expense_category_id > 0 AND expense_vendor_id > 0 AND YEAR(expense_date) = $year GROUP BY q");
+         FROM expenses WHERE YEAR(expense_date) = $year GROUP BY q");
     while ($r = mysqli_fetch_assoc($res)) {
         $q = intval($r['q']);
         if ($q >= 1 && $q <= 4) {

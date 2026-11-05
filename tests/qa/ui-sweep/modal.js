@@ -1,6 +1,6 @@
 // helper lib: open modal by url on a page, audit, fill, submit
-process.env.QA_BASE='http://127.0.0.1:8213';
-const h=require('./h.js');const IMG='/home/sysadmin/sweep-billing-img';
+process.env.QA_BASE='http://127.0.0.1:8218';
+const h=require('./h.js');const IMG='/home/sysadmin/sweep-docs-img';
 async function ctxPage(vp,dark){const b=await h.launch();const ctx=await b.newContext({viewport:vp||{width:1920,height:1080},storageState:IMG+'/state.json'});const p=await ctx.newPage();
  p.errs=[];p.on('console',m=>{if(m.type()==='error')p.errs.push('C:'+m.text().slice(0,140))});p.on('pageerror',e=>p.errs.push('JS:'+String(e).slice(0,140)));
  p.on('response',r=>{if(r.status()>=400)p.errs.push(r.status()+' '+r.url().replace(h.BASE,'').slice(0,100))});

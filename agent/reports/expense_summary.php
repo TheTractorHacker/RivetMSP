@@ -71,11 +71,12 @@ if (!empty($report_export_csv)) {
     </div>
     <div class="card-body">
         <form class="mb-3">
-            <select class="form-control auto-submit-select" name="year">
+            <select class="form-control auto-submit-select" name="year" aria-label="Year">
                 <?php while ($row = mysqli_fetch_assoc($sql_expense_years)) {
                     $expense_year = intval($row['expense_year']); ?>
                     <option <?php if ($year == $expense_year) { ?> selected <?php } ?>><?php echo $expense_year; ?></option>
                 <?php } ?>
+            <?php if (mysqli_num_rows($sql_expense_years) == 0) { ?><option selected><?php echo intval($year); ?></option><?php } ?>
             </select>
         </form>
 

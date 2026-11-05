@@ -194,3 +194,23 @@
 .progress-meter { display: flex; align-items: center; gap: .5rem; }
 .progress-meter .progress { flex: 1 1 auto; height: .6rem; min-width: 5rem; }
 .progress-meter .progress-label { flex: 0 0 auto; min-width: 3.25rem; font-size: .8125rem; font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Report filter selects (year / month / view): a bare .form-control select stretched to the full card width and read as an empty text field.
+   Keep them compact and on one wrapped row; the selects carry aria-labels in the markup. */
+form:has(> select.auto-submit-select) { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+select.form-control.auto-submit-select { width: auto; min-width: 8rem; }
+
+/* .info-box.bg-orange (aging buckets) was missing from the shim's muted-tile list, so one tile in a row rendered solid orange. */
+.info-box.bg-orange {
+    background-color: var(--if-surface, #fff) !important;
+    color: var(--if-ink, #16232a) !important;
+    border: 1px solid var(--if-border, #e3e9ea);
+    border-inline-start-width: 3px;
+    border-inline-start-color: #ea580c;
+    box-shadow: var(--if-shadow);
+}
+.info-box.bg-orange .info-box-icon { color: #c2410c; }
+
+/* Row headers (<th> inside tbody: totals / sub-headings on Profit & Loss etc.) used Bootstrap's 4px th padding while the <td>s beside them use the table's
+   cell padding, so the label sat 8px left of the column above it. */
+.table > tbody > tr > th { padding: .7rem .75rem; }

@@ -23,7 +23,7 @@ $passwords_not_rotated_sql = mysqli_query($mysqli,
 
     <div class="card card-dark">
         <div class="card-header py-2">
-            <h3 class="card-title mt-2"><i class="fas fa-fw fa-life-ring me-2"></i>Client credentials not changed/rotated in the last <?= intval($days) ?> days</h3>
+            <h3 class="card-title mt-2"><i class="fas fa-fw fa-key me-2"></i>Client credentials not changed/rotated in the last <?= intval($days) ?> days</h3>
             <div class="card-tools">
                 <button type="button" class="btn btn-primary d-print-none js-print-page"><i class="fas fa-fw fa-print me-2"></i>Print</button>
             </div>
@@ -42,8 +42,8 @@ $passwords_not_rotated_sql = mysqli_query($mysqli,
                     <thead>
                     <tr>
                         <th>Client</th>
-                        <th class="text-end">Credential Name</th>
-                        <th class="text-end">Credential Description</th>
+                        <th>Credential Name</th>
+                        <th>Credential Description</th>
                         <th class="text-end">Credential Password Last Changed</th>
                     </tr>
                     </thead>
@@ -64,11 +64,14 @@ $passwords_not_rotated_sql = mysqli_query($mysqli,
 
                         <tr>
                             <td><?php echo $client_name; ?></td>
-                            <td class="text-end"><?php echo $credential_name; ?></td>
-                            <td class="text-end"><?php echo $credential_description; ?></td>
+                            <td><?php echo $credential_name; ?></td>
+                            <td><?php echo $credential_description; ?></td>
                             <td class="text-end"><?php echo timeAgo($credential_password_changed) . " (" . $credential_password_changed . ")" ?></td>
                         </tr>
 
+                    <?php } ?>
+                    <?php if (mysqli_num_rows($passwords_not_rotated_sql) == 0) { ?>
+                        <tr><td colspan="4" class="text-center text-muted">No credentials are overdue for rotation.</td></tr>
                     <?php } ?>
 
                     </tbody>

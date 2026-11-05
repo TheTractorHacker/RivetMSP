@@ -16,7 +16,7 @@ ob_start();
         <span>&times;</span>
     </button>
 </div>
-<form action="post.php" method="post" enctype="multipart/form-data" autocomplete="off">
+<form action="post.php" method="post" enctype="multipart/form-data" autocomplete="off" id="uploadForm">
     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
     <input type="hidden" name="client_id" value="<?php echo $client_id; ?>">
     <input type="hidden" name="contact_id" value="<?php echo $contact_id; ?>">
@@ -62,6 +62,7 @@ ob_start();
 </form>
 
 <script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
+(function () {
     const maxFiles = 20; // Set the maximum number of allowed files
     const maxTotalSize = 500 * 1024 * 1024; // 500MB in bytes
 
@@ -96,6 +97,7 @@ ob_start();
     function resetFileInput() {
         fileInput.value = ''; // Clear the selected files
     }
+})();
 </script>
 
 <?php

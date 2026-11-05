@@ -48,7 +48,7 @@ $sql_vendor_expenses = mysqli_query($mysqli, "
     </div>
     <div class="card-body">
         <form class="mb-3">
-            <select class="form-control auto-submit-select" name="year">
+            <select class="form-control auto-submit-select" name="year" aria-label="Year">
                 <option value="all" <?php if ($year == 'all') { ?> selected <?php } ?> >All Years</option>
                 <?php
 
@@ -87,6 +87,9 @@ $sql_vendor_expenses = mysqli_query($mysqli, "
                 }
 
                 ?>
+                <?php if (mysqli_num_rows($sql_vendor_expenses) == 0) { ?>
+                <tr><td colspan="2" class="text-center text-muted">No results for this period.</td></tr>
+                <?php } ?>
                 </tbody>
             </table>
         </div>
