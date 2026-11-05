@@ -405,6 +405,11 @@ if (isset($_POST['edit_quote'])) {
         $item_total = floatval($row['item_total']);
         $quote_amount = $quote_amount + $item_total;
     }
+    // Discount must not be negative, nor exceed the line-item subtotal once items exist
+    if ($quote_discount < 0 || ($quote_amount > 0 && $quote_discount > $quote_amount)) {
+        flash_alert("Discount must be between 0 and the quote subtotal", 'error');
+        redirect();
+    }
     $quote_amount = max(0, $quote_amount - $quote_discount);
 
     mysqli_query($mysqli,"UPDATE quotes SET quote_scope = '$scope', quote_date = '$date', quote_expire = '$expire', quote_discount_amount = '$quote_discount', quote_amount = '$quote_amount', quote_category_id = $category WHERE quote_id = $quote_id");

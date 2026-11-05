@@ -159,6 +159,10 @@ if (isset($_POST['edit_recurring_invoice'])) {
         $item_total = floatval($row['item_total']);
         $recurring_invoice_amount = $recurring_invoice_amount + $item_total;
     }
+    if ($recurring_invoice_amount > 0 && $recurring_invoice_discount > $recurring_invoice_amount) {
+        flash_alert("Discount must be between 0 and the invoice subtotal", 'error');
+        redirect();
+    }
     $recurring_invoice_amount = max(0, $recurring_invoice_amount - $recurring_invoice_discount);
 
     mysqli_query($mysqli,"UPDATE recurring_invoices SET recurring_invoice_scope = '$scope', recurring_invoice_frequency = '$frequency', recurring_invoice_next_date = '$next_date', recurring_invoice_category_id = $category, recurring_invoice_discount_amount = $recurring_invoice_discount, recurring_invoice_amount = $recurring_invoice_amount, recurring_invoice_status = $status, recurring_invoice_contract_id = $contract_id WHERE recurring_invoice_id = $recurring_invoice_id");
