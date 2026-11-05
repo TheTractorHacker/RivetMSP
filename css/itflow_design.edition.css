@@ -198,7 +198,10 @@
 :root[data-bs-theme="dark"] .fc .fc-daygrid-day-number,
 :root[data-bs-theme="dark"] .fc .fc-col-header-cell-cushion { color: var(--color-text, #e5e7eb); }
 :root[data-bs-theme="dark"] .fc .fc-day-other .fc-daygrid-day-number { color: var(--color-text-muted, #9ca3af); }
-:root[data-bs-theme="dark"] .card .btn-outline-primary { color: #8ab4ff; border-color: #8ab4ff; }
+:root[data-bs-theme="dark"] .btn-outline-primary { color: #8ab4ff; border-color: #8ab4ff; }
+:root[data-bs-theme="dark"] .btn-outline-danger { color: #ff8f8f; border-color: #ff8f8f; }
+:root[data-bs-theme="dark"] .btn-outline-info { color: #7dd3ef; border-color: #7dd3ef; }
+:root[data-bs-theme="dark"] .nav-tabs .nav-link.active, :root[data-bs-theme="dark"] .nav-link[data-comment-filter].active { color: #8ab4ff; }
 
 /* Dark mode: the secondary grey is light (#93a6ab) so white text on it is 2.5:1, and .text-dark is remapped to a light colour,
    which left badges on light/green fills unreadable. Pin dark ink on those fills. */
