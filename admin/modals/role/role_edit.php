@@ -206,18 +206,5 @@ ob_start();
     </div>
 </form>
 
-<script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
-    // A required field on the hidden Details tab blocks submit silently: show that tab so the browser can point at the field.
-    document.querySelectorAll('.modal form').forEach(function (f) {
-        f.addEventListener('invalid', function (e) {
-            var pane = e.target.closest('.tab-pane');
-            if (pane && !pane.classList.contains('active')) {
-                var tab = document.querySelector('a[href="#' + pane.id + '"]');
-                if (tab) tab.click();
-            }
-        }, true);
-    });
-</script>
-
 <?php
 require_once '../../../includes/modal_footer.php';

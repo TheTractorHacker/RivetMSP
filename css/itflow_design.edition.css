@@ -199,3 +199,4 @@
 .ea-tab-dot.badge { display: inline-block; width: 10px; height: 10px; min-width: 0; padding: 0 !important; vertical-align: middle; border-radius: 50%; }
 /* Legacy <button class="close">&times;</button> inside a flex .modal-header sat right next to the title (the shim's float does nothing in a flex row). */
 .modal-header > .close { float: none; margin-left: auto; }
+.modal-header.bg-dark .close { color: #fff; opacity: .85; }
