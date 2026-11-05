@@ -282,7 +282,7 @@ if (isset($_POST['edit_payment'])) {
 
     logAction("Payment", "Edit", "Payment edited amount of " . numfmt_format_currency($currency_format, $amount, $session_company_currency), $client_id, $invoice_id);
 
-    flash_alert("Payment edited to amount <strong>" . numfmt_format_currency($currency_format, $amount, $session_company_currency) . "</strong> added");
+    flash_alert("Payment edited: amount is now <strong>" . numfmt_format_currency($currency_format, $amount, $session_company_currency) . "</strong>");
 
     redirect();
 
@@ -1055,7 +1055,7 @@ if (isset($_POST['export_payments_csv'])) {
         $f = fopen('php://memory', 'w');
 
         //set column headers
-        $fields = array('Payment Date', 'Invoice Date', 'Invoice Number', 'Invoice Amount', 'Payment Amount', 'Payment Method', 'Referrence');
+        $fields = array('Payment Date', 'Invoice Date', 'Invoice Number', 'Invoice Amount', 'Payment Amount', 'Payment Method', 'Reference');
         fputcsv($f, $fields, $delimiter, $enclosure, $escape);
 
         //output each row of the data, format line as csv and write to file pointer
