@@ -1003,6 +1003,10 @@ if (isset($_GET['delete_payment'])) {
     //Determine if invoice has been paid
     // (compared in cents, never float ==)
     $invoice_status = (moneyToCents($invoice_balance) <= 0) ? "Paid" : "Partial";
+    // Nothing left paid after this deletion: the invoice is simply outstanding again, not "Partial"
+    if (moneyToCents($total_payments_amount - $deleted_payment_amount) <= 0) {
+        $invoice_status = (moneyToCents($invoice_balance) <= 0) ? "Paid" : "Sent";
+    }
 
     //Update Invoice Status
     mysqli_query($mysqli,"UPDATE invoices SET invoice_status = '$invoice_status' WHERE invoice_id = $invoice_id");

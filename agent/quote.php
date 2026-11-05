@@ -291,7 +291,7 @@ if (isset($_GET['quote_id'])) {
                 <div class="col-md-12">
                     <div class="card">
                         <div class="table-responsive">
-                            <table class="table table-hover mb-0" id="items">
+                            <table class="table table-hover mb-0 guest-items" id="items">
                                 <thead>
                                     <tr>
                                         <th class="d-print-none"></th>
