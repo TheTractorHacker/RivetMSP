@@ -58,3 +58,15 @@
 
 /* Agent versions and rings: the label and its count were pushed to opposite ends of a half-page column. */
 .rmm-kv-list { max-width: 20rem; }
+
+/* Required fields on the RMM pages: the inputs carry `required` but no label said so. */
+.rmm-page .form-label:has(+ [required])::after,
+.rmm-page .form-label:has(+ .input-group [required])::after { content: " *"; color: var(--tblr-danger); font-weight: 600; }
+
+/* Key/value tables ("About this script", "Definition", device details): the key column took 40% of the card, leaving the value far from its label, and the key sat lower than the first line of a taller value. */
+@media (min-width: 768px) {
+  .rmm-page table .rmm-dl-key { width: 14rem; }
+}
+.rmm-page table:has(.rmm-dl-key) > tbody > tr > th,
+.rmm-page table:has(.rmm-dl-key) > tbody > tr > td { vertical-align: top; }
+.rmm-page table:has(.rmm-dl-key) > tbody > tr > th.rmm-dl-key { padding: 11.2px 12px; }

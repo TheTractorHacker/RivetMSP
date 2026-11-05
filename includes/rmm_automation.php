@@ -383,6 +383,8 @@ function rivetRmmAutoDone(array $result, string $okMessage, string $returnTo, ar
 {
     $ok = (bool) $result['ok'];
     $message = $ok ? $okMessage : ((string) ($result['error'] ?? '') !== '' ? (string) $result['error'] : 'That did not work.');
+    // Core names the request field in these two; say what to do in the form's own words.
+    $message = (string) preg_replace('/^(?:target|scope)\.?_?id is required for an? (\w+)(?: target| assignment)?\.$/', 'Choose a $1 first: none is selected.', $message);
     if (rivetRmmAutoWantsJson()) {
         header('Content-Type: application/json');
         header('Cache-Control: no-store');

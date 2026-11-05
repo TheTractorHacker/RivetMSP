@@ -94,15 +94,15 @@ function rivetRmmAutoInstallScopeForm(array $pkg, string $csrf): string
 
     $clientIds = implode(',', array_map(static fn (array $c): int => (int) $c['client_id'], (array) ($auto['clients'] ?? [])));
 
-    return '<form method="post" action="/agent/post/rmm_auto_install.php" class="row g-2 align-items-end" data-ia-scope-form><input type="hidden" name="csrf_token" value="' . $h($csrf) . '"><input type="hidden" name="package_id" value="' . $pid . '">'
-        . '<div class="col-auto"><label class="form-label small" for="ia-scope-' . $pid . '">Auto-install on new devices</label><select class="form-select form-select-sm" name="scope" id="ia-scope-' . $pid . '">'
+    return '<form method="post" action="/agent/post/rmm_auto_install.php" class="row g-3 align-items-end" data-ia-scope-form><input type="hidden" name="csrf_token" value="' . $h($csrf) . '"><input type="hidden" name="package_id" value="' . $pid . '">'
+        . '<div class="col-md-6 col-xl-3"><label class="form-label" for="ia-scope-' . $pid . '">Auto-install on new devices</label><select class="form-select form-select-sm" name="scope" id="ia-scope-' . $pid . '">'
         . '<option value="off"' . $sel('off', $auto['scope']) . '>Off</option><option value="all"' . $sel('all', $auto['scope']) . '>Every new device</option>'
         . '<option value="clients"' . $sel('clients', $auto['scope']) . '>Chosen clients</option><option value="os"' . $sel('os', $auto['scope']) . '>One operating system</option></select></div>'
-        . '<div class="col-auto"><label class="form-label small" for="ia-os-' . $pid . '">OS (when scope is "One operating system")</label><select class="form-select form-select-sm" name="os" id="ia-os-' . $pid . '"><option value="windows"' . $sel('windows', (string) $auto['os_filter']) . '>Windows</option><option value="linux"' . $sel('linux', (string) $auto['os_filter']) . '>Linux</option></select></div>'
-        . '<div class="col-auto"><label class="form-label small" for="ia-clients-' . $pid . '">Client ids (when scope is "Chosen clients", comma separated)</label><input class="form-control form-control-sm" type="text" name="client_ids" id="ia-clients-' . $pid . '" value="' . $h($clientIds) . '" placeholder="1,2,3"></div>'
-        . '<div class="col-auto"><label class="form-label small" for="ia-order-' . $pid . '">Order</label><input class="form-control form-control-sm" style="width:5rem" type="number" min="1" max="9999" name="install_order" id="ia-order-' . $pid . '" value="' . (int) $auto['install_order'] . '"></div>'
-        . '<div class="col-auto"><div class="form-check"><input class="form-check-input" type="checkbox" name="required" id="ia-req-' . $pid . '" value="1"' . (!empty($auto['required']) ? ' checked' : '') . '><label class="form-check-label small" for="ia-req-' . $pid . '">Required (stops later apps if it fails)</label></div></div>'
-        . '<div class="col-auto"><button type="submit" class="btn btn-sm btn-outline-primary" name="ia_op" value="set_auto">Save</button></div></form>';
+        . '<div class="col-md-6 col-xl-3"><label class="form-label" for="ia-os-' . $pid . '">OS (when scope is "One operating system")</label><select class="form-select form-select-sm" name="os" id="ia-os-' . $pid . '"><option value="windows"' . $sel('windows', (string) $auto['os_filter']) . '>Windows</option><option value="linux"' . $sel('linux', (string) $auto['os_filter']) . '>Linux</option></select></div>'
+        . '<div class="col-md-8 col-xl-4"><label class="form-label" for="ia-clients-' . $pid . '">Client ids (when scope is "Chosen clients", comma separated)</label><input class="form-control form-control-sm" type="text" name="client_ids" id="ia-clients-' . $pid . '" value="' . $h($clientIds) . '" placeholder="1,2,3"></div>'
+        . '<div class="col-md-4 col-xl-2"><label class="form-label" for="ia-order-' . $pid . '">Order</label><input class="form-control form-control-sm" type="number" min="1" max="9999" name="install_order" id="ia-order-' . $pid . '" value="' . (int) $auto['install_order'] . '"></div>'
+        . '<div class="col-12 d-flex flex-wrap align-items-center" style="gap:1rem"><div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="required" id="ia-req-' . $pid . '" value="1"' . (!empty($auto['required']) ? ' checked' : '') . '><label class="form-check-label small" for="ia-req-' . $pid . '">Required (stops later apps if it fails)</label></div>'
+        . '<button type="submit" class="btn btn-sm btn-outline-primary" name="ia_op" value="set_auto">Save</button></div></form>';
 }
 
 /** The vendor-parameter panel: declared names, where each is set (never a value), a write-only value box per name. */
@@ -143,11 +143,11 @@ function rivetRmmAutoInstallHostedFilesCard(RmmModule $rmm, RmmPrincipal $who, s
 
         return round($f, 1) . ' ' . $u[$i];
     };
-    $o = '<div class="card mb-3" id="auto-install-hosted-files"><div class="card-header"><h5 class="card-title mb-0">Hosted installer files</h5></div><div class="card-body">'
+    $o = '<div class="card mb-3" id="auto-install-hosted-files"><div class="card-header py-2"><h6 class="mb-0">Hosted installer files</h6></div><div class="card-body">'
         . '<p class="small text-muted">For a vendor whose download address is account-specific, upload the installer here instead of allow-listing a host (a Windows .exe or .msi only, up to ' . $h($human($maxBytes)) . '). Add a version of a package pointing at it afterward.</p>'
         . '<form method="post" action="/agent/post/rmm_auto_install.php" enctype="multipart/form-data" class="row g-2 align-items-end mb-3"><input type="hidden" name="csrf_token" value="' . $h($csrf) . '">'
-        . '<div class="col-auto"><input type="file" class="form-control form-control-sm" name="hosted_file" required></div>'
-        . '<div class="col-auto"><button type="submit" class="btn btn-sm btn-primary" name="ia_op" value="upload_file">Upload</button></div></form>'
+        . '<div class="col-auto"><input type="file" class="form-control" name="hosted_file" required aria-label="Installer file (.exe or .msi)"></div>'
+        . '<div class="col-auto"><button type="submit" class="btn btn-primary" name="ia_op" value="upload_file"><i class="fas fa-upload me-1" aria-hidden="true"></i>Upload</button></div></form>'
         . '<div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th scope="col">File</th><th scope="col">Size</th><th scope="col">SHA-256</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead><tbody>';
     foreach ($files as $f) {
         $o .= '<tr><td class="small">' . $h($f['filename'] ?? '') . '</td><td>' . $h($human((int) ($f['size_bytes'] ?? 0))) . '</td><td class="small font-monospace text-break">' . $h($f['sha256'] ?? '') . '</td>'
@@ -164,7 +164,7 @@ function rivetRmmAutoInstallHostedFilesCard(RmmModule $rmm, RmmPrincipal $who, s
 function rivetRmmAutoInstallTemplatesCard(string $csrf): string
 {
     $h = static fn ($v): string => nullable_htmlentities((string) $v);
-    $o = '<div class="card mb-3" id="auto-install-templates"><div class="card-header"><h5 class="card-title mb-0">Starter templates</h5></div><div class="card-body">'
+    $o = '<div class="card mb-3" id="auto-install-templates"><div class="card-header py-2"><h6 class="mb-0">Starter templates</h6></div><div class="card-body">'
         . '<p class="small text-danger"><strong>UNVERIFIED.</strong> These carry no binary, no address and no key - only a suggested silent-install line. Run a dry run, then one pilot machine, before relying on any of them.</p>';
     foreach (SoftwareTemplates::all() as $t) {
         $isPkg = ($t['fmt'] ?? '') === 'apt' || ($t['fmt'] ?? '') === 'dnf';

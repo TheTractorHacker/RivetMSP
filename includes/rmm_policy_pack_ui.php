@@ -73,7 +73,7 @@ function rivetRmmPolicyPackView(\RivetCore\Rmm\RmmModule $rmm, \RivetCore\Rmm\Au
 function rivetRmmPolicyPackCard(array $vm, string $csrf, ?array $flash): string
 {
     $h = static fn ($v): string => nullable_htmlentities((string) $v);
-    $o = '<div class="card mb-3" id="policy-starter-pack"><div class="card-header"><h4 class="card-title mb-0">Starter policies</h4></div><div class="card-body">';
+    $o = '<div class="card mb-3" id="policy-starter-pack"><div class="card-header py-2"><h6 class="mb-0">Starter policies</h6></div><div class="card-body">';
     if (!$vm['ok']) {
         return $o . '<p class="text-danger mb-0">' . $h($vm['error']) . '</p></div></div>';
     }

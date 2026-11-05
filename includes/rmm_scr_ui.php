@@ -1298,7 +1298,7 @@ function rivetRmmScrScheduleForm(?array $s, array $choices, array $scope, string
             . '<div class="form-text">Parameters shown are those of version ' . $pinned . '.</div></div>';
     }
     $o .= $vers . '<div class="col-12">' . $params . '</div>';
-    $o .= '<div class="col-md-6">' . rivetRmmAutoScopePicker('tgt', RIVET_RMM_SCR_TARGETS, (string) ($s['target']['type'] ?? 'tag'), (int) ($s['target']['id'] ?? 0), $scope, 'Runs on') . '</div>';
+    $o .= '<div class="col-md-6">' . rivetRmmAutoScopePicker('tgt', RIVET_RMM_SCR_TARGETS, (string) ($s['target']['type'] ?? 'device'), (int) ($s['target']['id'] ?? 0), $scope, 'Runs on') . '</div>';
     $kind = (string) ($s['kind'] ?? 'interval');
     $iv = (int) ($s['interval_s'] ?? 21600);
     [$ivVal, $ivUnit] = $iv % 86400 === 0 ? [intdiv($iv, 86400), 'day'] : ($iv % 3600 === 0 ? [intdiv($iv, 3600), 'hour'] : [intdiv(max(60, $iv), 60), 'minute']);
