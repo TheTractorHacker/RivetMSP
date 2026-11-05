@@ -25,7 +25,7 @@ if (isset($_POST['add_payment'])) {
     $currency_code = sanitizeInput($_POST['currency_code']);
     $payment_method = sanitizeInput($_POST['payment_method']);
     $reference = sanitizeInput($_POST['reference']);
-    $email_receipt = intval($_POST['email_receipt']);
+    $email_receipt = intval($_POST['email_receipt'] ?? 0);
 
     $client_id = intval(getFieldById('invoices', $invoice_id, 'invoice_client_id'));
 
@@ -818,7 +818,7 @@ if (isset($_POST['add_bulk_payment'])) {
     $currency_code = sanitizeInput($_POST['currency_code']);
     $payment_method = sanitizeInput($_POST['payment_method']);
     $reference = sanitizeInput($_POST['reference']);
-    $email_receipt = intval($_POST['email_receipt']);
+    $email_receipt = intval($_POST['email_receipt'] ?? 0);
     $email_body_invoices = '';
     $applied_payment_ids = [];
     $alert_message = '';

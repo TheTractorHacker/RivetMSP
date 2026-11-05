@@ -215,6 +215,11 @@ if (isset($_GET['delete_recurring_invoice'])) {
 
     flash_alert("Recurring Invoice <strong>$recurring_invoice_prefix$recurring_invoice_number</strong> deleted", 'error');
 
+    // Deleted from its own page: go to the list, not back to a recurring invoice that no longer exists
+    if (basename((string) parse_url($_SERVER['HTTP_REFERER'] ?? '', PHP_URL_PATH)) === 'recurring_invoice.php') {
+        redirect("recurring_invoices.php?client_id=$client_id");
+    }
+
     redirect();
 
 }

@@ -469,7 +469,7 @@ if (isset($_GET['delete_quote'])) {
 
     if (isset($_GET['client_id'])) {
         $client_id = intval($_GET['client_id']);
-        redirect("client_quotes.php?client_id=$client_id");
+        redirect("quotes.php?client_id=$client_id");
     } else {
         redirect("quotes.php");
     }

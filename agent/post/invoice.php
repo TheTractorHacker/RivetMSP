@@ -345,6 +345,11 @@ if (isset($_GET['delete_invoice'])) {
 
     flash_alert("Invoice <strong>$invoice_prefix$invoice_number</strong> deleted", 'error');
 
+    // Deleted from its own page: go to the list, not back to an invoice that no longer exists
+    if (basename((string) parse_url($_SERVER['HTTP_REFERER'] ?? '', PHP_URL_PATH)) === 'invoice.php') {
+        redirect("invoices.php?client_id=$client_id");
+    }
+
     redirect();
 
 }
@@ -558,6 +563,10 @@ if (isset($_GET['delete_invoice_item'])) {
 
     $sql = mysqli_query($mysqli,"SELECT * FROM invoice_items WHERE item_id = $item_id");
     $row = mysqli_fetch_assoc($sql);
+    if (!$row) {
+        flash_alert("Item not found (it may already have been deleted)", 'error');
+        redirect();
+    }
     $invoice_id = intval($row['item_invoice_id']);
     $item_name = sanitizeInput($row['item_name']);
     $item_quantity = floatval($row['item_quantity']);
