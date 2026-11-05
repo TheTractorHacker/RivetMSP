@@ -359,6 +359,10 @@ if (isset($_POST['add_invoice_item'])) {
     $name = sanitizeInput($_POST['name']);
     $description = sanitizeInput($_POST['description']);
     $qty = floatval($_POST['qty']);
+    if ($qty < 0) {
+        flash_alert("Quantity can not be negative", 'error');
+        redirect();
+    }
     $price = floatval($_POST['price']);
     $tax_id = intval($_POST['tax_id']);
     $item_order = intval($_POST['item_order']);
@@ -486,6 +490,10 @@ if (isset($_POST['edit_invoice_item'])) {
     $name = sanitizeInput($_POST['name']);
     $description = sanitizeInput($_POST['description']);
     $qty = floatval($_POST['qty']);
+    if ($qty < 0) {
+        flash_alert("Quantity can not be negative", 'error');
+        redirect();
+    }
     $price = floatval($_POST['price']);
     $tax_id = intval($_POST['tax_id']);
     $product_id = intval($_POST['product_id']);
