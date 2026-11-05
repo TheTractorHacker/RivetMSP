@@ -265,7 +265,7 @@ require_once "includes/inc_all_admin.php";
                         <div class="input-group-prepend">
                             <span class="input-group-text"><i class="fa fa-fw fa-link"></i></span>
                         </div>
-                        <input type="text" class="form-control" readonly value="<?php echo htmlspecialchars($mail_oauth_callback_uri); ?>">
+                        <input type="text" class="form-control" readonly aria-label="Microsoft OAuth callback URL" value="<?php echo htmlspecialchars($mail_oauth_callback_uri); ?>">
                         <div class="input-group-append">
                             <button type="submit" name="oauth_connect_microsoft_mail" class="btn btn-outline-primary">
                                 <i class="fab fa-fw fa-microsoft me-2"></i>Connect Microsoft 365

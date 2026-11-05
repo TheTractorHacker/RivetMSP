@@ -192,3 +192,6 @@
 /* Links inside the pale info alert were 2.8:1. */
 .alert-info .alert-link, .alert-info a:not(.btn) { color: #0b4a8f; }
 :root[data-bs-theme="dark"] .alert-info .alert-link, :root[data-bs-theme="dark"] .alert-info a:not(.btn) { color: inherit; text-decoration: underline; }
+/* Event rules: the recipes wrapper is a plain block (heading, hint, then .er-recipe-grid). The legacy grid rule for .er-recipes
+   made the heading, hint and the card grid three squeezed columns. */
+#er-recipes.er-recipes { display: block; }
