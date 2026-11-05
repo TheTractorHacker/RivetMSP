@@ -216,3 +216,6 @@ body.client-portal .table td, body.client-portal .table th { overflow-wrap: brea
 body.client-portal.dark-mode .badge.badge-secondary, body.client-portal.dark-mode .badge.text-bg-secondary { background-color: #4b5b61 !important; color: #fff !important; }
 body.client-portal.dark-mode .btn-outline-primary { color: #9dbbff; border-color: #5b86e8; }
 body.client-portal.dark-mode .btn-outline-primary:hover { color: #fff; background-color: #2563eb; border-color: #2563eb; }
+/* Login / password-reset links: the teal accent on white is 3.7:1 at 14px (AA needs 4.5:1). */
+.page-center .card a:not(.btn), .login-box .card a:not(.btn) { color: #0f766e; }
+.portal-doc-preview { max-height: 600px; width: auto; max-width: 100%; }

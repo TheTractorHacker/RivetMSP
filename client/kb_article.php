@@ -130,7 +130,7 @@ $sql_embeds = mysqli_query(
         ?>
         <p class="text-secondary small mb-1"><?php echo $embed_name; ?></p>
         <iframe src="kb_embed.php?id=<?php echo $embed_id; ?>" sandbox="allow-scripts" referrerpolicy="no-referrer" loading="lazy"
-                style="width:100%;height:<?php echo $embed_height; ?>px;border:0;" class="mb-3"></iframe>
+                width="100%" height="<?php echo (int) $embed_height; ?>" class="mb-3 border-0"></iframe>
         <?php } ?>
     </div>
 </div>

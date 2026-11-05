@@ -324,7 +324,7 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
                         <input type="hidden" name="email" value="<?php echo nullable_htmlentities($email); ?>">
                         <input type="hidden" name="client" value="<?php echo $client; ?>">
 
-                        <button type="submit" class="btn btn-success btn-block mb-3" name="password_reset_set_password">Reset password</button>
+                        <button type="submit" class="btn btn-primary btn-block mb-3" name="password_reset_set_password">Reset password</button>
 
 
                     <?php } else {
@@ -348,7 +348,7 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
                         </div>
                     </div>
 
-                    <button type="submit" class="btn btn-success btn-block mb-3" name="password_reset_email_request">Reset my password</button>
+                    <button type="submit" class="btn btn-primary btn-block mb-3" name="password_reset_email_request">Reset my password</button>
 
                 <?php }
                 ?>

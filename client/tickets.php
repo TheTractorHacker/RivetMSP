@@ -49,7 +49,7 @@ $total_tickets = intval($row['total_tickets']);
 </div>
 <div class="row">
 
-    <div class="col-md-9">
+    <div class="col-md-9 mb-3 mb-md-0">
 
         <div class="card card-outline card-primary">
             <div class="card-header">

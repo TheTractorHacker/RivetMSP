@@ -3,7 +3,7 @@
 require_once "includes/inc_all_guest.php";
 
 if (!isset($_GET['invoice_id'], $_GET['url_key'])) {
-    echo "<br><h2>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h2>";
+    echo "<div class='card mt-4'><div class='card-body text-center py-5'><h1 class='h3 mb-0'>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h1></div></div>";
     require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
 
     exit();
@@ -24,7 +24,7 @@ $sql = mysqli_query(
 
 if (mysqli_num_rows($sql) !== 1) {
     // Invalid invoice/key
-    echo "<br><h2>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h2>";
+    echo "<div class='card mt-4'><div class='card-body text-center py-5'><h1 class='h3 mb-0'>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h1></div></div>";
     require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
 
     exit();

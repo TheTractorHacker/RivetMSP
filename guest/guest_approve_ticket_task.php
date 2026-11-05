@@ -11,7 +11,7 @@ $purifier_config->set('URI.AllowedSchemes', ['http' => true, 'https' => true]);
 $purifier = new HTMLPurifier($purifier_config);
 
 if (!isset($_GET['task_approval_id'], $_GET['url_key'])) {
-    echo "<br><h2>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h2>";
+    echo "<div class='card mt-4'><div class='card-body text-center py-5'><h1 class='h3 mb-0'>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h1></div></div>";
     require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
     exit();
 }
@@ -48,7 +48,7 @@ $task_row = mysqli_fetch_assoc(mysqli_query($mysqli,
 
 if (!$task_row) {
     // Invalid
-    echo "<br><h2>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h2>";
+    echo "<div class='card mt-4'><div class='card-body text-center py-5'><h1 class='h3 mb-0'>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h1></div></div>";
     require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
     exit();
 }
