@@ -13,6 +13,7 @@ const JOBS=[
  ['agent/racks.php?'+C,'modals/rack/rack_add.php?'+C,'md',{name:'QA-UI Rack',make:'QA-UI Make 12U',units:'12'}],
  ['agent/services.php?'+C,'modals/service/service_add.php?'+C,'md',{name:'QA-UI Service'}],
  ['agent/vendors.php?'+C,'modals/vendor/vendor_add.php?'+C,'md',{name:'QA-UI Vendor'}],
+['agent/structured_docs.php?'+C,'modals/structured_doc/structured_doc_add.php?'+C+'&type_id=2','lg',{doc_name:'QA-UI FW-01'}],
  ['agent/projects.php','modals/project/project_add.php','md',{name:'QA-UI Project'}],
  ['agent/files.php?'+C,'modals/folder/folder_add.php?'+C,'md',{name:'QA-UI Folder'}],
  ['agent/files.php?'+C,'modals/document/document_add.php?'+C,'lg',{name:'QA-UI Document'}],

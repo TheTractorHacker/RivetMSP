@@ -104,6 +104,9 @@ while ($t = mysqli_fetch_assoc($sql_tasks)) {
     #kanban-board .kanban-status {
         background-color: var(--if-surface);
     }
+    /* The board's own container padding plus the column's 10px margin pushed the first lane 28px right of the breadcrumb and tabs above it. */
+    #kanban-board { padding-left: 0; padding-right: 0; }
+    #kanban-board .kanban-column:first-child { margin-left: 0; }
     #kanban-board .task {
         background: var(--if-surface);
         border: 1px solid var(--if-border);

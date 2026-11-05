@@ -215,3 +215,6 @@ select.form-control.auto-submit-select { width: auto; min-width: 8rem; }
 /* Row headers (<th> inside tbody: totals / sub-headings on Profit & Loss etc.) used Bootstrap's 4px th padding while the <td>s beside them use the table's
    cell padding, so the label sat 8px left of the column above it. */
 .table > tbody > tr > th { padding: .7rem .75rem; }
+
+/* Fixed-width (fa-fw) icons set to display:block inside a text-center empty state stay on the left edge; centre them. */
+.text-center > i.fa-fw.d-block { margin-left: auto; margin-right: auto; }
