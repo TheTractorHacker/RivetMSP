@@ -218,3 +218,16 @@ select.form-control.auto-submit-select { width: auto; min-width: 8rem; }
 
 /* Fixed-width (fa-fw) icons set to display:block inside a text-center empty state stay on the left edge; centre them. */
 .text-center > i.fa-fw.d-block { margin-left: auto; margin-right: auto; }
+
+/* Credential names inside table cells: overflow-wrap:anywhere collapses the cell to one character wide on narrow screens; let the responsive table scroll instead. */
+.table td .cred-name { overflow-wrap: break-word; }
+
+/* Asset list: tags under the name, lined up with the text beside the device icon (2.5em icon + .75rem gap). */
+.asset-row-tags { margin-left: calc(2.5em + .75rem); }
+
+/* Outline-primary buttons on dark surfaces: the brand blue is 3.2:1 on the dark cards; use a lighter tint of it for text and border. */
+:root[data-bs-theme="dark"] .btn-outline-primary:not(:hover):not(:focus):not(.active):not(:active),
+body.dark-mode .btn-outline-primary:not(:hover):not(:focus):not(.active):not(:active) {
+    color: #7aa7ff;
+    border-color: #7aa7ff;
+}

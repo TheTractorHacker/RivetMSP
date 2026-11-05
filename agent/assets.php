@@ -697,10 +697,11 @@ $can_rmm_remote_connect = lookupUserPermission('module_rmm_remote_connect') >= 1
                                                 <?php endif; ?>
                                                 </div>
                                             <div><small class="text-secondary"><?= $asset_description ?></small></div>
-                                            <?php if ($asset_tags_display) { echo $asset_tags_display; } ?>
                                         </div>
                                     </div>
                                 </a>
+                                <?php /* tag links sit outside the asset link: an <a> inside an <a> makes the parser split the outer link into empty pieces */ ?>
+                                <?php if ($asset_tags_display) { ?><div class="asset-row-tags"><?= $asset_tags_display ?></div><?php } ?>
                             </td>
 
                             <td>

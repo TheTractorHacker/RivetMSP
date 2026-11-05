@@ -79,10 +79,45 @@
         hs.forEach(function (h) { h.setAttribute('aria-level', String(parseInt(h.tagName.charAt(1), 10) - shift)); });
     }
 
+    // Badges carry a status colour inline (set per status/priority in the database); white or off-white text on the amber, cyan or
+    // mid-green ones is under 4.5:1. Pick whichever of black / white reads better on the actual background.
+    function lum(rgb) { var c = rgb.map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+    function parseRgb(str) {
+        var m = /rgba?\((\d+)[, ]+(\d+)[, ]+(\d+)/.exec(str || '');
+        if (m) return [+m[1], +m[2], +m[3]];
+        // newer engines can report colour(srgb ...): let a canvas normalise it
+        try { var c = document.createElement('canvas').getContext('2d'); c.fillStyle = '#000'; c.fillStyle = str; c.fillRect(0, 0, 1, 1); var d = c.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2]]; } catch (e) { return null; }
+    }
+    function fixBadgeContrast(root) {
+        root.querySelectorAll('.badge[style*="background"]').forEach(function (b) {
+            if (b.dataset.a11yBadge) return;
+            b.dataset.a11yBadge = '1';
+            var cs = getComputedStyle(b), bg = parseRgb(cs.backgroundColor), fg = parseRgb(cs.color);
+            if (!bg || !fg) return;
+            var lb = lum(bg), ratio = function (l) { return (Math.max(l, lb) + 0.05) / (Math.min(l, lb) + 0.05); };
+            if (ratio(lum(fg)) >= 4.5) return;
+            b.style.setProperty('color', ratio(0) >= ratio(1) ? '#000' : '#fff', 'important');
+        });
+    }
+
+    // A <th> that holds only a select-all checkbox has no text, which assistive tech reads as an empty column header.
+    function nameEmptyHeaders(root) {
+        root.querySelectorAll('th').forEach(function (th) {
+            if (th.textContent.trim() || th.getAttribute('aria-label') || th.querySelector('img, svg, i[title], [aria-label]:not(input)')) return;
+            var label = th.querySelector('input[type=checkbox]') ? 'Select' : (th.matches('.text-end, .text-right, .action, .actions') ? 'Actions' : (th.colSpan > 1 ? 'Section' : 'Item'));
+            var span = document.createElement('span');
+            span.className = 'visually-hidden';
+            span.textContent = label;
+            th.appendChild(span);
+        });
+    }
+
     function run(root) {
         root = root || document;
         root.querySelectorAll('button, a.btn, a.ajax-modal, a[data-bs-toggle="dropdown"], a.btn-tool').forEach(nameButton);
         root.querySelectorAll('iframe.tox-edit-area__iframe:not([title])').forEach(function (f) { f.setAttribute('title', 'Rich text editor'); });   // TinyMCE leaves its iframe unnamed
+        fixBadgeContrast(root);
+        nameEmptyHeaders(root);
         root.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button]), select, textarea').forEach(nameField);
     }
 

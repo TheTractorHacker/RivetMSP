@@ -5010,6 +5010,8 @@ function redirect($url = null, $permanent = false) {
 
 //Flash Alert Function
 function flash_alert(string $message, string $type = 'success'): void {
+    // Messages are built from sanitizeInput()ed names, so a quote arrives as \' or \" and used to show up with the backslash in the toast.
+    $message = str_replace(["\\'", '\\"'], ["'", '"'], $message);
     $_SESSION['alert_type'] = $type;
     $_SESSION['alert_message'] = $message;
 }
