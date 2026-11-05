@@ -483,7 +483,7 @@ if (isset($_GET['invoice_id'])) {
                                             </select>
                                         </td>
                                         <td class="text-center">
-                                            <button class="btn btn-secondary text-success" type="submit" name="add_invoice_item">
+                                            <button class="btn btn-secondary text-success" type="submit" name="add_invoice_item" aria-label="Add item to invoice" title="Add item">
                                                 <i class="fa fa-check"></i>
                                             </button>
                                         </td>

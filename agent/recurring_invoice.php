@@ -373,7 +373,7 @@ if (isset($_GET['recurring_invoice_id'])) {
                                                 </select>
                                             </td>
                                             <td class="text-center">
-                                                <button class="btn btn-light text-success" type="submit" name="add_recurring_invoice_item">
+                                                <button class="btn btn-secondary text-success" type="submit" name="add_recurring_invoice_item" aria-label="Add item to recurring invoice" title="Add item">
                                                     <i class="fa fa-fw fa-check"></i>
                                                 </button>
                                             </td>
