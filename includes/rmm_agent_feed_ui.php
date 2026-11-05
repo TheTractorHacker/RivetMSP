@@ -96,9 +96,9 @@ function rivetAgentFeedCard(array $vm, ?array $msg, array $steps, string $csrf, 
                 $o .= '<span class="text-muted small">Nothing to publish</span>';
             } else {
                 $fid = 'af_' . $i;
-                $o .= '<form action="post.php" method="post" class="d-flex flex-wrap gap-1 align-items-center"><input type="hidden" name="csrf_token" value="' . $h($csrf) . '"><input type="hidden" name="tag" value="' . $h($r['tag']) . '">'
+                $o .= '<form action="post.php" method="post" class="d-flex flex-wrap gap-2 align-items-center"><input type="hidden" name="csrf_token" value="' . $h($csrf) . '"><input type="hidden" name="tag" value="' . $h($r['tag']) . '">'
                     . '<select name="release_ring" class="form-select form-select-sm w-auto" aria-label="Offer to ring"><option value="">No update offer</option><option value="pilot" selected>Pilot ring</option><option value="stable">Stable ring</option></select>'
-                    . '<input type="number" name="rollout_pct" min="0" max="100" value="10" class="form-control form-control-sm" style="width:4.5rem" aria-label="Rollout percent">'
+                    . '<div class="input-group input-group-sm" style="width:6rem"><input type="number" name="rollout_pct" min="0" max="100" value="10" class="form-control form-control-sm" aria-label="Rollout percent"><span class="input-group-text">%</span></div>'
                     . '<div class="form-check mb-0"><input type="checkbox" class="form-check-input" id="' . $fid . '" name="activate" value="1" checked><label class="form-check-label small" for="' . $fid . '">Make current</label></div>'
                     . '<button type="submit" class="btn btn-sm btn-primary" name="publish_agent_release" value="1" data-ea-confirm="Download and publish agent ' . $h($r['version']) . ($r['prerelease'] ? ' (a pre-release)' : '')
                     . '? Each file is checked against the release checksums before it is stored.">' . ($r['complete'] ? 'Publish again' : 'Publish') . '</button></form>';

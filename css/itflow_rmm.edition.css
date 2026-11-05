@@ -53,7 +53,8 @@
 
 /* Filter-bar submit buttons were stretched to fill a whole grid column (a 260px wide "Filter"/"Apply"/"Save ring"). Keep them button-sized beside the fields. */
 @media (min-width: 768px) {
-  form .row.align-items-end > [class*="col-"] > .btn.w-100:only-child { width: auto !important; min-width: 5.5rem; }
+  form .row.align-items-end > [class*="col-"] > .btn.w-100:only-child,
+  form.row.align-items-end > [class*="col-"] > .btn.w-100:only-child { width: auto !important; min-width: 5.5rem; }
 }
 
 /* Agent versions and rings: the label and its count were pushed to opposite ends of a half-page column. */
@@ -70,3 +71,15 @@
 .rmm-page table:has(.rmm-dl-key) > tbody > tr > th,
 .rmm-page table:has(.rmm-dl-key) > tbody > tr > td { vertical-align: top; }
 .rmm-page table:has(.rmm-dl-key) > tbody > tr > th.rmm-dl-key { padding: 11.2px 12px; }
+
+/* Nothing on the RMM pages is allowed to be smaller than 12px (badges, inline code, small help text and the stat tile captions were 10 to 10.7px). */
+.rmm-page .badge, .rmm-page .info-box-text, .rmm-page .rmm-ib-sub { font-size: max(12px, .75rem); }
+.rmm-page code { font-size: max(12px, .85em); }
+.rmm-page .small, .rmm-page small, .rmm-page .form-text, .rmm-page .text-break { font-size: max(12px, .875em); }
+.rmm-page .fs-6 { font-size: 12px !important; }
+
+/* WCAG AA: white on the success green is 2.7:1, white on the grey secondary badge 2.5:1, light text on the info blue 2.6:1, and the primary blue outline button is 3.2 to 3.6:1 on the dark page. */
+.rmm-page .badge.bg-success, .rmm-page .badge.bg-info { color: #000 !important; }
+[data-bs-theme="dark"] .rmm-page .badge.bg-secondary { color: #0d1417 !important; }
+[data-bs-theme="dark"] .rmm-page .btn-outline-primary { color: #8fb2ff; border-color: #8fb2ff; }
+[data-bs-theme="dark"] .rmm-page .btn-outline-primary:hover { color: #0d1417; background: #8fb2ff; }
