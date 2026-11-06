@@ -140,6 +140,8 @@ use Aws\AwsClient;
  *     imageScanningConfiguration?: array{
  *         imageScanningEnabled?: bool,
  *         ecrConfiguration?: array{repositoryName?: string, containerTags?: list<string>, ...},
+ *         imageScanningTypes?: list<'ON_DEMAND_AMI_CVE'|'TEST_INSTANCE_CVE'>,
+ *         scanResultCondition?: array{maximumSeverityLabel?: 'HIGH'|'INFORMATIONAL'|'LOW'|'MEDIUM', fixAvailable?: bool, ...},
  *         ...,
  *     },
  *     workflows?: list<array{
@@ -166,6 +168,8 @@ use Aws\AwsClient;
  *     imageScanningConfiguration?: array{
  *         imageScanningEnabled?: bool,
  *         ecrConfiguration?: array{repositoryName?: string, containerTags?: list<string>, ...},
+ *         imageScanningTypes?: list<'ON_DEMAND_AMI_CVE'|'TEST_INSTANCE_CVE'>,
+ *         scanResultCondition?: array{maximumSeverityLabel?: 'HIGH'|'INFORMATIONAL'|'LOW'|'MEDIUM', fixAvailable?: bool, ...},
  *         ...,
  *     },
  *     workflows?: list<array{
@@ -203,6 +207,8 @@ use Aws\AwsClient;
  *     imageScanningConfiguration?: array{
  *         imageScanningEnabled?: bool,
  *         ecrConfiguration?: array{repositoryName?: string, containerTags?: list<string>, ...},
+ *         imageScanningTypes?: list<'ON_DEMAND_AMI_CVE'|'TEST_INSTANCE_CVE'>,
+ *         scanResultCondition?: array{maximumSeverityLabel?: 'HIGH'|'INFORMATIONAL'|'LOW'|'MEDIUM', fixAvailable?: bool, ...},
  *         ...,
  *     },
  *     workflows?: list<array{
@@ -241,6 +247,8 @@ use Aws\AwsClient;
  *     imageScanningConfiguration?: array{
  *         imageScanningEnabled?: bool,
  *         ecrConfiguration?: array{repositoryName?: string, containerTags?: list<string>, ...},
+ *         imageScanningTypes?: list<'ON_DEMAND_AMI_CVE'|'TEST_INSTANCE_CVE'>,
+ *         scanResultCondition?: array{maximumSeverityLabel?: 'HIGH'|'INFORMATIONAL'|'LOW'|'MEDIUM', fixAvailable?: bool, ...},
  *         ...,
  *     },
  *     workflows?: list<array{
@@ -300,6 +308,7 @@ use Aws\AwsClient;
  *     logging?: array{s3Logs?: array{s3BucketName?: string, s3KeyPrefix?: string, ...}, ...},
  *     keyPair?: string,
  *     terminateInstanceOnFailure?: bool,
+ *     terminateInstanceOnCompletion?: bool,
  *     snsTopicArn?: string,
  *     resourceTags?: array<string, string>,
  *     instanceMetadataOptions?: array{httpTokens?: string, httpPutResponseHopLimit?: int, ...},
@@ -311,6 +320,7 @@ use Aws\AwsClient;
  *         hostResourceGroupArn?: string,
  *         ...,
  *     },
+ *     parentInstance?: array{autoScalingGroup?: array{name?: string, capacityWaitTimeoutSeconds?: int, ...}, ...},
  *     clientToken?: string,
  *     dryRun?: bool,
  *     ...,
@@ -326,6 +336,7 @@ use Aws\AwsClient;
  *     logging?: array{s3Logs?: array{s3BucketName?: string, s3KeyPrefix?: string, ...}, ...},
  *     keyPair?: string,
  *     terminateInstanceOnFailure?: bool,
+ *     terminateInstanceOnCompletion?: bool,
  *     snsTopicArn?: string,
  *     resourceTags?: array<string, string>,
  *     instanceMetadataOptions?: array{httpTokens?: string, httpPutResponseHopLimit?: int, ...},
@@ -337,6 +348,7 @@ use Aws\AwsClient;
  *         hostResourceGroupArn?: string,
  *         ...,
  *     },
+ *     parentInstance?: array{autoScalingGroup?: array{name?: string, capacityWaitTimeoutSeconds?: int, ...}, ...},
  *     clientToken?: string,
  *     dryRun?: bool,
  *     ...,
@@ -1005,6 +1017,8 @@ use Aws\AwsClient;
  *     imageScanningConfiguration?: array{
  *         imageScanningEnabled?: bool,
  *         ecrConfiguration?: array{repositoryName?: string, containerTags?: list<string>, ...},
+ *         imageScanningTypes?: list<'ON_DEMAND_AMI_CVE'|'TEST_INSTANCE_CVE'>,
+ *         scanResultCondition?: array{maximumSeverityLabel?: 'HIGH'|'INFORMATIONAL'|'LOW'|'MEDIUM', fixAvailable?: bool, ...},
  *         ...,
  *     },
  *     workflows?: list<array{
@@ -1041,6 +1055,8 @@ use Aws\AwsClient;
  *     imageScanningConfiguration?: array{
  *         imageScanningEnabled?: bool,
  *         ecrConfiguration?: array{repositoryName?: string, containerTags?: list<string>, ...},
+ *         imageScanningTypes?: list<'ON_DEMAND_AMI_CVE'|'TEST_INSTANCE_CVE'>,
+ *         scanResultCondition?: array{maximumSeverityLabel?: 'HIGH'|'INFORMATIONAL'|'LOW'|'MEDIUM', fixAvailable?: bool, ...},
  *         ...,
  *     },
  *     workflows?: list<array{
@@ -1066,6 +1082,7 @@ use Aws\AwsClient;
  *     logging?: array{s3Logs?: array{s3BucketName?: string, s3KeyPrefix?: string, ...}, ...},
  *     keyPair?: string,
  *     terminateInstanceOnFailure?: bool,
+ *     terminateInstanceOnCompletion?: bool,
  *     snsTopicArn?: string,
  *     resourceTags?: array<string, string>,
  *     instanceMetadataOptions?: array{httpTokens?: string, httpPutResponseHopLimit?: int, ...},
@@ -1076,6 +1093,7 @@ use Aws\AwsClient;
  *         hostResourceGroupArn?: string,
  *         ...,
  *     },
+ *     parentInstance?: array{autoScalingGroup?: array{name?: string, capacityWaitTimeoutSeconds?: int, ...}, ...},
  *     clientToken?: string,
  *     ...,
  * } $args = [])
@@ -1090,6 +1108,7 @@ use Aws\AwsClient;
  *     logging?: array{s3Logs?: array{s3BucketName?: string, s3KeyPrefix?: string, ...}, ...},
  *     keyPair?: string,
  *     terminateInstanceOnFailure?: bool,
+ *     terminateInstanceOnCompletion?: bool,
  *     snsTopicArn?: string,
  *     resourceTags?: array<string, string>,
  *     instanceMetadataOptions?: array{httpTokens?: string, httpPutResponseHopLimit?: int, ...},
@@ -1100,6 +1119,7 @@ use Aws\AwsClient;
  *         hostResourceGroupArn?: string,
  *         ...,
  *     },
+ *     parentInstance?: array{autoScalingGroup?: array{name?: string, capacityWaitTimeoutSeconds?: int, ...}, ...},
  *     clientToken?: string,
  *     ...,
  * } $args = [])

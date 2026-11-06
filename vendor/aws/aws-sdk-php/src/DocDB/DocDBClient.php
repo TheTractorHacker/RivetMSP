@@ -81,6 +81,7 @@ use Aws\PresignUrlMiddleware;
  *     ManageMasterUserPassword?: bool,
  *     MasterUserSecretKmsKeyId?: string,
  *     NetworkType?: string,
+ *     CopyTagsToSnapshot?: bool,
  *     ...,
  * } $args = [])
  * @method \GuzzleHttp\Promise\Promise createDBClusterAsync(array $args = [])
@@ -110,6 +111,7 @@ use Aws\PresignUrlMiddleware;
  *     ManageMasterUserPassword?: bool,
  *     MasterUserSecretKmsKeyId?: string,
  *     NetworkType?: string,
+ *     CopyTagsToSnapshot?: bool,
  *     ...,
  * } $args = [])
  * @method \Aws\Result createDBClusterParameterGroup(array $args = [])
@@ -534,6 +536,28 @@ use Aws\PresignUrlMiddleware;
  *     MaxRecords?: int,
  *     ...,
  * } $args = [])
+ * @method \Aws\Result describeServerlessV2PlatformVersions(array $args = [])
+ * @phpstan-method \Aws\Result describeServerlessV2PlatformVersions(array{
+ *     ServerlessV2PlatformVersion?: string,
+ *     Engine?: string,
+ *     Filters?: list<array{Name?: string, Values?: list<string>, ...}>,
+ *     DefaultOnly?: bool,
+ *     IncludeAll?: bool,
+ *     MaxRecords?: int,
+ *     Marker?: string,
+ *     ...,
+ * } $args = [])
+ * @method \GuzzleHttp\Promise\Promise describeServerlessV2PlatformVersionsAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise describeServerlessV2PlatformVersionsAsync(array{
+ *     ServerlessV2PlatformVersion?: string,
+ *     Engine?: string,
+ *     Filters?: list<array{Name?: string, Values?: list<string>, ...}>,
+ *     DefaultOnly?: bool,
+ *     IncludeAll?: bool,
+ *     MaxRecords?: int,
+ *     Marker?: string,
+ *     ...,
+ * } $args = [])
  * @method \Aws\Result failoverDBCluster(array $args = [])
  * @phpstan-method \Aws\Result failoverDBCluster(array{DBClusterIdentifier?: string, TargetDBInstanceIdentifier?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise failoverDBClusterAsync(array $args = [])
@@ -580,6 +604,7 @@ use Aws\PresignUrlMiddleware;
  *     MasterUserSecretKmsKeyId?: string,
  *     RotateMasterUserPassword?: bool,
  *     NetworkType?: string,
+ *     CopyTagsToSnapshot?: bool,
  *     ...,
  * } $args = [])
  * @method \GuzzleHttp\Promise\Promise modifyDBClusterAsync(array $args = [])
@@ -604,6 +629,7 @@ use Aws\PresignUrlMiddleware;
  *     MasterUserSecretKmsKeyId?: string,
  *     RotateMasterUserPassword?: bool,
  *     NetworkType?: string,
+ *     CopyTagsToSnapshot?: bool,
  *     ...,
  * } $args = [])
  * @method \Aws\Result modifyDBClusterParameterGroup(array $args = [])
@@ -788,6 +814,7 @@ use Aws\PresignUrlMiddleware;
  *     ServerlessV2ScalingConfiguration?: array{MinCapacity?: float, MaxCapacity?: float, ...},
  *     StorageType?: string,
  *     NetworkType?: string,
+ *     CopyTagsToSnapshot?: bool,
  *     ...,
  * } $args = [])
  * @method \GuzzleHttp\Promise\Promise restoreDBClusterFromSnapshotAsync(array $args = [])
@@ -808,6 +835,7 @@ use Aws\PresignUrlMiddleware;
  *     ServerlessV2ScalingConfiguration?: array{MinCapacity?: float, MaxCapacity?: float, ...},
  *     StorageType?: string,
  *     NetworkType?: string,
+ *     CopyTagsToSnapshot?: bool,
  *     ...,
  * } $args = [])
  * @method \Aws\Result restoreDBClusterToPointInTime(array $args = [])
@@ -827,6 +855,7 @@ use Aws\PresignUrlMiddleware;
  *     ServerlessV2ScalingConfiguration?: array{MinCapacity?: float, MaxCapacity?: float, ...},
  *     StorageType?: string,
  *     NetworkType?: string,
+ *     CopyTagsToSnapshot?: bool,
  *     ...,
  * } $args = [])
  * @method \GuzzleHttp\Promise\Promise restoreDBClusterToPointInTimeAsync(array $args = [])
@@ -846,6 +875,7 @@ use Aws\PresignUrlMiddleware;
  *     ServerlessV2ScalingConfiguration?: array{MinCapacity?: float, MaxCapacity?: float, ...},
  *     StorageType?: string,
  *     NetworkType?: string,
+ *     CopyTagsToSnapshot?: bool,
  *     ...,
  * } $args = [])
  * @method \Aws\Result startDBCluster(array $args = [])
