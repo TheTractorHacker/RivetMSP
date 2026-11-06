@@ -65,6 +65,7 @@ use Aws\PresignUrlMiddleware;
  *     SnapshotTarget?: string,
  *     CopyOptionGroup?: bool,
  *     SnapshotAvailabilityZone?: string,
+ *     TagSpecifications?: list<array{ResourceType?: string, Tags?: list<array>, ...}>,
  *     ...,
  * } $args = [])
  * @method \GuzzleHttp\Promise\Promise copyDBSnapshotAsync(array $args = [])
@@ -80,6 +81,7 @@ use Aws\PresignUrlMiddleware;
  *     SnapshotTarget?: string,
  *     CopyOptionGroup?: bool,
  *     SnapshotAvailabilityZone?: string,
+ *     TagSpecifications?: list<array{ResourceType?: string, Tags?: list<array>, ...}>,
  *     ...,
  * } $args = [])
  * @method \Aws\Result copyOptionGroup(array $args = [])
@@ -174,6 +176,7 @@ use Aws\PresignUrlMiddleware;
  *         ...,
  *     }>,
  *     TagSpecifications?: list<array{ResourceType?: string, Tags?: list<array>, ...}>,
+ *     DBCapacityReservationIdentifier?: string,
  *     MasterUserAuthenticationType?: 'iam-db-auth'|'password',
  *     ...,
  * } $args = [])
@@ -253,6 +256,7 @@ use Aws\PresignUrlMiddleware;
  *         ...,
  *     }>,
  *     TagSpecifications?: list<array{ResourceType?: string, Tags?: list<array>, ...}>,
+ *     DBCapacityReservationIdentifier?: string,
  *     MasterUserAuthenticationType?: 'iam-db-auth'|'password',
  *     ...,
  * } $args = [])
@@ -315,6 +319,7 @@ use Aws\PresignUrlMiddleware;
  *         ...,
  *     }>,
  *     TagSpecifications?: list<array{ResourceType?: string, Tags?: list<array>, ...}>,
+ *     DBCapacityReservationIdentifier?: string,
  *     ...,
  * } $args = [])
  * @method \GuzzleHttp\Promise\Promise createDBInstanceReadReplicaAsync(array $args = [])
@@ -376,6 +381,7 @@ use Aws\PresignUrlMiddleware;
  *         ...,
  *     }>,
  *     TagSpecifications?: list<array{ResourceType?: string, Tags?: list<array>, ...}>,
+ *     DBCapacityReservationIdentifier?: string,
  *     ...,
  * } $args = [])
  * @method \Aws\Result createDBParameterGroup(array $args = [])
@@ -939,6 +945,7 @@ use Aws\PresignUrlMiddleware;
  *         SetForDelete?: bool,
  *         ...,
  *     }>,
+ *     DBCapacityReservationIdentifier?: string,
  *     TagSpecifications?: list<array{ResourceType?: string, Tags?: list<array>, ...}>,
  *     MasterUserAuthenticationType?: 'iam-db-auth'|'password',
  *     EngineLifecycleSupport?: string,
@@ -1017,6 +1024,7 @@ use Aws\PresignUrlMiddleware;
  *         SetForDelete?: bool,
  *         ...,
  *     }>,
+ *     DBCapacityReservationIdentifier?: string,
  *     TagSpecifications?: list<array{ResourceType?: string, Tags?: list<array>, ...}>,
  *     MasterUserAuthenticationType?: 'iam-db-auth'|'password',
  *     EngineLifecycleSupport?: string,
@@ -1241,6 +1249,7 @@ use Aws\PresignUrlMiddleware;
  *     DBClusterSnapshotIdentifier?: string,
  *     BackupRetentionPeriod?: int,
  *     PreferredBackupWindow?: string,
+ *     DBCapacityReservationIdentifier?: string,
  *     DedicatedLogVolume?: bool,
  *     CACertificateIdentifier?: string,
  *     EngineLifecycleSupport?: string,
@@ -1301,6 +1310,7 @@ use Aws\PresignUrlMiddleware;
  *     DBClusterSnapshotIdentifier?: string,
  *     BackupRetentionPeriod?: int,
  *     PreferredBackupWindow?: string,
+ *     DBCapacityReservationIdentifier?: string,
  *     DedicatedLogVolume?: bool,
  *     CACertificateIdentifier?: string,
  *     EngineLifecycleSupport?: string,
@@ -1365,6 +1375,7 @@ use Aws\PresignUrlMiddleware;
  *     AllocatedStorage?: int,
  *     BackupRetentionPeriod?: int,
  *     PreferredBackupWindow?: string,
+ *     DBCapacityReservationIdentifier?: string,
  *     DedicatedLogVolume?: bool,
  *     CACertificateIdentifier?: string,
  *     EngineLifecycleSupport?: string,
@@ -1429,6 +1440,7 @@ use Aws\PresignUrlMiddleware;
  *     AllocatedStorage?: int,
  *     BackupRetentionPeriod?: int,
  *     PreferredBackupWindow?: string,
+ *     DBCapacityReservationIdentifier?: string,
  *     DedicatedLogVolume?: bool,
  *     CACertificateIdentifier?: string,
  *     EngineLifecycleSupport?: string,
@@ -1492,6 +1504,10 @@ use Aws\PresignUrlMiddleware;
  *     UseEarliestTimeOnPointInTimeUnavailable?: bool,
  *     ...,
  * } $args = [])
+ * @method \Aws\Result cancelDBCapacityReservation(array $args = []) (supported in versions 2014-10-31)
+ * @phpstan-method \Aws\Result cancelDBCapacityReservation(array{DBCapacityReservationIdentifier?: string, ...} $args = [])
+ * @method \GuzzleHttp\Promise\Promise cancelDBCapacityReservationAsync(array $args = []) (supported in versions 2014-10-31)
+ * @phpstan-method \GuzzleHttp\Promise\Promise cancelDBCapacityReservationAsync(array{DBCapacityReservationIdentifier?: string, ...} $args = [])
  * @method \Aws\Result cancelExportTask(array $args = []) (supported in versions 2014-10-31)
  * @phpstan-method \Aws\Result cancelExportTask(array{ExportTaskIdentifier?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise cancelExportTaskAsync(array $args = []) (supported in versions 2014-10-31)
@@ -1546,6 +1562,7 @@ use Aws\PresignUrlMiddleware;
  *     TargetStorageType?: string,
  *     TargetAllocatedStorage?: int,
  *     TargetStorageThroughput?: int,
+ *     TargetResourceConfigurations?: list<array{SourceArn?: string, TargetKmsKeyId?: string, ...}>,
  *     ...,
  * } $args = [])
  * @method \GuzzleHttp\Promise\Promise createBlueGreenDeploymentAsync(array $args = []) (supported in versions 2014-10-31)
@@ -1562,6 +1579,7 @@ use Aws\PresignUrlMiddleware;
  *     TargetStorageType?: string,
  *     TargetAllocatedStorage?: int,
  *     TargetStorageThroughput?: int,
+ *     TargetResourceConfigurations?: list<array{SourceArn?: string, TargetKmsKeyId?: string, ...}>,
  *     ...,
  * } $args = [])
  * @method \Aws\Result createCustomDBEngineVersion(array $args = []) (supported in versions 2014-10-31)
@@ -1593,6 +1611,34 @@ use Aws\PresignUrlMiddleware;
  *     UseAwsProvidedLatestImage?: bool,
  *     Description?: string,
  *     Manifest?: string,
+ *     Tags?: list<array{Key?: string, Value?: string, ...}>,
+ *     ...,
+ * } $args = [])
+ * @method \Aws\Result createDBCapacityReservation(array $args = []) (supported in versions 2014-10-31)
+ * @phpstan-method \Aws\Result createDBCapacityReservation(array{
+ *     DBCapacityReservationName?: string,
+ *     DBInstanceClass?: string,
+ *     Engine?: string,
+ *     CapacityPerAvailabilityZone?: int,
+ *     AvailabilityZones?: list<string>,
+ *     EndDate?: int|string|\DateTimeInterface,
+ *     StartDate?: int|string|\DateTimeInterface,
+ *     CommitmentDuration?: int,
+ *     LicenseModel?: string,
+ *     Tags?: list<array{Key?: string, Value?: string, ...}>,
+ *     ...,
+ * } $args = [])
+ * @method \GuzzleHttp\Promise\Promise createDBCapacityReservationAsync(array $args = []) (supported in versions 2014-10-31)
+ * @phpstan-method \GuzzleHttp\Promise\Promise createDBCapacityReservationAsync(array{
+ *     DBCapacityReservationName?: string,
+ *     DBInstanceClass?: string,
+ *     Engine?: string,
+ *     CapacityPerAvailabilityZone?: int,
+ *     AvailabilityZones?: list<string>,
+ *     EndDate?: int|string|\DateTimeInterface,
+ *     StartDate?: int|string|\DateTimeInterface,
+ *     CommitmentDuration?: int,
+ *     LicenseModel?: string,
  *     Tags?: list<array{Key?: string, Value?: string, ...}>,
  *     ...,
  * } $args = [])
@@ -2102,6 +2148,22 @@ use Aws\PresignUrlMiddleware;
  *     Marker?: string,
  *     ...,
  * } $args = [])
+ * @method \Aws\Result describeDBCapacityReservations(array $args = []) (supported in versions 2014-10-31)
+ * @phpstan-method \Aws\Result describeDBCapacityReservations(array{
+ *     DBCapacityReservationIdentifier?: string,
+ *     Marker?: string,
+ *     MaxRecords?: int,
+ *     Filters?: list<array{Name?: string, Values?: list<string>, ...}>,
+ *     ...,
+ * } $args = [])
+ * @method \GuzzleHttp\Promise\Promise describeDBCapacityReservationsAsync(array $args = []) (supported in versions 2014-10-31)
+ * @phpstan-method \GuzzleHttp\Promise\Promise describeDBCapacityReservationsAsync(array{
+ *     DBCapacityReservationIdentifier?: string,
+ *     Marker?: string,
+ *     MaxRecords?: int,
+ *     Filters?: list<array{Name?: string, Values?: list<string>, ...}>,
+ *     ...,
+ * } $args = [])
  * @method \Aws\Result describeDBClusterAutomatedBackups(array $args = []) (supported in versions 2014-10-31)
  * @phpstan-method \Aws\Result describeDBClusterAutomatedBackups(array{
  *     DbClusterResourceId?: string,
@@ -2592,6 +2654,22 @@ use Aws\PresignUrlMiddleware;
  *     EngineVersion?: string,
  *     Description?: string,
  *     Status?: 'available'|'inactive'|'inactive-except-restore',
+ *     ...,
+ * } $args = [])
+ * @method \Aws\Result modifyDBCapacityReservation(array $args = []) (supported in versions 2014-10-31)
+ * @phpstan-method \Aws\Result modifyDBCapacityReservation(array{
+ *     DBCapacityReservationIdentifier?: string,
+ *     CapacityPerAvailabilityZone?: int,
+ *     EndDateType?: 'limited'|'unlimited',
+ *     EndDate?: int|string|\DateTimeInterface,
+ *     ...,
+ * } $args = [])
+ * @method \GuzzleHttp\Promise\Promise modifyDBCapacityReservationAsync(array $args = []) (supported in versions 2014-10-31)
+ * @phpstan-method \GuzzleHttp\Promise\Promise modifyDBCapacityReservationAsync(array{
+ *     DBCapacityReservationIdentifier?: string,
+ *     CapacityPerAvailabilityZone?: int,
+ *     EndDateType?: 'limited'|'unlimited',
+ *     EndDate?: int|string|\DateTimeInterface,
  *     ...,
  * } $args = [])
  * @method \Aws\Result modifyDBCluster(array $args = []) (supported in versions 2014-10-31)
@@ -3405,6 +3483,7 @@ use Aws\PresignUrlMiddleware;
  *     NetworkType?: string,
  *     ManageMasterUserPassword?: bool,
  *     MasterUserSecretKmsKeyId?: string,
+ *     DBCapacityReservationIdentifier?: string,
  *     DedicatedLogVolume?: bool,
  *     CACertificateIdentifier?: string,
  *     EngineLifecycleSupport?: string,
@@ -3471,6 +3550,7 @@ use Aws\PresignUrlMiddleware;
  *     NetworkType?: string,
  *     ManageMasterUserPassword?: bool,
  *     MasterUserSecretKmsKeyId?: string,
+ *     DBCapacityReservationIdentifier?: string,
  *     DedicatedLogVolume?: bool,
  *     CACertificateIdentifier?: string,
  *     EngineLifecycleSupport?: string,
@@ -3509,9 +3589,9 @@ use Aws\PresignUrlMiddleware;
  * @method \GuzzleHttp\Promise\Promise startDBClusterAsync(array $args = []) (supported in versions 2014-10-31)
  * @phpstan-method \GuzzleHttp\Promise\Promise startDBClusterAsync(array{DBClusterIdentifier?: string, ...} $args = [])
  * @method \Aws\Result startDBInstance(array $args = []) (supported in versions 2014-10-31)
- * @phpstan-method \Aws\Result startDBInstance(array{DBInstanceIdentifier?: string, ...} $args = [])
+ * @phpstan-method \Aws\Result startDBInstance(array{DBInstanceIdentifier?: string, DBCapacityReservationIdentifier?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise startDBInstanceAsync(array $args = []) (supported in versions 2014-10-31)
- * @phpstan-method \GuzzleHttp\Promise\Promise startDBInstanceAsync(array{DBInstanceIdentifier?: string, ...} $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise startDBInstanceAsync(array{DBInstanceIdentifier?: string, DBCapacityReservationIdentifier?: string, ...} $args = [])
  * @method \Aws\Result startDBInstanceAutomatedBackupsReplication(array $args = []) (supported in versions 2014-10-31)
  * @phpstan-method \Aws\Result startDBInstanceAutomatedBackupsReplication(array{
  *     SourceDBInstanceArn?: string,
@@ -3561,9 +3641,19 @@ use Aws\PresignUrlMiddleware;
  * @method \GuzzleHttp\Promise\Promise stopDBClusterAsync(array $args = []) (supported in versions 2014-10-31)
  * @phpstan-method \GuzzleHttp\Promise\Promise stopDBClusterAsync(array{DBClusterIdentifier?: string, ...} $args = [])
  * @method \Aws\Result stopDBInstance(array $args = []) (supported in versions 2014-10-31)
- * @phpstan-method \Aws\Result stopDBInstance(array{DBInstanceIdentifier?: string, DBSnapshotIdentifier?: string, ...} $args = [])
+ * @phpstan-method \Aws\Result stopDBInstance(array{
+ *     DBInstanceIdentifier?: string,
+ *     DBSnapshotIdentifier?: string,
+ *     DetachFromDBCapacityReservation?: bool,
+ *     ...,
+ * } $args = [])
  * @method \GuzzleHttp\Promise\Promise stopDBInstanceAsync(array $args = []) (supported in versions 2014-10-31)
- * @phpstan-method \GuzzleHttp\Promise\Promise stopDBInstanceAsync(array{DBInstanceIdentifier?: string, DBSnapshotIdentifier?: string, ...} $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise stopDBInstanceAsync(array{
+ *     DBInstanceIdentifier?: string,
+ *     DBSnapshotIdentifier?: string,
+ *     DetachFromDBCapacityReservation?: bool,
+ *     ...,
+ * } $args = [])
  * @method \Aws\Result stopDBInstanceAutomatedBackupsReplication(array $args = []) (supported in versions 2014-10-31)
  * @phpstan-method \Aws\Result stopDBInstanceAutomatedBackupsReplication(array{SourceDBInstanceArn?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise stopDBInstanceAutomatedBackupsReplicationAsync(array $args = []) (supported in versions 2014-10-31)

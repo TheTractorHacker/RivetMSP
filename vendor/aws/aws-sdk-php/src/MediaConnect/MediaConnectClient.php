@@ -71,6 +71,7 @@ use Aws\AwsClient;
  *         RouterIntegrationState?: 'DISABLED'|'ENABLED',
  *         RouterIntegrationTransitEncryption?: array,
  *         NdiOutputTimecodeSource?: 'EMBEDDED_TIMECODE'|'UTC_SYSTEM_TIME',
+ *         NdiAudioReferenceLevel?: int,
  *         ...,
  *     }>,
  *     ...,
@@ -101,6 +102,7 @@ use Aws\AwsClient;
  *         RouterIntegrationState?: 'DISABLED'|'ENABLED',
  *         RouterIntegrationTransitEncryption?: array,
  *         NdiOutputTimecodeSource?: 'EMBEDDED_TIMECODE'|'UTC_SYSTEM_TIME',
+ *         NdiAudioReferenceLevel?: int,
  *         ...,
  *     }>,
  *     ...,
@@ -195,6 +197,10 @@ use Aws\AwsClient;
  *     }>,
  *     ...,
  * } $args = [])
+ * @method \Aws\Result batchGetDestinationEndpoint(array $args = [])
+ * @phpstan-method \Aws\Result batchGetDestinationEndpoint(array{Arns?: list<string>, ...} $args = [])
+ * @method \GuzzleHttp\Promise\Promise batchGetDestinationEndpointAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise batchGetDestinationEndpointAsync(array{Arns?: list<string>, ...} $args = [])
  * @method \Aws\Result batchGetRouterInput(array $args = [])
  * @phpstan-method \Aws\Result batchGetRouterInput(array{Arns?: list<string>, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise batchGetRouterInputAsync(array $args = [])
@@ -207,6 +213,14 @@ use Aws\AwsClient;
  * @phpstan-method \Aws\Result batchGetRouterOutput(array{Arns?: list<string>, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise batchGetRouterOutputAsync(array $args = [])
  * @phpstan-method \GuzzleHttp\Promise\Promise batchGetRouterOutputAsync(array{Arns?: list<string>, ...} $args = [])
+ * @method \Aws\Result batchGetSourceEndpoint(array $args = [])
+ * @phpstan-method \Aws\Result batchGetSourceEndpoint(array{Arns?: list<string>, ...} $args = [])
+ * @method \GuzzleHttp\Promise\Promise batchGetSourceEndpointAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise batchGetSourceEndpointAsync(array{Arns?: list<string>, ...} $args = [])
+ * @method \Aws\Result connectEndpoints(array $args = [])
+ * @phpstan-method \Aws\Result connectEndpoints(array{DestinationEndpointArn?: string, SourceEndpointArn?: string, ...} $args = [])
+ * @method \GuzzleHttp\Promise\Promise connectEndpointsAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise connectEndpointsAsync(array{DestinationEndpointArn?: string, SourceEndpointArn?: string, ...} $args = [])
  * @method \Aws\Result createBridge(array $args = [])
  * @phpstan-method \Aws\Result createBridge(array{
  *     EgressGatewayBridge?: array{MaxBitrate?: int, ...},
@@ -289,6 +303,7 @@ use Aws\AwsClient;
  *         RouterIntegrationState?: 'DISABLED'|'ENABLED',
  *         RouterIntegrationTransitEncryption?: array,
  *         NdiOutputTimecodeSource?: 'EMBEDDED_TIMECODE'|'UTC_SYSTEM_TIME',
+ *         NdiAudioReferenceLevel?: int,
  *         ...,
  *     }>,
  *     Source?: array{
@@ -322,7 +337,7 @@ use Aws\AwsClient;
  *         VpcInterfaceName?: string,
  *         WhitelistCidr?: string,
  *         GatewayBridgeSource?: array{BridgeArn?: string, VpcInterfaceAttachment?: array, ...},
- *         NdiSourceSettings?: array{SourceName?: string, ...},
+ *         NdiSourceSettings?: array{SourceName?: string, AudioReferenceLevel?: int, ...},
  *         SourceTags?: array<string, string>,
  *         RouterIntegrationState?: 'DISABLED'|'ENABLED',
  *         RouterIntegrationTransitDecryption?: array{EncryptionKeyType?: 'AUTOMATIC'|'SECRETS_MANAGER', EncryptionKeyConfiguration?: array, ...},
@@ -436,6 +451,7 @@ use Aws\AwsClient;
  *         RouterIntegrationState?: 'DISABLED'|'ENABLED',
  *         RouterIntegrationTransitEncryption?: array,
  *         NdiOutputTimecodeSource?: 'EMBEDDED_TIMECODE'|'UTC_SYSTEM_TIME',
+ *         NdiAudioReferenceLevel?: int,
  *         ...,
  *     }>,
  *     Source?: array{
@@ -469,7 +485,7 @@ use Aws\AwsClient;
  *         VpcInterfaceName?: string,
  *         WhitelistCidr?: string,
  *         GatewayBridgeSource?: array{BridgeArn?: string, VpcInterfaceAttachment?: array, ...},
- *         NdiSourceSettings?: array{SourceName?: string, ...},
+ *         NdiSourceSettings?: array{SourceName?: string, AudioReferenceLevel?: int, ...},
  *         SourceTags?: array<string, string>,
  *         RouterIntegrationState?: 'DISABLED'|'ENABLED',
  *         RouterIntegrationTransitDecryption?: array{EncryptionKeyType?: 'AUTOMATIC'|'SECRETS_MANAGER', EncryptionKeyConfiguration?: array, ...},
@@ -553,6 +569,12 @@ use Aws\AwsClient;
  * @phpstan-method \Aws\Result createRouterInput(array{
  *     Name?: string,
  *     Configuration?: array{
+ *         DestinationEndpoint?: array{
+ *             EndpointLifecycleManagement?: 'MANAGED'|'UNMANAGED',
+ *             SourceTransitDecryptionType?: 'AUTOMATIC'|'SECRETS_MANAGER',
+ *             SourceTransitDecryption?: array,
+ *             ...,
+ *         },
  *         Standard?: array{
  *             NetworkInterfaceArn?: string,
  *             ProtocolConfiguration?: array,
@@ -584,7 +606,7 @@ use Aws\AwsClient;
  *     },
  *     MaximumBitrate?: int,
  *     RoutingScope?: 'GLOBAL'|'REGIONAL',
- *     Tier?: 'INPUT_100'|'INPUT_20'|'INPUT_50',
+ *     Tier?: 'INPUT_100'|'INPUT_20'|'INPUT_250'|'INPUT_50'|'INPUT_500',
  *     RegionName?: string,
  *     AvailabilityZone?: string,
  *     TransitEncryption?: array{
@@ -606,6 +628,12 @@ use Aws\AwsClient;
  * @phpstan-method \GuzzleHttp\Promise\Promise createRouterInputAsync(array{
  *     Name?: string,
  *     Configuration?: array{
+ *         DestinationEndpoint?: array{
+ *             EndpointLifecycleManagement?: 'MANAGED'|'UNMANAGED',
+ *             SourceTransitDecryptionType?: 'AUTOMATIC'|'SECRETS_MANAGER',
+ *             SourceTransitDecryption?: array,
+ *             ...,
+ *         },
  *         Standard?: array{
  *             NetworkInterfaceArn?: string,
  *             ProtocolConfiguration?: array,
@@ -637,7 +665,7 @@ use Aws\AwsClient;
  *     },
  *     MaximumBitrate?: int,
  *     RoutingScope?: 'GLOBAL'|'REGIONAL',
- *     Tier?: 'INPUT_100'|'INPUT_20'|'INPUT_50',
+ *     Tier?: 'INPUT_100'|'INPUT_20'|'INPUT_250'|'INPUT_50'|'INPUT_500',
  *     RegionName?: string,
  *     AvailabilityZone?: string,
  *     TransitEncryption?: array{
@@ -688,7 +716,7 @@ use Aws\AwsClient;
  *         Standard?: array{
  *             NetworkInterfaceArn?: string,
  *             ProtocolConfiguration?: array,
- *             Protocol?: 'RIST'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
+ *             Protocol?: 'RIST'|'RTMP_PUSH'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
  *             ...,
  *         },
  *         MediaConnectFlow?: array{FlowArn?: string, FlowSourceArn?: string, DestinationTransitEncryption?: array, ...},
@@ -698,11 +726,17 @@ use Aws\AwsClient;
  *             DestinationTransitEncryption?: array,
  *             ...,
  *         },
+ *         SourceEndpoint?: array{
+ *             EndpointLifecycleManagement?: 'MANAGED'|'UNMANAGED',
+ *             DestinationTransitEncryptionType?: 'AUTOMATIC'|'SECRETS_MANAGER',
+ *             DestinationTransitEncryption?: array,
+ *             ...,
+ *         },
  *         ...,
  *     },
  *     MaximumBitrate?: int,
  *     RoutingScope?: 'GLOBAL'|'REGIONAL',
- *     Tier?: 'OUTPUT_100'|'OUTPUT_20'|'OUTPUT_50',
+ *     Tier?: 'OUTPUT_100'|'OUTPUT_20'|'OUTPUT_250'|'OUTPUT_50'|'OUTPUT_500',
  *     RegionName?: string,
  *     AvailabilityZone?: string,
  *     MaintenanceConfiguration?: array{
@@ -722,7 +756,7 @@ use Aws\AwsClient;
  *         Standard?: array{
  *             NetworkInterfaceArn?: string,
  *             ProtocolConfiguration?: array,
- *             Protocol?: 'RIST'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
+ *             Protocol?: 'RIST'|'RTMP_PUSH'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
  *             ...,
  *         },
  *         MediaConnectFlow?: array{FlowArn?: string, FlowSourceArn?: string, DestinationTransitEncryption?: array, ...},
@@ -732,11 +766,17 @@ use Aws\AwsClient;
  *             DestinationTransitEncryption?: array,
  *             ...,
  *         },
+ *         SourceEndpoint?: array{
+ *             EndpointLifecycleManagement?: 'MANAGED'|'UNMANAGED',
+ *             DestinationTransitEncryptionType?: 'AUTOMATIC'|'SECRETS_MANAGER',
+ *             DestinationTransitEncryption?: array,
+ *             ...,
+ *         },
  *         ...,
  *     },
  *     MaximumBitrate?: int,
  *     RoutingScope?: 'GLOBAL'|'REGIONAL',
- *     Tier?: 'OUTPUT_100'|'OUTPUT_20'|'OUTPUT_50',
+ *     Tier?: 'OUTPUT_100'|'OUTPUT_20'|'OUTPUT_250'|'OUTPUT_50'|'OUTPUT_500',
  *     RegionName?: string,
  *     AvailabilityZone?: string,
  *     MaintenanceConfiguration?: array{
@@ -773,10 +813,18 @@ use Aws\AwsClient;
  * @phpstan-method \Aws\Result deleteRouterOutput(array{Arn?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise deleteRouterOutputAsync(array $args = [])
  * @phpstan-method \GuzzleHttp\Promise\Promise deleteRouterOutputAsync(array{Arn?: string, ...} $args = [])
+ * @method \Aws\Result deregisterDestinationEndpoint(array $args = [])
+ * @phpstan-method \Aws\Result deregisterDestinationEndpoint(array{Arn?: string, ...} $args = [])
+ * @method \GuzzleHttp\Promise\Promise deregisterDestinationEndpointAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise deregisterDestinationEndpointAsync(array{Arn?: string, ...} $args = [])
  * @method \Aws\Result deregisterGatewayInstance(array $args = [])
  * @phpstan-method \Aws\Result deregisterGatewayInstance(array{Force?: bool, GatewayInstanceArn?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise deregisterGatewayInstanceAsync(array $args = [])
  * @phpstan-method \GuzzleHttp\Promise\Promise deregisterGatewayInstanceAsync(array{Force?: bool, GatewayInstanceArn?: string, ...} $args = [])
+ * @method \Aws\Result deregisterSourceEndpoint(array $args = [])
+ * @phpstan-method \Aws\Result deregisterSourceEndpoint(array{Arn?: string, ...} $args = [])
+ * @method \GuzzleHttp\Promise\Promise deregisterSourceEndpointAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise deregisterSourceEndpointAsync(array{Arn?: string, ...} $args = [])
  * @method \Aws\Result describeBridge(array $args = [])
  * @phpstan-method \Aws\Result describeBridge(array{BridgeArn?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise describeBridgeAsync(array $args = [])
@@ -809,6 +857,14 @@ use Aws\AwsClient;
  * @phpstan-method \Aws\Result describeReservation(array{ReservationArn?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise describeReservationAsync(array $args = [])
  * @phpstan-method \GuzzleHttp\Promise\Promise describeReservationAsync(array{ReservationArn?: string, ...} $args = [])
+ * @method \Aws\Result disconnectEndpoints(array $args = [])
+ * @phpstan-method \Aws\Result disconnectEndpoints(array{DestinationEndpointArn?: string, SourceEndpointArn?: string, ...} $args = [])
+ * @method \GuzzleHttp\Promise\Promise disconnectEndpointsAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise disconnectEndpointsAsync(array{DestinationEndpointArn?: string, SourceEndpointArn?: string, ...} $args = [])
+ * @method \Aws\Result getDestinationEndpoint(array $args = [])
+ * @phpstan-method \Aws\Result getDestinationEndpoint(array{Arn?: string, ...} $args = [])
+ * @method \GuzzleHttp\Promise\Promise getDestinationEndpointAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise getDestinationEndpointAsync(array{Arn?: string, ...} $args = [])
  * @method \Aws\Result getRouterInput(array $args = [])
  * @phpstan-method \Aws\Result getRouterInput(array{Arn?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise getRouterInputAsync(array $args = [])
@@ -829,6 +885,10 @@ use Aws\AwsClient;
  * @phpstan-method \Aws\Result getRouterOutput(array{Arn?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise getRouterOutputAsync(array $args = [])
  * @phpstan-method \GuzzleHttp\Promise\Promise getRouterOutputAsync(array{Arn?: string, ...} $args = [])
+ * @method \Aws\Result getSourceEndpoint(array $args = [])
+ * @phpstan-method \Aws\Result getSourceEndpoint(array{Arn?: string, ...} $args = [])
+ * @method \GuzzleHttp\Promise\Promise getSourceEndpointAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise getSourceEndpointAsync(array{Arn?: string, ...} $args = [])
  * @method \Aws\Result grantFlowEntitlements(array $args = [])
  * @phpstan-method \Aws\Result grantFlowEntitlements(array{
  *     Entitlements?: list<array{
@@ -863,6 +923,30 @@ use Aws\AwsClient;
  * @phpstan-method \Aws\Result listBridges(array{FilterArn?: string, MaxResults?: int, NextToken?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise listBridgesAsync(array $args = [])
  * @phpstan-method \GuzzleHttp\Promise\Promise listBridgesAsync(array{FilterArn?: string, MaxResults?: int, NextToken?: string, ...} $args = [])
+ * @method \Aws\Result listDestinationEndpoints(array $args = [])
+ * @phpstan-method \Aws\Result listDestinationEndpoints(array{
+ *     MaxResults?: int,
+ *     NextToken?: string,
+ *     Filters?: list<array{
+ *         RegionNames?: list<string>,
+ *         DestinationTypes?: list<'ROUTER_INPUT'|'STANDARD'>,
+ *         NameContains?: list<string>,
+ *         ...,
+ *     }>,
+ *     ...,
+ * } $args = [])
+ * @method \GuzzleHttp\Promise\Promise listDestinationEndpointsAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise listDestinationEndpointsAsync(array{
+ *     MaxResults?: int,
+ *     NextToken?: string,
+ *     Filters?: list<array{
+ *         RegionNames?: list<string>,
+ *         DestinationTypes?: list<'ROUTER_INPUT'|'STANDARD'>,
+ *         NameContains?: list<string>,
+ *         ...,
+ *     }>,
+ *     ...,
+ * } $args = [])
  * @method \Aws\Result listEntitlements(array $args = [])
  * @phpstan-method \Aws\Result listEntitlements(array{MaxResults?: int, NextToken?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise listEntitlementsAsync(array $args = [])
@@ -896,7 +980,7 @@ use Aws\AwsClient;
  *         RegionNames?: list<string>,
  *         NetworkInterfaceArns?: list<string>,
  *         RoutingScopes?: list<'GLOBAL'|'REGIONAL'>,
- *         InputTypes?: list<'FAILOVER'|'MEDIACONNECT_FLOW'|'MEDIALIVE_CHANNEL'|'MERGE'|'STANDARD'>,
+ *         InputTypes?: list<'DESTINATION_ENDPOINT'|'FAILOVER'|'MEDIACONNECT_FLOW'|'MEDIALIVE_CHANNEL'|'MERGE'|'STANDARD'>,
  *         ...,
  *     }>,
  *     ...,
@@ -910,7 +994,7 @@ use Aws\AwsClient;
  *         RegionNames?: list<string>,
  *         NetworkInterfaceArns?: list<string>,
  *         RoutingScopes?: list<'GLOBAL'|'REGIONAL'>,
- *         InputTypes?: list<'FAILOVER'|'MEDIACONNECT_FLOW'|'MEDIALIVE_CHANNEL'|'MERGE'|'STANDARD'>,
+ *         InputTypes?: list<'DESTINATION_ENDPOINT'|'FAILOVER'|'MEDIACONNECT_FLOW'|'MEDIALIVE_CHANNEL'|'MERGE'|'STANDARD'>,
  *         ...,
  *     }>,
  *     ...,
@@ -947,7 +1031,7 @@ use Aws\AwsClient;
  *         RegionNames?: list<string>,
  *         NetworkInterfaceArns?: list<string>,
  *         RoutingScopes?: list<'GLOBAL'|'REGIONAL'>,
- *         OutputTypes?: list<'MEDIACONNECT_FLOW'|'MEDIALIVE_INPUT'|'STANDARD'>,
+ *         OutputTypes?: list<'MEDIACONNECT_FLOW'|'MEDIALIVE_INPUT'|'SOURCE_ENDPOINT'|'STANDARD'>,
  *         RoutedInputArns?: list<string>,
  *         NameContains?: list<string>,
  *         ...,
@@ -962,8 +1046,32 @@ use Aws\AwsClient;
  *         RegionNames?: list<string>,
  *         NetworkInterfaceArns?: list<string>,
  *         RoutingScopes?: list<'GLOBAL'|'REGIONAL'>,
- *         OutputTypes?: list<'MEDIACONNECT_FLOW'|'MEDIALIVE_INPUT'|'STANDARD'>,
+ *         OutputTypes?: list<'MEDIACONNECT_FLOW'|'MEDIALIVE_INPUT'|'SOURCE_ENDPOINT'|'STANDARD'>,
  *         RoutedInputArns?: list<string>,
+ *         NameContains?: list<string>,
+ *         ...,
+ *     }>,
+ *     ...,
+ * } $args = [])
+ * @method \Aws\Result listSourceEndpoints(array $args = [])
+ * @phpstan-method \Aws\Result listSourceEndpoints(array{
+ *     MaxResults?: int,
+ *     NextToken?: string,
+ *     Filters?: list<array{
+ *         RegionNames?: list<string>,
+ *         SourceTypes?: list<'ROUTER_OUTPUT'|'STANDARD'>,
+ *         NameContains?: list<string>,
+ *         ...,
+ *     }>,
+ *     ...,
+ * } $args = [])
+ * @method \GuzzleHttp\Promise\Promise listSourceEndpointsAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise listSourceEndpointsAsync(array{
+ *     MaxResults?: int,
+ *     NextToken?: string,
+ *     Filters?: list<array{
+ *         RegionNames?: list<string>,
+ *         SourceTypes?: list<'ROUTER_OUTPUT'|'STANDARD'>,
  *         NameContains?: list<string>,
  *         ...,
  *     }>,
@@ -981,6 +1089,86 @@ use Aws\AwsClient;
  * @phpstan-method \Aws\Result purchaseOffering(array{OfferingArn?: string, ReservationName?: string, Start?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise purchaseOfferingAsync(array $args = [])
  * @phpstan-method \GuzzleHttp\Promise\Promise purchaseOfferingAsync(array{OfferingArn?: string, ReservationName?: string, Start?: string, ...} $args = [])
+ * @method \Aws\Result registerDestinationEndpoint(array $args = [])
+ * @phpstan-method \Aws\Result registerDestinationEndpoint(array{
+ *     Description?: string,
+ *     Configuration?: array{
+ *         Standard?: array{
+ *             Name?: string,
+ *             DestinationNetworkingConfiguration?: array,
+ *             ProtocolConfiguration?: array,
+ *             DestinationNetworkingType?: 'PUBLIC'|'VPC',
+ *             Protocol?: 'RIST'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
+ *             ...,
+ *         },
+ *         RouterInput?: array{RouterInputArn?: string, ...},
+ *         ...,
+ *     },
+ *     RegionName?: string,
+ *     Tags?: array<string, string>,
+ *     ClientToken?: string,
+ *     ...,
+ * } $args = [])
+ * @method \GuzzleHttp\Promise\Promise registerDestinationEndpointAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise registerDestinationEndpointAsync(array{
+ *     Description?: string,
+ *     Configuration?: array{
+ *         Standard?: array{
+ *             Name?: string,
+ *             DestinationNetworkingConfiguration?: array,
+ *             ProtocolConfiguration?: array,
+ *             DestinationNetworkingType?: 'PUBLIC'|'VPC',
+ *             Protocol?: 'RIST'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
+ *             ...,
+ *         },
+ *         RouterInput?: array{RouterInputArn?: string, ...},
+ *         ...,
+ *     },
+ *     RegionName?: string,
+ *     Tags?: array<string, string>,
+ *     ClientToken?: string,
+ *     ...,
+ * } $args = [])
+ * @method \Aws\Result registerSourceEndpoint(array $args = [])
+ * @phpstan-method \Aws\Result registerSourceEndpoint(array{
+ *     RegionName?: string,
+ *     Description?: string,
+ *     Configuration?: array{
+ *         Standard?: array{
+ *             Name?: string,
+ *             SourceNetworkingConfiguration?: array,
+ *             ProtocolConfiguration?: array,
+ *             SourceNetworkingType?: 'PUBLIC'|'VPC',
+ *             Protocol?: 'RIST'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
+ *             ...,
+ *         },
+ *         RouterOutput?: array{RouterOutputArn?: string, ...},
+ *         ...,
+ *     },
+ *     Tags?: array<string, string>,
+ *     ClientToken?: string,
+ *     ...,
+ * } $args = [])
+ * @method \GuzzleHttp\Promise\Promise registerSourceEndpointAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise registerSourceEndpointAsync(array{
+ *     RegionName?: string,
+ *     Description?: string,
+ *     Configuration?: array{
+ *         Standard?: array{
+ *             Name?: string,
+ *             SourceNetworkingConfiguration?: array,
+ *             ProtocolConfiguration?: array,
+ *             SourceNetworkingType?: 'PUBLIC'|'VPC',
+ *             Protocol?: 'RIST'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
+ *             ...,
+ *         },
+ *         RouterOutput?: array{RouterOutputArn?: string, ...},
+ *         ...,
+ *     },
+ *     Tags?: array<string, string>,
+ *     ClientToken?: string,
+ *     ...,
+ * } $args = [])
  * @method \Aws\Result removeBridgeOutput(array $args = [])
  * @phpstan-method \Aws\Result removeBridgeOutput(array{BridgeArn?: string, OutputName?: string, ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise removeBridgeOutputAsync(array $args = [])
@@ -1151,6 +1339,42 @@ use Aws\AwsClient;
  * @phpstan-method \Aws\Result updateBridgeState(array{BridgeArn?: string, DesiredState?: 'ACTIVE'|'DELETED'|'STANDBY', ...} $args = [])
  * @method \GuzzleHttp\Promise\Promise updateBridgeStateAsync(array $args = [])
  * @phpstan-method \GuzzleHttp\Promise\Promise updateBridgeStateAsync(array{BridgeArn?: string, DesiredState?: 'ACTIVE'|'DELETED'|'STANDBY', ...} $args = [])
+ * @method \Aws\Result updateDestinationEndpoint(array $args = [])
+ * @phpstan-method \Aws\Result updateDestinationEndpoint(array{
+ *     Arn?: string,
+ *     Description?: string,
+ *     Configuration?: array{
+ *         Standard?: array{
+ *             Name?: string,
+ *             DestinationNetworkingConfiguration?: array,
+ *             ProtocolConfiguration?: array,
+ *             DestinationNetworkingType?: 'PUBLIC'|'VPC',
+ *             Protocol?: 'RIST'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
+ *             ...,
+ *         },
+ *         RouterInput?: array{RouterInputArn?: string, ...},
+ *         ...,
+ *     },
+ *     ...,
+ * } $args = [])
+ * @method \GuzzleHttp\Promise\Promise updateDestinationEndpointAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise updateDestinationEndpointAsync(array{
+ *     Arn?: string,
+ *     Description?: string,
+ *     Configuration?: array{
+ *         Standard?: array{
+ *             Name?: string,
+ *             DestinationNetworkingConfiguration?: array,
+ *             ProtocolConfiguration?: array,
+ *             DestinationNetworkingType?: 'PUBLIC'|'VPC',
+ *             Protocol?: 'RIST'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
+ *             ...,
+ *         },
+ *         RouterInput?: array{RouterInputArn?: string, ...},
+ *         ...,
+ *     },
+ *     ...,
+ * } $args = [])
  * @method \Aws\Result updateFlow(array $args = [])
  * @phpstan-method \Aws\Result updateFlow(array{
  *     FlowArn?: string,
@@ -1343,6 +1567,7 @@ use Aws\AwsClient;
  *         ...,
  *     },
  *     NdiOutputTimecodeSource?: 'EMBEDDED_TIMECODE'|'UTC_SYSTEM_TIME',
+ *     NdiAudioReferenceLevel?: int,
  *     ...,
  * } $args = [])
  * @method \GuzzleHttp\Promise\Promise updateFlowOutputAsync(array $args = [])
@@ -1391,6 +1616,7 @@ use Aws\AwsClient;
  *         ...,
  *     },
  *     NdiOutputTimecodeSource?: 'EMBEDDED_TIMECODE'|'UTC_SYSTEM_TIME',
+ *     NdiAudioReferenceLevel?: int,
  *     ...,
  * } $args = [])
  * @method \Aws\Result updateFlowSource(array $args = [])
@@ -1431,7 +1657,7 @@ use Aws\AwsClient;
  *     VpcInterfaceName?: string,
  *     WhitelistCidr?: string,
  *     GatewayBridgeSource?: array{BridgeArn?: string, VpcInterfaceAttachment?: array{VpcInterfaceName?: string, ...}, ...},
- *     NdiSourceSettings?: array{SourceName?: string, ...},
+ *     NdiSourceSettings?: array{SourceName?: string, AudioReferenceLevel?: int, ...},
  *     RouterIntegrationState?: 'DISABLED'|'ENABLED',
  *     RouterIntegrationTransitDecryption?: array{
  *         EncryptionKeyType?: 'AUTOMATIC'|'SECRETS_MANAGER',
@@ -1478,7 +1704,7 @@ use Aws\AwsClient;
  *     VpcInterfaceName?: string,
  *     WhitelistCidr?: string,
  *     GatewayBridgeSource?: array{BridgeArn?: string, VpcInterfaceAttachment?: array{VpcInterfaceName?: string, ...}, ...},
- *     NdiSourceSettings?: array{SourceName?: string, ...},
+ *     NdiSourceSettings?: array{SourceName?: string, AudioReferenceLevel?: int, ...},
  *     RouterIntegrationState?: 'DISABLED'|'ENABLED',
  *     RouterIntegrationTransitDecryption?: array{
  *         EncryptionKeyType?: 'AUTOMATIC'|'SECRETS_MANAGER',
@@ -1496,6 +1722,12 @@ use Aws\AwsClient;
  *     Arn?: string,
  *     Name?: string,
  *     Configuration?: array{
+ *         DestinationEndpoint?: array{
+ *             EndpointLifecycleManagement?: 'MANAGED'|'UNMANAGED',
+ *             SourceTransitDecryptionType?: 'AUTOMATIC'|'SECRETS_MANAGER',
+ *             SourceTransitDecryption?: array,
+ *             ...,
+ *         },
  *         Standard?: array{
  *             NetworkInterfaceArn?: string,
  *             ProtocolConfiguration?: array,
@@ -1527,7 +1759,7 @@ use Aws\AwsClient;
  *     },
  *     MaximumBitrate?: int,
  *     RoutingScope?: 'GLOBAL'|'REGIONAL',
- *     Tier?: 'INPUT_100'|'INPUT_20'|'INPUT_50',
+ *     Tier?: 'INPUT_100'|'INPUT_20'|'INPUT_250'|'INPUT_50'|'INPUT_500',
  *     TransitEncryption?: array{
  *         EncryptionKeyType?: 'AUTOMATIC'|'SECRETS_MANAGER',
  *         EncryptionKeyConfiguration?: array{SecretsManager?: array, Automatic?: array, ...},
@@ -1546,6 +1778,12 @@ use Aws\AwsClient;
  *     Arn?: string,
  *     Name?: string,
  *     Configuration?: array{
+ *         DestinationEndpoint?: array{
+ *             EndpointLifecycleManagement?: 'MANAGED'|'UNMANAGED',
+ *             SourceTransitDecryptionType?: 'AUTOMATIC'|'SECRETS_MANAGER',
+ *             SourceTransitDecryption?: array,
+ *             ...,
+ *         },
  *         Standard?: array{
  *             NetworkInterfaceArn?: string,
  *             ProtocolConfiguration?: array,
@@ -1577,7 +1815,7 @@ use Aws\AwsClient;
  *     },
  *     MaximumBitrate?: int,
  *     RoutingScope?: 'GLOBAL'|'REGIONAL',
- *     Tier?: 'INPUT_100'|'INPUT_20'|'INPUT_50',
+ *     Tier?: 'INPUT_100'|'INPUT_20'|'INPUT_250'|'INPUT_50'|'INPUT_500',
  *     TransitEncryption?: array{
  *         EncryptionKeyType?: 'AUTOMATIC'|'SECRETS_MANAGER',
  *         EncryptionKeyConfiguration?: array{SecretsManager?: array, Automatic?: array, ...},
@@ -1621,7 +1859,7 @@ use Aws\AwsClient;
  *         Standard?: array{
  *             NetworkInterfaceArn?: string,
  *             ProtocolConfiguration?: array,
- *             Protocol?: 'RIST'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
+ *             Protocol?: 'RIST'|'RTMP_PUSH'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
  *             ...,
  *         },
  *         MediaConnectFlow?: array{FlowArn?: string, FlowSourceArn?: string, DestinationTransitEncryption?: array, ...},
@@ -1631,11 +1869,17 @@ use Aws\AwsClient;
  *             DestinationTransitEncryption?: array,
  *             ...,
  *         },
+ *         SourceEndpoint?: array{
+ *             EndpointLifecycleManagement?: 'MANAGED'|'UNMANAGED',
+ *             DestinationTransitEncryptionType?: 'AUTOMATIC'|'SECRETS_MANAGER',
+ *             DestinationTransitEncryption?: array,
+ *             ...,
+ *         },
  *         ...,
  *     },
  *     MaximumBitrate?: int,
  *     RoutingScope?: 'GLOBAL'|'REGIONAL',
- *     Tier?: 'OUTPUT_100'|'OUTPUT_20'|'OUTPUT_50',
+ *     Tier?: 'OUTPUT_100'|'OUTPUT_20'|'OUTPUT_250'|'OUTPUT_50'|'OUTPUT_500',
  *     MaintenanceConfiguration?: array{
  *         PreferredDayTime?: array{Day?: 'FRIDAY'|'MONDAY'|'SATURDAY'|'SUNDAY'|'THURSDAY'|'TUESDAY'|'WEDNESDAY', Time?: string, ...},
  *         Default?: array,
@@ -1652,7 +1896,7 @@ use Aws\AwsClient;
  *         Standard?: array{
  *             NetworkInterfaceArn?: string,
  *             ProtocolConfiguration?: array,
- *             Protocol?: 'RIST'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
+ *             Protocol?: 'RIST'|'RTMP_PUSH'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
  *             ...,
  *         },
  *         MediaConnectFlow?: array{FlowArn?: string, FlowSourceArn?: string, DestinationTransitEncryption?: array, ...},
@@ -1662,17 +1906,59 @@ use Aws\AwsClient;
  *             DestinationTransitEncryption?: array,
  *             ...,
  *         },
+ *         SourceEndpoint?: array{
+ *             EndpointLifecycleManagement?: 'MANAGED'|'UNMANAGED',
+ *             DestinationTransitEncryptionType?: 'AUTOMATIC'|'SECRETS_MANAGER',
+ *             DestinationTransitEncryption?: array,
+ *             ...,
+ *         },
  *         ...,
  *     },
  *     MaximumBitrate?: int,
  *     RoutingScope?: 'GLOBAL'|'REGIONAL',
- *     Tier?: 'OUTPUT_100'|'OUTPUT_20'|'OUTPUT_50',
+ *     Tier?: 'OUTPUT_100'|'OUTPUT_20'|'OUTPUT_250'|'OUTPUT_50'|'OUTPUT_500',
  *     MaintenanceConfiguration?: array{
  *         PreferredDayTime?: array{Day?: 'FRIDAY'|'MONDAY'|'SATURDAY'|'SUNDAY'|'THURSDAY'|'TUESDAY'|'WEDNESDAY', Time?: string, ...},
  *         Default?: array,
  *         ...,
  *     },
  *     FabricConfiguration?: array{RecoveryLatencyMode?: 'BALANCED'|'LOW_LATENCY', ...},
+ *     ...,
+ * } $args = [])
+ * @method \Aws\Result updateSourceEndpoint(array $args = [])
+ * @phpstan-method \Aws\Result updateSourceEndpoint(array{
+ *     Arn?: string,
+ *     Description?: string,
+ *     Configuration?: array{
+ *         Standard?: array{
+ *             Name?: string,
+ *             SourceNetworkingConfiguration?: array,
+ *             ProtocolConfiguration?: array,
+ *             SourceNetworkingType?: 'PUBLIC'|'VPC',
+ *             Protocol?: 'RIST'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
+ *             ...,
+ *         },
+ *         RouterOutput?: array{RouterOutputArn?: string, ...},
+ *         ...,
+ *     },
+ *     ...,
+ * } $args = [])
+ * @method \GuzzleHttp\Promise\Promise updateSourceEndpointAsync(array $args = [])
+ * @phpstan-method \GuzzleHttp\Promise\Promise updateSourceEndpointAsync(array{
+ *     Arn?: string,
+ *     Description?: string,
+ *     Configuration?: array{
+ *         Standard?: array{
+ *             Name?: string,
+ *             SourceNetworkingConfiguration?: array,
+ *             ProtocolConfiguration?: array,
+ *             SourceNetworkingType?: 'PUBLIC'|'VPC',
+ *             Protocol?: 'RIST'|'RTP'|'SRT_CALLER'|'SRT_LISTENER',
+ *             ...,
+ *         },
+ *         RouterOutput?: array{RouterOutputArn?: string, ...},
+ *         ...,
+ *     },
  *     ...,
  * } $args = [])
  */

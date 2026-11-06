@@ -30,11 +30,13 @@
         if (label) btn.setAttribute('aria-label', label.trim());
     }
 
+    function cssEscape(v) { return window.CSS && CSS.escape ? CSS.escape(v) : String(v).replace(/[\\"]/g, '\\$&'); }
+
     function humanise(s) { return (s || '').replace(/\[\]$/, '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').replace(/^\w/, function (c) { return c.toUpperCase(); }); }
 
     function nameField(el) {
         if (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || el.getAttribute('title')) return;
-        if (el.id && document.querySelector('label[for="' + el.id.replace(/"/g, '\\"') + '"]')) return;
+        if (el.id && document.querySelector('label[for="' + cssEscape(el.id) + '"]')) return;
         if (el.closest('label')) return;
         var label = '';
         if (el.classList.contains('bulk-select') || /^(select_?all|selectAll)/i.test(el.id || '')) {

@@ -176,7 +176,7 @@ use Aws\AwsClient;
  *     LaunchPath?: string,
  *     WorkingDirectory?: string,
  *     LaunchParameters?: string,
- *     Platforms?: list<'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025'>,
+ *     Platforms?: list<'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_11'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025'>,
  *     InstanceFamilies?: list<string>,
  *     AppBlockArn?: string,
  *     Tags?: array<string, string>,
@@ -191,7 +191,7 @@ use Aws\AwsClient;
  *     LaunchPath?: string,
  *     WorkingDirectory?: string,
  *     LaunchParameters?: string,
- *     Platforms?: list<'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025'>,
+ *     Platforms?: list<'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_11'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025'>,
  *     InstanceFamilies?: list<string>,
  *     AppBlockArn?: string,
  *     Tags?: array<string, string>,
@@ -276,7 +276,7 @@ use Aws\AwsClient;
  *     IdleDisconnectTimeoutInSeconds?: int,
  *     IamRoleArn?: string,
  *     StreamView?: 'APP'|'DESKTOP',
- *     Platform?: 'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025',
+ *     Platform?: 'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_11'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025',
  *     MaxConcurrentSessions?: int,
  *     UsbDeviceFilterStrings?: list<string>,
  *     SessionScriptS3Location?: array{S3Bucket?: string, S3Key?: string, ...},
@@ -304,7 +304,7 @@ use Aws\AwsClient;
  *     IdleDisconnectTimeoutInSeconds?: int,
  *     IamRoleArn?: string,
  *     StreamView?: 'APP'|'DESKTOP',
- *     Platform?: 'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025',
+ *     Platform?: 'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_11'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025',
  *     MaxConcurrentSessions?: int,
  *     UsbDeviceFilterStrings?: list<string>,
  *     SessionScriptS3Location?: array{S3Bucket?: string, S3Key?: string, ...},
@@ -442,6 +442,7 @@ use Aws\AwsClient;
  *         UserControlMode?: 'DISABLED'|'VIEW_ONLY'|'VIEW_STOP',
  *         ...,
  *     },
+ *     StorageConnectorAuthentication?: 'FORCE_REAUTHENTICATION'|'REUSE_CREDENTIALS',
  *     ...,
  * } $args = [])
  * @method \GuzzleHttp\Promise\Promise createStackAsync(array $args = [])
@@ -479,6 +480,7 @@ use Aws\AwsClient;
  *         UserControlMode?: 'DISABLED'|'VIEW_ONLY'|'VIEW_STOP',
  *         ...,
  *     },
+ *     StorageConnectorAuthentication?: 'FORCE_REAUTHENTICATION'|'REUSE_CREDENTIALS',
  *     ...,
  * } $args = [])
  * @method \Aws\Result createStreamingURL(array $args = [])
@@ -848,7 +850,7 @@ use Aws\AwsClient;
  *     Name?: string,
  *     Description?: string,
  *     DisplayName?: string,
- *     Platform?: 'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025',
+ *     Platform?: 'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_11'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025',
  *     InstanceType?: string,
  *     VpcConfig?: array{SubnetIds?: list<string>, SecurityGroupIds?: list<string>, ...},
  *     EnableDefaultInternetAccess?: bool,
@@ -863,7 +865,7 @@ use Aws\AwsClient;
  *     Name?: string,
  *     Description?: string,
  *     DisplayName?: string,
- *     Platform?: 'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025',
+ *     Platform?: 'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_11'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025',
  *     InstanceType?: string,
  *     VpcConfig?: array{SubnetIds?: list<string>, SecurityGroupIds?: list<string>, ...},
  *     EnableDefaultInternetAccess?: bool,
@@ -960,7 +962,7 @@ use Aws\AwsClient;
  *     AttributesToDelete?: list<'DOMAIN_JOIN_INFO'|'IAM_ROLE_ARN'|'MAX_SESSIONS_PER_INSTANCE'|'SESSION_SCRIPT_S3_LOCATION'|'USB_DEVICE_FILTER_STRINGS'|'VOLUME_CONFIGURATION'|'VPC_CONFIGURATION'|'VPC_CONFIGURATION_SECURITY_GROUP_IDS'>,
  *     IamRoleArn?: string,
  *     StreamView?: 'APP'|'DESKTOP',
- *     Platform?: 'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025',
+ *     Platform?: 'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_11'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025',
  *     MaxConcurrentSessions?: int,
  *     UsbDeviceFilterStrings?: list<string>,
  *     SessionScriptS3Location?: array{S3Bucket?: string, S3Key?: string, ...},
@@ -988,7 +990,7 @@ use Aws\AwsClient;
  *     AttributesToDelete?: list<'DOMAIN_JOIN_INFO'|'IAM_ROLE_ARN'|'MAX_SESSIONS_PER_INSTANCE'|'SESSION_SCRIPT_S3_LOCATION'|'USB_DEVICE_FILTER_STRINGS'|'VOLUME_CONFIGURATION'|'VPC_CONFIGURATION'|'VPC_CONFIGURATION_SECURITY_GROUP_IDS'>,
  *     IamRoleArn?: string,
  *     StreamView?: 'APP'|'DESKTOP',
- *     Platform?: 'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025',
+ *     Platform?: 'AMAZON_LINUX2'|'RHEL8'|'ROCKY_LINUX8'|'UBUNTU_PRO_2404'|'WINDOWS'|'WINDOWS_11'|'WINDOWS_SERVER_2016'|'WINDOWS_SERVER_2019'|'WINDOWS_SERVER_2022'|'WINDOWS_SERVER_2025',
  *     MaxConcurrentSessions?: int,
  *     UsbDeviceFilterStrings?: list<string>,
  *     SessionScriptS3Location?: array{S3Bucket?: string, S3Key?: string, ...},
@@ -1026,7 +1028,7 @@ use Aws\AwsClient;
  *     DeleteStorageConnectors?: bool,
  *     RedirectURL?: string,
  *     FeedbackURL?: string,
- *     AttributesToDelete?: list<'ACCESS_ENDPOINTS'|'AGENT_ACCESS_CONFIG'|'CONTENT_REDIRECTION'|'EMBED_HOST_DOMAINS'|'FEEDBACK_URL'|'IAM_ROLE_ARN'|'REDIRECT_URL'|'STORAGE_CONNECTORS'|'STORAGE_CONNECTOR_GOOGLE_DRIVE'|'STORAGE_CONNECTOR_HOMEFOLDERS'|'STORAGE_CONNECTOR_ONE_DRIVE'|'STREAMING_EXPERIENCE_SETTINGS'|'THEME_NAME'|'USER_SETTINGS'>,
+ *     AttributesToDelete?: list<'ACCESS_ENDPOINTS'|'AGENT_ACCESS_CONFIG'|'CONTENT_REDIRECTION'|'EMBED_HOST_DOMAINS'|'FEEDBACK_URL'|'IAM_ROLE_ARN'|'REDIRECT_URL'|'STORAGE_CONNECTORS'|'STORAGE_CONNECTOR_AUTHENTICATION'|'STORAGE_CONNECTOR_GOOGLE_DRIVE'|'STORAGE_CONNECTOR_HOMEFOLDERS'|'STORAGE_CONNECTOR_ONE_DRIVE'|'STREAMING_EXPERIENCE_SETTINGS'|'THEME_NAME'|'USER_SETTINGS'>,
  *     UserSettings?: list<array{
  *         Action?: 'AUTO_TIME_ZONE_REDIRECTION'|'CLIPBOARD_COPY_FROM_LOCAL_DEVICE'|'CLIPBOARD_COPY_TO_LOCAL_DEVICE'|'DOMAIN_PASSWORD_SIGNIN'|'DOMAIN_SMART_CARD_SIGNIN'|'FILE_DOWNLOAD'|'FILE_UPLOAD'|'PRINTING_TO_LOCAL_DEVICE',
  *         Permission?: 'DISABLED'|'ENABLED',
@@ -1047,6 +1049,7 @@ use Aws\AwsClient;
  *         UserControlMode?: 'DISABLED'|'VIEW_ONLY'|'VIEW_STOP',
  *         ...,
  *     },
+ *     StorageConnectorAuthentication?: 'FORCE_REAUTHENTICATION'|'REUSE_CREDENTIALS',
  *     ...,
  * } $args = [])
  * @method \GuzzleHttp\Promise\Promise updateStackAsync(array $args = [])
@@ -1064,7 +1067,7 @@ use Aws\AwsClient;
  *     DeleteStorageConnectors?: bool,
  *     RedirectURL?: string,
  *     FeedbackURL?: string,
- *     AttributesToDelete?: list<'ACCESS_ENDPOINTS'|'AGENT_ACCESS_CONFIG'|'CONTENT_REDIRECTION'|'EMBED_HOST_DOMAINS'|'FEEDBACK_URL'|'IAM_ROLE_ARN'|'REDIRECT_URL'|'STORAGE_CONNECTORS'|'STORAGE_CONNECTOR_GOOGLE_DRIVE'|'STORAGE_CONNECTOR_HOMEFOLDERS'|'STORAGE_CONNECTOR_ONE_DRIVE'|'STREAMING_EXPERIENCE_SETTINGS'|'THEME_NAME'|'USER_SETTINGS'>,
+ *     AttributesToDelete?: list<'ACCESS_ENDPOINTS'|'AGENT_ACCESS_CONFIG'|'CONTENT_REDIRECTION'|'EMBED_HOST_DOMAINS'|'FEEDBACK_URL'|'IAM_ROLE_ARN'|'REDIRECT_URL'|'STORAGE_CONNECTORS'|'STORAGE_CONNECTOR_AUTHENTICATION'|'STORAGE_CONNECTOR_GOOGLE_DRIVE'|'STORAGE_CONNECTOR_HOMEFOLDERS'|'STORAGE_CONNECTOR_ONE_DRIVE'|'STREAMING_EXPERIENCE_SETTINGS'|'THEME_NAME'|'USER_SETTINGS'>,
  *     UserSettings?: list<array{
  *         Action?: 'AUTO_TIME_ZONE_REDIRECTION'|'CLIPBOARD_COPY_FROM_LOCAL_DEVICE'|'CLIPBOARD_COPY_TO_LOCAL_DEVICE'|'DOMAIN_PASSWORD_SIGNIN'|'DOMAIN_SMART_CARD_SIGNIN'|'FILE_DOWNLOAD'|'FILE_UPLOAD'|'PRINTING_TO_LOCAL_DEVICE',
  *         Permission?: 'DISABLED'|'ENABLED',
@@ -1085,6 +1088,7 @@ use Aws\AwsClient;
  *         UserControlMode?: 'DISABLED'|'VIEW_ONLY'|'VIEW_STOP',
  *         ...,
  *     },
+ *     StorageConnectorAuthentication?: 'FORCE_REAUTHENTICATION'|'REUSE_CREDENTIALS',
  *     ...,
  * } $args = [])
  * @method \Aws\Result updateThemeForStack(array $args = [])

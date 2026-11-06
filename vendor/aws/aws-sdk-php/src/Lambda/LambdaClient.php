@@ -202,7 +202,7 @@ use Aws\Middleware;
  *     Topics?: list<string>,
  *     Queues?: list<string>,
  *     SourceAccessConfigurations?: list<array{
- *         Type?: 'BASIC_AUTH'|'CLIENT_CERTIFICATE_TLS_AUTH'|'SASL_SCRAM_256_AUTH'|'SASL_SCRAM_512_AUTH'|'SERVER_ROOT_CA_CERTIFICATE'|'VIRTUAL_HOST'|'VPC_SECURITY_GROUP'|'VPC_SUBNET',
+ *         Type?: 'BASIC_AUTH'|'CLIENT_CERTIFICATE_TLS_AUTH'|'IAM_AUTH'|'IAM_OAUTHBEARER_AUTH'|'OAUTHBEARER_AUDIENCE'|'OAUTHBEARER_AUTH'|'OAUTHBEARER_IDENTITY_POOL'|'OAUTHBEARER_LOGICAL_CLUSTER'|'OAUTHBEARER_SCOPE'|'SASL_SCRAM_256_AUTH'|'SASL_SCRAM_512_AUTH'|'SERVER_ROOT_CA_CERTIFICATE'|'VIRTUAL_HOST'|'VPC_SECURITY_GROUP'|'VPC_SUBNET',
  *         URI?: string,
  *         ...,
  *     }>,
@@ -228,6 +228,7 @@ use Aws\Middleware;
  *             SchemaValidationConfigs?: list<array>,
  *             ...,
  *         },
+ *         ConsumptionMode?: 'Queue'|'Stream',
  *         ...,
  *     },
  *     DocumentDBEventSourceConfig?: array{DatabaseName?: string, CollectionName?: string, FullDocument?: 'Default'|'UpdateLookup', ...},
@@ -258,7 +259,7 @@ use Aws\Middleware;
  *     Topics?: list<string>,
  *     Queues?: list<string>,
  *     SourceAccessConfigurations?: list<array{
- *         Type?: 'BASIC_AUTH'|'CLIENT_CERTIFICATE_TLS_AUTH'|'SASL_SCRAM_256_AUTH'|'SASL_SCRAM_512_AUTH'|'SERVER_ROOT_CA_CERTIFICATE'|'VIRTUAL_HOST'|'VPC_SECURITY_GROUP'|'VPC_SUBNET',
+ *         Type?: 'BASIC_AUTH'|'CLIENT_CERTIFICATE_TLS_AUTH'|'IAM_AUTH'|'IAM_OAUTHBEARER_AUTH'|'OAUTHBEARER_AUDIENCE'|'OAUTHBEARER_AUTH'|'OAUTHBEARER_IDENTITY_POOL'|'OAUTHBEARER_LOGICAL_CLUSTER'|'OAUTHBEARER_SCOPE'|'SASL_SCRAM_256_AUTH'|'SASL_SCRAM_512_AUTH'|'SERVER_ROOT_CA_CERTIFICATE'|'VIRTUAL_HOST'|'VPC_SECURITY_GROUP'|'VPC_SUBNET',
  *         URI?: string,
  *         ...,
  *     }>,
@@ -284,6 +285,7 @@ use Aws\Middleware;
  *             SchemaValidationConfigs?: list<array>,
  *             ...,
  *         },
+ *         ConsumptionMode?: 'Queue'|'Stream',
  *         ...,
  *     },
  *     DocumentDBEventSourceConfig?: array{DatabaseName?: string, CollectionName?: string, FullDocument?: 'Default'|'UpdateLookup', ...},
@@ -985,7 +987,7 @@ use Aws\Middleware;
  *     MaximumRetryAttempts?: int,
  *     TumblingWindowInSeconds?: int,
  *     SourceAccessConfigurations?: list<array{
- *         Type?: 'BASIC_AUTH'|'CLIENT_CERTIFICATE_TLS_AUTH'|'SASL_SCRAM_256_AUTH'|'SASL_SCRAM_512_AUTH'|'SERVER_ROOT_CA_CERTIFICATE'|'VIRTUAL_HOST'|'VPC_SECURITY_GROUP'|'VPC_SUBNET',
+ *         Type?: 'BASIC_AUTH'|'CLIENT_CERTIFICATE_TLS_AUTH'|'IAM_AUTH'|'IAM_OAUTHBEARER_AUTH'|'OAUTHBEARER_AUDIENCE'|'OAUTHBEARER_AUTH'|'OAUTHBEARER_IDENTITY_POOL'|'OAUTHBEARER_LOGICAL_CLUSTER'|'OAUTHBEARER_SCOPE'|'SASL_SCRAM_256_AUTH'|'SASL_SCRAM_512_AUTH'|'SERVER_ROOT_CA_CERTIFICATE'|'VIRTUAL_HOST'|'VPC_SECURITY_GROUP'|'VPC_SUBNET',
  *         URI?: string,
  *         ...,
  *     }>,
@@ -1010,6 +1012,7 @@ use Aws\Middleware;
  *             SchemaValidationConfigs?: list<array>,
  *             ...,
  *         },
+ *         ConsumptionMode?: 'Queue'|'Stream',
  *         ...,
  *     },
  *     DocumentDBEventSourceConfig?: array{DatabaseName?: string, CollectionName?: string, FullDocument?: 'Default'|'UpdateLookup', ...},
@@ -1035,7 +1038,7 @@ use Aws\Middleware;
  *     MaximumRetryAttempts?: int,
  *     TumblingWindowInSeconds?: int,
  *     SourceAccessConfigurations?: list<array{
- *         Type?: 'BASIC_AUTH'|'CLIENT_CERTIFICATE_TLS_AUTH'|'SASL_SCRAM_256_AUTH'|'SASL_SCRAM_512_AUTH'|'SERVER_ROOT_CA_CERTIFICATE'|'VIRTUAL_HOST'|'VPC_SECURITY_GROUP'|'VPC_SUBNET',
+ *         Type?: 'BASIC_AUTH'|'CLIENT_CERTIFICATE_TLS_AUTH'|'IAM_AUTH'|'IAM_OAUTHBEARER_AUTH'|'OAUTHBEARER_AUDIENCE'|'OAUTHBEARER_AUTH'|'OAUTHBEARER_IDENTITY_POOL'|'OAUTHBEARER_LOGICAL_CLUSTER'|'OAUTHBEARER_SCOPE'|'SASL_SCRAM_256_AUTH'|'SASL_SCRAM_512_AUTH'|'SERVER_ROOT_CA_CERTIFICATE'|'VIRTUAL_HOST'|'VPC_SECURITY_GROUP'|'VPC_SUBNET',
  *         URI?: string,
  *         ...,
  *     }>,
@@ -1060,6 +1063,7 @@ use Aws\Middleware;
  *             SchemaValidationConfigs?: list<array>,
  *             ...,
  *         },
+ *         ConsumptionMode?: 'Queue'|'Stream',
  *         ...,
  *     },
  *     DocumentDBEventSourceConfig?: array{DatabaseName?: string, CollectionName?: string, FullDocument?: 'Default'|'UpdateLookup', ...},
@@ -1246,13 +1250,19 @@ class LambdaClient extends AwsClient
     }
 
     /**
-     * Provides a middleware that sets default Curl options for the command
+     * Provides a middleware that sets default Curl options for the command.
+     * Streamed commands are skipped, as they are served by a stream handler
+     * that rejects Curl options.
      *
      * @return callable
      */
     public function getDefaultCurlOptionsMiddleware()
     {
         return Middleware::mapCommand(function (CommandInterface $cmd) {
+            if (!empty($cmd['@http']['stream'])) {
+                return $cmd;
+            }
+
             $defaultCurlOptions = [
                 CURLOPT_TCP_KEEPALIVE => 1,
             ];
