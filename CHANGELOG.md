@@ -4,6 +4,18 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.50] - 2026-11-06
+
+No database change (DB stays 2.6.136).
+
+### Fixed
+- **Notifications:** the hourly "Automatic backup was NOT taken" alert is now sent at most once per 24 hours instead of every cron run, so the bell no longer fills with duplicates. The "See all Notifications" button in the notifications modal is visible and readable again.
+- **Full UI sweep (client portal, agent portal, administration, RMM, billing, docs):** about a hundred layout, alignment, contrast, dark-mode, mobile-width and accessibility defects fixed across pages, modals and forms, plus several functional bugs found by clicking through every flow.
+- Administration > Settings: icons and rows in the settings directory line up and there is room above the footer; the Remote MCP entry uses a link icon.
+
+### Changed
+- The administration footer no longer links to the upstream ITFlow docs, forum and services sites; it shows the product name, version and a link to the in-app Docs (Knowledge Base).
+
 ## [26.10.49] - 2026-11-03
 
 ### Added
