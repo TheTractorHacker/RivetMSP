@@ -34,8 +34,7 @@ if (isset($_POST['add_quote'])) {
 
     // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.
     $company_currency_sql = mysqli_real_escape_string($mysqli, (string) $session_company_currency);
-    $quote_prefix_sql = mysqli_real_escape_string($mysqli, (string) $config_quote_prefix);
-    mysqli_query($mysqli,"INSERT INTO quotes SET quote_prefix = '$quote_prefix_sql', quote_number = $quote_number, quote_scope = '$scope', quote_date = '$date', quote_expire = '$expire', quote_currency_code = '$company_currency_sql', quote_category_id = $category, quote_status = 'Draft', quote_url_key = '$quote_url_key', quote_client_id = $client_id");
+    mysqli_query($mysqli,"INSERT INTO quotes SET quote_prefix = '$config_quote_prefix', quote_number = $quote_number, quote_scope = '$scope', quote_date = '$date', quote_expire = '$expire', quote_currency_code = '$company_currency_sql', quote_category_id = $category, quote_status = 'Draft', quote_url_key = '$quote_url_key', quote_client_id = $client_id");
 
     $quote_id = mysqli_insert_id($mysqli);
 
