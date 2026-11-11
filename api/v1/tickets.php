@@ -614,8 +614,19 @@ if ($method === 'POST' && $id === null) {
     $contract = isset($body['contract_id']) ? intval($body['contract_id']) : 0;
     $category = isset($body['category_id']) ? intval($body['category_id']) : 0;
     $hostname = mysqli_real_escape_string($mysqli, trim($body['hostname'] ?? ''));
+    $asset_in = isset($body['asset_id']) ? intval($body['asset_id']) : 0;
 
     if (!$subject) api_error(400, 'subject required');
+
+    // A ticket raised from an asset (mobile "Create ticket" on the asset page, or the asset picker on the form).
+    // The asset decides the client when none was sent, and must belong to the client when one was.
+    if ($asset_in) {
+        $asset_pick = mysqli_fetch_assoc(mysqli_query($mysqli,
+            "SELECT asset_client_id FROM assets WHERE asset_id = $asset_in AND asset_archived_at IS NULL LIMIT 1"));
+        if (!$asset_pick) api_error(400, 'asset_id not found');
+        if (!$client) $client = intval($asset_pick['asset_client_id']);
+        elseif ($client !== intval($asset_pick['asset_client_id'])) api_error(400, 'asset_id does not belong to client_id');
+    }
 
     // Unlike every other write path in this file, ticket creation has no existing
     // ticket_id to run the client-scope check (lines 14-22) against - check the
@@ -689,8 +700,8 @@ if ($method === 'POST' && $id === null) {
     $billable = ticketCategoryBillableForNewTicket($mysqli, $category, 0);
 
     // Auto-link to a matching asset for this client by hostname/asset name
-    $asset_id = 0;
-    if ($hostname && $client) {
+    $asset_id = $asset_in;
+    if (!$asset_id && $hostname && $client) {
         $asset_row = mysqli_fetch_assoc(mysqli_query($mysqli,
             "SELECT asset_id FROM assets WHERE asset_client_id = $client AND asset_archived_at IS NULL
              AND (asset_name = '$hostname' OR asset_tag = '$hostname') LIMIT 1"));
