@@ -15,8 +15,9 @@ if (clientSelectDropdown && clientSelectDropdown.disabled) {
 }
 
 // Listener for client selection. Populate select lists when a client is selected
-$(clientSelectDropdown).on('select2:select', function (e) {
-    let client_id = $(this).find(':selected').val();
+// Native 'change': the .select2 class is backed by TomSelect (js/app.js initSelect2Widgets), which fires a native change event, not select2:select.
+$(clientSelectDropdown).on('change', function (e) {
+    let client_id = $(this).val();
 
     // Update the contacts dropdown list
     populateLists(client_id);
@@ -27,6 +28,8 @@ $(clientSelectDropdown).on('select2:select', function (e) {
 //  Called the client select dropdown is used or if the client select is disabled
 function populateLists(client_id) {
 
+    if (!client_id) { return; }
+
     populateContactsDropdown(client_id);
 
     populateAssetsDropdown(client_id);
@@ -34,6 +37,25 @@ function populateLists(client_id) {
     populateLocationsDropdown(client_id);
 
     populateVendorsDropdown(client_id);
+}
+
+// Repopulates a dynamic <select>. TomSelect renders from its own option list, so changing the raw <select> options is invisible
+// once it has wrapped the element - go through its API when present.
+function refreshDynamicDropdown(selectEl, placeholderText, items) {
+    if (!selectEl) return;
+    if (selectEl.tomselect) {
+        const ts = selectEl.tomselect;
+        ts.clearOptions();
+        ts.addOption({ value: '0', text: placeholderText });
+        items.forEach(item => ts.addOption(item));
+        ts.refreshOptions(false);
+        ts.setValue('0', true);
+        return;
+    }
+    let i, L = selectEl.options.length - 1;
+    for (i = L; i >= 0; i--) { selectEl.remove(i); }
+    selectEl[selectEl.length] = new Option(placeholderText, '0');
+    items.forEach(item => { selectEl[selectEl.length] = new Option(item.text, item.value); });
 }
 
 // Populate client contacts
@@ -53,23 +75,12 @@ function populateContactsDropdown(client_id) {
             // Contacts dropdown
             const contactSelectDropdown = document.getElementById("contactSelect");
 
-            // Clear dropdown
-            let i, L = contactSelectDropdown.options.length - 1;
-            for (i = L; i >= 0; i--) {
-                contactSelectDropdown.remove(i);
-            }
-            contactSelectDropdown[contactSelectDropdown.length] = new Option('- Contact -', '0');
-
-            // Populate dropdown
-            contacts.forEach(contact => {
-                var appendText = "";
-                if (contact.contact_primary == "1") {
-                    appendText = " (Primary)";
-                } else if (contact.contact_technical == "1") {
-                    appendText = " (Technical)";
-                }
-                contactSelectDropdown[contactSelectDropdown.length] = new Option(contact.contact_name + appendText, contact.contact_id);
-            });
+            refreshDynamicDropdown(contactSelectDropdown, '- Contact -', contacts.map(contact => {
+                let appendText = "";
+                if (contact.contact_primary == "1") { appendText = " (Primary)"; }
+                else if (contact.contact_technical == "1") { appendText = " (Technical)"; }
+                return { value: contact.contact_id, text: contact.contact_name + appendText };
+            }));
 
         }
     );
@@ -91,22 +102,10 @@ function populateAssetsDropdown(client_id) {
             // Assets dropdown
             const assetSelectDropdown = document.getElementById("assetSelect");
 
-            // Clear dropdown
-            let i, L = assetSelectDropdown.options.length - 1;
-            for (i = L; i >= 0; i--) {
-                assetSelectDropdown.remove(i);
-            }
-            assetSelectDropdown[assetSelectDropdown.length] = new Option('- Asset -', '0');
-
-            // Populate dropdown with asset name (and contact, if set)
-            assets.forEach(asset => {
-                let displayText = asset.asset_name;
-                if (asset.contact_name !== null) {
-                    displayText = asset.asset_name + " - " + asset.contact_name;
-                }
-
-                assetSelectDropdown[assetSelectDropdown.length] = new Option(displayText, asset.asset_id);
-            });
+            refreshDynamicDropdown(assetSelectDropdown, '- Asset -', assets.map(asset => ({
+                value: asset.asset_id,
+                text: asset.contact_name !== null ? asset.asset_name + " - " + asset.contact_name : asset.asset_name
+            })));
 
         }
     );
@@ -128,17 +127,7 @@ function populateLocationsDropdown(client_id) {
             // Locations dropdown
             const locationSelectDropdown = document.getElementById("locationSelect");
 
-            // Clear dropdown
-            let i, L = locationSelectDropdown.options.length - 1;
-            for (i = L; i >= 0; i--) {
-                locationSelectDropdown.remove(i);
-            }
-            locationSelectDropdown[locationSelectDropdown.length] = new Option('- Location -', '0');
-
-            // Populate dropdown
-            locations.forEach(location => {
-                locationSelectDropdown[locationSelectDropdown.length] = new Option(location.location_name, location.location_id);
-            });
+            refreshDynamicDropdown(locationSelectDropdown, '- Location -', locations.map(l => ({ value: l.location_id, text: l.location_name })));
 
         }
     );
@@ -160,17 +149,7 @@ function populateVendorsDropdown(client_id) {
             // Locations dropdown
             const vendorSelectDropdown = document.getElementById("vendorSelect");
 
-            // Clear dropdown
-            let i, L = vendorSelectDropdown.options.length - 1;
-            for (i = L; i >= 0; i--) {
-                vendorSelectDropdown.remove(i);
-            }
-            vendorSelectDropdown[vendorSelectDropdown.length] = new Option('- Vendor -', '0');
-
-            // Populate dropdown
-            vendors.forEach(vendor => {
-                vendorSelectDropdown[vendorSelectDropdown.length] = new Option(vendor.vendor_name, vendor.vendor_id);
-            });
+            refreshDynamicDropdown(vendorSelectDropdown, '- Vendor -', vendors.map(v => ({ value: v.vendor_id, text: v.vendor_name })));
 
         }
     );
