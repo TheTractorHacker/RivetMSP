@@ -240,8 +240,13 @@ thead th > .form-check, thead td > .form-check { margin-bottom: 0; }
 :root[data-bs-theme="dark"] .btn-outline-primary:not(:hover) { color: #7aa7ff; }
 :root[data-bs-theme="dark"] .badge.bg-secondary { color: #0d1417 !important; }
 .badge.bg-warning { color: #000 !important; }
-/* Links inside running text, alerts and the breadcrumb are told apart from the text by more than colour. */
-.admin-breadcrumb a, .alert a:not(.btn), .card-body p a:not(.btn):not(.nav-link) { text-decoration: underline; }
+/* Links inside alerts are told apart from the text by more than colour; breadcrumbs and card text links follow the plain ITFlow look (no underline). */
+.alert a:not(.btn) { text-decoration: underline; }
+.admin-breadcrumb a, .card-body p a:not(.btn):not(.nav-link) { text-decoration: none; }
+.admin-breadcrumb a:hover, .card-body p a:not(.btn):not(.nav-link):hover { text-decoration: underline; }
+main .upd-page a:not(.btn):not(.alert-link), main .admin-breadcrumb a { text-decoration: none; }
+main .upd-page a:not(.btn):not(.alert-link):hover, main .admin-breadcrumb a:hover { text-decoration: underline; }
+main .upd-tile-value a { color: inherit; }
 :root[data-bs-theme="dark"] .admin-directory__add { color: #7aa7ff; }
 /* Phone: a scrolling table keeps its cells on one line instead of wrapping emails and role names letter by letter. */
 @media (max-width: 767.98px) {
