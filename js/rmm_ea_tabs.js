@@ -64,5 +64,8 @@
         if (h) { h.value = pane.id.slice(4); }
     }, true);
 
+    // Long hashes are shortened with an ellipsis by CSS; keep the full value on hover.
+    document.querySelectorAll('.ea-pane td.font-monospace.text-break').forEach(function (td) { if (!td.title) { td.title = td.textContent.trim(); } });
+
     fromHash(true);
 })();

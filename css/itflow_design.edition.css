@@ -365,3 +365,21 @@ body.dark-mode .btn-outline-primary:not(:hover):not(:focus):not(.active):not(:ac
 }
 /* <pre> blocks on a light/tertiary background (RMM build-host config, log tails, check output) took Tabler's near-white pre colour and were unreadable. */
 pre.bg-body-tertiary, pre.bg-body-secondary, pre.bg-light, pre.bg-body { color: var(--tblr-body-color, inherit); }
+
+/* Endpoint agent tabs (Administration > Endpoint agent): the cards were walls of 11px text and oversized table controls on a wide monitor. */
+.ea-pane .card-body { padding: 1.25rem 1.5rem; }
+.ea-pane .card-body > p.small, .ea-pane .card-body > .small.text-muted, .ea-pane .card-body > p.text-muted { font-size: .875rem; line-height: 1.65; max-width: 115ch; margin-bottom: 1rem; }
+.ea-pane .alert { font-size: .875rem; }
+.ea-pane .alert.small { font-size: .875rem; }
+.ea-pane .table { font-size: .875rem; }
+.ea-pane .table thead th { font-size: .72rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; color: var(--tblr-secondary-color, #6c7a89); }
+.ea-pane .table td.font-monospace.text-break { max-width: 13rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; word-break: normal !important; overflow-wrap: normal !important; font-size: .75rem; }
+.ea-pane .table td .btn, .ea-pane .table td form .btn { --tblr-btn-padding-y: .2rem; --tblr-btn-padding-x: .6rem; --tblr-btn-font-size: .8125rem; padding: .2rem .6rem; font-size: .8125rem; line-height: 1.4; }
+.ea-pane .table td .form-select, .ea-pane .table td .form-control { padding-top: .2rem; padding-bottom: .2rem; min-height: 0; height: auto; font-size: .8125rem; }
+.ea-pane .table td form.d-inline-flex, .ea-pane .table td form.d-flex { flex-wrap: nowrap; align-items: center; }
+.ea-pane .table td.text-end, .ea-pane .table td.text-nowrap { white-space: nowrap; }
+.btn-xs { padding: .15rem .55rem; font-size: .78rem; line-height: 1.4; }
+/* Status dot inside a badge (build hosts): small white dot, not a black blob. */
+.badge[data-lb-dot] { display: inline-flex; align-items: center; justify-content: center; width: 1.35rem; height: 1.35rem; padding: 0; }
+.badge[data-lb-dot] i { font-size: .5rem; color: #fff; }
+.badge.bg-warning[data-lb-dot] i { color: #000; }

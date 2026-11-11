@@ -346,56 +346,60 @@ foreach ($section_pages as $key => $pages) {
                         <span class="nav-link-title">Endpoints</span>
                     </a>
                     <div class="dropdown-menu<?php echo $section_open['endpoint'] ? ' show' : ''; ?>" id="nav-group-endpoints">
-                        <?php if ($config_module_enable_rmm) { ?>
-                        <a href="/agent/rmm_dashboard.php" class="dropdown-item<?php if ($current_page == 'rmm_dashboard.php') { echo ' active'; } ?>">
-                            <span class="dropdown-item-icon"><i class="fas fa-tachometer-alt"></i></span>
-                            <span class="text-truncate">RMM Dashboard</span>
-                        </a>
+                        <?php
+                        // Endpoints, grouped like RivetIT: every page stays reachable in two clicks (open the section, open the group). The group holding the
+                        // current page is open, the others remember their state in this browser (script below). Module / permission hiding is unchanged.
+                        $nav_ep = ['overview' => [], 'devices' => [], 'automation' => [], 'patching' => [], 'settings' => []];
+                        $nav_add = static function (string $g, string $href, string $label, string $icon, array $pages) use (&$nav_ep): void { $nav_ep[$g][] = [$href, $label, $icon, $pages]; };
+                        if ($config_module_enable_rmm) {
+                            $nav_add('overview', '/agent/rmm_dashboard.php', 'RMM Dashboard', 'fa-tachometer-alt', ['rmm_dashboard.php']);
+                        }
+                        if ($rmm_nav_agent) {
+                            $nav_add('overview', '/agent/rmm_fleet.php', 'Agent Fleet', 'fa-satellite', ['rmm_fleet.php']);
+                            if (!empty($session_is_admin)) { $nav_add('devices', '/agent/rmm_add_device.php', 'Add device', 'fa-plus-circle', ['rmm_add_device.php']); }
+                            $nav_group_of = ['policies' => 'automation', 'scripts' => 'automation', 'alerting' => 'automation', 'logs' => 'automation', 'patching' => 'patching', 'software' => 'patching', 'hypervisor' => 'devices'];
+                            foreach (rivetRmmAutoNav((int) $session_user_id) as $nav_auto) { // policies / scripts / alerting / patching / software / hypervisor sub-switches (state file; no query)
+                                $g = $nav_group_of[$nav_auto['group']] ?? 'automation';
+                                if ($nav_auto['href'] === '/agent/rmm_fields.php' || $nav_auto['href'] === '/agent/rmm_logs.php') { $g = 'settings'; }
+                                $nav_add($g, $nav_auto['href'], $nav_auto['label'], $nav_auto['icon'], $nav_auto['pages']);
+                            }
+                        }
+                        if ($config_module_enable_rmm) {
+                            $nav_add('devices', '/agent/rmm_assets.php', 'Assets', 'fa-desktop', ['rmm_assets.php', 'rmm_asset.php']);
+                            $nav_add('overview', '/agent/rmm_alerts.php', 'RMM Alerts', 'fa-bell', ['rmm_alerts.php']);
+                        }
+                        if ($config_module_enable_rmm || ($rmm_nav_agent && rivetRmmFeatureOn('scripts'))) { // ONE Scripts entry: the RivetCore library and what is synced from a vendor RMM are tabs of its page
+                            $nav_add('automation', '/agent/rmm_scripts.php', 'Scripts', 'fa-code', ['rmm_scripts.php', 'rmm_script_library.php', 'rmm_script_run.php']);
+                        }
+                        if ($config_module_enable_rmm) {
+                            $nav_add('automation', '/agent/rmm_checks.php', 'Check Policies', 'fa-heartbeat', ['rmm_checks.php']);
+                        }
+                        $nav_add('devices', '/agent/network.php', 'Network', 'fa-network-wired', ['network.php', 'firewalls.php']);
+                        $nav_titles = ['overview' => 'Overview', 'devices' => 'Devices', 'automation' => 'Automation', 'patching' => 'Patching & software', 'settings' => 'Settings & logs'];
+                        foreach ($nav_ep as $gk => $items) {
+                            if (!$items) { continue; }
+                            $g_active = false;
+                            foreach ($items as $it) { if (in_array($current_page, $it[3], true)) { $g_active = true; } }
+                            ?>
+                        <details class="nav-subgroup" data-nav-group="endpoint-<?php echo $gk; ?>"<?php echo ($g_active || $gk === 'overview') ? ' open' : ''; ?>>
+                            <summary class="nav-subgroup-title"><span><?php echo nullable_htmlentities($nav_titles[$gk]); ?></span><i class="fas fa-chevron-down nav-subgroup-chevron" aria-hidden="true"></i></summary>
+                            <?php foreach ($items as [$it_href, $it_label, $it_icon, $it_pages]) { ?>
+                            <a href="<?php echo nullable_htmlentities($it_href); ?>" class="dropdown-item<?php if (in_array($current_page, $it_pages, true)) { echo ' active'; } ?>"<?php echo $it_href === '/agent/rmm_add_device.php' ? ' data-nav-add-device' : ''; ?>>
+                                <span class="dropdown-item-icon"><i class="fas <?php echo nullable_htmlentities($it_icon); ?>"></i></span>
+                                <span class="text-truncate"><?php echo nullable_htmlentities($it_label); ?></span>
+                            </a>
+                            <?php } ?>
+                        </details>
                         <?php } ?>
-                        <?php if ($rmm_nav_agent) { ?>
-                        <a href="/agent/rmm_fleet.php" class="dropdown-item<?php if ($current_page == 'rmm_fleet.php') { echo ' active'; } ?>">
-                            <span class="dropdown-item-icon"><i class="fas fa-satellite"></i></span>
-                            <span class="text-truncate">Agent Fleet</span>
-                        </a>
-                        <?php if (!empty($session_is_admin)) { ?>
-                        <a href="/agent/rmm_add_device.php" class="dropdown-item<?php if ($current_page == 'rmm_add_device.php') { echo ' active'; } ?>" data-nav-add-device>
-                            <span class="dropdown-item-icon"><i class="fas fa-plus"></i></span>
-                            <span class="text-truncate">Add device</span>
-                        </a>
-                        <?php } ?>
-                        <?php foreach (rivetRmmAutoNav((int) $session_user_id) as $nav_auto) { // policies / scripts / alerting sub-switches (state file; no query) ?>
-                        <a href="<?php echo nullable_htmlentities($nav_auto['href']); ?>" class="dropdown-item<?php if (in_array($current_page, $nav_auto['pages'], true)) { echo ' active'; } ?>">
-                            <span class="dropdown-item-icon"><i class="fas <?php echo nullable_htmlentities($nav_auto['icon']); ?>"></i></span>
-                            <span class="text-truncate"><?php echo nullable_htmlentities($nav_auto['label']); ?></span>
-                        </a>
-                        <?php } ?>
-                        <?php } ?>
-                        <?php if ($config_module_enable_rmm) { ?>
-                        <a href="/agent/rmm_assets.php" class="dropdown-item<?php if (in_array($current_page, ['rmm_assets.php','rmm_asset.php'])) { echo ' active'; } ?>">
-                            <span class="dropdown-item-icon"><i class="fas fa-desktop"></i></span>
-                            <span class="text-truncate">Assets</span>
-                        </a>
-                        <a href="/agent/rmm_alerts.php" class="dropdown-item<?php if ($current_page == 'rmm_alerts.php') { echo ' active'; } ?>">
-                            <span class="dropdown-item-icon"><i class="fas fa-bell"></i></span>
-                            <span class="text-truncate">RMM Alerts</span>
-                        </a>
-                        <?php } ?>
-                        <?php if ($config_module_enable_rmm || ($rmm_nav_agent && rivetRmmFeatureOn('scripts'))) { // ONE Scripts entry: the RivetCore library and what is synced from a vendor RMM are tabs of its page ?>
-                        <a href="/agent/rmm_scripts.php" class="dropdown-item<?php if (in_array($current_page, ['rmm_scripts.php', 'rmm_script_library.php', 'rmm_script_run.php'], true)) { echo ' active'; } ?>">
-                            <span class="dropdown-item-icon"><i class="fas fa-code"></i></span>
-                            <span class="text-truncate">Scripts</span>
-                        </a>
-                        <?php } ?>
-                        <?php if ($config_module_enable_rmm) { ?>
-                        <a href="/agent/rmm_checks.php" class="dropdown-item<?php if ($current_page == 'rmm_checks.php') { echo ' active'; } ?>">
-                            <span class="dropdown-item-icon"><i class="fas fa-heartbeat"></i></span>
-                            <span class="text-truncate">Check Policies</span>
-                        </a>
-                        <?php } ?>
-                        <a href="/agent/network.php" class="dropdown-item<?php if (in_array($current_page, ['network.php','firewalls.php'])) { echo ' active'; } ?>">
-                            <span class="dropdown-item-icon"><i class="fas fa-network-wired"></i></span>
-                            <span class="text-truncate">Network</span>
-                        </a>
+                        <script nonce="<?php echo htmlspecialchars($csp_nonce ?? ''); ?>">
+                        (function () {
+                            document.querySelectorAll('details.nav-subgroup[data-nav-group]').forEach(function (d) {
+                                var k = 'rivetmsp.nav.' + d.getAttribute('data-nav-group');
+                                try { var v = localStorage.getItem(k); if (v === '1' && !d.hasAttribute('data-keep')) { d.open = true; } else if (v === '0' && !d.querySelector('.dropdown-item.active')) { d.open = false; } } catch (e) {}
+                                d.addEventListener('toggle', function () { try { localStorage.setItem(k, d.open ? '1' : '0'); } catch (e) {} });
+                            });
+                        })();
+                        </script>
                     </div>
                 </li>
                 <?php } ?>
