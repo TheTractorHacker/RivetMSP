@@ -111,6 +111,27 @@ function rivetRmmMeshWizardPage(array $cfg, ?array $view, array $steps, array $o
         $o .= '<div class="alert alert-warning py-2" role="status" data-wiz-module-off>The RMM module is switched off, so Remote cannot work yet. Switch it on under <a href="/admin/settings_endpoint_agent.php">Administration &gt; Endpoint agent</a> (the RMM module card).</div>';
     }
 
+    // ---- 0 (not a numbered step: help for someone who has no MeshCentral server yet)
+    $o .= '<details class="card mb-3" id="mesh-no-server" data-wiz-helper' . ($urlSaved ? '' : ' open') . '>'
+        . '<summary class="card-header fw-semibold" style="cursor:pointer"><i class="fas fa-life-ring me-2" aria-hidden="true"></i>Don\'t have a MeshCentral server yet? How to get one</summary>'
+        . '<div class="card-body small">'
+        . '<p class="mb-2">MeshCentral is free, open-source remote-desktop software. RivetMSP does not include or host it: you run your own server and RivetMSP opens it with one click. Get it from <a href="https://github.com/Ylianst/MeshCentral" target="_blank" rel="noopener noreferrer">github.com/Ylianst/MeshCentral</a> (documentation and downloads: <a href="https://meshcentral.com" target="_blank" rel="noopener noreferrer">meshcentral.com</a>).</p>'
+        . '<p class="fw-semibold mb-1">Before you start, you need</p>'
+        . '<ul class="mb-3"><li>A small server or container that your technicians <strong>and every device</strong> can reach over the internet or your VPN (it does not have to be the RivetMSP server).</li>'
+        . '<li>A DNS name for it, for example <code>mesh.example.com</code>, and a real HTTPS certificate (Let\'s Encrypt is fine). With a private certificate you pin it in step 3.</li>'
+        . '<li>Either way of installing it: the container image <code>ghcr.io/ylianst/meshcentral</code> (Docker), or <code>npm install meshcentral</code> on a machine with Node.js.</li></ul>'
+        . '<p class="fw-semibold mb-1">After it is running</p>'
+        . '<ol class="mb-3"><li>Open its address and create the first account. The first account becomes the administrator.</li>'
+        . '<li>Then turn off public sign-up in MeshCentral\'s <code>config.json</code> (<code>"newAccounts": false</code> under <code>domains</code>) so nobody else can register.</li>'
+        . '<li>Come back to step 1 below: paste its address and the login token key.</li></ol>'
+        . '<p class="fw-semibold mb-1">If MeshCentral sits behind a reverse proxy, CDN or firewall</p>'
+        . '<ul class="mb-3"><li>It must pass <strong>WebSockets</strong> through. If the proxy ends TLS, MeshCentral needs its <code>TLSOffload</code> setting (see its documentation).</li>'
+        . '<li>Do <strong>not</strong> put a CAPTCHA, bot challenge or login page in front of the paths devices use: <code>/agent.ashx</code>, <code>/meshrelay.ashx</code>, <code>/control.ashx</code>, <code>/meshagents</code>. A device cannot solve a challenge, so it would never connect.</li></ul>'
+        . '<p class="fw-semibold mb-1">Linux servers</p>'
+        . '<p class="mb-3">In step 2 choose <strong>Linux / BSD</strong> (not Windows) when you press <em>Add Agent</em> in MeshCentral, then copy the address as shown there. The RivetMSP agent and the Mesh agent are two separate programs on each device.</p>'
+        . '<p class="mb-0 text-muted">The same rule applies to RivetMSP itself: an edge CAPTCHA, bot gate or firewall in front of this site must not challenge <code>/api/v1/agent_*</code>, which the RivetMSP agent calls to enrol and check in.</p>'
+        . '</div></details>';
+
     // ---- 1
     $enabled = array_key_exists('enabled', $old) ? $old['enabled'] === '1' : ((int) ($cfg['mesh_enabled'] ?? 0) === 1 || !$urlSaved);
     $b1 = '<ol class="small mb-3"><li>Sign in to your MeshCentral server as its administrator and open a command line in the MeshCentral folder.</li>'
@@ -132,7 +153,7 @@ function rivetRmmMeshWizardPage(array $cfg, ?array $view, array $steps, array $o
     // ---- 2
     $group = array_key_exists('group', $old) ? $old['group'] : (string) (($view['mesh_group_id_url'] ?? '') !== '' ? $view['mesh_group_id_url'] : ($view['mesh_group_id'] ?? ''));
     $b2 = '<ol class="small mb-3"><li>In MeshCentral open <strong>My Devices</strong>, press <strong>Add Device Group</strong>, give it a name (for example "Acme laptops") and choose <strong>Manage using a software agent</strong>.</li>'
-        . '<li>Open the new group and press <strong>Add Agent</strong>. Choose <strong>Windows 64-bit</strong> (the installer).</li>'
+        . '<li>Open the new group and press <strong>Add Agent</strong>. Choose <strong>Windows 64-bit</strong> (the installer) for Windows PCs, or <strong>Linux / BSD</strong> for Linux servers.</li>'
         . '<li>Copy the download address MeshCentral shows (it looks like <code>https://mesh.example.com/meshagents?id=4&amp;meshid=...</code>) and paste the <strong>whole address</strong> below. RivetMSP picks out the group by itself.</li></ol>'
         . ($view === null ? '<div class="alert alert-secondary py-2 mb-0">Not available yet: run the database update (Administration, Updates), then reload this page.</div>'
         : '<form action="post.php" method="post" class="row g-3" autocomplete="off" id="wiz-form-2">' . $post()
@@ -165,7 +186,7 @@ function rivetRmmMeshWizardPage(array $cfg, ?array $view, array $steps, array $o
     $o .= rivetRmmMeshWizardStepCard($steps[3], $b4);
 
     // ---- 5
-    $b5 = '<ol class="small mb-3"><li>Run the installer on one test PC and wait a minute or two for it to check in.</li>'
+    $b5 = '<ol class="small mb-3"><li>Run the installer on one test device and wait a minute or two for it to check in.</li>'
         . '<li>Open the device from <a href="/agent/rmm_fleet.php">Agent fleet</a>. Its <em>Remote access</em> card shows the MeshCentral node it reported as <strong>Node not approved yet</strong>: check in MeshCentral that the node is this PC, then press <strong>Approve and map this node</strong>. The card then says <strong>MeshCentral node mapped</strong>.</li>'
         . '<li>Press <strong>Remote access</strong>. A new tab opens at MeshCentral on that device. Press MeshCentral\'s own <strong>Connect</strong> button once: MeshCentral never connects by itself.</li></ol>'
         . '<a href="/agent/rmm_fleet.php" class="btn btn-outline-primary"><i class="fas fa-satellite me-1" aria-hidden="true"></i>Open Agent fleet</a>';
