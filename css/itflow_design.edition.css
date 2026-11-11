@@ -363,3 +363,5 @@ body.dark-mode .btn-outline-primary:not(:hover):not(:focus):not(.active):not(:ac
     color: #7aa7ff;
     border-color: #7aa7ff;
 }
+/* <pre> blocks on a light/tertiary background (RMM build-host config, log tails, check output) took Tabler's near-white pre colour and were unreadable. */
+pre.bg-body-tertiary, pre.bg-body-secondary, pre.bg-light, pre.bg-body { color: var(--tblr-body-color, inherit); }
