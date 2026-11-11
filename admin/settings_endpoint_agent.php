@@ -89,7 +89,7 @@ $eaTab = static function (string $name) use (&$eaTabs, &$eaCur): void { $eaTabs[
         <span class="badge bg-<?= $cfg['enabled'] ? 'success' : 'secondary' ?> fs-6"><?= $cfg['enabled'] ? 'On' : 'Off' ?></span>
     </div>
     <div class="card-body">
-        <p class="text-muted mb-2">The built-in Windows agent reports inventory, health and checks, runs controlled maintenance jobs and links each endpoint to its asset. Remote access uses your MeshCentral server. Enrolling an agent is optional per device: Tactical RMM, Level, Action1 and Sophos links keep working beside it.</p>
+        <p class="text-muted mb-2">The built-in Windows and Linux agent reports inventory, health and checks, runs controlled maintenance jobs and links each endpoint to its asset. Remote access uses your MeshCentral server. Enrolling an agent is optional per device: Tactical RMM, Level, Action1 and Sophos links keep working beside it.</p>
         <div class="d-flex flex-wrap gap-3 small mb-0">
             <span><span class="badge bg-success">Online</span> checked in within <?= (int) $cfg['offline_after_s'] ?> s: <strong><?= $counts['online'] ?></strong></span>
             <span><span class="badge bg-danger">Offline</span> quiet for longer than that: <strong><?= $counts['offline'] ?></strong></span>
@@ -922,10 +922,10 @@ echo rivetAgentLinuxFilesCard($mysqli, (string) $csrf);
             $cands = $d['candidates']; ?>
         <div class="border rounded p-3 mb-3">
             <div class="d-flex justify-content-between flex-wrap">
-                <div><strong><?= $h($d['hostname']) ?></strong> <span class="text-muted small">device #<?= (int) $d['device_id'] ?>, serial <?= $h($d['serial'] ?: 'none reported') ?>, <?= $h($d['manufacturer']) ?> <?= $h($d['model']) ?>, <?= $h($clientName[(int) $d['client_id']] ?? '') ?></span></div>
+                <div><strong><?= $h($d['hostname']) ?></strong> <span class="text-muted small"><?= $h(implode(', ', array_filter(['device #' . (int) $d['device_id'], 'serial ' . ($d['serial'] ?: 'none reported'), trim((string) $d['manufacturer'] . ' ' . (string) $d['model']), (string) ($clientName[(int) $d['client_id']] ?? '')], static fn($x) => $x !== ''))) ?></span></div>
                 <span class="small text-muted">first seen <?= $h($dt($d['first_seen_at'])) ?></span>
             </div>
-            <p class="small mb-2 mt-1"><i class="fas fa-info-circle me-1"></i><?= $h($d['match_reason_text']) ?></p>
+            <?php if (trim((string) $d['match_reason_text']) !== '') { ?><p class="small mb-2 mt-1"><i class="fas fa-info-circle me-1"></i><?= $h($d['match_reason_text']) ?></p><?php } ?>
             <form action="post.php" method="post" class="row g-2 align-items-end">
                 <input type="hidden" name="csrf_token" value="<?= $csrf ?>"><input type="hidden" name="device_id" value="<?= (int) $d['device_id'] ?>">
                 <div class="col-lg-6"><label class="form-label small mb-0" for="pa_<?= (int) $d['device_id'] ?>">Link to asset</label>
@@ -947,7 +947,7 @@ echo rivetAgentLinuxFilesCard($mysqli, (string) $csrf);
 <?php $eaTab('overview'); ?>
 <div class="card mb-3" id="devices">
     <div class="card-header"><h4 class="card-title mb-0">Devices</h4></div>
-    <div class="table-responsive"><table class="table table-sm table-striped align-middle mb-0">
+    <div class="table-responsive"><table class="table table-sm table-striped align-middle mb-0 text-nowrap">
         <thead><tr><th>Device</th><th>Status</th><th>Last check-in</th><th>Agent</th><th>Asset</th><th>Ring</th><th></th></tr></thead><tbody>
         <?php foreach ($devices as $d) {
             $gone = $d['revoked'] || $d['retired']; ?>

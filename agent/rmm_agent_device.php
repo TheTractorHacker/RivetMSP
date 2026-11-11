@@ -68,7 +68,7 @@ $stateBadge = ['succeeded' => 'success', 'failed' => 'danger', 'timed_out' => 'w
 $ts = static fn($iso) => $iso ? htmlspecialchars(rivetRmmTime($iso, true, true, 'Y-m-d H:i:s', (string) $iso)) : '<span class="text-muted">never</span>';   // Core stores UTC; shown in company time
 ?>
 <div class="d-flex align-items-center flex-wrap gap-2 mb-3">
-    <h4 class="mb-0 me-auto"><i class="fab fa-windows me-2"></i><?= $h($dev['hostname']) ?>
+    <h4 class="mb-0 me-auto"><i class="<?= ($dev['os'] ?? '') === 'linux' ? 'fab fa-linux' : (($dev['os'] ?? '') === 'windows' ? 'fab fa-windows' : 'fas fa-desktop') ?> me-2"></i><?= $h($dev['hostname']) ?>
         <span class="badge bg-<?= $badge ?> ms-2"><?= ucfirst($st['state']) ?></span>
         <?php if ($dev['revoked_at'] !== null) { echo '<span class="badge bg-danger ms-1">Revoked</span>'; } ?>
         <?php if ($dev['retired_at'] !== null) { echo '<span class="badge bg-secondary ms-1">Retired</span>'; } ?>

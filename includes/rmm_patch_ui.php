@@ -502,7 +502,7 @@ function rivetRmmPatchCompliancePage(array $vm): string
     foreach ((array) ($d['groups'] ?? []) as $g) {
         $key = (int) $g['key'];
         $name = $g['name'] ?? ($vm['names'][$key] ?? null);
-        $rows .= '<tr><td class="ps-3">' . rmmH($name !== null && $name !== '' ? $name : $label . ' #' . $key) . '</td><td>' . (int) $g['devices'] . '</td><td>' . (int) $g['compliant'] . '</td><td>' . ((int) $g['noncompliant'] > 0 ? '<strong class="text-danger">' . (int) $g['noncompliant'] . '</strong>' : '0')
+        $rows .= '<tr><td class="ps-3 text-nowrap">' . rmmH($name !== null && $name !== '' ? $name : $label . ' #' . $key) . '</td><td>' . (int) $g['devices'] . '</td><td>' . (int) $g['compliant'] . '</td><td>' . ((int) $g['noncompliant'] > 0 ? '<strong class="text-danger">' . (int) $g['noncompliant'] . '</strong>' : '0')
             . '</td><td>' . (int) $g['never_scanned'] . '</td><td>' . (int) $g['stale'] . '</td><td>' . (int) $g['reboot_pending'] . '</td><td>' . (int) $g['failed_installs'] . '</td><td>' . (int) $g['missing_total'] . '</td></tr>';
     }
     $o .= rivetRmmUiCard('By ' . strtolower($label), 'layer-group', '<div class="table-responsive"><table class="table table-sm mb-0"><caption class="visually-hidden">Compliance by ' . rmmH(strtolower($label)) . '</caption>'

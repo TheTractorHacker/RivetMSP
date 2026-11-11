@@ -336,14 +336,7 @@ if (isset($_GET['asset_id'])) {
                         <?php endif; ?>
                         <div class="text-muted small mt-1">
                             <?php if ($rmm_link['os_name']):
-                                $rmm_os_lower = strtolower($rmm_link['os_name']);
-                                if (str_contains($rmm_os_lower, 'linux')) {
-                                    $rmm_os_icon = 'fa-linux';
-                                } elseif (str_contains($rmm_os_lower, 'mac') || str_contains($rmm_os_lower, 'darwin')) {
-                                    $rmm_os_icon = 'fa-apple';
-                                } else {
-                                    $rmm_os_icon = 'fa-windows';
-                                }
+                                $rmm_os_icon = osBrandIcon($rmm_link['os_name']);
                             ?><i class="fab <?= $rmm_os_icon ?> me-1"></i><?= nullable_htmlentities($rmm_link['os_name']) ?>&nbsp;<?php endif; ?>
                             <?php if ($rmm_link['logged_in_user']): ?>&bull;&nbsp;<i class="fas fa-user mx-1"></i><?= nullable_htmlentities($rmm_link['logged_in_user']) ?>&nbsp;<?php endif; ?>
                             <?php if ($rmm_link['last_seen']): ?>&bull;&nbsp;<i class="fas fa-clock mx-1"></i>Last seen <?= nullable_htmlentities(rivetRmmTime($rmm_link['last_seen'], false, true, 'Y-m-d H:i', (string) $rmm_link['last_seen'])) ?><?php endif; ?>
@@ -456,7 +449,7 @@ if (isset($_GET['asset_id'])) {
                             <div class="mt-2"><i class="fa fa-fw fa-circle text-secondary me-2"></i><?= "$asset_make $asset_model"; ?></div>
                         <?php }
                         if ($asset_os) { ?>
-                            <div class="mt-2"><i class="fab fa-fw fa-windows text-secondary me-2"></i><?= "$asset_os"; ?></div>
+                            <div class="mt-2"><i class="fab fa-fw <?= osBrandIcon($asset_os) ?> text-secondary me-2"></i><?= "$asset_os"; ?></div>
                         <?php }
                         if ($asset_serial) { ?>
                             <div class="mt-2"><i class="fa fa-fw fa-barcode text-secondary me-2"></i><?= $asset_serial; ?></div>
