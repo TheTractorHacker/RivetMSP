@@ -9,7 +9,8 @@ header("Content-Security-Policy: default-src 'self'");
 require_once "includes/inc_all.php";
 
 if ($session_contact_primary == 0 && !$session_contact_is_billing_contact) {
-    header("Location: post.php?logout");
+    flash_alert("You do not have access to that page.", 'danger');
+    header("Location: index.php");
     exit();
 }
 
@@ -63,7 +64,7 @@ $quotes_sql = mysqli_query($mysqli, "SELECT * FROM quotes WHERE quote_client_id 
                 }
 
                 if ($quote_status == "Sent") {
-                    $quote_badge_color = "warning text-white";
+                    $quote_badge_color = "warning text-dark";
                 } elseif ($quote_status == "Viewed") {
                     $quote_badge_color = "primary";
                 } elseif ($quote_status == "Accepted") {

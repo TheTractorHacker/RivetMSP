@@ -187,6 +187,7 @@ if (isset($_GET['query'])) {
 
     <div class="card-body">
 
+    <?php ob_start(); // buffer the result cards so a search with no hits can say so ?>
     <div class="row">
         <?php if (mysqli_num_rows($sql_clients) > 0) { ?>
 
@@ -1099,12 +1100,38 @@ if (isset($_GET['query'])) {
         <?php } ?>
 
     </div>
+    <?php $gs_results_html = ob_get_clean();
+    if (strpos($gs_results_html, 'col-sm-6') === false) { ?>
+        <div class="text-center text-secondary py-5">
+            <i class="fas fa-search fa-2x mb-3 d-block"></i>
+            <p class="mb-0">No results for <strong>&ldquo;<?php echo $q; ?>&rdquo;</strong>. Check the spelling or try a shorter search.</p>
+        </div>
+    <?php } else { echo $gs_results_html; } ?>
 
 </div>
 
 </div>
 
 <?php
+
+} else {
+
+    // No query yet (the phone header only links here): give the page its own search box.
+    ?>
+    <div class="card card-dark">
+        <div class="card-header mb-3">
+            <h4 class="card-title text-center"><i class="fas fa-fw fa-search me-2"></i>Global Search</h4>
+        </div>
+        <div class="card-body">
+            <form action="global_search.php" method="get" role="search">
+                <div class="input-group">
+                    <input type="search" class="form-control" name="query" placeholder="Search clients, contacts, tickets, assets, documents..." aria-label="Search everywhere" autofocus required>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-search me-2"></i>Search</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <?php
 
 }
 

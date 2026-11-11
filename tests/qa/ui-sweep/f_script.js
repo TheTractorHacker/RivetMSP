@@ -1,0 +1,12 @@
+const h = require('./h.js');
+(async () => { const b = await h.launch(); const c = await b.newContext({ viewport: { width: 1920, height: 1080 }, storageState:'/home/sysadmin/ui-sweep-rmm/shots/state.json' }); const p = await c.newPage();
+ const errs=[]; p.on('pageerror',e=>errs.push(String(e).slice(0,120))); p.on('console',m=>{if(m.type()==='error')errs.push(m.text().slice(0,120))});
+ const S=(n)=>p.screenshot({path:'/home/sysadmin/ui-sweep-rmm/shots/f_'+n+'.png', fullPage:false});
+ await p.goto(h.BASE+'/agent/rmm_scripts.php?tab=library&new=1');
+ console.log(await p.locator('#scr-editor [type=submit]').evaluateAll(e=>e.map(x=>x.innerText.trim()+':'+x.name+'='+x.value)));
+ await p.locator('#scr-editor [type=submit]').first().click(); await p.waitForTimeout(500);
+ console.log('empty ->', p.url().replace(h.BASE,''), await p.evaluate(()=>document.activeElement && document.activeElement.id+':'+document.activeElement.validationMessage)); await S('script_empty');
+ await p.fill('#scr_name','QA-UI-script one'); await p.fill('textarea[name=body]','echo "qa ui"').catch(async()=>{ await p.locator('textarea').first().fill('echo "qa ui"'); });
+ await p.locator('#scr-editor [type=submit]').first().click(); await p.waitForLoadState('networkidle'); await p.waitForTimeout(700);
+ console.log('saved ->', p.url().replace(h.BASE,''), (await p.locator('.alert,.toast').allInnerTexts()).join('|').slice(0,200)); await S('script_saved');
+ console.log(errs); await b.close(); })();

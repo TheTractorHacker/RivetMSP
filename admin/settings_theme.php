@@ -16,7 +16,6 @@ $theme_colors_array = array (
     'fuchsia',
     'yellow',
     'orange',
-    'yellow',
     'black',
     'navy',
     'gray'
@@ -33,7 +32,7 @@ $theme_colors_array = array (
             <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token'] ?>">
 
             <label>Select a Theme</label>
-            <div class="form-row">
+            <div class="d-flex flex-wrap gap-4 mt-2 mb-3">
 
                 <?php
 
@@ -41,17 +40,13 @@ $theme_colors_array = array (
 
                     ?>
 
-                    <div class="col-4 text-center mb-3">
-                        <div class="form-group">
-                            <div class="form-check form-check">
-                                <input class="form-check-input auto-submit-select" type="radio" id="customRadio<?php echo $theme_color; ?>" name="edit_theme_settings" value="<?php echo $theme_color; ?>" <?php if ($config_theme == $theme_color) { echo "checked"; } ?>>
-                                <label for="customRadio<?php echo $theme_color; ?>" class="form-check-label">
-                                    <i class="fa fa-fw fa-6x fa-circle text-<?php echo $theme_color; ?>"></i>
-                                    <br>
-                                    <?php echo $theme_color; ?>
-                                </label>
-                            </div>
-                        </div>
+                    <div class="form-check d-flex flex-column align-items-center p-0" style="width: 110px;">
+                        <input class="form-check-input auto-submit-select m-0 mb-1" type="radio" id="customRadio<?php echo $theme_color; ?>" name="edit_theme_settings" value="<?php echo $theme_color; ?>" <?php if ($config_theme == $theme_color) { echo "checked"; } ?>>
+                        <label for="customRadio<?php echo $theme_color; ?>" class="form-check-label text-center" style="cursor: pointer;">
+                            <i class="fa fa-fw fa-6x fa-circle text-<?php echo $theme_color; ?>"></i>
+                            <br>
+                            <?php echo $theme_color; ?>
+                        </label>
                     </div>
 
                 <?php } ?>
@@ -70,7 +65,7 @@ $theme_colors_array = array (
         <form action="post.php" method="post" enctype="multipart/form-data" autocomplete="off">
             <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token'] ?>">
 
-            <img class="mb-3" src="<?php if(file_exists("../uploads/favicon.ico")) { echo "../uploads/favicon.ico"; } else { echo "../favicon.ico"; } ?>">
+            <img class="mb-3" alt="Current favicon" src="<?php if(file_exists("../uploads/favicon.ico")) { echo "../uploads/favicon.ico"; } else { echo "../favicon.ico"; } ?>">
 
             <div class="form-group">
                 <input type="file" class="form-control-file" name="file" accept=".ico">

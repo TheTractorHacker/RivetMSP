@@ -379,7 +379,7 @@ if (isset($_GET['invoice_id'])) {
                 <div class="col-md-12">
                     <div class="card">
                         <div class="table-responsive">
-                            <table class="table table-hover mb-0" id="items">
+                            <table class="table table-hover mb-0 guest-items" id="items">
                                 <thead>
                                 <tr>
                                     <th class="d-print-none"></th>
@@ -483,7 +483,7 @@ if (isset($_GET['invoice_id'])) {
                                             </select>
                                         </td>
                                         <td class="text-center">
-                                            <button class="btn btn-secondary text-success" type="submit" name="add_invoice_item">
+                                            <button class="btn btn-secondary text-success" type="submit" name="add_invoice_item" aria-label="Add item to invoice" title="Add item">
                                                 <i class="fa fa-check"></i>
                                             </button>
                                         </td>
@@ -569,7 +569,7 @@ if (isset($_GET['invoice_id'])) {
             <div class="d-none d-print-block text-center text-secondary"><?php echo nl2br(nullable_htmlentities($config_invoice_footer)); ?></div>
         </div>
     </div>
-    <div class="row d-print-none mb-3">
+    <div class="row d-print-none mt-3 mb-3">
         <div class="col-sm">
             <div class="card">
                 <div class="card-header text-bold">

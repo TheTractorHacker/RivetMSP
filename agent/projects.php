@@ -232,16 +232,18 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                         </td>
                         <td>
                             <?php if($ticket_count) { ?>
-                            <div class="progress" style="height: 20px;">
-                                <i class="fa fas fa-fw fa-life-ring me-2"></i>
-                                <div class="progress-bar bg-primary" style="width: <?php echo $tickets_closed_percent; ?>%;"><?php echo $closed_ticket_count; ?> / <?php echo $ticket_count; ?></div>
-                            </div>
+                            <div class="progress-meter">
+<i class="fa fas fa-fw fa-life-ring text-secondary" aria-hidden="true"></i>
+<div class="progress" role="progressbar" aria-valuenow="<?php echo (int) $tickets_closed_percent; ?>" aria-valuemin="0" aria-valuemax="100" aria-label="Tickets closed"><div class="progress-bar bg-primary" style="width: <?php echo $tickets_closed_percent; ?>%;"></div></div>
+<span class="progress-label"><?php echo $closed_ticket_count; ?> / <?php echo $ticket_count; ?></span>
+</div>
                             <?php } else { echo "<div>-</div>"; } ?>
                             <?php if($task_count) { ?>
-                            <div class="progress mt-2" style="height: 20px;">
-                                <i class="fa fas fa-fw fa-tasks me-2"></i>
-                                <div class="progress-bar bg-secondary" style="width: <?php echo $tasks_completed_percent; ?>%;"><?php echo $completed_task_count; ?> / <?php echo $task_count; ?></div>
-                            </div>
+                            <div class="progress-meter mt-2">
+<i class="fa fas fa-fw fa-tasks text-secondary" aria-hidden="true"></i>
+<div class="progress" role="progressbar" aria-valuenow="<?php echo (int) $tasks_completed_percent; ?>" aria-valuemin="0" aria-valuemax="100" aria-label="Tasks completed"><div class="progress-bar bg-secondary" style="width: <?php echo $tasks_completed_percent; ?>%;"></div></div>
+<span class="progress-label"><?php echo $completed_task_count; ?> / <?php echo $task_count; ?></span>
+</div>
                             <?php } ?>
                         </td>
                         <td><?php echo $project_due; ?></td>
@@ -275,10 +277,10 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                             <a class="dropdown-item text-info confirm-link" href="post.php?restore_project=<?= $project_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                 <i class="fas fa-fw fa-redo me-2"></i>Restore
                                             </a>
-                                            <?php if (lookupUserPermission("module_support" >= 3)) { ?>
+                                            <?php if (lookupUserPermission("module_support") >= 3) { ?>
                                                 <div class="dropdown-divider"></div>
                                                 <a class="dropdown-item text-danger confirm-link" href="post.php?delete_project=<?= $project_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
-                                                    <i class="fas fa-fw fa-archive me-2"></i>Delete
+                                                    <i class="fas fa-fw fa-trash me-2"></i>Delete
                                                 </a>
                                             <?php } ?>
                                         <?php } ?>

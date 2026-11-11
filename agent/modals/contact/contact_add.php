@@ -117,7 +117,7 @@ ob_start();
                                 <div class="input-group-prepend">
                                     <span class="input-group-text"><i class="fa fa-fw fa-phone"></i></span>
                                 </div>
-                                <input type="tel" class="form-control col-2" name="phone_country_code" placeholder="+" maxlength="4">
+                                <input type="tel" class="form-control phone-country-code" name="phone_country_code" placeholder="+" maxlength="4">
                                 <input type="tel" class="form-control" name="phone" placeholder="Phone Number" maxlength="200">
                             </div>
                         </div>
@@ -137,8 +137,8 @@ ob_start();
                                 <div class="input-group-prepend">
                                     <span class="input-group-text"><i class="fa fa-fw fa-mobile-alt"></i></span>
                                 </div>
-                                <input type="tel" class="form-control col-2" name="mobile_country_code" placeholder="+" maxlength="4">
-                                <input type="tel" class="form-control" name="mobile" placeholder="Mobile Phone Number">
+                                <input type="tel" class="form-control phone-country-code" name="mobile_country_code" placeholder="+" maxlength="4">
+                                <input type="tel" class="form-control" name="mobile" placeholder="Mobile Number">
                             </div>
                         </div>
                     </div>

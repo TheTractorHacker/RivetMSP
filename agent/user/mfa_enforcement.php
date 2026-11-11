@@ -127,7 +127,7 @@ $data = "otpauth://totp/RivetMSP:$session_email?secret=$token";
                 <?php if (!empty($company_logo)) { ?>
                     <img alt="<?= nullable_htmlentities($company_name ?? $session_company_name) ?> logo" height="110" width="380" class="img-fluid" src="<?php echo "../../uploads/settings/$company_logo"; ?>">
                 <?php } else { ?>
-                    <span class="text-primary fw-bold"><i class="fas fa-paper-plane me-2"></i>IT</span>Flow
+                    <img src="<?= nullable_htmlentities(APP_LOGO_URL) ?>" alt="<?= nullable_htmlentities(APP_NAME) ?>" width="240" height="80" style="max-width:100%;height:auto;">
                 <?php } ?>
             </div>
 

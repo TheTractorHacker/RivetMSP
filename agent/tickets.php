@@ -224,16 +224,35 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
         .popover {
             max-width: 600px;
         }
+        /* Stat tiles.
+           Grid (not .row/.col) so every tile in a row shares one row height - the
+           old flex row let each tile size itself and the bottom edge came out
+           saw-toothed whenever a label wrapped. Column count is stepped by
+           breakpoint rather than auto-fit so the seven tiles never leave a hole. */
+        .ticket-stat-row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: .75rem;
+        }
+        @media (min-width: 576px) {
+            .ticket-stat-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        }
+        @media (min-width: 1200px) {
+            .ticket-stat-row { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+        }
         .ticket-stat-box {
             display: flex;
-            align-items: center;
-            gap: .75rem;
+            flex-direction: column;
+            justify-content: center;
+            gap: .3rem;
+            min-width: 0;
             text-align: left;
+            text-decoration: none;
             border-radius: var(--input-radius);
-            padding: .6rem .85rem;
+            padding: .6rem .7rem;
             background: var(--color-surface);
             border: 1px solid var(--color-border);
-            border-left: 4px solid var(--stat-color, var(--color-accent));
+            border-left: 3px solid var(--stat-color, var(--color-accent));
             color: var(--color-text);
             box-shadow: var(--card-shadow);
             transition: transform .1s ease-out, box-shadow .1s ease-out;
@@ -244,53 +263,146 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
             text-decoration: none;
             color: var(--color-text);
         }
+        /* Selected tile: a tint of its own hue plus a full-colour ring. A solid
+           fill could not carry legible text - white on the lighter stat hues
+           measured 3.1:1 - so the label stays ink on a light ground. */
         .ticket-stat-box.active {
-            background: var(--stat-color, var(--color-accent));
+            background: rgba(var(--stat-color-rgb, var(--color-accent-rgb)), .10);
             border-color: var(--stat-color, var(--color-accent));
-            color: #fff;
+            box-shadow: inset 0 0 0 1px var(--stat-color, var(--color-accent));
+            color: var(--color-text);
+        }
+        .ticket-stat-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .4rem;
+            min-width: 0;
         }
         .ticket-stat-box .ticket-stat-icon {
-            flex-shrink: 0;
+            flex: 0 0 auto;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 2.1rem;
-            height: 2.1rem;
+            width: 1.75rem;
+            height: 1.75rem;
             border-radius: 50%;
-            font-size: 1rem;
+            font-size: .8rem;
             background: rgba(var(--stat-color-rgb, var(--color-accent-rgb)), .12);
             color: var(--stat-color, var(--color-accent));
         }
         .ticket-stat-box.active .ticket-stat-icon {
-            background: rgba(255,255,255,.2);
-            color: #fff;
+            background: rgba(var(--stat-color-rgb, var(--color-accent-rgb)), .22);
+            color: var(--stat-color, var(--color-accent));
         }
         .ticket-stat-box .ticket-stat-value {
-            font-size: 1.3rem;
+            font-size: 1.25rem;
             font-weight: 700;
-            display: block;
-            line-height: 1.15;
+            line-height: 1;
+            text-align: right;
+            min-width: 0;
         }
         .ticket-stat-box .ticket-stat-label {
+            display: block;
+            min-width: 0;
             font-size: .75rem;
+            line-height: 1.25;
             text-transform: uppercase;
-            letter-spacing: .03em;
+            letter-spacing: .04em;
+            overflow-wrap: break-word;
             color: var(--color-text-muted);
         }
         .ticket-stat-box.active .ticket-stat-label {
-            color: rgba(255,255,255,.85);
+            color: var(--color-text);
+            font-weight: 600;
         }
+        /* Open/Closed counts in the card header. Selected is the filled chip;
+           the old markup had that backwards (and its --tblr-light fill vanished
+           against the card in dark mode). */
+        /* Status, priority, board and assignee pills in the list stay on one line instead of breaking mid-word ("Ope n") */
+        .table .badge.rounded-pill { white-space: nowrap; }
+        .table-tight td.ticket-subject-cell { min-width: 8rem; }
+        .ticket-count-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: .3rem;
+            font-size: .75rem;
+            font-weight: 500;
+            line-height: 1.2;
+            padding: .22rem .6rem;
+            border: 1px solid var(--color-border);
+            border-radius: 999px;
+            background: var(--color-surface);
+            color: var(--color-text-muted);
+            text-decoration: none;
+        }
+        .ticket-count-pill:hover {
+            color: var(--color-text);
+            border-color: var(--color-text-muted);
+            text-decoration: none;
+        }
+        .ticket-count-pill.active {
+            background: var(--color-text);
+            border-color: var(--color-text);
+            color: var(--color-surface);
+        }
+        .ticket-views-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem;
+            padding: .5rem .75rem;
+        }
+        .ticket-views-header .card-title {
+            min-width: 0;
+            font-size: .8rem;
+            font-weight: 600;
+        }
+        .ticket-views-header .btn-add-view {
+            flex: 0 0 auto;
+            width: 2rem;
+            height: 2rem;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        /* Saved views: a flex row per item so a wrapped label keeps its own
+           column and the icon stays a fixed-width cell on the first line
+           instead of being flex-shrunk into the gutter. */
         .ticket-saved-views .nav-link {
+            display: flex;
+            align-items: flex-start;
+            gap: .5rem;
             color: inherit;
-            border-radius: .25rem;
-            padding: .4rem .6rem;
+            border-radius: var(--input-radius);
+            padding: .35rem .5rem;
+            line-height: 1.35;
+        }
+        .ticket-saved-views .nav-link > i {
+            flex: 0 0 1.05rem;
+            width: 1.05rem;
+            text-align: center;
+            line-height: 1.35;
+            opacity: .75;
+        }
+        .ticket-saved-views .nav-link > span {
+            min-width: 0;
+            overflow-wrap: break-word;
         }
         .ticket-saved-views .nav-link.active {
-            background: var(--accent, #2563eb);
-            color: #fff;
+            background: var(--color-accent-soft);
+            color: var(--color-text);
+            font-weight: 600;
+            box-shadow: inset 3px 0 0 var(--color-accent);
         }
-        .ticket-saved-views .nav-link:hover {
-            background: rgba(0,0,0,.15);
+        .ticket-saved-views .nav-link.active > i {
+            color: var(--color-accent);
+            opacity: 1;
+        }
+        .ticket-saved-views .nav-link:hover:not(.active) {
+            background: var(--color-accent-soft);
+            color: var(--color-text);
         }
         .ticket-saved-views .saved-view-actions {
             opacity: 0;
@@ -298,7 +410,16 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
         .ticket-saved-views .nav-item:hover .saved-view-actions {
             opacity: 1;
         }
-        .table-tight td, .table-tight th {
+        .ticket-views-group-label {
+            margin: .85rem .5rem .35rem;
+            font-size: .75rem;
+            font-weight: 600;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            color: var(--color-text-muted);
+        }
+        .table-tight td, .table-tight th,
+        .table.table-tight > :not(caption) > * > * {
             padding: .35rem .5rem;
         }
     </style>
@@ -306,9 +427,9 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
         <?php if (!$client_url) { ?>
         <div class="col-lg-2 tvf-views-col mb-3">
             <div class="card card-dark h-100">
-                <div class="card-header py-2 d-flex align-items-center justify-content-between">
-                    <h3 class="card-title mt-0 mb-0"><i class="fa fa-fw fa-thumbtack me-2"></i>Ticket Views</h3>
-                    <button type="button" class="btn btn-sm btn-outline-secondary ajax-modal" title="Save current view"
+                <div class="card-header ticket-views-header">
+                    <h3 class="card-title mt-0 mb-0">Ticket Views</h3>
+                    <button type="button" class="btn btn-sm btn-outline-secondary btn-add-view ajax-modal" title="Save current view"
                         data-modal-url="modals/ticket/ticket_saved_view_add.php?<?= htmlspecialchars(http_build_query($_GET)) ?>">
                         <i class="fas fa-plus"></i>
                     </button>
@@ -377,7 +498,7 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
                         mysqli_data_seek($sql_boards_filter, 0);
                     ?>
                     <hr>
-                    <h6 class="text-secondary text-uppercase" style="font-size:.7rem;">Boards</h6>
+                    <div class="ticket-views-group-label">Boards</div>
                     <ul class="nav nav-pills flex-column">
                         <?php while ($_board = mysqli_fetch_assoc($sql_boards_filter)) {
                             $_board_id = intval($_board['category_id']);
@@ -397,7 +518,7 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
         <?php } ?>
         <div class="<?= $client_url ? 'col-12' : 'col-lg-10 tvf-main-col' ?>">
 
-    <div class="row g-3 mb-3">
+    <div class="ticket-stat-row mb-3">
         <?php
         $_stats = [
             ['label' => 'All Tickets',  'value' => $total_tickets_all,           'href' => '?' . $client_url . 'status=All',                              'icon' => 'fa-list', 'color' => '#475569', 'rgb' => '71,85,105'],
@@ -410,15 +531,13 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
         ];
         foreach ($_stats as $_stat) {
         ?>
-        <div class="col-6 col-md-4 col-xl">
-            <a class="ticket-stat-box <?= !empty($_stat['active']) ? 'active' : '' ?>" href="<?= $_stat['href'] ?>" style="--stat-color: <?= $_stat['color'] ?>; --stat-color-rgb: <?= $_stat['rgb'] ?>;">
+        <a class="ticket-stat-box <?= !empty($_stat['active']) ? 'active' : '' ?>" href="<?= $_stat['href'] ?>" style="--stat-color: <?= $_stat['color'] ?>; --stat-color-rgb: <?= $_stat['rgb'] ?>;">
+            <span class="ticket-stat-head">
                 <span class="ticket-stat-icon"><i class="fas fa-fw <?= $_stat['icon'] ?>"></i></span>
-                <span>
-                    <span class="ticket-stat-value"><?= $_stat['value'] ?></span>
-                    <span class="ticket-stat-label"><?= $_stat['label'] ?></span>
-                </span>
-            </a>
-        </div>
+                <span class="ticket-stat-value"><?= $_stat['value'] ?></span>
+            </span>
+            <span class="ticket-stat-label"><?= $_stat['label'] ?></span>
+        </a>
         <?php } ?>
     </div>
 
@@ -426,8 +545,8 @@ $sql_ticket_tags_filter = mysqli_query($mysqli, "SELECT * FROM tags WHERE tag_ty
         <div class="card-header py-2">
             <h3 class="card-title mt-2"><i class="fa fa-fw fa-life-ring me-2"></i>Tickets
                 <small class="ms-3">
-                    <a href="?<?= $client_url ?>status=Open" class="badge rounded-pill p-1 <?= $status == 'Open' ? 'text-bg-light text-dark' : 'text-bg-secondary text-light' ?>"><strong><?= $total_tickets_open ?></strong> Open</a> |
-                    <a href="?<?= $client_url ?>status=Closed" class="badge rounded-pill p-1 <?= $status == 'Closed' ? 'text-bg-light text-dark' : 'text-bg-secondary text-light' ?>"><strong><?= $total_tickets_closed ?></strong> Closed</a>
+                    <a href="?<?= $client_url ?>status=Open" class="ticket-count-pill <?= $status == 'Open' ? 'active' : '' ?>"><strong><?= $total_tickets_open ?></strong> Open</a>
+                    <a href="?<?= $client_url ?>status=Closed" class="ticket-count-pill <?= $status == 'Closed' ? 'active' : '' ?>"><strong><?= $total_tickets_closed ?></strong> Closed</a>
                 </small>
             </h3>
             <?php if (lookupUserPermission("module_support") >= 2) { ?>

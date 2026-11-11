@@ -25,7 +25,7 @@ if (isset($_POST['add_payment'])) {
     $currency_code = sanitizeInput($_POST['currency_code']);
     $payment_method = sanitizeInput($_POST['payment_method']);
     $reference = sanitizeInput($_POST['reference']);
-    $email_receipt = intval($_POST['email_receipt']);
+    $email_receipt = intval($_POST['email_receipt'] ?? 0);
 
     $client_id = intval(getFieldById('invoices', $invoice_id, 'invoice_client_id'));
 
@@ -282,7 +282,7 @@ if (isset($_POST['edit_payment'])) {
 
     logAction("Payment", "Edit", "Payment edited amount of " . numfmt_format_currency($currency_format, $amount, $session_company_currency), $client_id, $invoice_id);
 
-    flash_alert("Payment edited to amount <strong>" . numfmt_format_currency($currency_format, $amount, $session_company_currency) . "</strong> added");
+    flash_alert("Payment edited: amount is now <strong>" . numfmt_format_currency($currency_format, $amount, $session_company_currency) . "</strong>");
 
     redirect();
 
@@ -671,7 +671,7 @@ if (isset($_GET['add_payment_stripe'])) {
     $stripe_pm = sanitizeInput($stripe_client_details['stripe_pm']);
 
     // Sanity checks
-    if (!$config_stripe_enable || !$stripe_id || !$stripe_pm) {
+    if (empty($config_stripe_enable) || !$stripe_id || !$stripe_pm) {
         flash_alert("Stripe not enabled or no client card saved", 'error');
         redirect();
     } elseif ($invoice_status !== 'Sent' && $invoice_status !== 'Viewed') {
@@ -818,7 +818,7 @@ if (isset($_POST['add_bulk_payment'])) {
     $currency_code = sanitizeInput($_POST['currency_code']);
     $payment_method = sanitizeInput($_POST['payment_method']);
     $reference = sanitizeInput($_POST['reference']);
-    $email_receipt = intval($_POST['email_receipt']);
+    $email_receipt = intval($_POST['email_receipt'] ?? 0);
     $email_body_invoices = '';
     $applied_payment_ids = [];
     $alert_message = '';
@@ -1003,6 +1003,10 @@ if (isset($_GET['delete_payment'])) {
     //Determine if invoice has been paid
     // (compared in cents, never float ==)
     $invoice_status = (moneyToCents($invoice_balance) <= 0) ? "Paid" : "Partial";
+    // Nothing left paid after this deletion: the invoice is simply outstanding again, not "Partial"
+    if (moneyToCents($total_payments_amount - $deleted_payment_amount) <= 0) {
+        $invoice_status = (moneyToCents($invoice_balance) <= 0) ? "Paid" : "Sent";
+    }
 
     //Update Invoice Status
     mysqli_query($mysqli,"UPDATE invoices SET invoice_status = '$invoice_status' WHERE invoice_id = $invoice_id");
@@ -1015,7 +1019,7 @@ if (isset($_GET['delete_payment'])) {
     logAction("Invoice", "Edit", "$session_name deleted Payment on Invoice $invoice_prefix$invoice_number", $client_id, $invoice_id);
 
     flash_alert("Payment deleted", 'error');
-    if ($config_stripe_enable) {
+    if (!empty($config_stripe_enable)) {
        flash_alert("Payment deleted - Stripe payments must be manually refunded in Stripe", 'error');
     }
 
@@ -1055,7 +1059,7 @@ if (isset($_POST['export_payments_csv'])) {
         $f = fopen('php://memory', 'w');
 
         //set column headers
-        $fields = array('Payment Date', 'Invoice Date', 'Invoice Number', 'Invoice Amount', 'Payment Amount', 'Payment Method', 'Referrence');
+        $fields = array('Payment Date', 'Invoice Date', 'Invoice Number', 'Invoice Amount', 'Payment Amount', 'Payment Method', 'Reference');
         fputcsv($f, $fields, $delimiter, $enclosure, $escape);
 
         //output each row of the data, format line as csv and write to file pointer

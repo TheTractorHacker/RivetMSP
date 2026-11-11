@@ -446,7 +446,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="rmm_integrationModalTitle">Add RMM Integration</h5>
-                    <button type="button" class="close" data-bs-dismiss="modal">&times;</button>
+                    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">&times;</button>
                 </div>
                 <form action="post.php" method="post">
                     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
@@ -915,7 +915,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="fw_modalTitle">Add Sophos Central Connection</h5>
-                    <button type="button" class="close" data-bs-dismiss="modal">&times;</button>
+                    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">&times;</button>
                 </div>
                 <form action="post.php" method="post">
                     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
@@ -1261,7 +1261,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="unifi_integrationModalTitle">Add UniFi Connection</h5>
-                    <button type="button" class="close" data-bs-dismiss="modal">&times;</button>
+                    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">&times;</button>
                 </div>
                 <form action="post.php" method="post">
                     <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
@@ -1357,7 +1357,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
             <div class="modal-content">
                 <div class="modal-header py-2">
                     <h5 class="modal-title"><i class="fas fa-bug me-2"></i><span id="unifi_inspectTitle">Raw API Response</span></h5>
-                    <button type="button" class="close" data-bs-dismiss="modal">&times;</button>
+                    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">&times;</button>
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-2" id="unifi_inspectDesc"></p>
@@ -1376,7 +1376,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Site &rarr; Client Mapping <span id="unifi_siteMappingIntgName" class="text-muted"></span></h5>
-                    <button type="button" class="close" data-bs-dismiss="modal">&times;</button>
+                    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">&times;</button>
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small">

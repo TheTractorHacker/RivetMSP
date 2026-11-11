@@ -7,7 +7,7 @@ ob_start();
 ?>
 
 <div class="modal-header bg-dark">
-    <h5 class="modal-title"><i class="fa fa-fw fa-download me-2"></i>Exporting Expenses to CSV</h5>
+    <h5 class="modal-title"><i class="fa fa-fw fa-download me-2"></i>Export Expenses to CSV</h5>
     <button type="button" class="close text-white" data-bs-dismiss="modal">
         <span>&times;</span>
     </button>

@@ -493,6 +493,10 @@ if (isset($_POST['edit_ticket_priority'])) {
 
     customAction('ticket_update', $ticket_id);
 
+    flash_alert("Priority updated from <strong>$original_priority</strong> to <strong>$priority</strong>");
+
+    redirect();
+
 }
 
 if (isset($_POST['edit_ticket_delivery_method'])) {
@@ -525,9 +529,7 @@ if (isset($_POST['edit_ticket_delivery_method'])) {
 
     logAction("Ticket", "Edit", "$session_name set delivery method to " . ($delivery_method ?? 'Not set') . " for ticket $ticket_id", $client_id, $ticket_id);
 
-    redirect();
-
-    flash_alert("Priority updated from <strong>$original_priority</strong> to <strong>$priority</strong>");
+    flash_alert("Delivery method updated to <strong>" . nullable_htmlentities($delivery_method ?? 'Not set') . "</strong>");
 
     redirect();
 
@@ -2545,7 +2547,9 @@ if (isset($_POST['add_ticket_reply'])) {
         }
 
     } else {
+        // No reply text: nothing to log as a reply ($ticket_prefix/$ticket_number/$ticket_subject are only set when one was posted)
         flash_alert("Ticket updated");
+        redirect();
     }
 
     if ($ticket_reply_type == 'Labor') {

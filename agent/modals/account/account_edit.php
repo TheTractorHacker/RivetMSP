@@ -15,7 +15,7 @@ ob_start();
 ?>
 
 <div class="modal-header bg-dark">
-    <h5 class="modal-title"><i class="fa fa-fw fa-piggy-bank me-2"></i>Editing account: <strong><?php echo $account_name; ?></strong></h5>
+    <h5 class="modal-title"><i class="fa fa-fw fa-piggy-bank me-2"></i>Editing Account: <strong><?php echo $account_name; ?></strong></h5>
     <button type="button" class="close text-light" data-bs-dismiss="modal">
         <span>&times;</span>
     </button>

@@ -453,6 +453,8 @@ while ($row = mysqli_fetch_assoc($sql)) {
         });
 
         calendar.render();
+        // prev/next chevrons are decorative <span role=img> inside labelled buttons
+        calendarEl.querySelectorAll('.fc-icon[role="img"]').forEach(function (i) { i.setAttribute('aria-hidden', 'true'); i.removeAttribute('role'); });
     });
 </script>
 

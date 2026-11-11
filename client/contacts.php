@@ -9,7 +9,8 @@ header("Content-Security-Policy: default-src 'self'");
 require_once "includes/inc_all.php";
 
 if ($session_contact_primary == 0 && !$session_contact_is_technical_contact) {
-    header("Location: post.php?logout");
+    flash_alert("You do not have access to that page.", 'danger');
+    header("Location: index.php");
     exit();
 }
 
@@ -20,7 +21,7 @@ $contacts_sql = mysqli_query($mysqli, "SELECT contact_id, contact_name, contact_
         <div class="col">
             <h3><i class="fas fa-fw fa-address-book me-2"></i>Contacts</h3>
         </div>
-        <div class="col offset-6 text-end">
+        <div class="col-auto">
             <a href="contact_add.php" class="btn btn-primary" role="button"><i class="fas fa-plus me-2"></i>New Contact</a>
         </div>
     </div>
@@ -60,7 +61,7 @@ $contacts_sql = mysqli_query($mysqli, "SELECT contact_id, contact_name, contact_
                     if ($contact_primary) {
                         $contact_roles_display = 'Primary contact';
                     } else if ($contact_technical && $contact_billing) {
-                        $contact_roles_display = 'Technical & Billing';
+                        $contact_roles_display = 'Technical &amp; Billing';
                     } else if ($contact_technical) {
                         $contact_roles_display = 'Technical';
                     } else if ($contact_billing) {
@@ -72,7 +73,7 @@ $contacts_sql = mysqli_query($mysqli, "SELECT contact_id, contact_name, contact_
                     <tr>
                         <td><a href="contact_edit.php?id=<?php echo $contact_id?>"><?php echo $contact_name ?></a></td>
                         <td><?php echo $contact_email; ?></td>
-                        <td><span class="badge text-bg-secondary"><?php echo $contact_roles_display ?></span></td>
+                        <td><?php if ($contact_roles_display === '-') { ?><span class="text-muted">-</span><?php } else { ?><span class="badge text-bg-secondary"><?php echo $contact_roles_display ?></span><?php } ?></td>
                     </tr>
 
                 <?php } ?>

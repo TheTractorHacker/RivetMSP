@@ -103,12 +103,12 @@ $priority_colors = [
             <label class="mb-0 me-1" for="reportDateRange-btn">Date range</label>
             <?php dateRangePickerField($date_range, 'canned_date', ['hide_groups' => ['Upcoming'], 'id' => 'reportDateRange']); ?>
             <label class="mb-0 ms-2 me-1" for="reportMaintenance">Maintenance (RMM) tickets</label>
-            <select class="form-select form-select-sm w-auto" name="maintenance" id="reportMaintenance">
+            <select class="form-select w-auto" style="min-width:8.5rem" name="maintenance" id="reportMaintenance">
                 <?php foreach (['include' => 'Include', 'exclude' => 'Exclude', 'only' => 'Only these'] as $mv => $ml) { ?>
                 <option value="<?= $mv ?>" <?= $report_maintenance === $mv ? 'selected' : '' ?>><?= $ml ?></option>
                 <?php } ?>
             </select>
-            <button type="submit" class="btn btn-sm btn-outline-secondary">Apply</button>
+            <button type="submit" class="btn btn-outline-secondary">Apply</button>
         </form>
 
         <div class="px-3 pb-2">
@@ -198,7 +198,7 @@ $priority_colors = [
 
         <!-- SLA compliance detail -->
         <div class="px-3">
-            <div class="table-responsive-sm">
+            <div class="table-responsive">
                 <table class="table table-striped">
                     <thead>
                         <tr>
@@ -229,7 +229,7 @@ $priority_colors = [
         <!-- Avg response / resolution by priority -->
         <div class="px-3">
             <h6 class="mt-2"><i class="fas fa-exclamation-circle me-2"></i>Avg Response &amp; Resolution by Priority</h6>
-            <div class="table-responsive-sm">
+            <div class="table-responsive">
                 <table class="table table-striped">
                     <thead>
                         <tr>
@@ -261,7 +261,7 @@ $priority_colors = [
         <!-- Per-technician workload -->
         <div class="px-3 pb-3">
             <h6 class="mt-2"><i class="fas fa-user-cog me-2"></i>Technician Workload</h6>
-            <div class="table-responsive-sm">
+            <div class="table-responsive">
                 <table class="table table-striped">
                     <thead>
                         <tr>

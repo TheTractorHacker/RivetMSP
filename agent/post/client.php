@@ -258,7 +258,7 @@ if (isset($_POST['add_client'])) {
 
     logAction("Client", "Create", "$session_name created client $name$extended_log_description", $client_id, $client_id);
 
-    flash_alert("Client <strong>$name</strong> created");
+    flash_alert(($lead ? "Lead" : "Client") . " <strong>$name</strong> created");
 
     redirect();
 

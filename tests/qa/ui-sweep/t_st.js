@@ -1,0 +1,10 @@
+const L=require('./lib.js');
+(async()=>{const b=await L.launch();const ctx=await L.ctxFor(b,'admin',{width:1920,height:1080});const p=await ctx.newPage();const log=[];L.watch(p,log);
+await p.goto(L.BASE+'/agent/ticket.php?client_id=6&ticket_id=48',{waitUntil:'networkidle'});
+await p.click('text=New >> nth=1').catch(()=>{});
+await p.evaluate(()=>window.openAjaxModal('modals/ticket/ticket_status.php?id=48','md',{}));await p.waitForSelector('.modal.show form');await p.waitForTimeout(600);
+console.log(await p.evaluate(()=>[...document.querySelectorAll('.modal.show select')].map(s=>s.name+':'+[...s.options].map(o=>o.textContent.trim()).join('|'))));
+console.log(await L.setSel(p,'.modal.show','status','Open'));
+await p.screenshot({path:L.SCR+'/img/tst_modal.png'});
+await p.click('.modal.show button[type=submit]');await p.waitForLoadState('networkidle');await p.waitForTimeout(800);
+console.log(await p.evaluate(()=>document.body.innerText.match(/Ticket#[^\n]*\n[^\n]*/)?.[0]),log.join(';'));await b.close()})();

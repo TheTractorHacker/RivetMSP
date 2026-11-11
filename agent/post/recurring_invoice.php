@@ -132,7 +132,12 @@ if (isset($_POST['edit_recurring_invoice'])) {
     $category = intval($_POST['category']);
     $scope = sanitizeInput($_POST['scope']);
     $status = intval($_POST['status']);
-    $recurring_invoice_discount = floatval($_POST['recurring_invoice_discount']);
+    $recurring_invoice_discount = round(floatval($_POST['recurring_invoice_discount']), 2);
+    // A negative discount would inflate the total
+    if ($recurring_invoice_discount < 0) {
+        flash_alert("Discount can not be negative", 'error');
+        redirect();
+    }
 
     // Get Recurring Invoice Details and Client ID for Logging
     $sql = mysqli_query($mysqli,"SELECT recurring_invoice_prefix, recurring_invoice_number, recurring_invoice_client_id FROM recurring_invoices WHERE recurring_invoice_id = $recurring_invoice_id");
@@ -154,7 +159,11 @@ if (isset($_POST['edit_recurring_invoice'])) {
         $item_total = floatval($row['item_total']);
         $recurring_invoice_amount = $recurring_invoice_amount + $item_total;
     }
-    $recurring_invoice_amount = $recurring_invoice_amount - $recurring_invoice_discount;
+    if ($recurring_invoice_amount > 0 && $recurring_invoice_discount > $recurring_invoice_amount) {
+        flash_alert("Discount must be between 0 and the invoice subtotal", 'error');
+        redirect();
+    }
+    $recurring_invoice_amount = max(0, $recurring_invoice_amount - $recurring_invoice_discount);
 
     mysqli_query($mysqli,"UPDATE recurring_invoices SET recurring_invoice_scope = '$scope', recurring_invoice_frequency = '$frequency', recurring_invoice_next_date = '$next_date', recurring_invoice_category_id = $category, recurring_invoice_discount_amount = $recurring_invoice_discount, recurring_invoice_amount = $recurring_invoice_amount, recurring_invoice_status = $status, recurring_invoice_contract_id = $contract_id WHERE recurring_invoice_id = $recurring_invoice_id");
 
@@ -206,6 +215,11 @@ if (isset($_GET['delete_recurring_invoice'])) {
 
     flash_alert("Recurring Invoice <strong>$recurring_invoice_prefix$recurring_invoice_number</strong> deleted", 'error');
 
+    // Deleted from its own page: go to the list, not back to a recurring invoice that no longer exists
+    if (basename((string) parse_url($_SERVER['HTTP_REFERER'] ?? '', PHP_URL_PATH)) === 'recurring_invoice.php') {
+        redirect("recurring_invoices.php?client_id=$client_id");
+    }
+
     redirect();
 
 }
@@ -220,6 +234,10 @@ if (isset($_POST['add_recurring_invoice_item'])) {
     $name = sanitizeInput($_POST['name']);
     $description = sanitizeInput($_POST['description']);
     $qty = floatval($_POST['qty']);
+    if ($qty < 0) {
+        flash_alert("Quantity can not be negative", 'error');
+        redirect();
+    }
     $price = floatval($_POST['price']);
     $tax_id = intval($_POST['tax_id']);
     $item_order = intval($_POST['item_order']);
@@ -258,7 +276,7 @@ if (isset($_POST['add_recurring_invoice_item'])) {
         $item_total = floatval($row['item_total']);
         $recurring_invoice_amount = $recurring_invoice_amount + $item_total;
     }
-    $recurring_invoice_amount = $recurring_invoice_amount - $recurring_invoice_discount;
+    $recurring_invoice_amount = max(0, $recurring_invoice_amount - $recurring_invoice_discount);
 
     mysqli_query($mysqli,"UPDATE recurring_invoices SET recurring_invoice_amount = $recurring_invoice_amount WHERE recurring_invoice_id = $recurring_invoice_id");
 
@@ -280,6 +298,10 @@ if (isset($_POST['edit_recurring_invoice_item'])) {
     $name = sanitizeInput($_POST['name']);
     $description = sanitizeInput($_POST['description']);
     $qty = floatval($_POST['qty']);
+    if ($qty < 0) {
+        flash_alert("Quantity can not be negative", 'error');
+        redirect();
+    }
     $price = floatval($_POST['price']);
     $tax_id = intval($_POST['tax_id']);
     $product_id = intval($_POST['product_id']);
@@ -317,7 +339,7 @@ if (isset($_POST['edit_recurring_invoice_item'])) {
     //Update Invoice Balances by tallying up invoice items
     $sql_recurring_invoice_total = mysqli_query($mysqli,"SELECT SUM(item_total) AS recurring_invoice_total FROM recurring_invoice_items WHERE item_recurring_invoice_id = $recurring_invoice_id");
     $row = mysqli_fetch_assoc($sql_recurring_invoice_total);
-    $new_recurring_invoice_amount = floatval($row['recurring_invoice_total']) - $recurring_invoice_discount;
+    $new_recurring_invoice_amount = max(0, floatval($row['recurring_invoice_total']) - $recurring_invoice_discount);
 
     mysqli_query($mysqli,"UPDATE recurring_invoices SET recurring_invoice_amount = $new_recurring_invoice_amount WHERE recurring_invoice_id = $recurring_invoice_id");
 
@@ -479,7 +501,7 @@ if (isset($_GET['force_recurring'])) {
     //Update Recurring Balances by tallying up recurring items also update recurring dates
     $sql_recurring_invoice_total = mysqli_query($mysqli,"SELECT SUM(item_total) AS recurring_invoice_total FROM recurring_invoice_items WHERE item_recurring_invoice_id = $recurring_invoice_id");
     $row = mysqli_fetch_assoc($sql_recurring_invoice_total);
-    $new_recurring_invoice_amount = floatval($row['recurring_invoice_total']) - $recurring_invoice_discount_amount;
+    $new_recurring_invoice_amount = max(0, floatval($row['recurring_invoice_total']) - $recurring_invoice_discount_amount);
 
     // INTERVAL units are SQL keywords, not values: map the stored frequency through an allow-list (never interpolate the stored text).
     $recurring_interval_unit = $recurring_invoice_frequency === 'year' ? 'YEAR' : 'MONTH';

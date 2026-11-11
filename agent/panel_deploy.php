@@ -10,6 +10,12 @@
  * module_support level 1 (read) / 2 (write) - not admin-only, same as RivetIT's reference page.
  */
 
+// These pages belong to one client: without a client_id the client shell rendered an empty page (and PHP warnings), so go to the client list.
+if (intval($_GET['client_id'] ?? 0) === 0) {
+    header('Location: /agent/clients.php');
+    exit;
+}
+
 require_once "includes/inc_all_client.php";
 require_once "../includes/panel_bootstrap.php";
 

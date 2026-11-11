@@ -16,7 +16,7 @@ if (isset($_POST['add_rack'])) {
     $name = sanitizeInput($_POST['name']);
     $description = sanitizeInput($_POST['description']);
     $type = sanitizeInput($_POST['type']);
-    $model = sanitizeInput($_POST['model']);
+    $model = sanitizeInput($_POST['make'] ?? $_POST['model'] ?? ''); // the modals post this field as 'make'
     $depth = sanitizeInput($_POST['depth']);
     $units = intval($_POST['units']);
     $physical_location = sanitizeInput($_POST['physical_location']);
@@ -63,7 +63,7 @@ if (isset($_POST['edit_rack'])) {
     $name = sanitizeInput($_POST['name']);
     $description = sanitizeInput($_POST['description']);
     $type = sanitizeInput($_POST['type']);
-    $model = sanitizeInput($_POST['model']);
+    $model = sanitizeInput($_POST['make'] ?? $_POST['model'] ?? ''); // the modals post this field as 'make'
     $depth = sanitizeInput($_POST['depth']);
     $units = intval($_POST['units']);
     $physical_location = sanitizeInput($_POST['physical_location']);

@@ -12,6 +12,39 @@ require_once "../includes/check_login.php";
 require_once "../plugins/totp/totp.php";
 
 /*
+ * Leads board: move a lead to another pipeline stage (drag and drop). POST + CSRF, JSON response.
+ * Moving a card to "Converted" turns the lead into a client, same as the Convert action on the list.
+ */
+if (isset($_POST['lead_set_status'])) {
+    header('Content-Type: application/json');
+    if (!is_string($_POST['csrf_token'] ?? null) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+        http_response_code(403);
+        exit(json_encode(['ok' => false, 'error' => 'Session expired, reload the page']));
+    }
+    enforceUserPermission('module_client', 2);
+
+    $client_id = intval($_POST['client_id'] ?? 0);
+    enforceClientAccess();
+    $stage = trim((string) ($_POST['status'] ?? ''));
+    $stages = ['New', 'Contacted', 'Qualified', 'Proposal', 'Negotiation', 'Converted', 'Lost'];
+    if (!in_array($stage, $stages, true)) {
+        http_response_code(422);
+        exit(json_encode(['ok' => false, 'error' => 'Unknown stage']));
+    }
+    $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT client_name FROM clients WHERE client_id = $client_id AND client_lead = 1 AND client_archived_at IS NULL"));
+    if (!$row) {
+        http_response_code(404);
+        exit(json_encode(['ok' => false, 'error' => 'Lead not found']));
+    }
+    $client_name = sanitizeInput($row['client_name']);
+    $stage_sql = mysqli_real_escape_string($mysqli, $stage);
+    $lead_flag = $stage === 'Converted' ? ', client_lead = 0' : '';
+    mysqli_query($mysqli, "UPDATE clients SET client_lead_status = '$stage_sql'$lead_flag WHERE client_id = $client_id");
+    logAction('Client', $stage === 'Converted' ? 'Convert' : 'Edit', "$session_name moved lead $client_name to $stage", $client_id, $client_id);
+    exit(json_encode(['ok' => true, 'status' => $stage, 'converted' => $stage === 'Converted']));
+}
+
+/*
  * Live global-search dropdown (top nav). Read-only GET, no CSRF needed (mirrors
  * certificate_fetch_parse_json_details below). Auth already enforced by check_login.php above.
  * Mirrors global_search.php's own queries/scoping for clients, contacts, tickets, quotes,
@@ -531,6 +564,7 @@ if (isset($_GET['get_active_clients'])) {
         ORDER BY client_accessed_at DESC"
     );
 
+    $response = ['clients' => []];
     while ($row = mysqli_fetch_assoc($client_sql)) {
         $response['clients'][] = $row;
     }
@@ -555,6 +589,7 @@ if (isset($_GET['get_client_contacts'])) {
         ORDER BY contact_primary DESC, contact_technical DESC, contact_important DESC, contact_name"
     );
 
+    $response = ['contacts' => []];
     while ($row = mysqli_fetch_assoc($contact_sql)) {
         $response['contacts'][] = $row;
     }
@@ -580,6 +615,7 @@ if (isset($_GET['get_client_assets'])) {
         ORDER BY asset_favorite DESC, asset_name"
     );
 
+    $response = ['assets' => []];
     while ($row = mysqli_fetch_assoc($asset_sql)) {
         $response['assets'][] = $row;
     }
@@ -604,6 +640,7 @@ if (isset($_GET['get_client_locations'])) {
         ORDER BY location_primary DESC, location_name ASC"
     );
 
+    $response = ['locations' => []];
     while ($row = mysqli_fetch_assoc($locations_sql)) {
         $response['locations'][] = $row;
     }
@@ -628,6 +665,7 @@ if (isset($_GET['get_client_vendors'])) {
         ORDER BY vendor_name ASC"
     );
 
+    $response = ['vendors' => []];
     while ($row = mysqli_fetch_assoc($vendors_sql)) {
         $response['vendors'][] = $row;
     }
@@ -1584,6 +1622,7 @@ if (isset($_GET['get_internal_users'])) {
          ORDER BY user_name"
     );
 
+    $response = ['users' => []];
     while ($row = mysqli_fetch_assoc($sql)) {
         $response['users'][] = $row;
     }

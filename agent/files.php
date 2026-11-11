@@ -366,7 +366,7 @@ if ($view == 1) {
         $document_description     = nullable_htmlentities($row['document_description']);
         $document_created_by_name = nullable_htmlentities($row['user_name']);
         $document_created_at      = $row['document_created_at'];
-        $document_updated_at      = $row['document_updated_at'];
+        $document_updated_at      = $row['document_updated_at'] ?: $row['document_created_at'];
         $document_archived_at     = $row['document_archived_at'];
 
         $items[] = [

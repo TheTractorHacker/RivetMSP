@@ -11,7 +11,7 @@ $purifier_config->set('URI.AllowedSchemes', ['http' => true, 'https' => true]);
 $purifier = new HTMLPurifier($purifier_config);
 
 if (!isset($_GET['ticket_id'], $_GET['url_key'])) {
-    echo "<br><h2>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h2>";
+    echo "<div class='card mt-4'><div class='card-body text-center py-5'><h1 class='h3 mb-0'>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h1></div></div>";
     require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
     exit();
 }
@@ -46,7 +46,7 @@ $ticket_sql = mysqli_query($mysqli,
 
 if (mysqli_num_rows($ticket_sql) !== 1) {
     // Invalid invoice/key
-    echo "<br><h2>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h2>";
+    echo "<div class='card mt-4'><div class='card-body text-center py-5'><h1 class='h3 mb-0'>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h1></div></div>";
     require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
 
     exit();
@@ -74,9 +74,9 @@ if ($ticket_row) {
     ?>
 
     <div class="card mt-3">
-        <div class="card-header bg-dark text-center">
+        <div class="card-header bg-dark text-white text-center">
             <div class="text-uppercase small" style="letter-spacing:.06em; opacity:.7;">Ticket <?php echo $ticket_prefix, $ticket_number ?></div>
-            <h4 class="mt-1 mb-0"><?php echo $ticket_subject ?></h4>
+            <h4 class="mt-1 mb-0 text-white"><?php echo $ticket_subject ?></h4>
         </div>
 
         <div class="card-body prettyContent">
@@ -245,7 +245,7 @@ if ($ticket_row) {
                             ?>
                             <span class="fa-stack fa-2x">
                                     <i class="fa fa-circle fa-stack-2x text-secondary"></i>
-                                    <span class="fa fa-stack-1x text-white"><?php echo $user_initials; ?></span>
+                                    <span class="fa-stack-1x text-white fw-semibold" style="font-size:.55em;"><?php echo $user_initials; ?></span>
                                 </span>
                             <?php
                         }

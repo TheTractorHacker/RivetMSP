@@ -4,6 +4,29 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.50] - 2026-11-06
+
+No database change (DB stays 2.6.136).
+
+### Fixed
+- **Notifications:** the hourly "Automatic backup was NOT taken" alert is now sent at most once per 24 hours instead of every cron run, so the bell no longer fills with duplicates. The "See all Notifications" button in the notifications modal is visible and readable again.
+- **Full UI sweep (client portal, agent portal, administration, RMM, billing, docs):** about a hundred layout, alignment, contrast, dark-mode, mobile-width and accessibility defects fixed across pages, modals and forms, plus several functional bugs found by clicking through every flow.
+- Administration > Settings: icons and rows in the settings directory line up and there is room above the footer; the Remote MCP entry uses a link icon.
+
+### Changed
+- The administration footer no longer links to the upstream ITFlow docs, forum and services sites; it shows the product name, version and a link to the in-app Docs (Knowledge Base).
+
+## [26.10.49] - 2026-11-03
+
+### Added
+- Lead pipeline board (agent/leads_board.php): leads as cards in stage columns (New to Lost), drag a card to change its stage (saved at once, reverted with a message if the save fails) and drop it on the green bar to convert it to a client. Reachable from the Leads list via the new Board button.
+
+### Fixed
+- Knowledge-base image upload returned page HTML in front of the JSON; relationships card vendor links opened a fatal page (now the vendor modal); Redis capacity flag used a non-existent function; old upgrade step no longer fatals when a removed helper is missing; several pages no longer warn when opened without their id parameter; report tables scroll sideways on phones; timer and add-item buttons have accessible names.
+
+- **Dashboard (like RivetIT, plus a money band).** `agent/dashboard.php` now redirects to the new `agent/my_dashboard.php`, a per-user widget dashboard ported from RivetIT: add, remove, hide, resize and drag to reorder widgets, switch bar widgets to bar/pie charts, Reset to default, Year picker. Widgets: tickets by status/priority/category/technician, SLA at risk, my tickets, created vs closed, resolution time, CSAT, assets, expiring items, needs attention, projects, RMM, clients, and MSP money widgets (Ready to bill, Overdue invoices, Quotes waiting on a yes, Unpaid invoices, Cash flow). Above the widgets sits a **Waiting on you** band: ready to bill (estimate: logged time x client rate), overdue (still unpaid) and quotes waiting, each with the three biggest items and one action; roles without the financial section get "Your day" (assigned to me, past due, unassigned). Everything honours a user's client restriction. DB 2.6.136 adds `dashboard_layouts` (one JSON row per user; no row = default layout). The old fixed Financial/Technical sections are gone: their content is available as widgets.
+- **Fixes found in a full-page scan:** Administration > Settings > Pax8 required the wrong footer path and died at the end of the page; recurring-invoice pages printed an empty JS array literal (syntax error) when the invoice is not editable.
+
 **Security: TinyMCE 8.5.0 → 8.5.1 (no database change).** Fixes three stored-XSS CVEs (CVE-2026-47759, CVE-2026-47761,
 CVE-2026-47762) disclosed against the vendored editor bundle (`plugins/tinymce/`, audit finding C4). Verified provenance against
 the npm registry's recorded SHA-1/SHA-512 for the official `tinymce@8.5.1` package before swapping in the bundle; no local

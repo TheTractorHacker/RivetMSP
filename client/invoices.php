@@ -10,7 +10,8 @@ require_once "includes/inc_all.php";
 
 
 if ($session_contact_primary == 0 && !$session_contact_is_billing_contact) {
-    header("Location: post.php?logout");
+    flash_alert("You do not have access to that page.", 'danger');
+    header("Location: index.php");
     exit();
 }
 
@@ -73,7 +74,7 @@ $invoices_sql = mysqli_query($mysqli, "SELECT * FROM invoices WHERE invoice_clie
                 }
 
                 if ($invoice_status == "Sent") {
-                    $invoice_badge_color = "warning text-white";
+                    $invoice_badge_color = "warning text-dark";
                 } elseif ($invoice_status == "Viewed") {
                     $invoice_badge_color = "info";
                 } elseif ($invoice_status == "Partial") {

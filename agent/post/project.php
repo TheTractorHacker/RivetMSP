@@ -333,6 +333,9 @@ if (isset($_GET['delete_project'])) {
         enforceClientAccess();
     }
 
+    // Detach the project's tickets first: left behind they point at a dead id, and the next project to be given that id shows them as its own.
+    mysqli_query($mysqli, "UPDATE tickets SET ticket_project_id = 0 WHERE ticket_project_id = $project_id");
+
     mysqli_query($mysqli, "DELETE FROM projects WHERE project_id = $project_id");
 
     logAction("Project", "Delete", "$session_name deleted project $project_name", $client_id, $project_id);

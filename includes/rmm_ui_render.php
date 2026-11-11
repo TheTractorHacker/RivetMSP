@@ -1128,8 +1128,8 @@ function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null, ?
         $outRows .= '<li class="list-group-item d-flex align-items-center gap-2"><div class="me-auto min-w-0">' . rivetRmmUiDeviceLink($d) . '<div class="text-muted small">' . rmmH($cn((int) $d['client_id'])) . '</div></div>'
             . '<span class="ifm-mono small">' . rmmH($d['agent_version']) . '</span><i class="fas fa-arrow-right text-muted" aria-label="should be"></i><span class="ifm-mono small">' . rmmH($d['target_version']) . '</span></li>';
     }
-    $versionsBody = '<div class="card-body pb-2"><div class="row"><div class="col-6"><div class="ifm-toolbar-label mb-1">Rings</div><ul class="list-unstyled small mb-0">' . ($ringRows ?: '<li class="text-muted">none</li>') . '</ul></div>'
-        . '<div class="col-6"><div class="ifm-toolbar-label mb-1">Versions</div><ul class="list-unstyled small mb-0">' . ($verRows ?: '<li class="text-muted">none</li>') . '</ul></div></div>'
+    $versionsBody = '<div class="card-body pb-2"><div class="row"><div class="col-6"><div class="ifm-toolbar-label mb-1">Rings</div><ul class="list-unstyled small mb-0 rmm-kv-list">' . ($ringRows ?: '<li class="text-muted">none</li>') . '</ul></div>'
+        . '<div class="col-6"><div class="ifm-toolbar-label mb-1">Versions</div><ul class="list-unstyled small mb-0 rmm-kv-list">' . ($verRows ?: '<li class="text-muted">none</li>') . '</ul></div></div>'
         . '<p class="small text-muted mt-2 mb-0">' . ($cur ? 'Current hosted version: ' . rmmH(implode(' / ', $cur)) . '.' : 'No agent binary is hosted yet, so nothing counts as outdated.')
         . ($f['scan_partial'] ? ' Counts cover the first ' . (int) $f['scanned'] . ' devices.' : '') . '</p></div>'
         . '<ul class="list-group list-group-flush">' . ($outRows ?: '<li class="list-group-item text-muted small"><i class="fas fa-check-circle text-success me-1" aria-hidden="true"></i>No outdated agents.</li>') . '</ul>';
@@ -1243,7 +1243,7 @@ function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null, ?
     $capacity = $f['capacity'] !== null ? rivetRmmUiCapacity($f['capacity']) : '';
     $swCard = $f['outdated_sw'] !== null ? rivetRmmUiOutdatedSoftware($f['outdated_sw'], $cn, $f) : '';
 
-    return '<div class="d-flex align-items-center flex-wrap mb-3" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-satellite me-2" aria-hidden="true"></i>Agent fleet</h4>'
+    return '<div class="d-flex align-items-center flex-wrap mb-3 rmm-page-head" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-satellite me-2" aria-hidden="true"></i>Agent fleet</h4>'
         . ($entry !== null ? $entry['button'] : ($installer !== null ? '<a href="/agent/rmm_add_device.php" class="btn btn-primary" data-rmm-build-installer><i class="fas fa-plus me-1" aria-hidden="true"></i>Add device</a>' : ''))
         . ($installer !== null ? rivetRmmUiInstallerButton($installer, 'Quick download', 'btn btn-outline-primary', null, 'fa-download') : '')
         . '<a href="/agent/rmm_assets.php" class="btn btn-info btn-sm"><i class="fas fa-desktop me-1" aria-hidden="true"></i>All RMM assets</a>'

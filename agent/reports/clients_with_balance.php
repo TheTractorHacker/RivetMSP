@@ -97,7 +97,7 @@ if (!empty($report_export_csv)) {
                 </div>
             </div>
             <div class="col-lg-7">
-                <div class="table-responsive-sm">
+                <div class="table-responsive">
                     <table class="table table-striped table-sm">
                         <thead>
                         <tr>

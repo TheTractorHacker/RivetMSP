@@ -291,7 +291,7 @@ if (isset($_GET['quote_id'])) {
                 <div class="col-md-12">
                     <div class="card">
                         <div class="table-responsive">
-                            <table class="table table-hover mb-0" id="items">
+                            <table class="table table-hover mb-0 guest-items" id="items">
                                 <thead>
                                     <tr>
                                         <th class="d-print-none"></th>
@@ -408,7 +408,7 @@ if (isset($_GET['quote_id'])) {
                                                 </select>
                                             </td>
                                             <td class="text-center">
-                                                <button class="btn btn-secondary text-success" type="submit" name="add_quote_item">
+                                                <button class="btn btn-secondary text-success" type="submit" name="add_quote_item" aria-label="Add item to quote" title="Add item">
                                                     <i class="fa fa-check"></i>
                                                 </button>
                                             </td>
@@ -524,7 +524,7 @@ if (isset($_GET['quote_id'])) {
     </div>
     <?php } ?>
 
-    <div class="row mb-3">
+    <div class="row mt-3 mb-3">
         <div class="col-sm d-print-none">
             <div class="card">
                 <div class="card-header text-bold">

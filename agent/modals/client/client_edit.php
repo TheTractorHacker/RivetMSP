@@ -169,7 +169,7 @@ ob_start();
                     <div class="form-row">
                         <div class="form-group col-md-6 mb-2">
                             <label>Lead Source</label>
-                            <input type="text" class="form-control" name="lead_source" placeholder="e.g. Website, Referral, Cold Call" maxlength="60" value="<?php echo $client_lead_source; ?>">
+                            <input type="text" class="form-control" name="lead_source" placeholder="e.g. Website, Referral" maxlength="60" value="<?php echo $client_lead_source; ?>">
                         </div>
                         <div class="form-group col-md-6 mb-2">
                             <label>Lead Status</label>

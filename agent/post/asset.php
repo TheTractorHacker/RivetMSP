@@ -63,7 +63,7 @@ if (isset($_POST['add_asset'])) {
         $credential_id = mysqli_insert_id($mysqli);
         \RivetMSP\Crypto\VaultV3::finalizeCredential($mysqli, $credential_id);
 
-        logAction("Credential", "Create", "$session_name created login credential for asset $asset_name", $client_id, $credential_id);
+        logAction("Credential", "Create", "$session_name created login credential for asset $name", $client_id, $credential_id);
 
         $alert_extended = " along with login credentials";
 

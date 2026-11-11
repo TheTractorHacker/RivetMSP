@@ -1259,6 +1259,16 @@ $config_backup_passphrase    = decryptSetting($settings_row['config_backup_passp
 // rc.53 GAP-11: same override build_backup() requires, see BackupUnencryptedNotAllowed's doc comment.
 $config_backup_allow_unencrypted_override = intval($settings_row['config_backup_allow_unencrypted_override'] ?? 0);
 
+// The refusal repeats every cron run until fixed; raise the in-app notice at most once per 24 hours.
+function backupRefusedNotifyOnce($message) {
+    global $mysqli;
+    $msg_esc = mysqli_real_escape_string($mysqli, substr($message, 0, 1000));
+    $recent = mysqli_query($mysqli, "SELECT notification_id FROM notifications WHERE notification_type = 'Backup' AND notification = '$msg_esc' AND notification_timestamp > NOW() - INTERVAL 24 HOUR LIMIT 1");
+    if ($recent && mysqli_num_rows($recent) === 0) {
+        appNotify('Backup', $message, '/admin/backup.php');
+    }
+}
+
 if ($config_backup_auto_enabled) {
     $backup_dir   = dirname(__DIR__) . '/backups';
     $should_run   = false;
@@ -1294,13 +1304,13 @@ if ($config_backup_auto_enabled) {
         } catch (BackupPassphraseRequired $e) {
             // No usable backup passphrase: refuse loudly instead of writing a backup that cannot protect the settings key.
             logApp('Backup', 'error', 'Auto-backup refused: ' . $e->getMessage());
-            appNotify('Backup', 'Automatic backup was NOT taken: set a backup passphrase (16+ characters) in Maintenance > Backup.', '/admin/backup.php');
+            backupRefusedNotifyOnce('Automatic backup was NOT taken: set a backup passphrase (16+ characters) in Maintenance > Backup.');
             echo gmdate('Y-m-d\\TH:i:s\\Z') . " cron: auto-backup refused (no backup passphrase)\n";
             $result = null;
         } catch (BackupUnencryptedNotAllowed $e) {
             // rc.53 GAP-11: refuse rather than silently write a backup whose db.sql/uploads.zip content is not encrypted.
             logApp('Backup', 'error', 'Auto-backup refused: ' . $e->getMessage());
-            appNotify('Backup', 'Automatic backup was NOT taken: turn on "Allow unencrypted in-app backups" in Maintenance > Backup, or switch to deploy/backup.sh.', '/admin/backup.php');
+            backupRefusedNotifyOnce('Automatic backup was NOT taken: turn on "Allow unencrypted in-app backups" in Maintenance > Backup, or switch to deploy/backup.sh.');
             echo gmdate('Y-m-d\\TH:i:s\\Z') . " cron: auto-backup refused (unencrypted override not set)\n";
             $result = null;
         }

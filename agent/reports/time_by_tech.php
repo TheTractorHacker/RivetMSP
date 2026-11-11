@@ -46,7 +46,7 @@ $sql_users = mysqli_query($mysqli, "
         </div>
         <div class="card-body">
             <form class="mb-3">
-                <select class="form-control auto-submit-select" name="year">
+                <select class="form-control auto-submit-select" name="year" aria-label="Year">
                     <?php
                     while ($row = mysqli_fetch_assoc($sql_ticket_years)) {
                         $ticket_year = intval($row['ticket_year']); ?>
@@ -60,7 +60,7 @@ $sql_users = mysqli_query($mysqli, "
                     <h3 class="card-title"><i class="fas fa-fw fa-chart-area me-2"></i>Yearly (<?php echo $year; ?>)</h3>
                 </div>
                 <div class="card-body">
-                    <div class="table-responsive-sm">
+                    <div class="table-responsive">
                         <table class="table table-striped">
                             <thead>
                             <tr>

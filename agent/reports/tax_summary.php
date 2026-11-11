@@ -27,7 +27,7 @@ $sql_tax = mysqli_query($mysqli, "SELECT `tax_name` FROM `taxes`");
         </div>
         <div class="card-body p-0">
             <form class="p-3">
-                <select class="form-control auto-submit-select" name="year">
+                <select class="form-control auto-submit-select" name="year" aria-label="Year">
                     <?php
 
                     while ($row = mysqli_fetch_assoc($sql_all_years)) {
@@ -42,13 +42,13 @@ $sql_tax = mysqli_query($mysqli, "SELECT `tax_name` FROM `taxes`");
                 </select>
 
                 <!-- View Selection Dropdown -->
-                <select class="form-control auto-submit-select" name="view">
+                <select class="form-control auto-submit-select" name="view" aria-label="View">
                     <option value="monthly" <?php if ($view == 'monthly') echo "selected"; ?>>Monthly</option>
                     <option value="quarterly" <?php if ($view == 'quarterly') echo "selected"; ?>>Quarterly</option>
                 </select>
             </form>
 
-            <div class="table-responsive-sm">
+            <div class="table-responsive">
                 <table class="table table-sm">
                     <thead class="text-dark">
                     <tr>

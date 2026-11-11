@@ -182,6 +182,9 @@ $sql_campaigns = mysqli_query($mysqli, "SELECT crm_campaigns.*, segment_name,
                         </tbody>
                     </table>
                 </div>
+                <?php if (mysqli_num_rows($sql_campaigns) == 0) { ?>
+                    <div class="text-center text-muted py-4">No campaigns yet. Fill in the form to save your first draft.</div>
+                <?php } ?>
             </div>
         </div>
     </div>

@@ -1,0 +1,10 @@
+const h=require('./h.js');const I='/home/sysadmin/ui-sweep-adminother-img/';
+const mode=process.argv[2];
+(async()=>{const b=await h.launch();const ctx=await b.newContext({viewport:{width:1920,height:1080},storageState:I+'state.json'});const page=await ctx.newPage();
+await page.goto(h.BASE+'/agent/user/user_preferences.php');
+console.log('before',await page.evaluate(()=>document.documentElement.getAttribute('data-bs-theme')+' '+[...document.querySelectorAll('input[name=theme],input[type=radio]')].map(i=>i.name+'='+i.value+':'+i.checked).join(',')));
+await page.screenshot({path:I+'prefs_before.png'});
+await page.locator('label:has-text("'+(mode==='dark'?'Dark':'Light')+'")').first().click();
+await page.locator('button:has-text("Save Preferences")').click();await page.waitForLoadState('networkidle');
+console.log('after',await page.evaluate(()=>document.documentElement.getAttribute('data-bs-theme')),page.url());
+await ctx.storageState({path:I+'state.json'});await b.close();})();

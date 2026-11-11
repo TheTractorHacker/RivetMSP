@@ -48,6 +48,11 @@ if (isset($_POST['add_project_task'])) {
     if ($task_progress < 0) { $task_progress = 0; }
     if ($task_progress > 100) { $task_progress = 100; }
 
+    if ($task_start && $task_due && $task_start > $task_due) {
+        flash_alert("Task start date can't be after its due date", 'error');
+        redirect();
+    }
+
     // Resolve client from the project for access checks/logging
     $client_id = intval(getFieldById('projects', $project_id, 'project_client_id'));
     if ($client_id) {
@@ -87,6 +92,11 @@ if (isset($_POST['edit_project_task'])) {
     $task_progress = intval($_POST['progress'] ?? 0);
     if ($task_progress < 0) { $task_progress = 0; }
     if ($task_progress > 100) { $task_progress = 100; }
+
+    if ($task_start && $task_due && $task_start > $task_due) {
+        flash_alert("Task start date can't be after its due date", 'error');
+        redirect();
+    }
 
     // Resolve client from the task's project (or its ticket) for access checks/logging
     $sql = mysqli_query($mysqli, "SELECT * FROM tasks LEFT JOIN tickets ON ticket_id = task_ticket_id WHERE task_id = $task_id");

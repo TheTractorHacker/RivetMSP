@@ -6,7 +6,7 @@ ob_start();
 
 ?>
 <div class="modal-header bg-dark">
-    <h5 class="modal-title"><i class="fas fa-fw fa-exchange-alt me-2"></i>Transfering Funds</h5>
+    <h5 class="modal-title"><i class="fas fa-fw fa-exchange-alt me-2"></i>Transferring Funds</h5>
     <button type="button" class="close text-white" data-bs-dismiss="modal">
         <span>&times;</span>
     </button>

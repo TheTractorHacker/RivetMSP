@@ -1,0 +1,2 @@
+agent/asset_details.php?client_id=1&asset_id=26
+agent/kb_article.php?id=2

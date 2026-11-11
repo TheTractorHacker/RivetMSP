@@ -48,7 +48,7 @@ function tagTextClass($hex_color) {
         $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
     }
     if (!preg_match('/^[0-9a-fA-F]{6}$/', $hex)) {
-        return 'text-light'; // unparseable color - fall back to the old default
+        return 'text-white'; // unparseable color - fall back to the old default
     }
 
     // WCAG relative luminance (https://www.w3.org/TR/WCAG21/#dfn-relative-luminance)
@@ -69,7 +69,29 @@ function tagTextClass($hex_color) {
     $dark_luminance = 0.01806564208421097; // relative luminance of #212529
     $contrast_dark  = ($luminance + 0.05) / ($dark_luminance + 0.05);
 
-    return $contrast_white >= $contrast_dark ? 'text-light' : 'text-dark';
+    // text-white, not text-light: text-light renders #f9fafb, which costs the 4.5:1 AA margin on mid-tone pills like #6c757d
+    return $contrast_white >= $contrast_dark ? 'text-white' : 'text-dark';
+}
+
+// Background colour that keeps white pill text at WCAG AA (4.5:1): darkens a mid-tone colour like #007bff
+// (3.97:1 with white) step by step; colours that already pass, or that tagTextClass() pairs with dark text, are returned unchanged.
+function tagSafeBg($hex_color) {
+    $hex = ltrim((string) $hex_color, '#');
+    if (strlen($hex) === 3) {
+        $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+    }
+    if (!preg_match('/^[0-9a-fA-F]{6}$/', $hex) || tagTextClass($hex) !== 'text-white') {
+        return $hex_color;
+    }
+    $rgb = [hexdec(substr($hex, 0, 2)), hexdec(substr($hex, 2, 2)), hexdec(substr($hex, 4, 2))];
+    for ($i = 0; $i < 20; $i++) {
+        $lin = array_map(function ($c) { $c /= 255; return $c <= 0.03928 ? $c / 12.92 : (($c + 0.055) / 1.055) ** 2.4; }, $rgb);
+        if (1.05 / (0.2126 * $lin[0] + 0.7152 * $lin[1] + 0.0722 * $lin[2] + 0.05) >= 4.5) {
+            break;
+        }
+        $rgb = array_map(function ($c) { return (int) round($c * 0.94); }, $rgb);
+    }
+    return sprintf('#%02x%02x%02x', $rgb[0], $rgb[1], $rgb[2]);
 }
 
 // Curated set of preset tag colors offered in the tag color picker
@@ -2344,8 +2366,8 @@ function getClientProfitability(mysqli $mysqli, $year)
 /**
  * Quarterly Profit & Loss summary for a single year (set-based). Mirrors the revenue
  * and expense definitions used by agent/reports/profit_loss.php's classic table so the
- * numbers reconcile: revenue = invoice-linked payments + categorised revenues; expenses
- * = categorised, vendor-attributed expenses. Used to drive the prior-year comparison
+ * numbers reconcile: revenue = invoice-linked payments + revenues; expenses = all expenses
+ * (uncategorized ones show on the classic table's Uncategorized row, so they count here too). Used to drive the prior-year comparison
  * column, net margin and the year-over-year chart.
  */
 function getProfitLossSummary(mysqli $mysqli, $year)
@@ -2366,7 +2388,7 @@ function getProfitLossSummary(mysqli $mysqli, $year)
     }
     $res = mysqli_query($mysqli,
         "SELECT QUARTER(revenue_date) AS q, SUM(revenue_amount) AS amt
-         FROM revenues WHERE revenue_category_id > 0 AND YEAR(revenue_date) = $year GROUP BY q");
+         FROM revenues WHERE YEAR(revenue_date) = $year GROUP BY q");
     while ($r = mysqli_fetch_assoc($res)) {
         $q = intval($r['q']);
         if ($q >= 1 && $q <= 4) {
@@ -2375,7 +2397,7 @@ function getProfitLossSummary(mysqli $mysqli, $year)
     }
     $res = mysqli_query($mysqli,
         "SELECT QUARTER(expense_date) AS q, SUM(expense_amount) AS amt
-         FROM expenses WHERE expense_category_id > 0 AND expense_vendor_id > 0 AND YEAR(expense_date) = $year GROUP BY q");
+         FROM expenses WHERE YEAR(expense_date) = $year GROUP BY q");
     while ($r = mysqli_fetch_assoc($res)) {
         $q = intval($r['q']);
         if ($q >= 1 && $q <= 4) {
@@ -2846,7 +2868,7 @@ function getMonthlyTax($tax_name, $month, $year, $mysqli)
             LEFT JOIN payments ON invoices.invoice_id = payments.payment_invoice_id
             WHERE YEAR(payments.payment_date) = $year AND MONTH(payments.payment_date) = $month
             AND invoices.invoice_amount > 0
-            AND invoice_items.item_tax_id = (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
+            AND invoice_items.item_tax_id IN (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
     $result = mysqli_query($mysqli, $sql);
     $row = mysqli_fetch_assoc($result);
     return $row['monthly_tax'] ?? 0;
@@ -2865,7 +2887,7 @@ function getQuarterlyTax($tax_name, $quarter, $year, $mysqli)
             LEFT JOIN payments ON invoices.invoice_id = payments.payment_invoice_id
             WHERE YEAR(payments.payment_date) = $year AND MONTH(payments.payment_date) BETWEEN $start_month AND $end_month
             AND invoices.invoice_amount > 0
-            AND invoice_items.item_tax_id = (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
+            AND invoice_items.item_tax_id IN (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
     $result = mysqli_query($mysqli, $sql);
     $row = mysqli_fetch_assoc($result);
     return $row['quarterly_tax'] ?? 0;
@@ -2880,7 +2902,7 @@ function getTotalTax($tax_name, $year, $mysqli)
             LEFT JOIN payments ON invoices.invoice_id = payments.payment_invoice_id
             WHERE YEAR(payments.payment_date) = $year
             AND invoices.invoice_amount > 0
-            AND invoice_items.item_tax_id = (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
+            AND invoice_items.item_tax_id IN (SELECT tax_id FROM taxes WHERE tax_name = '$tax_name')";
     $result = mysqli_query($mysqli, $sql);
     $row = mysqli_fetch_assoc($result);
     return $row['total_tax'] ?? 0;
@@ -3649,6 +3671,31 @@ function resolveTicketStatusId(int $status_id): int {
     return $status_id == 4 ? 5 : $status_id;
 }
 
+// Ends a request the role may not make. A full page load gets a small branded 403 page instead of two bare lines of text on a white screen;
+// modals, ajax fetches and post handlers keep the plain fragment they always returned.
+function denyAccess($detail) {
+    $is_document = (($_SERVER['HTTP_SEC_FETCH_DEST'] ?? 'document') === 'document')
+        && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET'
+        && empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+        && strpos((string) ($_SERVER['SCRIPT_NAME'] ?? ''), '/modals/') === false
+        && strpos((string) ($_SERVER['SCRIPT_NAME'] ?? ''), '/ajax') === false;
+    if (!$is_document) {
+        exit(WORDING_ROLECHECK_FAILED . "<br>" . $detail);
+    }
+    http_response_code(403);
+    $h = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES); };
+    echo '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+        . '<title>' . $h(defined('APP_NAME') ? APP_NAME : 'Access denied') . ' - Access denied</title>'
+        . '<link rel="stylesheet" href="/plugins/tabler/css/tabler.min.css"><link rel="stylesheet" href="/plugins/fontawesome-free/css/all.min.css"></head>'
+        . '<body class="d-flex flex-column" style="min-height:100vh;background:#eef2f2"><div class="page page-center"><div class="container-tight py-4 text-center">'
+        . '<div class="empty"><div class="empty-icon text-danger" style="font-size:3rem" aria-hidden="true"><i class="fas fa-lock"></i></div>'
+        . '<h1 class="empty-title">' . $h(WORDING_ROLECHECK_FAILED) . '</h1>'
+        . '<p class="empty-subtitle text-secondary">' . $h($detail) . '</p>'
+        . '<div class="empty-action"><a href="javascript:history.back()" class="btn btn-outline-secondary me-2">Go back</a>'
+        . '<a href="/agent/clients.php" class="btn btn-primary">Home</a></div></div></div></div></body></html>';
+    exit;
+}
+
 // Ensures a user has access to a module (e.g. module_support) with at least the required permission level provided (defaults to read)
 function enforceUserPermission($module, $check_access_level = 1) {
     $permitted_access_level = lookupUserPermission($module);
@@ -3661,7 +3708,7 @@ function enforceUserPermission($module, $check_access_level = 1) {
             "2" => "write",
             "3" => "full"
         ];
-        exit(WORDING_ROLECHECK_FAILED . "<br>Tell your admin: $map[$check_access_level] access to $module is not permitted for your role.");
+        denyAccess("Tell your admin: $map[$check_access_level] access to $module is not permitted for your role.");
     }
 }
 
@@ -3727,7 +3774,7 @@ function enforceClientAccess($client_id = null) {
 function enforceAdminPermission() {
     global $session_is_admin;
     if (!isset($session_is_admin) || !$session_is_admin) {
-        exit(WORDING_ROLECHECK_FAILED . "<br>Tell your admin: Your role does not have admin access.");
+        denyAccess("Tell your admin: Your role does not have admin access.");
     }
     return true;
 }
@@ -5044,6 +5091,10 @@ function redirect($url = null, $permanent = false) {
 
 //Flash Alert Function
 function flash_alert(string $message, string $type = 'success'): void {
+    // Messages are built from sanitizeInput()ed names, so a quote arrives as \' or \" and used to show up with the backslash in the toast.
+    $message = str_replace(["\\'", '\\"'], ["'", '"'], $message);
+    // Several handlers pass 'alert', which toastr has no method for (the page threw and showed no message at all); it means a warning.
+    if (!in_array($type, ['success', 'error', 'info', 'warning'], true)) { $type = 'warning'; }
     $_SESSION['alert_type'] = $type;
     $_SESSION['alert_message'] = $message;
 }

@@ -28,7 +28,7 @@ $rows = 0;
         </div>
         <div class="card-body">
             <form class="mb-3">
-                <select class="form-control auto-submit-select" name="year">
+                <select class="form-control auto-submit-select" name="year" aria-label="Year">
                     <?php
                     while ($row = mysqli_fetch_assoc($sql_ticket_years)) {
                         $ticket_year = intval($row['ticket_year']); ?>
@@ -37,7 +37,7 @@ $rows = 0;
                 </select>
             </form>
 
-            <div class="table-responsive-sm">
+            <div class="table-responsive">
                 <table class="table table-striped">
                     <thead>
                     <tr>

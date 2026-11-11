@@ -67,24 +67,25 @@ $bytes = static function ($b) { if ($b === null) { return '<span class="text-mut
 $stateBadge = ['succeeded' => 'success', 'failed' => 'danger', 'timed_out' => 'warning', 'cancelled' => 'secondary', 'expired' => 'secondary', 'running' => 'info', 'queued' => 'primary'];
 $ts = static fn($iso) => $iso ? htmlspecialchars(rivetRmmTime($iso, true, true, 'Y-m-d H:i:s', (string) $iso)) : '<span class="text-muted">never</span>';   // Core stores UTC; shown in company time
 ?>
-<div class="d-flex align-items-center flex-wrap gap-2 mb-3">
-    <h4 class="mb-0 me-auto"><i class="<?= ($dev['os'] ?? '') === 'linux' ? 'fab fa-linux' : (($dev['os'] ?? '') === 'windows' ? 'fab fa-windows' : 'fas fa-desktop') ?> me-2"></i><?= $h($dev['hostname']) ?>
+<div class="d-flex align-items-center flex-wrap gap-2 mb-3 rmm-page-head">
+    <h4 class="mb-0 me-auto"><i class="fab <?= stripos((string) ($dev['os'] ?? ''), 'windows') === false && ($dev['os'] ?? '') !== '' ? 'fa-linux' : 'fa-windows' ?> me-2"></i><?= $h($dev['hostname']) ?>
         <span class="badge bg-<?= $badge ?> ms-2"><?= ucfirst($st['state']) ?></span>
         <?php if ($dev['revoked_at'] !== null) { echo '<span class="badge bg-danger ms-1">Revoked</span>'; } ?>
         <?php if ($dev['retired_at'] !== null) { echo '<span class="badge bg-secondary ms-1">Retired</span>'; } ?>
         <?php if ($dev['link_state'] === 'pending_approval') { echo '<span class="badge bg-warning text-dark ms-1">Waiting for approval</span>'; } ?>
     </h4>
     <?php if ($asset) { ?><a class="btn btn-outline-secondary btn-sm" href="/agent/asset_details.php?asset_id=<?= (int) $asset['asset_id'] ?>"><i class="fas fa-laptop me-1"></i>Asset: <?= $h($asset['asset_name']) ?></a><?php } ?>
+    <a class="btn btn-outline-secondary btn-sm" href="/agent/rmm_fleet.php"><i class="fas fa-arrow-left me-1"></i>Agent fleet</a>
     <?php if ($can_remote) { ?><button type="button" class="btn btn-success btn-sm" id="ea-remote"><i class="fas fa-desktop me-1"></i>Launch remote session</button><?php } ?>
     <?php if ($is_admin) { ?><a class="btn btn-outline-secondary btn-sm" href="/admin/settings_endpoint_agent.php#devices"><i class="fas fa-cog me-1"></i>Manage</a><?php } ?>
 </div>
-<div id="ea-msg" class="alert d-none" role="status"></div>
+<div id="ea-msg" class="alert d-none" role="alert" aria-live="polite"></div>
 
 <div class="row">
 <div class="col-lg-6">
     <div class="card mb-3"><div class="card-header"><h5 class="card-title mb-0">Status</h5></div><div class="card-body">
         <table class="table table-sm table-borderless mb-0">
-            <tr><td class="text-muted" style="width:40%">Last check-in</td><td><?= $ts($st['last_checkin_at']) ?><?php if ($st['age_s'] !== null) { echo ' <span class="text-muted">(' . (int) $st['age_s'] . ' s ago)</span>'; } ?></td></tr>
+            <tr><td class="text-muted" style="width:40%">Last check-in</td><td><?= $ts($st['last_checkin_at']) ?><?php if ($st['age_s'] !== null) { $ag = (int) $st['age_s']; echo ' <span class="text-muted">(' . ($ag < 90 ? $ag . ' s' : ($ag < 5400 ? round($ag / 60) . ' min' : ($ag < 172800 ? round($ag / 3600) . ' h' : round($ag / 86400) . ' days'))) . ' ago)</span>'; } ?></td></tr>
             <tr><td class="text-muted">Last successful collection</td><td><?= $ts(Sql::iso($dev['last_collected_at'])) ?></td></tr>
             <tr><td class="text-muted">Last inventory</td><td><?= $ts(Sql::iso($dev['last_inventory_at'])) ?></td></tr>
             <?php if ($st['offline_since']) { ?><tr><td class="text-muted">Considered offline since</td><td><?= $ts($st['offline_since']) ?></td></tr><?php } ?>
@@ -100,11 +101,11 @@ $ts = static fn($iso) => $iso ? htmlspecialchars(rivetRmmTime($iso, true, true, 
         <table class="table table-sm table-borderless mb-2">
             <tr><td class="text-muted" style="width:40%">OS</td><td><?= $h($dev['os_version']) ?> (<?= $h($dev['arch']) ?>)</td></tr>
             <tr><td class="text-muted">Make / model</td><td><?= $h(trim(($dev['manufacturer'] ?? '') . ' ' . ($dev['model'] ?? ''))) ?></td></tr>
-            <tr><td class="text-muted">Serial</td><td><?= $h($dev['serial'] ?? '') ?></td></tr>
-            <tr><td class="text-muted">CPU</td><td><?= $h($inv['cpu']['model'] ?? '') ?><?= !empty($inv['cpu']['cores']) ? ' (' . (int) $inv['cpu']['cores'] . ' cores)' : '' ?></td></tr>
+            <tr><td class="text-muted">Serial</td><td><?= $h($dev['serial'] ?? '') ?: '<span class="text-muted">not reported</span>' ?></td></tr>
+            <tr><td class="text-muted">CPU</td><td><?= $h($inv['cpu']['model'] ?? '') ?: '<span class="text-muted">not reported</span>' ?><?= !empty($inv['cpu']['cores']) ? ' (' . (int) $inv['cpu']['cores'] . ' cores)' : '' ?></td></tr>
             <tr><td class="text-muted">Memory</td><td><?= $bytes($inv['memory_total_bytes'] ?? null) ?></td></tr>
             <tr><td class="text-muted">Uptime</td><td><?= $dev['uptime_s'] === null ? '<span class="text-muted">no data</span>' : $h(round($dev['uptime_s'] / 3600, 1) . ' h') ?></td></tr>
-            <tr><td class="text-muted">Logged-in user</td><td><?= $h($dev['logged_in_user'] ?? '') ?></td></tr>
+            <tr><td class="text-muted">Logged-in user</td><td><?= $h($dev['logged_in_user'] ?? '') ?: '<span class="text-muted">not reported</span>' ?></td></tr>
             <tr><td class="text-muted">Pending reboot</td><td><?= $dev['pending_reboot'] === null ? '<span class="text-muted">no data</span>' : ($dev['pending_reboot'] ? '<span class="badge bg-warning text-dark">Yes</span>' : 'No') ?></td></tr>
         </table>
         <?php if (!empty($inv['disks'])) { ?><div class="small text-muted">Disks</div><table class="table table-sm mb-2"><tbody>
@@ -199,7 +200,7 @@ $ts = static fn($iso) => $iso ? htmlspecialchars(rivetRmmTime($iso, true, true, 
     <form id="ea-mesh-form" class="row g-2 align-items-end">
         <input type="hidden" name="csrf_token" value="<?= $h($_SESSION['csrf_token']) ?>"><input type="hidden" name="device_id" value="<?= $device_id ?>">
         <div class="col-lg-8"><label class="form-label small" for="ea-node">MeshCentral node id</label><input class="form-control form-control-sm font-monospace" id="ea-node" name="mesh_node_id" maxlength="2048" value="<?= $h($mesh['mesh_node_id'] ?? '') ?>" placeholder="node//... or the MeshCentral address of the device" aria-describedby="ea-node-help"><div class="form-text" id="ea-node-help">In MeshCentral open the device and copy the address bar, or paste the node id. Any form is accepted and shown as <code>node//</code> plus 64 characters.</div></div>
-        <div class="col-lg-4"><button class="btn btn-sm btn-primary" type="submit">Save mapping</button> <span class="small text-muted">Leave empty to clear. An id set here is kept when the Mesh agent reports a different one: a node the agent reports is used only once an administrator maps it.</span></div>
+        <div class="col-lg-4"><button class="btn btn-sm btn-primary" type="submit">Save mapping</button><div class="form-text">Leave empty to clear. An id set here is kept when the Mesh agent reports a different one: a node the agent reports is used only once an administrator maps it.</div></div>
     </form>
 </div></div>
 <?php } ?>
@@ -211,7 +212,7 @@ $ts = static fn($iso) => $iso ? htmlspecialchars(rivetRmmTime($iso, true, true, 
         var body = new URLSearchParams(data); body.set('action', action); body.set('device_id', '<?= $device_id ?>'); body.set('csrf_token', '<?= $h($_SESSION['csrf_token']) ?>');
         return fetch('/agent/post/rmm_agent.php', {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: body.toString()}).then(function (r) { return r.json(); });
     };
-    var msg = function (text, ok) { var m = document.getElementById('ea-msg'); m.className = 'alert alert-' + (ok ? 'success' : 'danger'); m.textContent = text; };
+    var msg = function (text, ok) { var m = document.getElementById('ea-msg'); m.className = 'alert alert-' + (ok ? 'success' : 'danger'); m.textContent = text; if (m.scrollIntoView) { m.scrollIntoView({block: 'center', behavior: 'smooth'}); } };
     var r = document.getElementById('ea-remote');
     // The tab is opened inside the click (a browser blocks one opened after the asynchronous launch call: js/rmm_launch.js), then sent to the session when the launch answers.
     var launch = function (force) {

@@ -5,7 +5,7 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/functions.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/check_login.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/page_title.php';
 if (!isset($session_is_admin) || !$session_is_admin) {
-    exit(WORDING_ROLECHECK_FAILED . "<br>Tell your admin: Your role does not have admin access.");
+    denyAccess("Tell your admin: Your role does not have admin access.");
 }
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/header.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/top_nav.php';
@@ -31,6 +31,7 @@ $admin_settings_labels = [
     'settings_localization.php' => 'Language & region',
     'settings_theme.php' => 'Theme',
     'settings_appearance.php' => 'Appearance',
+    'settings_portal_branding.php' => 'Client Portal Branding',
     'settings_default.php' => 'Defaults',
     'settings_module.php' => 'Modules',
     'settings_ticket.php' => 'Ticketing',

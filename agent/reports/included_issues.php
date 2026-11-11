@@ -63,25 +63,25 @@ function renderIssuesUsageCells(array $u): void {
     </div>
     <div class="card-body">
         <form class="mb-3 d-flex" style="gap:.5rem">
-            <select class="form-control auto-submit-select" name="month" style="max-width:180px">
+            <select class="form-control auto-submit-select" name="month" style="max-width:180px" aria-label="Month">
                 <?php foreach ($month_names as $m => $mname) { ?>
                     <option value="<?= $m ?>" <?= $m == $month ? 'selected' : '' ?>><?= $mname ?></option>
                 <?php } ?>
             </select>
-            <select class="form-control auto-submit-select" name="year" style="max-width:120px">
+            <select class="form-control auto-submit-select" name="year" style="max-width:120px" aria-label="Year">
                 <?php for ($y = intval(date('Y')); $y >= intval(date('Y')) - 4; $y--) { ?>
                     <option value="<?= $y ?>" <?= $y == $year ? 'selected' : '' ?>><?= $y ?></option>
                 <?php } ?>
             </select>
         </form>
 
-        <div class="table-responsive-sm">
+        <div class="table-responsive">
             <table class="table table-striped table-sm">
                 <thead>
                     <tr>
                         <th rowspan="2" class="align-bottom">Client</th>
-                        <th colspan="4" class="text-center"><i class="fas fa-fw fa-laptop me-1"></i>Remote <small class="text-muted">(hrs, 30 min/ticket)</small></th>
-                        <th colspan="4" class="text-center"><i class="fas fa-fw fa-house-user me-1"></i>Onsite <small class="text-muted">(hrs, 1 hr/ticket)</small></th>
+                        <th colspan="4" class="text-center"><i class="fas fa-fw fa-laptop me-1"></i>Remote <small class="text-muted" style="font-size:.75rem">(hrs, 30 min/ticket)</small></th>
+                        <th colspan="4" class="text-center"><i class="fas fa-fw fa-house-user me-1"></i>Onsite <small class="text-muted" style="font-size:.75rem">(hrs, 1 hr/ticket)</small></th>
                     </tr>
                     <tr>
                         <th class="text-end">Included</th>

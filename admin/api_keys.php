@@ -94,11 +94,11 @@ if ($rl_res && ($rl_row = mysqli_fetch_assoc($rl_res))) { $rl_ready = true; $rl_
                 <table class="table table-striped table-borderless table-hover">
                     <thead class="text-dark <?php if ($num_rows[0] == 0) { echo "d-none"; } ?>">
                     <tr>
-                        <td class="pe-0">
+                        <th class="pe-0">
                             <div class="form-check">
-                                <input class="form-check-input" id="selectAllCheckbox" type="checkbox">
+                                <input class="form-check-input" id="selectAllCheckbox" type="checkbox" aria-label="Select all keys">
                             </div>
-                        </td>
+                        </th>
                         <th>
                             <a class="text-dark" href="?<?php echo $url_query_strings_sort; ?>&sort=api_key_name&order=<?php echo $disp; ?>">
                                 Name <?php if ($sort == 'api_key_name') { echo $order_icon; } ?>

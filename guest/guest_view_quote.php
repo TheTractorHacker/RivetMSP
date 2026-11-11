@@ -4,7 +4,7 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/guest/includes/inc_all_guest.php';
 
 
 if (!isset($_GET['quote_id'], $_GET['url_key'])) {
-    echo "<br><h2>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h2>";
+    echo "<div class='card mt-4'><div class='card-body text-center py-5'><h1 class='h3 mb-0'>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h1></div></div>";
     require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
 
     exit();
@@ -26,7 +26,7 @@ $sql = mysqli_query(
 
 if (mysqli_num_rows($sql) !== 1) {
     // Invalid quote/key
-    echo "<br><h2>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h2>";
+    echo "<div class='card mt-4'><div class='card-body text-center py-5'><h1 class='h3 mb-0'>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h1></div></div>";
     require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
 
     exit();
@@ -118,8 +118,8 @@ if ($quote_status == "Draft" || $quote_status == "Sent" || $quote_status == "Vie
     <div class="card-header d-print-none">
 
         <div class="float-end">
-            <a class="btn btn-primary js-print-page" href="#"><i class="fas fa-fw fa-print me-2"></i>Print</a>
-            <a class="btn btn-primary" href="guest_post.php?export_quote_pdf=<?php echo $quote_id; ?>&url_key=<?php echo $url_key; ?>">
+            <a class="btn btn-default js-print-page" href="#"><i class="fas fa-fw fa-print me-2"></i>Print</a>
+            <a class="btn btn-default" href="guest_post.php?export_quote_pdf=<?php echo $quote_id; ?>&url_key=<?php echo $url_key; ?>">
                 <i class="fa fa-fw fa-download me-2"></i>Download
             </a>
         </div>
@@ -181,8 +181,8 @@ if ($quote_status == "Draft" || $quote_status == "Sent" || $quote_status == "Vie
         <div class="row mb-3">
             <div class="col-md-12">
                 <div class="card">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
+                    <div class="table-responsive" tabindex="0" role="region" aria-label="Quote line items">
+                        <table class="table table-hover mb-0 guest-items">
                             <thead class="bg-light">
                             <tr>
                                 <th>Item</th>
@@ -277,7 +277,7 @@ if ($quote_status == "Draft" || $quote_status == "Sent" || $quote_status == "Vie
         <div class="text-center"><?php echo nl2br($config_quote_footer); ?></div>
         <div class="">
             <?php
-                if ($quote_status == "Sent" || $quote_status == "Viewed" && strtotime($quote_expire) > strtotime("now")) { ?>
+                if (($quote_status == "Sent" || $quote_status == "Viewed") && strtotime($quote_expire) > strtotime("now")) { ?>
                     <form method="post" action="guest_post.php" class="d-inline">
                         <input type="hidden" name="accept_quote" value="<?php echo $quote_id; ?>">
                         <input type="hidden" name="url_key" value="<?php echo $url_key; ?>">
@@ -292,6 +292,9 @@ if ($quote_status == "Draft" || $quote_status == "Sent" || $quote_status == "Vie
                             <i class="fas fa-fw fa-thumbs-down me-2"></i>Decline
                         </button>
                     </form>
+                <?php } ?>
+                <?php if (($quote_status == "Sent" || $quote_status == "Viewed") && strtotime($quote_expire) <= strtotime("now")) { ?>
+                    <p class="text-muted mb-0"><i class="fas fa-fw fa-clock me-1"></i>This quote expired on <?php echo nullable_htmlentities($quote_expire); ?>. Please contact us if you would still like to proceed.</p>
                 <?php } ?>
                 <?php if ($quote_status == "Accepted") { ?>
                     <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#uploadFileModal">

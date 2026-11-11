@@ -34,7 +34,7 @@ $company_initials = nullable_htmlentities(initials($company_name));
                 <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token'] ?>">
 
                     <div class="row">
-                        <div class="col-md-3 text-center">
+                        <div class="col-md-3">
                             <?php if ($company_logo) { ?>
                                 <img class="img-thumbnail" src="<?php echo "../uploads/settings/$company_logo"; ?>">
                                 <a href="post.php?remove_company_logo&csrf_token=<?= $_SESSION['csrf_token'] ?>" class="btn btn-outline-danger btn-block">Remove Logo</a>
@@ -120,7 +120,7 @@ $company_initials = nullable_htmlentities(initials($company_name));
                                             <div class="input-group-prepend">
                                                 <span class="input-group-text"><i class="fa fa-fw fa-phone"></i></span>
                                             </div>
-                                            <input type="tel" class="form-control col-2" name="phone_country_code" value="<?php echo $company_phone_country_code; ?>" placeholder="+" maxlength="4">
+                                            <input type="tel" class="form-control phone-country-code" name="phone_country_code" value="<?php echo $company_phone_country_code; ?>" placeholder="+" maxlength="4">
                                             <input type="tel" class="form-control" name="phone" value="<?php echo $company_phone; ?>" placeholder="Phone Number" maxlength="200">
                                         </div>
                                     </div>

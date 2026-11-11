@@ -116,12 +116,12 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                     </th>
                     <th>
                         <a class="text-dark" href="?<?php echo $url_query_strings_sort; ?>&sort=quote_date&order=<?php echo $disp; ?>">
-                            Date <?php if ($sort == 'quote_number') { echo $order_icon; } ?>
+                            Date <?php if ($sort == 'quote_date') { echo $order_icon; } ?>
                         </a>
                     </th>
                     <th>
                         <a class="text-dark" href="?<?php echo $url_query_strings_sort; ?>&sort=quote_expire&order=<?php echo $disp; ?>">
-                            Expire <?php if ($sort == 'quote_number') { echo $order_icon; } ?>
+                            Expire <?php if ($sort == 'quote_expire') { echo $order_icon; } ?>
                         </a>
                     </th>
                     <th>

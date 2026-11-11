@@ -1101,3 +1101,12 @@ if (!window.__cspDelegates) {
         }
     });
 }
+
+// A required field on an inactive tab pane (modal tabs: Details / Permissions / Keys ...) blocks submit with no visible message
+// ("An invalid form control is not focusable"). Show the pane that holds the invalid field so the browser can point at it.
+document.addEventListener('invalid', function (e) {
+    var pane = e.target.closest && e.target.closest('.tab-pane');
+    if (!pane || !pane.id || pane.classList.contains('active')) { return; }
+    var tab = document.querySelector('[data-bs-toggle="pill"][href="#' + pane.id + '"], [data-bs-toggle="tab"][href="#' + pane.id + '"], [data-bs-target="#' + pane.id + '"]');
+    if (tab) { tab.click(); }
+}, true);

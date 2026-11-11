@@ -58,10 +58,10 @@ if (isset($kb_groups['Uncategorized'])) {
 <div class="row mt-3">
     <div class="col-md-12">
         <form autocomplete="off" class="mb-3">
-            <div class="input-group" style="max-width: 400px">
+            <div class="input-group">
                 <input type="search" class="form-control" name="q" value="<?= nullable_htmlentities($q) ?>" placeholder="Search Knowledge Base">
                 <div class="input-group-append">
-                    <button class="btn btn-primary"><i class="fa fa-search"></i></button>
+                    <button class="btn btn-primary" aria-label="Search"><i class="fa fa-search"></i></button>
                 </div>
             </div>
         </form>
@@ -103,10 +103,10 @@ if (isset($kb_groups['Uncategorized'])) {
                                 </h5>
                                 <p class="card-text"><?= nullable_htmlentities($kb_article_preview) ?></p>
                             </div>
-                            <div class="card-footer d-flex align-items-center justify-content-between bg-white">
+                            <div class="card-footer d-flex align-items-center justify-content-between">
                                 <span class="kb-article-meta"><?= date('M j, Y', strtotime($kb_article_updated_at)) ?></span>
                                 <a href="kb_article.php?id=<?= $kb_article_id ?>" class="btn btn-sm btn-outline-primary">
-                                    <i class="fas fa-eye"></i> View
+                                    <i class="fas fa-eye me-1"></i>View
                                 </a>
                             </div>
                         </div>

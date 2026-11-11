@@ -32,7 +32,7 @@ ob_start();
 ?>
 
 <div class="modal-header bg-dark">
-    <h5 class="modal-title text-white"><i class="fa fa-fw fa-clock me-2"></i>Editing recurring expense</h5>
+    <h5 class="modal-title text-white"><i class="fa fa-fw fa-clock me-2"></i>Editing Recurring Expense</h5>
     <button type="button" class="close text-white" data-bs-dismiss="modal">
         <span>&times;</span>
     </button>

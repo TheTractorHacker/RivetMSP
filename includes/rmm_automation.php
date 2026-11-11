@@ -156,7 +156,7 @@ function rivetRmmAutoScriptsOn(): string
 /** The page title row: title and icon on the left, the page's buttons (already HTML) on the right, then an optional one-line explanation. */
 function rivetRmmAutoHeader(string $title, string $icon, string $actionsHtml = '', string $intro = ''): string
 {
-    return '<div class="d-flex align-items-center flex-wrap mb-3" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-' . rmmH($icon) . ' me-2" aria-hidden="true"></i>' . rmmH($title) . '</h4>'
+    return '<div class="d-flex align-items-center flex-wrap mb-3 rmm-page-head" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-' . rmmH($icon) . ' me-2" aria-hidden="true"></i>' . rmmH($title) . '</h4>'
         . $actionsHtml . '</div>' . ($intro !== '' ? '<p class="text-muted small mb-3">' . rmmH($intro) . '</p>' : '');
 }
 
@@ -383,6 +383,8 @@ function rivetRmmAutoDone(array $result, string $okMessage, string $returnTo, ar
 {
     $ok = (bool) $result['ok'];
     $message = $ok ? $okMessage : ((string) ($result['error'] ?? '') !== '' ? (string) $result['error'] : 'That did not work.');
+    // Core names the request field in these two; say what to do in the form's own words.
+    $message = (string) preg_replace('/^(?:target|scope)\.?_?id is required for an? (\w+)(?: target| assignment)?\.$/', 'Choose a $1 first: none is selected.', $message);
     if (rivetRmmAutoWantsJson()) {
         header('Content-Type: application/json');
         header('Cache-Control: no-store');

@@ -17,6 +17,11 @@ if (isset($_POST['add_ticket'])) {
 
     $subject = sanitizeInput($_POST['subject']);
     $details = mysqli_real_escape_string($mysqli, ($_POST['details']));
+    // Subject and Details are marked required, but the Details editor is TinyMCE (the browser cannot validate it)
+    if (trim($subject) === '' || trim(strip_tags($_POST['details'] ?? '', '<img>')) === '') {
+        flash_alert("Please enter a subject and describe the problem in Details", 'danger');
+        redirect();
+    }
     $category = intval($_POST['category']);
     if (!$category) {
         $category = getDefaultClientTicketCategoryId($mysqli);
@@ -526,7 +531,7 @@ if (isset($_POST['add_contact'])) {
     $contact_auth_method = sanitizeInput($_POST['contact_auth_method']);
 
     // Auth method is a fixed set; only the primary contact may grant technical/billing roles
-    if (!in_array($contact_auth_method, ['local', 'azure'], true)) {
+    if (!in_array($contact_auth_method, ['', 'local', 'azure'], true)) {
         flash_alert("Invalid authentication method", 'danger');
         redirect('contact_add.php');
     }
@@ -602,7 +607,7 @@ if (isset($_POST['edit_contact'])) {
     }
     $contact_user_id = intval($row['contact_user_id']);
 
-    if (!in_array($contact_auth_method, ['local', 'azure'], true)) {
+    if (!in_array($contact_auth_method, ['', 'local', 'azure'], true)) {
         flash_alert("Invalid authentication method", 'danger');
         redirect('contact_edit.php?id=' . $contact_id);
     }
@@ -1394,7 +1399,7 @@ if (isset($_POST['client_add_document'])) {
 
     logAction("Document", "Create", "Client contact $session_contact_name created document $document_name", $session_client_id, $document_id);
 
-    flash_alert("Document <strong>$document_name</strong> created successfully");
+    flash_alert("Document \"$document_name\" created successfully");
 
     redirect('documents.php');
 
@@ -1472,7 +1477,7 @@ if (isset($_POST['client_upload_document'])) {
 
                 logAction("Document", "Upload", "Client contact $session_contact_name uploaded document $document_name with file $file_name", $session_client_id, $document_id);
 
-                flash_alert("Document <strong>$document_name</strong> uploaded successfully");
+                flash_alert("Document \"$document_name\" uploaded successfully");
 
             } else {
                 flash_alert('Error uploading file. Please try again.', 'error');

@@ -3,7 +3,7 @@
 require_once "includes/inc_all_guest.php";
 
 if (!isset($_GET['invoice_id'], $_GET['url_key'])) {
-    echo "<br><h2>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h2>";
+    echo "<div class='card mt-4'><div class='card-body text-center py-5'><h1 class='h3 mb-0'>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h1></div></div>";
     require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
 
     exit();
@@ -24,7 +24,7 @@ $sql = mysqli_query(
 
 if (mysqli_num_rows($sql) !== 1) {
     // Invalid invoice/key
-    echo "<br><h2>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h2>";
+    echo "<div class='card mt-4'><div class='card-body text-center py-5'><h1 class='h3 mb-0'>Oops, something went wrong! Please raise a ticket if you believe this is an error.</h1></div></div>";
     require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
 
     exit();
@@ -89,10 +89,10 @@ $config_invoice_footer = nullable_htmlentities($row['config_invoice_footer']);
 
 // Get Payment Provide Details
 $sql = mysqli_query($mysqli, "SELECT * FROM payment_providers WHERE payment_provider_active = 1 LIMIT 1");
-$row = mysqli_fetch_assoc($sql);
-$payment_provider_id = intval($row['payment_provider_id']);
-$payment_provider_name = nullable_htmlentities($row['payment_provider_name']);
-$payment_provider_threshold = floatval($row['payment_provider_threshold']);
+$row = mysqli_fetch_assoc($sql) ?: [];
+$payment_provider_id = intval($row['payment_provider_id'] ?? 0);
+$payment_provider_name = nullable_htmlentities($row['payment_provider_name'] ?? '');
+$payment_provider_threshold = floatval($row['payment_provider_threshold'] ?? 0);
 
 //Set Currency Format
 $currency_format = numfmt_create($company_locale, NumberFormatter::CURRENCY);
@@ -246,8 +246,8 @@ if ($balance > 0) {
         <div class="row mb-3">
             <div class="col-md-12">
                 <div class="card">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
+                    <div class="table-responsive" tabindex="0" role="region" aria-label="Invoice line items">
+                        <table class="table table-hover mb-0 guest-items">
                             <thead class="bg-light">
                             <tr>
                                 <th>Item</th>

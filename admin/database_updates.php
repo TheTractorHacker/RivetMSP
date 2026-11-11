@@ -475,7 +475,7 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         foreach ($sql_logins as $row) {
             $login_id = $row['login_id'];
             $login_username = $row['login_username'];
-            $login_encrypted_username = encryptLoginEntry($row['login_username']);
+            $login_encrypted_username = function_exists('encryptLoginEntry') ? encryptLoginEntry($row['login_username']) : $row['login_username'];   // helper removed from later releases: keep the value instead of fataling on an old upgrade
             mysqli_query($mysqli, "UPDATE logins SET login_username = '$login_encrypted_username' WHERE login_id = '$login_id'");
         }
 
@@ -8412,4 +8412,17 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.135'");
+    }
+
+    if ($rivetit_db_version() == '2.6.135') {
+        // My dashboard (ported from RivetIT): one row per user holding the JSON layout of that user's widgets (id, size, hidden, chart).
+        // No row = the default layout, so code that runs before this migration simply has no saved layouts.
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `dashboard_layouts` (
+            `layout_user_id` int(11) NOT NULL,
+            `layout_widgets` text DEFAULT NULL,
+            `layout_updated_at` datetime DEFAULT NULL,
+            PRIMARY KEY (`layout_user_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.136'");
     }

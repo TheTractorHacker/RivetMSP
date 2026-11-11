@@ -13,7 +13,8 @@ if (!empty($_SESSION['alert_message'])) {
            so every toast path shares them - including the AJAX ones, which never
            reached this file. */
 
-        toastr[<?php echo json_encode(in_array($_SESSION['alert_type'], ['success', 'info', 'warning', 'error'], true) ? $_SESSION['alert_type'] : ($_SESSION['alert_type'] === 'danger' ? 'error' : 'info')); ?>](<?php echo json_encode($_SESSION['alert_message']); ?>)
+        /* flash_alert() callers pass 'danger' (Bootstrap word); toastr's method for that is 'error' */
+        toastr[<?php echo json_encode(['danger' => 'error', 'info' => 'info', 'warning' => 'warning', 'error' => 'error', 'success' => 'success'][$_SESSION['alert_type']] ?? 'info'); ?>](<?php echo json_encode($_SESSION['alert_message']); ?>)
 
     </script>
 

@@ -19,7 +19,7 @@ ob_start();
 ?>
 
 <div class="modal-header bg-dark">
-    <h5 class="modal-title"><i class='fas fa-bell mr-2'></i>Notifications<span class='badge badge-secondary badge-pill px-3 ml-3'><?= $num_notifications ?><span></h5>
+    <h5 class="modal-title"><i class='fas fa-bell mr-2'></i>Notifications<span class='badge bg-secondary rounded-pill px-3 ms-3'><?= $num_notifications ?></span></h5>
     <button type="button" class="close text-white" data-dismiss="modal">
         <span>&times;</span>
     </button>
@@ -66,8 +66,9 @@ ob_start();
         ?>
         </table>
         <div class="text-center mt-2">
-            <button id="prev-btn" class="btn btn-sm btn-outline-secondary mr-2"><i class="fas fa-caret-left"></i></button>
-            <button id="next-btn" class="btn btn-sm btn-outline-secondary"><i class="fas fa-caret-right"></i></button>
+            <button type="button" id="prev-btn" class="btn btn-sm btn-outline-secondary me-2" aria-label="Previous page"><i class="fas fa-caret-left"></i></button>
+            <span id="page-indicator" class="small text-secondary mx-2"></span>
+            <button type="button" id="next-btn" class="btn btn-sm btn-outline-secondary" aria-label="Next page"><i class="fas fa-caret-right"></i></button>
         </div>
     <?php } else { ?>
     <div class="text-center text-secondary pt-3">
@@ -82,8 +83,8 @@ ob_start();
     <a href="/agent/post.php?dismiss_all_notifications&csrf_token=<?= $_SESSION["csrf_token"] ?>" class="btn btn-primary">
         <span class="text-white text-bold"><i class="fas fa-check mr-2"></i>Dismiss all</span>
     </a>
-    <a href="/agent/notifications.php" class="btn btn-secondary">
-        <span class="text-white">See all Notifications</span>
+    <a href="/agent/notifications.php" class="btn btn-outline-secondary">
+        See all Notifications
     </a>
     <?php } else { ?>
     <a href="/agent/notifications.php?dismissed" class="btn btn-dark">

@@ -1,0 +1,6 @@
+agent/structured_doc.php?id=1&client_id=1
+agent/structured_docs.php?client_id=1
+agent/service_catalog.php
+agent/project_kanban.php
+agent/project_gantt.php
+agent/backups.php

@@ -144,7 +144,7 @@ $freq_labels = [
         <div class="row px-3">
             <div class="col-md-6">
                 <h6 class="mt-2"><i class="fas fa-exchange-alt me-2"></i>MRR Movement (last 30 days)</h6>
-                <div class="table-responsive-sm">
+                <div class="table-responsive">
                     <table class="table table-striped table-sm">
                         <tbody>
                             <tr>
@@ -168,7 +168,7 @@ $freq_labels = [
             </div>
             <div class="col-md-6">
                 <h6 class="mt-2"><i class="fas fa-layer-group me-2"></i>MRR by Frequency</h6>
-                <div class="table-responsive-sm">
+                <div class="table-responsive">
                     <table class="table table-striped table-sm">
                         <thead>
                             <tr><th>Frequency</th><th class="text-end">Schedules</th><th class="text-end">MRR</th></tr>
@@ -193,7 +193,7 @@ $freq_labels = [
         <!-- Top clients by MRR -->
         <div class="px-3 pb-3">
             <h6 class="mt-2"><i class="fas fa-crown me-2"></i>Top Clients by MRR</h6>
-            <div class="table-responsive-sm">
+            <div class="table-responsive">
                 <table class="table table-striped table-sm">
                     <thead>
                         <tr><th>Client</th><th class="text-end">MRR</th><th class="text-end">ARR</th></tr>

@@ -31,14 +31,14 @@ $sql_clients = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients
         </div>
         <div class="card-body">
             <form class="mb-3">
-                <select class="form-control auto-submit-select" name="year">
+                <select class="form-control auto-submit-select" name="year" aria-label="Year">
                     <?php
                     while ($row = mysqli_fetch_assoc($sql_ticket_years)) {
                         $ticket_year = intval($row['ticket_year']); ?>
                         <option <?php if ($year == $ticket_year) { ?> selected <?php } ?> > <?php echo $ticket_year; ?></option>
                     <?php } ?>
                 </select>
-                <select class="form-control auto-submit-select" name="month">
+                <select class="form-control auto-submit-select" name="month" aria-label="Month">
                     <option <?php if ($month == 1) { echo 'selected'; } ?> value="1">January</option>
                     <option <?php if ($month == 2) { echo 'selected'; } ?> value="2">February</option>
                     <option <?php if ($month == 3) { echo 'selected'; } ?> value="3">March</option>
@@ -59,7 +59,7 @@ $sql_clients = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients
                     <h3 class="card-title"><i class="fas fa-fw fa-chart-area me-2"></i>Yearly (<?php echo $year; ?>)</h3>
                 </div>
                 <div class="card-body">
-                    <div class="table-responsive-sm">
+                    <div class="table-responsive">
                         <table class="table table-striped">
                             <thead>
                             <tr>
@@ -180,7 +180,7 @@ $sql_clients = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients
                     <h3 class="card-title"><i class="fas fa-fw fa-chart-area me-2"></i>Monthly (<?php echo date("F", mktime(1, 1, 1, $month, 1)) . ' ' . $year; ?>)</h3>
                 </div>
                 <div class="card-body">
-                    <div class="table-responsive-sm">
+                    <div class="table-responsive">
                         <table class="table table-striped">
                             <thead>
                             <tr>

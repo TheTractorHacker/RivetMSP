@@ -94,7 +94,7 @@ if (isset($_GET['id']) && intval($_GET['id'])) {
 
         <div class="card mb-3" data-ticket-id="<?= $ticket_id ?>" data-live-chat="<?= $config_module_enable_live_chat ? '1' : '0' ?>" data-csrf="<?= $_SESSION['csrf_token'] ?>" data-user-name="<?= nullable_htmlentities($session_contact_name) ?>" data-user-id="<?= intval($session_contact_id) ?>" data-user-type="contact">
             <div class="card-header bg-dark my-2">
-                <h4 class="card-title mt-1">
+                <h4 class="card-title mt-1 text-white">
                     Ticket <?php echo $ticket_prefix, $ticket_number ?>
                 </h4>
                 <div class="card-tools">
@@ -270,7 +270,7 @@ if (isset($_GET['id']) && intval($_GET['id'])) {
                 <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
                 <input type="hidden" name="ticket_id" value="<?php echo $ticket_id ?>">
                 <div class="form-group">
-                    <textarea class="form-control tinymce" name="comment" placeholder="Add comments.."></textarea>
+                    <textarea class="form-control tinymce" name="comment" placeholder="Add a comment..." aria-label="Your reply"></textarea>
                 </div>
                 <div class="form-group">
                     <input type="file" class="form-control-file" name="file[]" multiple id="fileInput" accept=".jpg, .jpeg, .gif, .png, .webp, .pdf, .txt, .md, .doc, .docx, .odt, .csv, .xls, .xlsx, .ods, .pptx, .odp, .zip, .tar, .gz, .xml, .msg, .json, .wav, .mp3, .ogg, .mov, .mp4, .av1, .ovpn">
@@ -283,18 +283,10 @@ if (isset($_GET['id']) && intval($_GET['id'])) {
 
             <h4>Your ticket has been resolved</h4>
 
-            <div class="col-6">
-                <div class="row">
-                    <div class="col">
-                        <a href="post.php?reopen_ticket=<?php echo $ticket_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>" class="btn btn-secondary btn-lg"><i class="fas fa-fw fa-redo text-white"></i> Reopen ticket</a>
-                    </div>
-
-                    <div class="col">
-                        <a href="post.php?close_ticket=<?php echo $ticket_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>" class="btn btn-success btn-lg confirm-link"><i class="fas fa-fw fa-gavel text-white"></i> Close ticket</a>
-                    </div>
-                </div>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                <a href="post.php?reopen_ticket=<?php echo $ticket_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>" class="btn btn-outline-secondary"><i class="fas fa-fw fa-redo me-1"></i> Reopen ticket</a>
+                <a href="post.php?close_ticket=<?php echo $ticket_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>" class="btn btn-success confirm-link"><i class="fas fa-fw fa-gavel me-1"></i> Close ticket</a>
             </div>
-            <br>
 
         <?php } elseif (empty($config_ticket_csat_enable)) { ?>
 
@@ -384,7 +376,7 @@ if (isset($_GET['id']) && intval($_GET['id'])) {
                                 ?>
                                 <span class="fa-stack fa-2x">
                                     <i class="fa fa-circle fa-stack-2x text-secondary"></i>
-                                    <span class="fa fa-stack-1x text-white"><?php echo $user_initials; ?></span>
+                                    <span class="fa-stack-1x text-white fw-semibold" style="font-size:.55em;"><?php echo $user_initials; ?></span>
                                 </span>
                                 <?php
                             }
@@ -417,8 +409,6 @@ if (isset($_GET['id']) && intval($_GET['id'])) {
         }
 
         ?>
-
-        <script src="../js/pretty_content.js"></script>
 
         <!-- Live ticket updates (replies/status/chat via SSE) -->
         <script src="../js/live_ticket.js"></script>

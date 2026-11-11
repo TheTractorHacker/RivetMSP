@@ -1,0 +1,4 @@
+agent/project_kanban.php?project_id=1
+agent/project_gantt.php?project_id=1
+agent/project_kanban.php?project_id=5
+agent/project_gantt.php?project_id=5

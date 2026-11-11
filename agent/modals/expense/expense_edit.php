@@ -32,7 +32,7 @@ ob_start();
 ?>
 
 <div class="modal-header bg-dark">
-    <h5 class="modal-title"><i class='fas fa-fw fa-shopping-cart me-2'></i>Editing expense</h5>
+    <h5 class="modal-title"><i class='fas fa-fw fa-shopping-cart me-2'></i>Editing Expense</h5>
     <button type="button" class="close text-white" data-bs-dismiss="modal">
         <span>&times;</span>
     </button>

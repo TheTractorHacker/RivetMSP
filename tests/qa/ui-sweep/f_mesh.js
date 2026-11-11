@@ -1,0 +1,11 @@
+const h = require('./h.js');
+(async () => { const b = await h.launch(); const c = await b.newContext({ viewport: { width: 1920, height: 1080 }, storageState:'/home/sysadmin/ui-sweep-rmm/shots/state.json' }); const p = await c.newPage();
+ const errs=[]; p.on('pageerror',e=>errs.push(String(e).slice(0,120))); p.on('console',m=>{if(m.type()==='error')errs.push(m.text().slice(0,120))});
+ await p.goto(h.BASE+'/admin/rmm_mesh_wizard.php'); await p.waitForLoadState('networkidle');
+ const f=p.locator('form:has([name=mesh_url])');
+ await f.locator('[name=mesh_url]').fill('not a url'); await f.locator('[name=wiz_save1]').click();
+ console.log('bad url validity:', await p.evaluate(()=>document.activeElement.name+':'+document.activeElement.validationMessage));
+ await f.evaluate(e=>e.noValidate=true); await f.locator('[name=wiz_save1]').click(); await p.waitForLoadState('networkidle'); await p.waitForTimeout(600);
+ console.log('->',p.url().replace(h.BASE,''),(await p.locator('.alert').allInnerTexts()).join(' // ').slice(0,300));
+ await p.screenshot({path:'/home/sysadmin/ui-sweep-rmm/shots/f_mesh_bad.png'});
+ console.log(errs); await b.close(); })();

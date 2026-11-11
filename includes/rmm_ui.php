@@ -885,8 +885,8 @@ function rivetRmmUiFleet(\mysqli $mysqli, int $userId, array $filters = [], ?int
     $capacity = null;
     if ($isAdmin) {
         $redis = null;
-        if (function_exists('redisEnabled')) {
-            $redis = (bool) redisEnabled();
+        if (function_exists('rivetRedisGuardsOn')) {   // the Redis module switch; there is no function called redisEnabled()
+            $redis = rivetRedisGuardsOn();
         }
         $capacity = $rmm->capacity()->build(['redis_available' => $redis]);
         $capacity['limits'] = $rmm->settings()->limits();   // rc.11 scale panel: the cache and herd settings in force (CapacityReport does not repeat them)

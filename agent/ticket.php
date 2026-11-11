@@ -577,7 +577,7 @@ if (isset($_GET['ticket_id'])) {
                             </div>
 
                             <div class="dropdown dropleft text-center">
-                                <button class="btn btn-secondary btn-sm" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown">
+                                <button class="btn btn-secondary btn-sm" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-label="More actions">
                                     <i class="fas fa-fw fa-ellipsis-v"></i>
                                 </button>
                                 <div class="dropdown-menu">
@@ -1216,7 +1216,7 @@ if (isset($_GET['ticket_id'])) {
                                     <div class="card-tools d-print-none mb-2">
                                         <div class="dropdown dropleft">
                                             <?php if (lookupUserPermission("module_support") >= 2) { ?>
-                                                <button class="btn btn-sm btn-tool" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown">
+                                                <button class="btn btn-sm btn-tool" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-label="Reply actions">
                                                     <i class="fas fa-fw fa-ellipsis-v"></i>
                                                 </button>
                                                 <div class="dropdown-menu">
@@ -1285,7 +1285,7 @@ if (isset($_GET['ticket_id'])) {
                             <h5 class="card-title mt-1"><i class="fas fa-fw fa-desktop me-2"></i>Assets</h5>
                             <?php if (empty($ticket_resolved_at) && lookupUserPermission("module_support") >= 2) { ?>
                             <div class="card-tools">
-                                <a class="btn btn-tool ajax-modal" href="#" data-modal-url="modals/ticket/ticket_edit_asset.php?id=<?= $ticket_id ?>">
+                                <a class="btn btn-tool ajax-modal" href="#" aria-label="Edit asset" data-modal-url="modals/ticket/ticket_edit_asset.php?id=<?= $ticket_id ?>">
                                     <i class="fas fa-fw fa-edit"></i>
                                 </a>
                             </div>
@@ -1361,7 +1361,7 @@ if (isset($_GET['ticket_id'])) {
                             <h5 class="card-title mt-1"><i class="fas fa-fw fa-desktop me-2"></i>Assets</h5>
                             <?php if (empty($ticket_resolved_at) && lookupUserPermission("module_support") >= 2) { ?>
                             <div class="card-tools">
-                                <a class="btn btn-tool ajax-modal" href="#" data-modal-url="modals/ticket/ticket_edit_asset.php?id=<?= $ticket_id ?>">
+                                <a class="btn btn-tool ajax-modal" href="#" aria-label="Edit asset" data-modal-url="modals/ticket/ticket_edit_asset.php?id=<?= $ticket_id ?>">
                                     <i class="fas fa-fw fa-edit"></i>
                                 </a>
                             </div>
@@ -1463,7 +1463,7 @@ if (isset($_GET['ticket_id'])) {
                             <input type="text" inputmode="numeric" maxlength="2" id="seconds" name="seconds" placeholder="00" form="ticketReplyForm" class="form-control form-control-sm text-center" style="max-width:3.5rem;">
                         </div>
                         <div class="btn-group btn-block mb-3">
-                            <button type="button" class="btn btn-outline-purple" id="startStopTimer"><i class="fas fa-play me-1"></i>Start</button>
+                            <button type="button" class="btn btn-outline-purple" id="startStopTimer" aria-label="Start or stop the ticket timer"><i class="fas fa-play me-1"></i>Start</button>
                             <button type="button" class="btn btn-outline-purple" id="resetTimer"><i class="fas fa-redo-alt me-1"></i>Reset</button>
                         </div>
                         <?php if ($lt_reply_rows) { ?>

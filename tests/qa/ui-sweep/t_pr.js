@@ -1,0 +1,10 @@
+const L=require('./lib.js');
+(async()=>{const b=await L.launch();const ctx=await L.ctxFor(b,'admin',{width:1920,height:1080});const p=await ctx.newPage();const log=[];L.watch(p,log);
+await p.goto(L.BASE+'/agent/ticket.php?client_id=6&ticket_id=48',{waitUntil:'networkidle'});
+await p.evaluate(()=>window.openAjaxModal('modals/ticket/ticket_priority.php?id=48','md',{}));await p.waitForSelector('.modal.show form');
+console.log(await p.evaluate(()=>[...document.querySelectorAll('.modal.show select')].map(s=>s.name+':'+[...s.options].map(o=>o.textContent).join('|')+' sel='+s.value)), await p.evaluate(()=>document.querySelector('.modal.show form').outerHTML.slice(0,300)));
+await L.setSel(p,'.modal.show','priority','High');
+const [resp]=await Promise.all([p.waitForResponse(r=>r.url().includes('post.php')),p.click('.modal.show button[type=submit]')]);
+console.log(resp.status(),resp.headers()['location'],(await resp.text().catch(()=>'')).slice(0,200));
+await p.waitForTimeout(2000);console.log(p.url(),log.join(';'));console.log((await p.evaluate(()=>document.body.innerText)).slice(0,200));
+await b.close()})();

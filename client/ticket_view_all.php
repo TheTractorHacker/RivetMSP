@@ -8,7 +8,8 @@ require_once 'includes/inc_all.php';
 
 
 if ($session_contact_primary == 0 && !$session_contact_is_technical_contact) {
-    header("Location: post.php?logout");
+    flash_alert("You do not have access to that page.", 'danger');
+    header("Location: index.php");
     exit();
 }
 
@@ -91,5 +92,11 @@ $all_tickets = mysqli_query($mysqli, "SELECT ticket_id, ticket_prefix, ticket_nu
         </div>
     </div>
 
+<script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
+// The portal does not load js/app.js, so .auto-submit-select did nothing: submit the status filter on change.
+document.querySelectorAll('.auto-submit-select').forEach(function (el) {
+    el.addEventListener('change', function () { el.form.submit(); });
+});
+</script>
 <?php
 require_once 'includes/footer.php';

@@ -16,7 +16,7 @@ $purifier_config->set('Cache.DefinitionImpl', null);
 $purifier_config->set('URI.AllowedSchemes', ['data' => true, 'src' => true, 'http' => true, 'https' => true]);
 $purifier = new HTMLPurifier($purifier_config);
 
-$kb_article_id = intval($_GET['id']);
+$kb_article_id = intval($_GET['id'] ?? 0);
 
 $sql = mysqli_query(
     $mysqli,

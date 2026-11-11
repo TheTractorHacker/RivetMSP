@@ -60,17 +60,17 @@ require_once "includes/inc_all_admin.php";
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
             <h4>OpenID Connect for Client Portal</h4>
             <p class="text-muted">Connect any standards-compliant provider - Authentik, Keycloak, Ory Hydra, Okta, Entra ID via its own OIDC endpoint, and more. Register <code>https://<?= nullable_htmlentities($config_base_url) ?>/client/login_oidc.php</code> as the exact redirect URI. Set a contact's Client Portal login to OpenID Connect in their contact record (Clients &gt; (client) &gt; Contacts &gt; Edit); link it to the provider subject automatically on first sign-in below, or set the subject directly.</p>
-            <div class="form-check mb-3">
-                <input class="form-check-input" type="checkbox" id="oidc_enabled" name="oidc_enabled" value="1" <?= $config_oidc_enabled ? 'checked' : '' ?>>
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="oidc_enabled" name="oidc_enabled" value="1" <?= $config_oidc_enabled ? 'checked' : '' ?>>
                 <label class="form-check-label" for="oidc_enabled">Enable Client Portal SSO</label>
             </div>
-            <div class="form-check mb-3">
-                <input class="form-check-input" type="checkbox" id="oidc_link_by_email" name="oidc_link_by_email" value="1" <?= $config_oidc_link_by_email ? 'checked' : '' ?>>
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="oidc_link_by_email" name="oidc_link_by_email" value="1" <?= $config_oidc_link_by_email ? 'checked' : '' ?>>
                 <label class="form-check-label" for="oidc_link_by_email">Link logins on first sign-in by email</label>
                 <small class="form-text text-muted d-block">Optional. For a contact login set to OpenID Connect with no subject linked yet, the first sign-in is linked to the provider account when the email matches exactly one such login. After that only the provider's subject is used, so later email changes never matter.</small>
             </div>
-            <div class="form-check mb-3 ms-4">
-                <input class="form-check-input" type="checkbox" id="oidc_require_verified_email" name="oidc_require_verified_email" value="1" <?= $config_oidc_require_verified_email ? 'checked' : '' ?>>
+            <div class="form-check form-switch mb-3 ms-4">
+                <input class="form-check-input" type="checkbox" role="switch" id="oidc_require_verified_email" name="oidc_require_verified_email" value="1" <?= $config_oidc_require_verified_email ? 'checked' : '' ?>>
                 <label class="form-check-label" for="oidc_require_verified_email">Require the provider to confirm the email is verified</label>
                 <small class="form-text text-muted d-block">Recommended. Turn this off only if your provider does not send a verified flag and only administrators can create contacts or change email addresses there. With it off, anyone who can set their provider email to a blank login's email can claim that login on first sign-in.</small>
             </div>

@@ -10,7 +10,7 @@ if (isset($_GET['client_id'])) {
 
 enforceUserPermission('module_kb');
 
-$kb_article_id = intval($_GET['kb_article_id']);
+$kb_article_id = intval($_GET['kb_article_id'] ?? 0);
 
 $sql = mysqli_query($mysqli, "SELECT kb_article_id, kb_article_title, kb_article_client_id FROM kb_articles WHERE kb_article_id = $kb_article_id LIMIT 1");
 

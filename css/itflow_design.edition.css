@@ -145,6 +145,7 @@
    (not instead of) .prettyContent so pretty_content.js's table/img-fluid
    hook keeps working unchanged. ---- */
 .kb-reader-card { border-top: 3px solid var(--color-accent); }
+.kb-reader-card .card-header { display: block; }
 .kb-reader-meta { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; font-size: .82rem; color: var(--if-muted); margin-top: .35rem; }
 
 .kb-prose { font-size: 1rem; line-height: 1.75; color: var(--if-ink); max-width: 74ch; }
@@ -181,3 +182,186 @@
 .card-body > .kb-empty:last-child {
     padding-top: 1.5rem;
 }
+
+/* A scroll container must also be the containing block of absolutely positioned descendants (TomSelect's hidden accessible <select>,
+   its dropdown), otherwise they escape the clip and make the whole page scroll sideways on phones (quote view at 360px). */
+.table-responsive { position: relative; }
+
+/* White on the success green is 2.9:1; black is 7:1 (same treatment the BS4 shim gives .badge-success). */
+.badge.text-bg-success, .badge.badge-success { color: #000 !important; }
+
+/* ---- Client portal (body.client-portal) ---- */
+/* Core's `.table td { color: ... !important }` flattened .text-danger/.text-warning in light mode, so overdue and
+   expiring dates in table cells were plain black (bold only). Re-assert the semantic colour at higher specificity. */
+body:not(.dark-mode) .table td.text-danger, body:not(.dark-mode) .table td .text-danger { color: #b42318 !important; }
+body:not(.dark-mode) .table td.text-warning, body:not(.dark-mode) .table td .text-warning { color: #8a5300 !important; }
+/* Core paints every table link as body text (a row is not a call to action). In the portal the invoice, quote,
+   ticket and contact numbers/names are the ONLY way into the record, so they must look clickable. */
+body.client-portal .table tbody a:not(.btn):not(.badge):not(.dropdown-item) {
+    color: var(--color-link);
+    text-decoration: underline;
+    text-decoration-color: rgba(var(--bs-primary-rgb, 37, 99, 235), .35);
+    text-underline-offset: 2px;
+}
+body.client-portal .table tbody a:not(.btn):not(.badge):not(.dropdown-item):hover { text-decoration-color: currentColor; }
+/* Profile detail list */
+.portal-dl dt { font-weight: 600; color: var(--color-text-muted); padding-bottom: .5rem; }
+.portal-dl dd { padding-bottom: .5rem; margin-bottom: 0; overflow-wrap: anywhere; }
+/* Status pills in portal tables broke mid-word on phones ("Resol/ved"); keep them whole and let the table scroll instead. */
+body.client-portal .table td .badge { white-space: nowrap; overflow-wrap: normal; }
+body.client-portal .badge { flex-shrink: 0; }
+/* `overflow-wrap: anywhere` (Core) lets the table shrink columns below one word ("Domai/n"); break-word only splits a
+   word that cannot fit, and the surrounding .table-responsive scrolls instead. */
+body.client-portal .table td, body.client-portal .table th { overflow-wrap: break-word; }
+/* Dark portal: white on the light-grey secondary badge was 2.5:1, and the accent blue outline button was 3.3:1 on the card. */
+body.client-portal.dark-mode .badge.badge-secondary, body.client-portal.dark-mode .badge.text-bg-secondary { background-color: #4b5b61 !important; color: #fff !important; }
+body.client-portal.dark-mode .btn-outline-primary { color: #9dbbff; border-color: #5b86e8; }
+body.client-portal.dark-mode .btn-outline-primary:hover { color: #fff; background-color: #2563eb; border-color: #2563eb; }
+/* Login / password-reset links: the teal accent on white is 3.7:1 at 14px (AA needs 4.5:1). */
+.page-center .card a:not(.btn), .login-box .card a:not(.btn) { color: #0f766e; }
+.portal-doc-preview { max-height: 600px; width: auto; max-width: 100%; }
+.portal-kpis > .col-lg { max-width: 25%; } @media (max-width: 991.98px) { .portal-kpis > .col-lg { max-width: none; } }
+
+.badge.bg-success { color: #000 !important; }
+/* Links inside the pale info alert were 2.8:1. */
+.alert-info .alert-link, .alert-info a:not(.btn) { color: #0b4a8f; }
+:root[data-bs-theme="dark"] .alert-info .alert-link, :root[data-bs-theme="dark"] .alert-info a:not(.btn) { color: inherit; text-decoration: underline; }
+/* Event rules: the recipes wrapper is a plain block (heading, hint, then .er-recipe-grid). The legacy grid rule for .er-recipes
+   made the heading, hint and the card grid three squeezed columns. */
+#er-recipes.er-recipes { display: block; }
+/* Endpoint agent tab attention dot: a round 10px dot, not a stretched pill. */
+.ea-tab-dot.badge { display: inline-block; width: 10px; height: 10px; min-width: 0; padding: 0 !important; vertical-align: middle; border-radius: 50%; }
+/* Legacy <button class="close">&times;</button> inside a flex .modal-header sat right next to the title (the shim's float does nothing in a flex row). */
+.modal-header > .close { float: none; margin-left: auto; }
+.modal-header.bg-dark .close { color: #fff; opacity: .85; }
+/* Select-all checkbox in a table header sat above the header text (form-check bottom margin). */
+thead th > .form-check, thead td > .form-check { margin-bottom: 0; }
+/* Dark mode contrast: outline-primary text, secondary and warning badges. */
+:root[data-bs-theme="dark"] .btn-outline-primary:not(:hover) { color: #7aa7ff; }
+:root[data-bs-theme="dark"] .badge.bg-secondary { color: #0d1417 !important; }
+.badge.bg-warning { color: #000 !important; }
+/* Links inside alerts are told apart from the text by more than colour; breadcrumbs and card text links follow the plain ITFlow look (no underline). */
+.alert a:not(.btn) { text-decoration: underline; }
+.admin-breadcrumb a, .card-body p a:not(.btn):not(.nav-link) { text-decoration: none; }
+.admin-breadcrumb a:hover, .card-body p a:not(.btn):not(.nav-link):hover { text-decoration: underline; }
+main .upd-page a:not(.btn):not(.alert-link), main .admin-breadcrumb a { text-decoration: none; }
+main .upd-page a:not(.btn):not(.alert-link):hover, main .admin-breadcrumb a:hover { text-decoration: underline; }
+main .upd-tile-value a { color: inherit; }
+:root[data-bs-theme="dark"] .admin-directory__add { color: #7aa7ff; }
+/* Phone: a scrolling table keeps its cells on one line instead of wrapping emails and role names letter by letter. */
+@media (max-width: 767.98px) {
+  .table-responsive-sm > table td, .table-responsive-sm > table th,
+  .table-responsive-sm form > table td, .table-responsive-sm form > table th { white-space: nowrap; }
+}
+
+/* FullCalendar header (title + prev/next + view buttons) is one non-wrapping row and pushes the page sideways on phones. */
+@media (max-width: 575.98px) {
+    .fc .fc-header-toolbar { flex-wrap: wrap; justify-content: center; gap: .5rem; }
+}
+
+/* Calendar in dark mode: day numbers/links and the outline-primary "Subscribe Now" button used the light-theme blue (#2563eb), about 3:1 on the dark card. */
+:root[data-bs-theme="dark"] .fc .fc-daygrid-day-number,
+:root[data-bs-theme="dark"] .fc .fc-col-header-cell-cushion { color: var(--color-text, #e5e7eb); }
+:root[data-bs-theme="dark"] .fc .fc-day-other .fc-daygrid-day-number { color: var(--color-text-muted, #9ca3af); }
+:root[data-bs-theme="dark"] .btn-outline-primary { color: #8ab4ff; border-color: #8ab4ff; }
+:root[data-bs-theme="dark"] .btn-outline-danger { color: #ff8f8f; border-color: #ff8f8f; }
+:root[data-bs-theme="dark"] .btn-outline-info { color: #7dd3ef; border-color: #7dd3ef; }
+:root[data-bs-theme="dark"] .nav-tabs .nav-link.active, :root[data-bs-theme="dark"] .nav-link[data-comment-filter].active { color: #8ab4ff; }
+
+/* Dark mode: the secondary grey is light (#93a6ab) so white text on it is 2.5:1, and .text-dark is remapped to a light colour,
+   which left badges on light/green fills unreadable. Pin dark ink on those fills. */
+:root[data-bs-theme="dark"] .badge.badge-secondary,
+:root[data-bs-theme="dark"] .bg-secondary.text-white { color: #0d1417 !important; }
+:root[data-bs-theme="dark"] .badge.text-dark { color: #0d1417 !important; }
+
+/* Light theme: Tabler's warning/info text colours are 2.1:1 and 3:1 on white. Darker shades for text elements only (icons keep the brand colour). */
+:root:not([data-bs-theme="dark"]) :is(h1,h2,h3,h4,h5,h6,span,small,div,a,strong,td).text-warning { color: #8a5700 !important; }
+:root:not([data-bs-theme="dark"]) #ticket_collision_viewing { color: #0b6477; }
+
+/* A small select was 36px tall beside a 32px small input in the same filter row (line-height 20px vs 16px), so the row's controls and labels sat at different heights. */
+.form-select.form-select-sm { line-height: 16px; }
+
+/* UI sweep (admin/chrome): white on the success green fails WCAG AA for badges that
+   use bg-success without the text-bg-* helper; inline code inside small/muted text stays readable (was 10.5px). */
+.badge.bg-success { color: #000 !important; }
+code, kbd, samp { font-size: max(.875em, 11.5px); }
+
+/* Event rules: Core styles .er-recipes as the card grid, but the edition markup wraps heading + blurb + .er-recipe-grid in it, which
+   squeezed the recipe cards into a narrow third column. The wrapper is a plain block; .er-recipe-grid does the layout. */
+#er-recipes.er-recipes { display: block; }
+
+/* Dark theme contrast: yellow badges keep black text (text-dark flips light in dark mode), the pale grey secondary badge takes black
+   text, and outline-primary / directory "+ New" links use a lighter blue (#2563eb is 3.2:1 on the dark surfaces). */
+.badge.bg-warning, .badge.text-bg-warning { color: #000 !important; }
+[data-bs-theme="dark"] .badge.bg-secondary, [data-bs-theme="dark"] .badge.text-bg-secondary { color: #000 !important; }
+[data-bs-theme="dark"] .btn-outline-primary:not(:hover):not(:focus):not(.active),
+[data-bs-theme="dark"] .admin-directory__add { color: #8db3ff; border-color: #8db3ff; }
+
+/* BS4-style modal close button: .close floats, which a flex .modal-header ignores, so the X sat glued to the title. Push it to the right edge. */
+.modal-header .close { float: none; margin-left: auto; }
+
+/* Phones: Tabler's own sidebar hamburger stacked above the top bar, whose hamburger does the same job (two menu buttons, two bars). While the menu is
+   closed only the top-bar button shows; once open, Tabler's toggler (now a close X) is visible again. */
+@media (max-width: 991.98px) {
+    .navbar-vertical .navbar-toggler[aria-expanded="false"], .navbar-vertical .navbar-toggler.collapsed { display: none; }
+}
+
+/* Phones: a long page list (audit log, 23 pages) pushed past the viewport, and a card header with a title plus two buttons (Mailboxes)
+   squeezed the title to one letter per line. Let both wrap. */
+.pagination { flex-wrap: wrap; }
+@media (max-width: 575.98px) {
+    .card-header:has(> .card-tools) { flex-wrap: wrap; gap: .5rem; }
+    .card-header > .card-tools { display: flex; flex-wrap: wrap; gap: .5rem; margin-left: auto; max-width: 100%; flex-shrink: 1; }
+}
+
+/* Legacy <button class="close">&times;</button> inside a flex .modal-header sat right next to the title (the shim's float does nothing in a flex row). */
+.modal-header > .close { float: none; margin-left: auto; }
+.modal-header.bg-dark .close { color: #fff; opacity: .85; }
+/* Guest quote/invoice line items: on phones keep each cell on one line (the table scrolls) instead of wrapping item names letter by letter. */
+@media (max-width: 575.98px) { .guest-items th, .guest-items td { white-space: nowrap; } }
+/* Records-per-page picker in list footers stretched across a third of the card; it only ever shows a number. */
+.card-footer .form-group > .ts-wrapper.auto-submit-select { width: 6.5rem; max-width: 100%; }
+
+/* Progress meters (projects list/detail): the "x / y" count lived inside the bar, so a 0-25% bar clipped it and it rendered at 10.5px.
+   The count now sits beside the bar at a readable size; the bar itself is purely visual. */
+.progress-meter { display: flex; align-items: center; gap: .5rem; }
+.progress-meter .progress { flex: 1 1 auto; height: .6rem; min-width: 5rem; }
+.progress-meter .progress-label { flex: 0 0 auto; min-width: 3.25rem; font-size: .8125rem; font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Report filter selects (year / month / view): a bare .form-control select stretched to the full card width and read as an empty text field.
+   Keep them compact and on one wrapped row; the selects carry aria-labels in the markup. */
+form:has(> select.auto-submit-select) { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+select.form-control.auto-submit-select { width: auto; min-width: 8rem; }
+
+/* .info-box.bg-orange (aging buckets) was missing from the shim's muted-tile list, so one tile in a row rendered solid orange. */
+.info-box.bg-orange {
+    background-color: var(--if-surface, #fff) !important;
+    color: var(--if-ink, #16232a) !important;
+    border: 1px solid var(--if-border, #e3e9ea);
+    border-inline-start-width: 3px;
+    border-inline-start-color: #ea580c;
+    box-shadow: var(--if-shadow);
+}
+.info-box.bg-orange .info-box-icon { color: #c2410c; }
+
+/* Row headers (<th> inside tbody: totals / sub-headings on Profit & Loss etc.) used Bootstrap's 4px th padding while the <td>s beside them use the table's
+   cell padding, so the label sat 8px left of the column above it. */
+.table > tbody > tr > th { padding: .7rem .75rem; }
+
+/* Fixed-width (fa-fw) icons set to display:block inside a text-center empty state stay on the left edge; centre them. */
+.text-center > i.fa-fw.d-block { margin-left: auto; margin-right: auto; }
+
+/* Credential names inside table cells: overflow-wrap:anywhere collapses the cell to one character wide on narrow screens; let the responsive table scroll instead. */
+.table td .cred-name { overflow-wrap: break-word; }
+
+/* Asset list: tags under the name, lined up with the text beside the device icon (2.5em icon + .75rem gap). */
+.asset-row-tags { margin-left: calc(2.5em + .75rem); }
+
+/* Outline-primary buttons on dark surfaces: the brand blue is 3.2:1 on the dark cards; use a lighter tint of it for text and border. */
+:root[data-bs-theme="dark"] .btn-outline-primary:not(:hover):not(:focus):not(.active):not(:active),
+body.dark-mode .btn-outline-primary:not(:hover):not(:focus):not(.active):not(:active) {
+    color: #7aa7ff;
+    border-color: #7aa7ff;
+}
+/* <pre> blocks on a light/tertiary background (RMM build-host config, log tails, check output) took Tabler's near-white pre colour and were unreadable. */
+pre.bg-body-tertiary, pre.bg-body-secondary, pre.bg-light, pre.bg-body { color: var(--tblr-body-color, inherit); }

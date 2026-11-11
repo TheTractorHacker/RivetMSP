@@ -4,12 +4,12 @@ require_once "inc_confirm_modal.php";
 
 <?php
 if (basename(dirname($_SERVER['REQUEST_URI'])) === 'admin') { ?>
-    <p class="text-end fw-light"><?php echo htmlspecialchars(APP_NAME, ENT_QUOTES, 'UTF-8'); ?> <?php echo APP_VERSION ?> &nbsp; · &nbsp; <a target="_blank" href="https://docs.itflow.org">Upstream Docs</a> &nbsp; · &nbsp; <a target="_blank" href="https://forum.itflow.org">Upstream Forum</a> &nbsp; · &nbsp; <a target="_blank" href="https://services.itflow.org">Upstream Services</a></p>
+    <p class="text-end fw-light mt-5 mb-3"><?php echo htmlspecialchars(APP_NAME, ENT_QUOTES, 'UTF-8'); ?> <?php echo APP_VERSION ?> &nbsp; · &nbsp; <a href="/agent/kb_articles.php">Docs</a></p>
     <br>
 <?php } ?>
 <?php
 if (basename(dirname($_SERVER['REQUEST_URI'])) === 'guest') { ?>
-<p class="text-center">
+<p class="text-center text-muted small mt-3 mb-4">
     <?php echo nullable_htmlentities($session_company_name); ?>
 </p>
 <?php } ?>

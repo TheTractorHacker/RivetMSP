@@ -137,7 +137,7 @@ $trend_avg    = array_map(function ($t) { return $t['avg_rating']; }, $report['t
                     <div class="info-box-content">
                         <span class="info-box-text">Response Rate</span>
                         <span class="info-box-number"><?php echo $report['summary']['response_rate_pct'] !== null ? $report['summary']['response_rate_pct'] . '%' : '—'; ?></span>
-                        <span class="info-box-text" style="font-size:10px"><?php echo intval($report['summary']['rated']); ?> of <?php echo intval($report['summary']['total_closed']); ?> closed</span>
+                        <span class="info-box-text" style="font-size:.75rem"><?php echo intval($report['summary']['rated']); ?> of <?php echo intval($report['summary']['total_closed']); ?> closed</span>
                     </div>
                 </div>
             </div>
@@ -156,7 +156,7 @@ $trend_avg    = array_map(function ($t) { return $t['avg_rating']; }, $report['t
                     <div class="info-box-content">
                         <span class="info-box-text">Needs Follow-up</span>
                         <span class="info-box-number"><?php echo intval($report['summary']['needs_followup_count']); ?></span>
-                        <span class="info-box-text" style="font-size:10px">rated &le; <?php echo intval($config_ticket_csat_low_rating_threshold); ?>/5, not yet re-closed</span>
+                        <span class="info-box-text" style="font-size:.75rem">rated &le; <?php echo intval($config_ticket_csat_low_rating_threshold); ?>/5, not yet re-closed</span>
                     </div>
                 </div>
             </div>
@@ -186,7 +186,7 @@ $trend_avg    = array_map(function ($t) { return $t['avg_rating']; }, $report['t
         <div class="row px-3">
             <div class="col-lg-6">
                 <h6 class="mt-2"><i class="fas fa-user-cog me-2"></i>By Technician</h6>
-                <div class="table-responsive-sm">
+                <div class="table-responsive">
                     <table class="table table-striped table-sm">
                         <thead>
                             <tr>
@@ -213,7 +213,7 @@ $trend_avg    = array_map(function ($t) { return $t['avg_rating']; }, $report['t
             </div>
             <div class="col-lg-6">
                 <h6 class="mt-2"><i class="fas fa-building me-2"></i>By Client</h6>
-                <div class="table-responsive-sm">
+                <div class="table-responsive">
                     <table class="table table-striped table-sm">
                         <thead>
                             <tr>
@@ -243,7 +243,7 @@ $trend_avg    = array_map(function ($t) { return $t['avg_rating']; }, $report['t
         <!-- Raw feedback feed -->
         <div class="px-3 pb-3">
             <h6 class="mt-2"><i class="fas fa-comment-dots me-2"></i>Feedback <small class="text-muted">(most recent first, capped at 1000 rows — full range via CSV)</small></h6>
-            <div class="table-responsive-sm">
+            <div class="table-responsive">
                 <table class="table table-striped table-sm">
                     <thead>
                         <tr>

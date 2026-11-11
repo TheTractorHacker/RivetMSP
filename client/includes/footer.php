@@ -39,7 +39,7 @@
 <footer class="footer footer-transparent d-print-none">
     <div class="container">
         <hr class="mt-0">
-        <p class="text-center mb-0">
+        <p class="text-center mb-0 text-body">
             <?php echo nullable_htmlentities($session_company_name); ?>
         </p>
     </div>

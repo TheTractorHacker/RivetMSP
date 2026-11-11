@@ -77,19 +77,19 @@ $backup_ready = $backup_passphrase_ready && (int) $config_backup_allow_unencrypt
         <div class="row mt-3 text-center">
             <div class="col-4">
                 <div class="border-right py-2">
-                    <div class="text-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Last Manual</div>
+                    <div class="text-muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Last Manual</div>
                     <div class="fw-bold mt-1"><?= fmt_age($last_manual ? filemtime($last_manual) : null) ?></div>
                 </div>
             </div>
             <div class="col-4">
                 <div class="border-right py-2">
-                    <div class="text-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Last Auto</div>
+                    <div class="text-muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Last Auto</div>
                     <div class="fw-bold mt-1"><?= fmt_age($last_auto ? filemtime($last_auto) : null) ?></div>
                 </div>
             </div>
             <div class="col-4">
                 <div class="py-2">
-                    <div class="text-muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Auto-Schedule</div>
+                    <div class="text-muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Auto-Schedule</div>
                     <div class="fw-bold mt-1">
                         <?php if ($config_backup_auto_enabled): ?>
                             <span class="text-success"><i class="fas fa-check-circle me-1"></i><?= ucfirst($config_backup_frequency) ?></span>
@@ -173,7 +173,7 @@ $backup_ready = $backup_passphrase_ready && (int) $config_backup_allow_unencrypt
                                    <?= $config_backup_allow_unencrypted_override ? 'checked' : '' ?>>
                             <label class="form-check-label" for="backup_allow_unencrypted">Allow unencrypted in-app backups</label>
                         </div>
-                        <small class="text-warning">
+                        <small class="text-warning-emphasis">
                             <i class="fas fa-triangle-exclamation me-1"></i>Off by default: this builder's zip holds the database dump and uploaded files
                             as plain, unencrypted zip content - only the small manifest above (carrying the settings key) is passphrase-encrypted. With
                             this off, "Download Backup", "Save to Server" and the automatic schedule all refuse to run. Turn this on only if you
@@ -332,7 +332,7 @@ $backup_ready = $backup_passphrase_ready && (int) $config_backup_allow_unencrypt
             </div>
         <?php else: ?>
         <table class="table table-sm table-borderless table-hover mb-0">
-            <thead style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;" class="text-muted border-bottom">
+            <thead style="font-size:12px;text-transform:uppercase;letter-spacing:.5px;" class="text-muted border-bottom">
                 <tr>
                     <th class="ps-3" style="width:36px;"></th>
                     <th>Filename</th>

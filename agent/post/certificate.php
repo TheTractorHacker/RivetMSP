@@ -215,7 +215,7 @@ if (isset($_GET['delete_certificate'])) {
     mysqli_stmt_execute($stmt);
     mysqli_stmt_close($stmt);
 
-    logAction("Certificate", "Delete", "$session_name deleted certificate $name", $client_id);
+    logAction("Certificate", "Delete", "$session_name deleted certificate $certificate_name", $client_id);
 
     flash_alert("Certificate <strong>$certificate_name</strong> deleted");
 

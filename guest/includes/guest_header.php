@@ -166,5 +166,5 @@
      dark-mode        guest pages are pinned light - see data-bs-theme above.
    --------------------------------------------------------------------------- */
 ?>
-<body class="accent-<?php echo nullable_htmlentities($config_theme ?? ''); ?>">
+<body class="client-portal accent-<?php echo nullable_htmlentities($config_theme ?? ''); ?>">
     <div class="page">

@@ -271,7 +271,7 @@ ob_start();
 
                                 <?php }
 
-                                if ($current_type_select !== null) echo "</optgroup>";
+                                if ($current_type !== null) echo "</optgroup>";
                                 ?>
                             </select>
                         </div>

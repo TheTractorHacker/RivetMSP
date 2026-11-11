@@ -9,7 +9,8 @@ header("Content-Security-Policy: default-src 'self'");
 require_once "includes/inc_all.php";
 
 if ($session_contact_primary == 0 && !$session_contact_is_technical_contact) {
-    header("Location: post.php?logout");
+    flash_alert("You do not have access to that page.", 'danger');
+    header("Location: index.php");
     exit();
 }
 
@@ -75,7 +76,7 @@ $documents_sql = mysqli_query($mysqli, "SELECT document_id, document_name, docum
                     </td>
                     <td><?php echo date('M j, Y', strtotime($document_created_at)); ?></td>
                     <td class="text-center">
-                        <a href="document.php?id=<?php echo $document_id?>" class="btn btn-sm btn-outline-primary">
+                        <a href="document.php?id=<?php echo $document_id?>" class="btn btn-sm btn-outline-primary" title="View document" aria-label="View document">
                             <i class="fas fa-eye"></i>
                         </a>
                     </td>
@@ -96,13 +97,11 @@ $documents_sql = mysqli_query($mysqli, "SELECT document_id, document_name, docum
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title"><i class="fa fa-fw fa-file-alt me-2"></i>Create New Document</h5>
-                <button type="button" class="close" data-bs-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form action="post.php" method="post" autocomplete="off">
                 <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
-                <div class="modal-body bg-white">
+                <div class="modal-body">
                     <div class="form-group">
                         <label>Document Name <strong class="text-danger">*</strong></label>
                         <div class="input-group">
@@ -128,9 +127,9 @@ $documents_sql = mysqli_query($mysqli, "SELECT document_id, document_name, docum
                         <textarea class="form-control" name="document_content" rows="8" placeholder="Enter document content..." required></textarea>
                     </div>
                 </div>
-                <div class="modal-footer bg-white">
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fa fa-times me-2"></i>Cancel</button>
                     <button type="submit" name="client_add_document" class="btn btn-primary"><i class="fa fa-check me-2"></i>Create Document</button>
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal"><i class="fa fa-times me-2"></i>Cancel</button>
                 </div>
             </form>
         </div>
@@ -143,13 +142,11 @@ $documents_sql = mysqli_query($mysqli, "SELECT document_id, document_name, docum
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title"><i class="fa fa-fw fa-upload me-2"></i>Upload Document File</h5>
-                <button type="button" class="close" data-bs-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form action="post.php" method="post" enctype="multipart/form-data" autocomplete="off">
                 <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
-                <div class="modal-body bg-white">
+                <div class="modal-body">
                     <div class="form-group">
                         <label>Document Name <strong class="text-danger">*</strong></label>
                         <div class="input-group">
@@ -177,9 +174,9 @@ $documents_sql = mysqli_query($mysqli, "SELECT document_id, document_name, docum
                         <small class="text-secondary">Supported formats: PDF, Word documents, text files</small>
                     </div>
                 </div>
-                <div class="modal-footer bg-white">
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fa fa-times me-2"></i>Cancel</button>
                     <button type="submit" name="client_upload_document" class="btn btn-primary"><i class="fa fa-upload me-2"></i>Upload Document</button>
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal"><i class="fa fa-times me-2"></i>Cancel</button>
                 </div>
             </form>
         </div>

@@ -165,6 +165,9 @@ $mb_ago = function ($secs): string {
                     </td>
                 </tr>
                 <?php } ?>
+                <?php if (mysqli_num_rows($sql) === 0) { ?>
+                <tr><td colspan="8" class="text-center text-secondary py-4">No mailboxes configured yet. Click <strong>Add Mailbox</strong> to connect one.</td></tr>
+                <?php } ?>
                 </tbody>
             </table>
         </div>

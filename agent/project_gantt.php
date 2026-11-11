@@ -87,7 +87,7 @@ $page_title = $row['project_name'];
     <div class="card-body">
         <div id="project-gantt"></div>
         <div id="gantt-empty" class="text-center text-secondary py-5" style="display:none;">
-            <i class="fas fa-fw fa-stream fa-2x mb-3 d-block"></i>
+            <i class="fas fa-fw fa-stream fa-2x mb-3 d-block mx-auto"></i>
             No scheduled tasks yet. Add a <strong>start</strong> and <strong>due</strong> date to a task to see it on the timeline.
         </div>
     </div>
