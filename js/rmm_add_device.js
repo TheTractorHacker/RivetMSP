@@ -12,7 +12,9 @@
     var osField = document.getElementById('rmm-add-os');
     var clientSel = document.getElementById('rmm-add-client');
     var locSel = document.getElementById('rmm-add-loc');
-    var archSel = document.getElementById('rmm-add-arch');
+    var archField = document.getElementById('rmm-add-arch');
+    var winSec = document.getElementById('add-windows');
+    var linSec = document.getElementById('add-linux');
     var msg = document.getElementById('rmm-add-msg');
     var winReady = form.getAttribute('data-win-ready') === '1';
     var serviceReady = form.getAttribute('data-service-ready') === '1';
@@ -69,27 +71,39 @@
             if (show && o.selected) { keep = true; }
         });
         if (!keep) { locSel.value = '0'; }
+        var col = document.getElementById('rmm-add-loc-col');
+        if (col) { col.classList.toggle('d-none', !([].some.call(locSel.options, function (o) { return o.getAttribute('data-client') === cid; }))); }
+    }
+    // The platform buttons (Windows / Linux, x64 / ARM64) drive the hidden os + arch fields and which section shows.
+    function platform() { var c = form.querySelector('input[name="platform"]:checked'); return c ? c.value : 'windows-amd64'; }
+    function syncPlatform() {
+        var p = platform().split('-');
+        osField.value = p[0]; archField.value = p[1] === 'arm64' ? 'arm64' : 'amd64';
+        if (winSec) { winSec.classList.toggle('d-none', p[0] !== 'windows'); }
+        if (linSec) { linSec.classList.toggle('d-none', p[0] !== 'linux'); }
     }
     function refreshArch() {
-        var o = archSel.options[archSel.selectedIndex];
-        var hasWin = !!(o && o.getAttribute('data-win-version'));
-        var reason = o ? (o.getAttribute('data-msi-reason') || '') : '';
+        syncPlatform();
+        var a = archField.value;
+        var o = { text: a === 'arm64' ? 'ARM64' : 'x64', getAttribute: function (n) { return form.getAttribute('data-' + n.replace('data-', '') + '-' + a); } };
+        var hasWin = !!o.getAttribute('data-win');
+        var reason = o.getAttribute('data-msi-reason') || '';
         if (exeBtn) { exeBtn.disabled = busy || !serviceReady || !winReady || !hasWin; }
         if (msiBtn) { msiBtn.disabled = busy || !serviceReady || !winReady || reason !== ''; }
-        var ve = form.querySelector('[data-add-ver-exe]'); if (ve && o) { ve.textContent = o.getAttribute('data-win-version') || 'none'; }
+        var ve = form.querySelector('[data-add-ver-exe]'); if (ve) { ve.textContent = o.getAttribute('data-win') || 'none'; }
         if (msiHelp && o) {
-            msiHelp.textContent = reason !== '' ? reason : (msiHelp.getAttribute('data-add-msi-ok') || '') + (o.getAttribute('data-msi-version') || '') + '.';
+            msiHelp.textContent = reason !== '' ? reason : (msiHelp.getAttribute('data-add-msi-ok') || '') + (o.getAttribute('data-msi') || '') + '.';
         }
-        if (winReady && !hasWin) {
-            say('No Windows agent is hosted for ' + o.text.split(' (')[0] + '. Choose the other architecture, or publish a release under Administration > Endpoint agent > Agent updates.', 'warning');
+        if (winReady && !hasWin && osField.value === 'windows') {
+            say('No Windows agent is hosted for ' + o.text + '. Choose another platform, or publish a release under Administration > Endpoint agent > Agent updates.', 'warning');
         } else if (msg.getAttribute('data-kind') === 'arch') { clearMsg(); }
-        msg.setAttribute('data-kind', winReady && !hasWin ? 'arch' : '');
+        msg.setAttribute('data-kind', winReady && !hasWin && osField.value === 'windows' ? 'arch' : '');
         [].forEach.call(form.querySelectorAll('[data-add=commands-windows]'), function (b) { b.disabled = busy || !serviceReady || !winReady || !hasWin; });
         [].forEach.call(form.querySelectorAll('[data-add=commands-linux]'), function (b) { b.disabled = busy || !serviceReady; });
     }
     clientSel.addEventListener('change', function () { filterLocations(); clearMsg(); refreshAllApps(); });
     locSel.addEventListener('change', refreshAllApps);
-    archSel.addEventListener('change', function () { clearMsg(); refreshArch(); });
+    [].forEach.call(form.querySelectorAll('input[name="platform"]'), function (r) { r.addEventListener('change', function () { clearMsg(); refreshArch(); }); });
 
     function filenameOf(res, fallback) {
         var cd = res.headers.get('Content-Disposition') || '';
@@ -99,7 +113,7 @@
     function params(os, mode, format) {
         var raw = new FormData(form);
         var p = new URLSearchParams(raw);
-        p.delete('format');
+        p.delete('format'); p.delete('platform');
         // Each OS ticks its own app list (app_ids_windows[] / app_ids_linux[]); send only the one that matches this request, renamed to what the
         // server expects (app_ids[]), and never the other OS's ticked ids.
         p.delete('app_ids_windows[]');
@@ -175,8 +189,7 @@
     }
     function windowsCommands() {
         run(function () {
-            var o = archSel.options[archSel.selectedIndex];
-            var withMsi = !!(o && !o.getAttribute('data-msi-reason'));
+            var withMsi = !form.getAttribute('data-msi-reason-' + archField.value);
             return post('windows', 'commands', withMsi ? 'msi' : 'exe').then(function (res) {
                 if (!res.ok) { return failText(res).then(function (t) { say(t, 'danger'); }); }
                 return res.json().then(function (d) {
