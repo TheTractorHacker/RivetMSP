@@ -198,6 +198,20 @@ function getWebBrowser($user_browser) {
     return $browser;
 }
 
+// Font Awesome brand icon class for an OS name or a distribution (Ubuntu, Debian, Rocky...), not just "Windows": a Linux server must not wear the Windows logo.
+function osBrandIcon($os_name) {
+    $o = strtolower((string) $os_name);
+    if (str_contains($o, 'windows')) { return 'fa-windows'; }
+    if (str_contains($o, 'mac') || str_contains($o, 'darwin') || str_contains($o, 'ios')) { return 'fa-apple'; }
+    if (str_contains($o, 'android')) { return 'fa-android'; }
+    if (str_contains($o, 'ubuntu')) { return 'fa-ubuntu'; }
+    if (str_contains($o, 'fedora')) { return 'fa-fedora'; }
+    if (str_contains($o, 'centos')) { return 'fa-centos'; }
+    if (preg_match('/red ?hat|rhel|rocky|alma/', $o)) { return 'fa-redhat'; }
+    if (str_contains($o, 'suse')) { return 'fa-suse'; }
+    return 'fa-linux';   // Debian, Arch, Alpine, "Linux" and any other unix-like server
+}
+
 function getOS($user_os) {
     $os_platform    =   "-";
     $os_array       =   array(
@@ -474,7 +488,27 @@ function getCanonicalVaultKey($mysqli): ?string {
 // Persists the canonical site encryption master key (admin-only action).
 function setCanonicalVaultKey($mysqli, string $master_key): void {
     $esc = mysqli_real_escape_string($mysqli, encryptSetting($master_key, \RivetMSP\Crypto\SettingsCrypto::VAULT_CANONICAL_KEY));
+
+    // UPDATE first, INSERT only when there is genuinely no row. An INSERT ... ON DUPLICATE KEY UPDATE is wrong here: under
+    // STRICT_TRANS_TABLES the proposed row is validated before the duplicate is detected, and
+    // settings.config_current_database_version is NOT NULL with no default.
+    // setup/index.php calls this from the ?user step (the only moment the freshly minted master key is in scope), before the
+    // ?company step creates the settings row, so the fallback seeds the row.
     mysqli_query($mysqli, "UPDATE settings SET config_vault_canonical_key = '$esc', config_vault_canonical_key_set_at = NOW() WHERE company_id = 1");
+    if (mysqli_affected_rows($mysqli) > 0) {
+        return;
+    }
+
+    // affected_rows is also 0 when the row exists but the value is unchanged, so check existence explicitly.
+    $exists = mysqli_query($mysqli, "SELECT 1 FROM settings WHERE company_id = 1 LIMIT 1");
+    if ($exists && mysqli_num_rows($exists) > 0) {
+        return;
+    }
+
+    $version_esc = mysqli_real_escape_string($mysqli, defined('LATEST_DATABASE_VERSION') ? LATEST_DATABASE_VERSION : '0.0.0');
+    mysqli_query($mysqli,
+        "INSERT INTO settings (company_id, config_current_database_version, config_vault_canonical_key, config_vault_canonical_key_set_at)
+         VALUES (1, '$version_esc', '$esc', NOW())");
 }
 
 // Self-heals a missing/unusable user_specific_encryption_ciphertext (e.g. NULL on

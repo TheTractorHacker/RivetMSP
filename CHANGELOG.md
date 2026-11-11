@@ -4,6 +4,22 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.51] - 2026-11-10
+
+No database change (DB stays 2.6.136).
+
+### Added
+- **Remote access (MeshCentral) setup:** a collapsible "Don't have a MeshCentral server yet?" helper in the wizard (what MeshCentral is, what to have ready, first-account and sign-up hardening, reverse-proxy and WebSocket notes, the device paths that must never sit behind a CAPTCHA, the Linux / BSD agent choice). Steps 2 and 5 now cover Linux servers, not only Windows PCs.
+- **Dependabot** configuration (Composer and GitHub Actions, weekly).
+
+### Fixed
+- **Browser setup wizard:** the Company step no longer ends in a 500 (the vault master key was minted in the User step but saved in the Company step, a separate request). The Company step also no longer leaves the invoice, quote and ticket prefixes and counters empty.
+- **RMM pages:** Linux servers show the right OS icon on the asset page; flash errors no longer raise `toastr.danger is not a function`; the patch compliance client column and the endpoint agent device table no longer break words on phones; the "Waiting for approval" row no longer prints a stray comma.
+- **Security:** Pax8 billing sync only reuses the synced client's invoice and runs under a named lock; copying a quote derives the client from the source quote and checks access first.
+
+### Changed
+- Dependencies: aws/aws-sdk-php 3.403.1, predis/predis 3.7.1 and their transitive packages (composer audit: no advisories). `a11y_auto.js` escapes label lookups with `CSS.escape`.
+
 ## [26.10.50] - 2026-11-06
 
 No database change (DB stays 2.6.136).
