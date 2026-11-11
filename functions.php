@@ -176,6 +176,20 @@ function getWebBrowser($user_browser) {
     return $browser;
 }
 
+// Font Awesome brand icon class for an OS name or a distribution (Ubuntu, Debian, Rocky...), not just "Windows": a Linux server must not wear the Windows logo.
+function osBrandIcon($os_name) {
+    $o = strtolower((string) $os_name);
+    if (str_contains($o, 'windows')) { return 'fa-windows'; }
+    if (str_contains($o, 'mac') || str_contains($o, 'darwin') || str_contains($o, 'ios')) { return 'fa-apple'; }
+    if (str_contains($o, 'android')) { return 'fa-android'; }
+    if (str_contains($o, 'ubuntu')) { return 'fa-ubuntu'; }
+    if (str_contains($o, 'fedora')) { return 'fa-fedora'; }
+    if (str_contains($o, 'centos')) { return 'fa-centos'; }
+    if (preg_match('/red ?hat|rhel|rocky|alma/', $o)) { return 'fa-redhat'; }
+    if (str_contains($o, 'suse')) { return 'fa-suse'; }
+    return 'fa-linux';   // Debian, Arch, Alpine, "Linux" and any other unix-like server
+}
+
 function getOS($user_os) {
     $os_platform    =   "-";
     $os_array       =   array(
