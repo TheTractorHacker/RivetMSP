@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RivetCore\Migration;
 
 use RivetCore\Audit\Migration\Migration0001AuditEvents;
+use RivetCore\Audit\Migration\Migration0048AuditHashChain;
 use RivetCore\Jobs\Migration\Migration0002IntegrationJobs;
 use RivetCore\Jobs\Migration\Migration0012JobHeartbeat;
 use RivetCore\Automation\Migration\Migration0006AutomationRules;
@@ -47,6 +48,7 @@ use RivetCore\Rmm\Migration\Migration0041DailyBudget;
 use RivetCore\Rmm\Migration\Migration0042RmmDataStore;
 use RivetCore\Rmm\Migration\Migration0043RmmStoreDenormalisation;
 use RivetCore\Rmm\Migration\Migration0044RmmStoreSwitch;
+use RivetCore\Rmm\Migration\Migration0049InstallerManagedExternally;
 use RivetCore\Reporting\Migration\Migration0047ReportingViews;
 use RivetCore\Webhooks\Migration\Migration0005WebhookDeliveries;
 use RivetCore\Workflow\Migration\Migration0007WorkflowTables;
@@ -107,6 +109,8 @@ final class CoreMigrations
             new Migration0044RmmStoreSwitch(),
             new Migration0046FrameworkProfiles(),
             new Migration0047ReportingViews(),
+            new Migration0048AuditHashChain(),
+            new Migration0049InstallerManagedExternally(),
         ];
     }
 }

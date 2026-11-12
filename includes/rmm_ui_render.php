@@ -21,6 +21,8 @@ function rmmH($v): string
     return nullable_htmlentities((string) $v);
 }
 
+require_once __DIR__ . '/rmm_ui_kit.php';
+
 /** The app's empty state (includes/ui/empty_state.php) as a string. */
 function rivetRmmUiEmpty(string $icon, string $title, string $subtitle = '', string $actions = ''): string
 {
@@ -1098,12 +1100,14 @@ function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null, ?
     $cn = static fn (int $id): string => $id > 0 ? ($names[$id] ?? 'client #' . $id) : 'unassigned';
     $now = $f['now'];
 
-    $kpi = rivetRmmUiInfoBox('success', 'circle', 'Online', $c['online'], 'of ' . $c['total'] . ' managed', '/agent/rmm_fleet.php?status=online')
-        . rivetRmmUiInfoBox('danger', 'times-circle', 'Offline', $c['offline'], 'quiet up to 7 days', '/agent/rmm_fleet.php?status=offline')
-        . rivetRmmUiInfoBox('secondary', 'moon', 'Stale', $c['stale'], 'quiet over 7 days', '/agent/rmm_fleet.php?status=stale')
-        . rivetRmmUiInfoBox('primary', 'hourglass-half', 'Never seen', $c['never'], 'enrolled, no check-in', '/agent/rmm_fleet.php?status=never')
-        . rivetRmmUiInfoBox($c['pending_approval'] > 0 ? 'warning' : 'secondary', 'user-clock', 'Need approval', $c['pending_approval'], 'waiting for a decision', '/agent/rmm_fleet.php?status=pending_approval')
-        . rivetRmmUiInfoBox($f['open_alerts'] > 0 ? 'danger' : 'secondary', 'bell', 'Open alerts', $f['open_alerts'], 'agent alerts', '/agent/rmm_alerts.php?status=new');
+    $kpi = '<div class="rmm-fleet-kpis">' . rmmxKpiGrid([
+        ['icon' => 'fa-circle', 'label' => 'Online', 'value' => $c['online'], 'sub' => 'of ' . $c['total'] . ' managed', 'tone' => 'ok', 'href' => '/agent/rmm_fleet.php?status=online'],
+        ['icon' => 'fa-times-circle', 'label' => 'Offline', 'value' => $c['offline'], 'sub' => 'quiet up to 7 days', 'tone' => 'danger', 'href' => '/agent/rmm_fleet.php?status=offline'],
+        ['icon' => 'fa-moon', 'label' => 'Stale', 'value' => $c['stale'], 'sub' => 'quiet over 7 days', 'tone' => 'neutral', 'href' => '/agent/rmm_fleet.php?status=stale'],
+        ['icon' => 'fa-hourglass-half', 'label' => 'Never seen', 'value' => $c['never'], 'sub' => 'no check-in yet', 'tone' => 'info', 'href' => '/agent/rmm_fleet.php?status=never'],
+        ['icon' => 'fa-user-clock', 'label' => 'Need approval', 'value' => $c['pending_approval'], 'sub' => 'waiting for a decision', 'tone' => $c['pending_approval'] > 0 ? 'warn' : 'neutral', 'href' => '/agent/rmm_fleet.php?status=pending_approval'],
+        ['icon' => 'fa-bell', 'label' => 'Open alerts', 'value' => $f['open_alerts'], 'sub' => 'agent alerts', 'tone' => $f['open_alerts'] > 0 ? 'danger' : 'neutral', 'href' => '/agent/rmm_alerts.php?status=new'],
+    ]) . '</div>';
 
     $legend = static fn (string $col, string $l, int $n): string => '<li class="d-flex align-items-center gap-2"><span class="ifm-legend-swatch" style="background:' . $col . '"></span>' . rmmH($l) . ' <b class="ms-auto">' . $n . '</b></li>';
     $donut = rivetRmmUiDonut([['n' => $c['online'], 'l' => 'online', 'col' => 'var(--tblr-success)'], ['n' => $c['offline'], 'l' => 'offline', 'col' => 'var(--tblr-danger)'],
@@ -1195,7 +1199,7 @@ function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null, ?
 
         return '<a class="btn btn-sm ' . ($active ? 'btn-primary' : 'btn-outline-secondary') . '" href="' . rmmH($qs(['status' => $status, 'page' => 1])) . '"' . ($active ? ' aria-current="true"' : '') . '>' . rmmH($label) . '</a>';
     };
-    $filter = '<form class="d-flex flex-wrap align-items-center gap-2 p-3 border-bottom" method="get" action="/agent/rmm_fleet.php" role="search" aria-label="Filter devices">'
+    $filter = '<form class="rmm-fleet-toolbar d-flex flex-wrap align-items-center gap-2 p-3 border-bottom" method="get" action="/agent/rmm_fleet.php" role="search" aria-label="Filter devices">'
         . '<label class="visually-hidden" for="rmm-f-q">Search by hostname or serial number</label><input class="form-control form-control-sm w-auto" id="rmm-f-q" name="q" type="search" maxlength="100" placeholder="Hostname or serial" value="' . rmmH($f['filters']['q'] ?? '') . '">'
         . '<label class="visually-hidden" for="rmm-f-status">Status</label><select class="form-select form-select-sm w-auto" id="rmm-f-status" name="status"><option value="">Any status</option>';
     foreach (['online' => 'Online', 'offline' => 'Offline', 'stale' => 'Stale', 'never' => 'Never seen', 'pending_approval' => 'Needs approval', 'linked' => 'Linked', 'rejected' => 'Rejected'] as $v => $l) {
@@ -1243,20 +1247,29 @@ function rivetRmmUiFleetPage(array $f, string $csrf, ?array $installer = null, ?
     $capacity = $f['capacity'] !== null ? rivetRmmUiCapacity($f['capacity']) : '';
     $swCard = $f['outdated_sw'] !== null ? rivetRmmUiOutdatedSoftware($f['outdated_sw'], $cn, $f) : '';
 
-    return '<div class="d-flex align-items-center flex-wrap mb-3 rmm-page-head" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-satellite me-2" aria-hidden="true"></i>Agent fleet</h4>'
-        . ($entry !== null ? $entry['button'] : ($installer !== null ? '<a href="/agent/rmm_add_device.php" class="btn btn-primary" data-rmm-build-installer><i class="fas fa-plus me-1" aria-hidden="true"></i>Add device</a>' : ''))
-        . ($installer !== null ? rivetRmmUiInstallerButton($installer, 'Quick download', 'btn btn-outline-primary', null, 'fa-download') : '')
-        . '<a href="/agent/rmm_assets.php" class="btn btn-info btn-sm"><i class="fas fa-desktop me-1" aria-hidden="true"></i>All RMM assets</a>'
-        . '<a href="/agent/rmm_alerts.php" class="btn btn-warning btn-sm"><i class="fas fa-bell me-1" aria-hidden="true"></i>Alerts</a>'
-        . ($f['perm']['admin'] ? '<a href="/admin/settings_endpoint_agent.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-cog me-1" aria-hidden="true"></i>Administration</a>' : '') . '</div>'
-        . ($entry !== null ? $entry['notice'] : '')
-        . ($c['total'] === 0 && $f['filters'] === [] ? '<section class="card card-dark mb-3"><div class="card-body">' . rivetRmmUiEmpty('fas fa-satellite-dish', 'No agent is enrolled yet',
-            $installer !== null ? 'Use Add device to get an installer, then run it on a PC.' : ($f['perm']['admin'] ? 'Create an enrollment token under Administration, Endpoint agent, then install the agent on a device.' : 'An administrator creates an enrollment token and installs the agent.'),
-            $installer !== null ? rivetRmmUiInstallerButton($installer, 'Quick download', 'btn btn-primary', null, 'fa-download') : '') . '</div></section>' : '')
-        . '<div class="row mb-3">' . $kpi . '</div>'
+    $isEmpty = $c['total'] === 0 && $f['filters'] === [];
+    $btnSm = 'btn btn-outline-secondary btn-sm';
+    $head = '<div class="d-flex align-items-center flex-wrap mb-3 rmm-page-head" style="gap:6px"><h4 class="mb-0 me-auto"><i class="fas fa-satellite me-2" aria-hidden="true"></i>Agent fleet</h4>'
+        . ($entry !== null ? $entry['button'] : ($installer !== null ? '<a href="/agent/rmm_add_device.php" class="btn btn-primary btn-sm" data-rmm-build-installer><i class="fas fa-plus me-1" aria-hidden="true"></i>Add device</a>' : ''))
+        . ($installer !== null ? rivetRmmUiInstallerButton($installer, 'Quick download', $btnSm, null, 'fa-download') : '')
+        . '<a href="/agent/rmm_assets.php" class="' . $btnSm . '"><i class="fas fa-desktop me-1" aria-hidden="true"></i>All RMM assets</a>'
+        . '<a href="/agent/rmm_alerts.php" class="' . $btnSm . '"><i class="fas fa-bell me-1" aria-hidden="true"></i>Alerts</a>'
+        . ($f['perm']['admin'] ? '<a href="/admin/settings_endpoint_agent.php" class="' . $btnSm . '"><i class="fas fa-cog me-1" aria-hidden="true"></i>Administration</a>' : '') . '</div>'
+        . ($entry !== null ? $entry['notice'] : '');
+    // Capacity is an administrator's detail, so it sits closed at the bottom instead of pushing the device list off the screen.
+    $capacityBox = $capacity !== '' ? '<details class="rmm-cap-details mb-3"><summary><i class="fas fa-chart-area me-2" aria-hidden="true"></i>Performance and capacity <span class="text-muted fw-normal ms-1">scale, queue workers and storage &middot; administrators only</span></summary><div class="pt-3">' . $capacity . '</div></details>' : '';
+    $modal = $installer !== null ? rivetRmmUiInstallerModal($installer, $csrf) : '';
+    if ($isEmpty) {
+        // Nothing enrolled: one calm empty state with the one action, not a dashboard of zeros.
+        return $head . '<section class="card card-dark mb-3 rmm-empty-compact"><div class="card-body">' . rivetRmmUiEmpty('fas fa-satellite-dish', 'No agent is enrolled yet',
+            $installer !== null ? 'Use Add device to get an installer, then run it on a PC.' : ($f['perm']['admin'] ? 'Create an enrollment token under Administration, Endpoint agent, then install the agent on a device.' : 'An administrator creates an enrollment token for you.')) . '</div></section>'
+            . $capacityBox . $modal;
+    }
+
+    return $head . $kpi . $table
         . '<div class="row"><div class="col-lg-7">' . $healthCard . '</div><div class="col-lg-5">' . $apCard . '</div></div>'
         . '<div class="row"><div class="col-lg-6">' . $offCard . '</div><div class="col-lg-6">' . $fCard . '</div></div>'
-        . $versionsCard . $swCard . $capacity . $meshBulk . $table . ($installer !== null ? rivetRmmUiInstallerModal($installer, $csrf) : '');
+        . $versionsCard . $swCard . $meshBulk . $capacityBox . $modal;
 }
 
 /**
