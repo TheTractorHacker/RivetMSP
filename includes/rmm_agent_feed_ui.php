@@ -142,12 +142,15 @@ function rivetAgentAddDevicePage(array $ins, string $csrf, ?array $rec, bool $is
     $defaultArch = $ins['windows']['amd64'] === null && $ins['windows']['arm64'] !== null ? 'arm64' : 'amd64';
     $blocked = $ins['service_problem'] !== null;
     $noWin = $ins['windows']['amd64'] === null && $ins['windows']['arm64'] === null;
+    // Why a button is greyed out, in words under it (the JS keeps toggling `disabled` for the busy state; these only name the standing reasons).
+    $why = static fn (string $reason): string => $reason === '' ? '' : '<p class="small text-muted mb-0 mt-2" data-add-why><i class="fas fa-info-circle me-1" aria-hidden="true"></i>' . $reason . '</p>';
+    $winWhy = $blocked ? 'Unavailable until the service address above is fixed.' : ($noWin ? 'Unavailable: no Windows agent is hosted yet.' : '');
     $admin = static fn (string $anchor, string $text): string => $isAdmin ? ' <a href="/admin/settings_endpoint_agent.php#' . $anchor . '">' . $text . '</a>' : ' An administrator can do this under Administration &gt; Endpoint agent.';
     $feedLink = $admin('agent-updates', 'Publish a release under Agent updates.');
     $plat = static fn (string $v, string $id, string $icon, string $label, bool $checked): string => '<input type="radio" class="btn-check" name="platform" id="' . $id . '" value="' . $v . '"' . ($checked ? ' checked' : '') . ' autocomplete="off">'
         . '<label class="btn btn-outline-primary" for="' . $id . '"><i class="' . $icon . ' me-1" aria-hidden="true"></i>' . $label . '</label>';
-    $chip = static fn (bool $on, string $label, string $detail): string => '<li class="list-group-item d-flex justify-content-between align-items-center"><span>' . $label . '</span>'
-        . ($on ? '<span class="badge text-bg-success">' . $h($detail) . '</span>' : '<span class="badge text-bg-secondary">not published</span>') . '</li>';
+    $chip = static fn (bool $on, string $label, string $detail): string => '<li class="list-group-item d-flex justify-content-between align-items-center gap-3 py-2"><span>' . $label . '</span>'
+        . ($on ? '<span class="badge text-bg-success text-nowrap flex-shrink-0">' . $h($detail) . '</span>' : '<span class="badge text-bg-secondary text-nowrap flex-shrink-0">not published</span>') . '</li>';
 
     $clientOpts = '<option value=""' . ($ins['selected'] === 0 ? ' selected' : '') . ' disabled>Choose a client...</option>';
     foreach ($ins['clients'] as $c) {
@@ -172,8 +175,8 @@ function rivetAgentAddDevicePage(array $ins, string $csrf, ?array $rec, bool $is
         }
     }
 
-    $o = '<div class="d-flex justify-content-end mb-2">' . rivetRmmUiInstallerButton($ins, 'Quick download', 'btn btn-outline-primary btn-sm', null, 'fa-download') . '</div>'
-        . '<div class="card" id="rmm-add-root"><div class="card-header py-3"><h3 class="card-title mb-0"><i class="fas fa-fw fa-download me-2" aria-hidden="true"></i>Add device / Build installer</h3></div><div class="card-body">'
+    $o = '<div class="card" id="rmm-add-root"><div class="card-header py-3 d-flex flex-wrap align-items-center gap-2"><h3 class="card-title mb-0 me-auto"><i class="fas fa-fw fa-download me-2" aria-hidden="true"></i>Add device / Build installer</h3>'
+        . rivetRmmUiInstallerButton($ins, 'Quick download', 'btn btn-outline-primary btn-sm', null, 'fa-download') . '</div><div class="card-body">'
         . '<p class="text-muted">Pick the client and the kind of machine. Everything you copy or download already knows this server and the client, so nothing is typed on the machine. '
         . 'Every button below creates its own enrollment token (audited, shown once); the Advanced section sets how long it works and for how many machines.</p>'
         . ($blocked ? '<div class="alert alert-warning py-2" role="status" data-add-notice="service"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i>' . $h($ins['service_problem']) . $admin('settings', 'Fix it in Administration &gt; Endpoint agent.') . '</div>' : '')
@@ -183,7 +186,7 @@ function rivetAgentAddDevicePage(array $ins, string $csrf, ?array $rec, bool $is
         . ' data-have-linux="' . ($rec !== null ? '1' : '0') . '">'
         . '<input type="hidden" name="csrf_token" value="' . $h($csrf) . '"><input type="hidden" name="os" id="rmm-add-os" value="windows"><input type="hidden" name="arch" id="rmm-add-arch" value="' . $defaultArch . '">'
         . '<div class="row g-3">'
-        . '<div class="col-md-4"><label class="form-label" for="rmm-add-client">Client <span class="text-danger" aria-hidden="true">*</span></label><select class="form-select" id="rmm-add-client" name="client_id" required>' . $clientOpts . '</select></div>'
+        . '<div class="col-md-4"><label class="form-label" for="rmm-add-client">Client</label><select class="form-select" id="rmm-add-client" name="client_id" required>' . $clientOpts . '</select></div>'
         . '<div class="col-md-3' . ($anyLoc ? '' : ' d-none') . '" id="rmm-add-loc-col"><label class="form-label" for="rmm-add-loc">Location <span class="text-muted">(optional)</span></label><select class="form-select" id="rmm-add-loc" name="location_id">' . $locOpts . '</select></div>'
         . '<div class="col-md-2"><label class="form-label" for="rmm-add-ring">Update ring</label><select class="form-select" id="rmm-add-ring" name="ring"><option value="stable" selected>Stable</option><option value="pilot">Pilot</option></select></div>'
         . '<div class="col-md-3"><label class="form-label" for="rmm-add-dtype">Device type</label><select class="form-select" id="rmm-add-dtype" name="device_type">'
@@ -206,12 +209,12 @@ function rivetAgentAddDevicePage(array $ins, string $csrf, ?array $rec, bool $is
     $o .= '<section class="mt-4" id="add-windows" aria-labelledby="add-windows-h"><h4 class="h5" id="add-windows-h"><i class="fab fa-windows me-2" aria-hidden="true"></i>Windows</h4>'
         . '<div class="row g-3"><div class="col-lg-6"><div class="border rounded p-3 h-100"><h5 class="h6">Installer (.exe)</h5>'
         . '<p class="small text-muted">The proven path. Double-click it on the PC and accept the administrator prompt; it installs and enrolls itself. For deployment tools run it with <code>setup --silent</code>. Hosted version: <span data-add-ver-exe>' . $h((string) ($ins['windows'][$defaultArch] ?? 'none')) . '</span>.</p>'
-        . '<button type="submit" class="btn btn-primary" name="format" value="exe" data-add="download" data-add-format="exe"' . ($noWin || $blocked ? ' disabled' : '') . '><i class="fas fa-download me-1" aria-hidden="true"></i>Download .exe installer</button></div></div>'
+        . '<button type="submit" class="btn btn-primary" name="format" value="exe" data-add="download" data-add-format="exe"' . ($noWin || $blocked ? ' disabled' : '') . '><i class="fas fa-download me-1" aria-hidden="true"></i>Download .exe installer</button>' . $why($winWhy) . '</div></div>'
         . '<div class="col-lg-6"><div class="border rounded p-3 h-100"><h5 class="h6">MSI (.msi)</h5>'
         . '<p class="small text-muted" data-add-msi-help data-add-msi-ok="' . $h($msiOk) . '">' . ($msiReason !== '' ? $h($msiReason) : $h($msiOk . (string) ($ins['msi'][$defaultArch] ?? '') . '.')) . '</p>'
-        . '<button type="submit" class="btn btn-outline-primary" name="format" value="msi" data-add="download" data-add-format="msi"' . ($msiReason !== '' || $blocked ? ' disabled' : '') . '><i class="fas fa-download me-1" aria-hidden="true"></i>Download .msi installer</button></div></div>'
+        . '<button type="submit" class="btn btn-outline-primary" name="format" value="msi" data-add="download" data-add-format="msi"' . ($msiReason !== '' || $blocked ? ' disabled' : '') . '><i class="fas fa-download me-1" aria-hidden="true"></i>Download .msi installer</button>' . $why($blocked ? 'Unavailable until the service address above is fixed.' : '') . '</div></div>'
         . '<div class="col-12"><div class="border rounded p-3"><h5 class="h6">Silent install commands (Intune, GPO, your RMM)</h5><p class="small text-muted">Creates a token and prints ready-to-paste commands. The commands download the stamped installer from this server with the token, so run them as SYSTEM or an administrator.</p>'
-        . '<button type="button" class="btn btn-outline-primary" data-add="commands-windows"' . ($noWin || $blocked ? ' disabled' : '') . '><i class="fas fa-terminal me-1" aria-hidden="true"></i>Show silent-install commands</button>'
+        . '<button type="button" class="btn btn-outline-primary" data-add="commands-windows"' . ($noWin || $blocked ? ' disabled' : '') . '><i class="fas fa-terminal me-1" aria-hidden="true"></i>Show silent-install commands</button>' . $why($winWhy)
         . '<div id="add-win-out" class="mt-3" hidden></div></div></div>'
         . '<div class="col-12" id="rmm-add-apps-windows-wrap" hidden><div class="border rounded p-3"><h5 class="h6">Apps to install with the agent</h5><div id="rmm-add-apps-windows" data-rmm-apps-list aria-live="polite"></div></div></div>'
         . '</div></section>';
