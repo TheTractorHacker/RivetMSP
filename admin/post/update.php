@@ -43,6 +43,33 @@ if (isset($_GET['update'])) {
 
     validateAdminRole(); // Old function
 
+    // rivet-core#39: the web server user must not run git against a checkout somebody else owns. When deploy/install-web-update.sh has been run, the
+    // update goes through the root-owned helper (backup, git as the file owner, composer, migrations, PHP-FPM reload) and failures are reported.
+    // Without the helper, a checkout the web user itself owns still updates in the page as before; any other layout is refused with the fix instead of
+    // failing halfway and leaving a mixed-ownership tree.
+    require_once __DIR__ . '/../../includes/update_helper.php';
+    $update_mode = updateHelperMode(dirname(__DIR__, 2));
+    if ($update_mode === 'helper') {
+        if (isset($_GET['force_update'])) {
+            flash_alert('FORCE update discards local changes, so it is not offered through the page when the update helper is installed. Run deploy/update.sh on the server, or git reset --hard there, as the file owner.', 'error');
+            redirect();
+        }
+        require_once __DIR__ . '/../../includes/release_channel.php';
+        $helper_branch = releaseChannelBranch(releaseChannelConfigured($mysqli, dirname(__DIR__, 2)));
+        $helper = updateHelperRun($helper_branch);
+        logAction('App', 'Update', "$session_name ran the update helper: " . ($helper['ok'] ? 'success' : 'FAILED (exit ' . $helper['code'] . ')'));
+        if (!$helper['ok']) {
+            flash_alert('The update failed (exit ' . (int) $helper['code'] . '). <pre class="small mb-0 mt-2">' . htmlspecialchars($helper['tail'], ENT_QUOTES) . '</pre> The full output is in /var/log/itflow-update.log.', 'error');
+            redirect();
+        }
+        flash_alert('Update successful. Run <strong>Update Database</strong> only if the page says the database is behind (the helper already ran the migrations).');
+        redirect();
+    }
+    if ($update_mode === 'unsupported') {
+        flash_alert('The update did not run: the app files are not owned by the web server user, so the page cannot update them safely. On the server, run as root: <code>deploy/install-web-update.sh --app-dir=' . htmlspecialchars(dirname(__DIR__, 2), ENT_QUOTES) . ' --web-user=' . htmlspecialchars(updateCheckWebUser(), ENT_QUOTES) . ' --passphrase-file=&lt;file&gt;</code> (or <code>deploy/update.sh</code> by hand).', 'error');
+        redirect();
+    }
+
     // Stop with a plain explanation (not a half-run git command) when the server cannot update itself; the Checks panel has the details.
     require_once __DIR__ . '/../../includes/update_checks.php';
     foreach (updateChecks(dirname(__DIR__, 2)) as $update_check) {
