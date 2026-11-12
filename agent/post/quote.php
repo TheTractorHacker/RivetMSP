@@ -537,6 +537,12 @@ if (isset($_GET['mark_quote_sent'])) {
 
     enforceClientAccess();
 
+    // MSP-INJ-26(c): only a Draft quote can be marked sent. Invoiced -> Sent -> accepted -> invoiced again billed the same quote twice.
+    if (($row['quote_status'] ?? '') !== 'Draft') {
+        flash_alert('Only a draft quote can be marked sent (this one is ' . htmlspecialchars((string) ($row['quote_status'] ?? ''), ENT_QUOTES) . ').', 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"UPDATE quotes SET quote_status = 'Sent' WHERE quote_id = $quote_id");
 
     mysqli_query($mysqli,"INSERT INTO history SET history_status = 'Sent', history_description = 'Quote marked sent', history_quote_id = $quote_id");

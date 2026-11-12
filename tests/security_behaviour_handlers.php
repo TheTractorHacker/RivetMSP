@@ -10,7 +10,7 @@ $m = new mysqli('localhost', (string) getenv('RIVETMSP_TEST_DB_USER'), (string) 
 $q = function (string $s) use ($m) { $r = $m->query($s); if ($r === false) { fwrite(STDERR, $m->error . "\n" . $s . "\n"); exit(3); } return $r; };
 $one = fn (string $s) => ($r = $q($s)->fetch_row()) ? $r[0] : null;
 $q("SET SESSION sql_mode=''");
-foreach (['users', 'user_roles', 'user_client_permissions', 'modules', 'user_role_permissions', 'clients', 'projects', 'tickets', 'expenses', 'revenues', 'transfers', 'ticket_worksheets', 'ticket_worksheet_responses', 'contacts', 'locations', 'logs'] as $t) { $q("DELETE FROM `$t`"); }
+foreach (['users', 'user_roles', 'user_client_permissions', 'modules', 'user_role_permissions', 'clients', 'projects', 'tickets', 'expenses', 'revenues', 'transfers', 'ticket_worksheets', 'ticket_worksheet_responses', 'contacts', 'locations', 'logs', 'invoices', 'payments', 'quotes', 'history'] as $t) { $q("DELETE FROM `$t`"); }
 $q("INSERT INTO user_roles (role_id, role_name, role_is_admin) VALUES (91,'Adm',1),(92,'Tech',0)");
 $mods = ['module_support', 'module_client', 'module_financial', 'module_sales'];
 foreach ($mods as $i => $mn) { $q("INSERT INTO modules (module_id, module_name) VALUES (" . (950 + $i) . ", '$mn')"); $q("INSERT INTO user_role_permissions (user_role_id, module_id, user_role_permission_level) VALUES (92," . (950 + $i) . ",3)"); }
@@ -23,6 +23,10 @@ $q("INSERT INTO expenses (expense_id, expense_client_id, expense_amount, expense
 $q("INSERT INTO revenues (revenue_id, revenue_amount, revenue_date, revenue_account_id) VALUES (401,5,'2026-01-01',1)");
 $q("INSERT INTO transfers (transfer_id, transfer_expense_id, transfer_revenue_id, transfer_method) VALUES (501, 301, 401, 'orig')");
 $q("INSERT INTO ticket_worksheets (worksheet_id, worksheet_ticket_id, worksheet_template_id, worksheet_signed_at) VALUES (601,101,1,NULL),(602,202,1,NULL),(603,202,1,NOW())");
+
+$q("INSERT INTO invoices (invoice_id, invoice_client_id, invoice_prefix, invoice_number, invoice_status, invoice_amount, invoice_currency_code, invoice_url_key) VALUES (701,1,'I',1,'Partial',100,'USD','k1'),(702,1,'I',2,'Draft',50,'USD','k2')");
+$q("INSERT INTO payments (payment_id, payment_invoice_id, payment_amount, payment_date) VALUES (801,701,60,'2026-01-01')");
+$q("INSERT INTO quotes (quote_id, quote_client_id, quote_prefix, quote_number, quote_status, quote_url_key, quote_amount) VALUES (901,1,'Q',1,'Invoiced','kq1',10),(902,1,'Q',2,'Draft','kq2',10)");
 
 $run = function (string $handler, int $user, array $post = [], array $get = []): string {
     $cmd = [PHP_BINARY, __DIR__ . '/lib/run_post_handler.php', json_encode(['handler' => $handler, 'user_id' => $user, 'post' => $post, 'get' => $get])];
@@ -65,4 +69,18 @@ $csvA = $run('client.php', 3, ['export_clients_csv' => 1]);
 $ok('INJ-8: the client export of a restricted tech excludes other clients', str_contains($csvA, 'Client One') && !str_contains($csvA, 'Victim'));
 $csvB = $run('client.php', 2, ['export_clients_csv' => 1]);
 $ok('INJ-8: an unrestricted tech still gets every client', str_contains($csvB, 'Client One') && str_contains($csvB, 'Victim'));
+// INJ-26 (money; no payment provider is ever called here)
+$run('invoice.php', 2, [], ['mark_invoice_sent' => 701]);
+$ok('INJ-26(a): a Partial invoice cannot be set back to Sent', $one("SELECT invoice_status FROM invoices WHERE invoice_id=701") === 'Partial');
+$run('invoice.php', 2, [], ['mark_invoice_sent' => 702]);
+$ok('INJ-26(a): a Draft invoice can still be marked sent', $one("SELECT invoice_status FROM invoices WHERE invoice_id=702") === 'Sent');
+$run('quote.php', 2, [], ['mark_quote_sent' => 901]);
+$ok('INJ-26(c): an Invoiced quote cannot be set back to Sent (no second invoicing)', $one("SELECT quote_status FROM quotes WHERE quote_id=901") === 'Invoiced');
+$run('quote.php', 2, [], ['mark_quote_sent' => 902]);
+$ok('INJ-26(c): a Draft quote can still be marked sent', $one("SELECT quote_status FROM quotes WHERE quote_id=902") === 'Sent');
+require_once dirname(__DIR__) . '/includes/billing_guards.php';
+$ok('INJ-26(a): the amount to charge is the balance ($100 invoice, $60 paid -> $40)', invoiceBalanceDue($m, 701, 100) === 40.0);
+$ok('INJ-26(a): nothing to charge once fully paid', ($q("INSERT INTO payments (payment_id, payment_invoice_id, payment_amount, payment_date) VALUES (802,701,40,'2026-01-02')") && invoiceBalanceDue($m, 701, 100) <= 0));
+$run('payment.php', 2, [], ['delete_payment' => 801]);
+$ok('INJ-26(d): delete_payment needs level 3 (this tech has 3: allowed) and the invoice status is recomputed from what is left', (int) $one("SELECT COUNT(*) FROM payments WHERE payment_id=801") === 0);
 exit($fail ? 1 : 0);

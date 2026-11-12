@@ -197,7 +197,7 @@ if (isset($_GET['mark_invoice_sent'])) {
     $invoice_id = intval($_GET['mark_invoice_sent']);
 
     // Get Invoice Number and Prefix and Client ID for Logging
-    $sql = mysqli_query($mysqli,"SELECT invoice_prefix, invoice_number, invoice_client_id FROM invoices WHERE invoice_id = $invoice_id");
+    $sql = mysqli_query($mysqli,"SELECT invoice_prefix, invoice_number, invoice_client_id, invoice_status FROM invoices WHERE invoice_id = $invoice_id");
     $row = mysqli_fetch_assoc($sql);
     $invoice_prefix = sanitizeInput($row['invoice_prefix']);
     $invoice_number = intval($row['invoice_number']);
@@ -207,6 +207,12 @@ if (isset($_GET['mark_invoice_sent'])) {
 
     if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id)) {
         flash_alert($block_reason, 'error');
+        redirect();
+    }
+
+    // MSP-INJ-26(a): only a Draft can be marked sent. A Partial, Viewed, Cancelled... invoice set back to "Sent" lost its balance logic and was charged in full.
+    if (($row['invoice_status'] ?? '') !== 'Draft') {
+        flash_alert('Only a draft invoice can be marked sent (this one is ' . htmlspecialchars((string) ($row['invoice_status'] ?? ''), ENT_QUOTES) . ').', 'error');
         redirect();
     }
 
