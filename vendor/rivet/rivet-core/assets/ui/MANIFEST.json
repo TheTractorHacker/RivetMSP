@@ -1,6 +1,6 @@
 {
     "schema": 1,
-    "core_version": "1.0.0-rc.55",
+    "core_version": "1.0.0-rc.59",
     "files": {
         "css/file_upload.css": {
             "sha256": "0643d5ce607c9634d8f74bc908136a037b03e5b96ef922f284eaa65e156ff9a7",
@@ -33,13 +33,13 @@
             "origin": "rivetit-verbatim"
         },
         "css/itflow_custom.css": {
-            "sha256": "945ec7f6062813fea4418e7f404c934126c85a4770b40d8339441394a616aece",
-            "bytes": 164003,
+            "sha256": "8da36fdd581dfe23b674b693b81fddf6dc34836dcb9851d4812cdbbd5b58c92c",
+            "bytes": 164069,
             "origin": "rivetit-split"
         },
         "css/itflow_design.css": {
-            "sha256": "94569801ac779ef24f412c4a0c91f91d7a75e1fc3de5a37329216b1dea489c1f",
-            "bytes": 62716,
+            "sha256": "fe3ce14ce47b09ec26f69481526f41e0ef6cddd13d50735a32b97dc3f75cc4ce",
+            "bytes": 67325,
             "origin": "rivetit-split"
         },
         "css/itflow_metrics.css": {
@@ -107,6 +107,11 @@
             "bytes": 6125,
             "origin": "rivetit-verbatim"
         },
+        "js/command_palette.js": {
+            "sha256": "ab466ed86e3f661cf6a4aa92ffd5f32ace9ad7741edb45cb394576916ffa032e",
+            "bytes": 15615,
+            "origin": "core"
+        },
         "js/date_range_picker.js": {
             "sha256": "fd0445c9ca151dfbb968c1d262f5a4ea5ebf5e37e6d127425de8960b63700d0e",
             "bytes": 12305,
@@ -128,8 +133,8 @@
             "origin": "core"
         },
         "js/webhook_wizard.js": {
-            "sha256": "64a1b7e820d048ff3d04c143b34283fe7cf6452f8c75b380ad0e649067bc973e",
-            "bytes": 56022,
+            "sha256": "7f3c1105c42ad9d154d699f1b57259d20c08a49608979cfa8f42a8856996bed3",
+            "bytes": 56416,
             "origin": "core"
         }
     },

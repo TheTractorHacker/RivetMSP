@@ -2,6 +2,42 @@
 
 All notable changes to RivetCore. Semantic versioning.
 
+## 1.0.0-rc.59 (XSS-through-DOM hardening from CodeQL; dependency bumps; no migration)
+
+- **Fix.** `command_palette.js`: a result's URL is now resolved with `sameOrigin()` before it is used as a link target (`a.href`) and before Enter navigates, so a record or page URL can never carry a `javascript:`/`data:` scheme or another origin. Closes CodeQL `js/xss-through-dom` at the two `it.url` sinks.
+- **Fix.** `webhook_wizard.js`: the `data-wz-networks` and `data-wz-edit` attributes are reduced to a same-origin path (`sameOriginPath()`) when read, so the links and `replaceState` built from them stay on this origin.
+- **Dependencies.** `guzzlehttp/guzzle` 8.3.1, `phpstan/phpstan` 2.3.4 (dev), MSI packaging base image digest.
+
+## 1.0.0-rc.57 (audit log hash chain; migration 0048)
+
+Closes the baseline gap ERR-04 / GAP-02 / INFO-08 as far as Core can: audit rows can be hash-chained, tampering is detectable, and the chain survives retention pruning. Additive: no public signature or constant value changed, the RMM device protocol and its tables are untouched. **Opt-in:** an edition that changes nothing keeps writing plain rows exactly as before.
+
+- **Migration `0048_audit_hash_chain`** (`Audit\Migration\Migration0048AuditHashChain`, `@internal`): adds nullable `audit_events.prev_hash` and `row_hash` (no existing row is rewritten; a no-op where an edition already has the columns) and the tables `audit_chain_head` and `audit_chain_checkpoint`. MariaDB and MySQL; nothing in the PostgreSQL RMM store.
+- **`Audit\AuditChainWriter`** (new, `@api`) and an appended optional `AuditService` constructor parameter `?AuditChainWriter $chain = null`. With a writer, every row gets `prev_hash` and `row_hash` (SHA-256, or HMAC-SHA-256 with a key from `AuditChainHasher::deriveKey($kek)`). One transaction locks the single `audit_chain_head` row (`SELECT ... FOR UPDATE`), so concurrent writers cannot fork the chain. If the chain cannot be extended the event is still stored, unchained (and logged to `error_log`). New constant `KeyPurpose::AUDIT_CHAIN`.
+- **`Audit\AuditChainVerifier`**, **`AuditChainResult`** (new, `@api`): finds an edited row, a deleted or reordered row, a removed tail, oldest rows removed without a recorded prune, and unchained rows after the chain started; counts unchained legacy rows; `exportHead()` returns the newest chained row to store off the database and `verify($anchor)` checks against it. `AuditChainHasher` holds the canonical hash; `AuditChainCheckpoints` the prune checkpoints.
+- **`RetentionService::prune()`** now deletes audit rows oldest first (`ORDER BY audit_id`) and records a checkpoint when it removed chained rows, so legitimate pruning keeps the chain verifiable. Behaviour is otherwise unchanged and it is a no-op for an install that does not use the chain.
+- **`scripts/audit-verify.php`** (ships to editions): read-only verification, `--json`, `--export-head`, `--anchor=`; exit 0/1/2. **`Compliance\Check\AuditChainIntactCheck`** (not in any built-in profile).
+- **Baseline.** ERR-04 changes from `gap` to `partial` (opt-in; legacy rows unchained; a database administrator who rewrites the whole chain is not detected unless the head hash is kept off the database). GAP-02 reworded; `CONTROL_MAPPING.md` and the `BASELINE.md` table regenerated. `CLAIMS.md` needs no change and no new public claim is made.
+- **Tests.** `tests/Unit/AuditChainUnitTest.php`, `tests/Integration/AuditChainTest.php` (edit, middle delete, tail delete, manual old-row delete, retention prune, prune of everything, legacy rows, unchained rows, keys, external anchor), `tests/Integration/AuditChainConcurrencyTest.php` (six processes writing at once). Docs: `docs/security/AUDIT_CHAIN.md`.
+- **Tooling.** `scripts/api-surface-check.php` reads `RIVETCORE_TEST_DB_PORT` (like the test helper) and snapshots the two new chain tables; `tests/api-surface.json` records the two new `audit_events` columns.
+
+## 1.0.0-rc.56 (dev tooling: scripts/secret-scan.php now ships to editions and scans their OWN repo; no protocol/runtime/migration impact)
+
+- **Tests.** `ChangeMonitorTest` no longer fails in the first hour after 00:00 UTC (it seeded events up to 50 minutes old and asserted one calendar day). The pinned hash of the shared design CSS was re-pinned after the rc.55 UI changes, which had turned `main` CI red.
+- **Tooling.** `scripts/rmm-load/pressure-test.sh` (staged 500 to 10,000 simulated-device ramp over `soak.sh`) and `scripts/rmm-load/real-agents.sh` (a few dozen real Linux agents as small containers). Neither has run against a live server yet.
+- Docs: `docs/design/edition-prompts-rc54.md`, `docs/design/edition-prompts-rc55.md`.
+
+- **Fix.** `scripts/secret-scan.php` was marked `export-ignore` in `.gitattributes`, so it never reached `vendor/rivet/rivet-core` when an edition (RivetIT, RivetMSP) installed this package via composer; an edition could only use it with a full dev checkout of rivet-core, which defeats the point. It now ships (`/scripts/secret-scan.php -export-ignore`); the allowlist it already loads, the repository-root `secret-scan-allowlist.json`, was already unconditionally shipped.
+- **Fix.** Even once shipped, the vendored copy was silently useless: its CLI entrypoint always resolved the scan root as `dirname(__DIR__)` (one level above wherever the script file physically lives) and `chdir()`'d there before running `git ls-files`. From a dev checkout that is the repo root (correct); vendored to `<edition>/vendor/rivet/rivet-core/scripts/secret-scan.php` the same logic resolved to `vendor/rivet/rivet-core` - not the edition's own repo, and usually not even a git repository on its own (composer installs from a dist archive, no `.git`), so `git ls-files` returned nothing. The scan root now defaults to `getcwd()` (the directory the caller invoked it from), so the vendored copy scans the EDITION's own repo when run from the edition's repo root. New `--root=<path>` overrides the scan root explicitly; new `--allowlist=<path>` lets an edition supply its own allowlist instead of this tool's (the allowlist still defaults to this tool's own `secret-scan-allowlist.json`, loaded next to the running copy - ships-with-the-tool behaviour for the tool's own false-positive list). The docblock's usage examples are updated for both invocation styles (dev checkout vs. `cd /path/to/your/repo && php vendor/rivet/rivet-core/scripts/secret-scan.php`).
+- **Tests.** `tests/Unit/SecretScanTest.php::testAVendoredCopyInvokedFromAnEditionRepoScansTheEditionNotRivetCore` builds a throwaway git repo structured like `<tmp>/fake-edition/vendor/rivet/rivet-core/scripts/secret-scan.php`, commits a fixture secret into the fake edition's own `src/`, runs the vendored copy from the fake edition's root, and asserts the finding is reported against the edition's own file (never against anything under `vendor/rivet/rivet-core`). `.gitleaks.toml`/`.semgrepignore` drift check (`testGeneratedScannerConfigsAreUpToDate`) is unaffected: the allowlist's own path and content did not change.
+
+## 1.0.0-rc.58 (UI sweep: badges and buttons never break mid-word, tight tables, readable amber text, command palette; no migration)
+
+- **Command palette** (`js/command_palette.js` + styles in `itflow_design.css`): Ctrl/Cmd+K (or `/` outside a field) opens one box to jump to any page in the user's own navigation, to recent destinations, and, while typing, to records through the existing live-search endpoint. Pure front end: no endpoint, schema or permission change (pages come from the sidebar the user already sees); recents live in `localStorage`. Editions load it from their footer; the header search shows a `Ctrl K` chip.
+- **Table badges and buttons** no longer break mid-word ("Uncatego / rized", "Ope / n", "TCK- / 257"): `.table td .badge` is one line (ellipsis past 22rem) instead of `overflow-wrap:anywhere`, and `.btn` (not `.btn-link`) is `nowrap` (`itflow_custom.css`, `itflow_design.css`).
+- **`.table-tight`** lists get a narrower cell gutter so 12-column lists (Tickets) fit their card.
+- **`.text-warning`** on light surfaces is a darker amber (was 2.1:1 on white).
+
 ## 1.0.0-rc.55 (UI: patches table cells no longer wrap mid-word; table hover no longer solid-fills a row; no migration)
 
 - **Table row hover**: a hovered row in a `.table-hover` list (e.g. Departments) no longer gets a solid accent-colour fill on top of the subtle tint; the tint alone is the hover (`itflow_design.css`).

@@ -438,6 +438,33 @@ CREATE TABLE `assets` (
   KEY `idx_assets_client_archived` (`asset_client_id`,`asset_archived_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+--
+-- RivetCore migration 0048_audit_hash_chain (1.0.0-rc.57): audit_events.prev_hash/row_hash (above) and the two chain tables. Nothing is chained until the
+-- edition wires an AuditChainWriter; the head row is the genesis anchor Migration0048AuditHashChain inserts.
+--
+
+DROP TABLE IF EXISTS `audit_chain_head`;
+CREATE TABLE `audit_chain_head` (
+  `id` tinyint(4) NOT NULL,
+  `head_audit_id` int(11) DEFAULT NULL,
+  `head_hash` char(64) NOT NULL,
+  `hash_mode` varchar(8) NOT NULL DEFAULT '',
+  `key_fp` varchar(16) NOT NULL DEFAULT '',
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+INSERT IGNORE INTO `audit_chain_head` (`id`, `head_hash`) VALUES (1, '0000000000000000000000000000000000000000000000000000000000000000');
+
+DROP TABLE IF EXISTS `audit_chain_checkpoint`;
+CREATE TABLE `audit_chain_checkpoint` (
+  `checkpoint_id` int(11) NOT NULL AUTO_INCREMENT,
+  `anchor_hash` char(64) NOT NULL,
+  `rows_pruned` int(11) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`checkpoint_id`),
+  KEY `idx_audit_chain_checkpoint_anchor` (`anchor_hash`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 DROP TABLE IF EXISTS `audit_events`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;

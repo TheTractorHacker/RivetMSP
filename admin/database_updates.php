@@ -8426,3 +8426,18 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.136'");
     }
+
+    if ($rivetit_db_version() == '2.6.136') {
+        // DB 2.6.137: RivetCore 1.0.0-rc.55 -> 1.0.0-rc.59. rc.57 adds migration 0048 (0048_audit_hash_chain): two nullable columns on audit_events and
+        // the audit_chain_head / audit_chain_checkpoint tables. Nothing is chained until an AuditChainWriter is wired in (rc.56, rc.58 and rc.59 ship
+        // no migration), so an edition that does nothing keeps writing plain audit rows. One MigrationRunner pass picks up 0048 and anything pending.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+        }
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.137'");
+    }
