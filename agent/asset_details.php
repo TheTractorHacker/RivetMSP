@@ -242,6 +242,7 @@ if (isset($_GET['asset_id'])) {
             LEFT JOIN credential_tags ON credential_tags.credential_id = credentials.credential_id
             LEFT JOIN tags ON tags.tag_id = credential_tags.tag_id
             WHERE credential_asset_id = $asset_id
+              AND credential_client_id = (SELECT asset_client_id FROM assets WHERE asset_id = $asset_id)   /* a credential of another client never shows under this asset (rmm assign_client could move assets across clients) */
               AND credential_archived_at IS NULL
             GROUP BY credentials.credential_id
             ORDER BY credential_name DESC

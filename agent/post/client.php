@@ -387,6 +387,8 @@ if (isset($_GET['archive_client'])) {
 
     $client_id = intval($_GET['archive_client']);
 
+    enforceClientAccess($client_id);   // MSP-INJ-1: module permission alone must not reach clients outside the user's client restriction
+
     // Archive client
     mysqli_query($mysqli, "UPDATE clients SET client_archived_at = NOW() WHERE client_id = $client_id");
 
@@ -417,6 +419,8 @@ if (isset($_GET['restore_client'])) {
 
     $client_id = intval($_GET['restore_client']);
 
+    enforceClientAccess($client_id);   // MSP-INJ-1: module permission alone must not reach clients outside the user's client restriction
+
     // Get Client Name
     $client_name = sanitizeInput(getFieldById('clients', $client_id, 'client_name'));
 
@@ -437,6 +441,8 @@ if (isset($_GET['delete_client'])) {
     enforceUserPermission('module_client', 3);
 
     $client_id = intval($_GET['delete_client']);
+
+    enforceClientAccess($client_id);   // MSP-INJ-1: module permission alone must not reach clients outside the user's client restriction
 
     // Get Client Name
     $client_name = sanitizeInput(getFieldById('clients', $client_id, 'client_name'));

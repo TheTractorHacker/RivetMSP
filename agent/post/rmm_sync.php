@@ -117,10 +117,15 @@ if ($action === 'assign_client') {
 
     enforceClientAccess($target_client_id);
 
-    $asset_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT asset_name FROM assets WHERE asset_id=$asset_id"));
+    $asset_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT asset_name, asset_client_id FROM assets WHERE asset_id=$asset_id"));
     if (!$asset_row) {
         echo json_encode(['success' => false, 'error' => 'Asset not found']);
         exit;
+    }
+    // MSP-INJ-2: access to the target client is not enough. The asset's CURRENT client must be one this user may act on too, otherwise any
+    // RMM-sync user could pull another client's asset (and everything hanging off it) into a client they control.
+    if ((int) $asset_row['asset_client_id'] > 0) {
+        enforceClientAccess((int) $asset_row['asset_client_id']);
     }
 
     $client_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT client_name FROM clients WHERE client_id=$target_client_id AND client_archived_at IS NULL"));
