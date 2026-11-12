@@ -4,6 +4,34 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.52] - 2026-11-12
+
+Database 2.6.137 (RivetCore migrations 0048 audit hash chain tables and 0049 installer `managed_externally`; both additive, applied by Update Database). **Do not deploy before the mobile apps are updated** (see "Mobile API changes").
+
+### Security
+- **Client access:** archive/restore/delete client, notes on clients/contacts/assets, `edit_transfer`, `edit_project` and linking tickets to projects, worksheets, the client and expense CSV exports, the vendor-contact import/export and RMM `assign_client` now check the user's client restriction on the client stored on the record (not the one in the request). Credentials under an asset or service stay within the asset's client; a credential can only be linked to an asset of the same client. Closed worksheets (signed by the customer) can no longer be edited or deleted.
+- **Modals:** `agent/modals/*` now need the module their folder belongs to (financial, sales, client, credential, KB, support); an unmapped folder fails closed to module_support. Ticket modals check the ticket's client.
+- **RMM:** reboot needs `module_rmm_scripts` 2, free-form run command 3; link, unlink, sync, assign and sync scripts need Write (they accepted Read).
+- **Sign-in:** the mobile API password login refuses an account that must have two-factor but has not set it up (and is out of grace). Changing your email, turning two-factor on or off, and adding or removing a passkey now need your current password and a live session (disabling two-factor is a form, not a link).
+- **Vault:** every place that shows decrypted credential values (CSV export, client PDF, global search, asset/contact/client pages and modals, edit form, share link, TOTP, API) goes through one gate: the reveal limit (30 per 10 minutes by default), a password step-up for exports and PDFs, and an activity-log line. Viewing an asset or contact page counts as one reveal.
+- **Notifications:** a notification about a client goes only to administrators, users with no client restriction and users whose list includes that client (also in the API). Open: per-notification-type module permission (e.g. invoice amounts) is not filtered yet.
+- **Portal and guest ticket views** show only Public and Client replies (the guest sign-off page had no filter).
+- **Money:** saved-card, portal and autopay charges use the remaining balance, never the invoice total; an invoice or quote can only be marked sent from Draft (no re-invoicing, no charge-in-full of a Partial invoice); deleting a payment needs level 3. Pax8: re-mapping or un-mapping a company stops billing the old client, billing uses one deterministic map row and only companies with billing on, and the subscription refresh runs under the billing lock in one transaction. **Open:** the double-charge race between portal, agent and autopay (design in `docs/design/stripe-double-charge-INJ-26b.md`), unbounded quote/recurring discounts.
+- **Core TEN-1..12 (tenant isolation in Core's RMM actions):** no change expected for RivetMSP, administrators are unrestricted by design.
+
+### Mobile API changes (apps must ship first)
+- `PUT /api/v1/me` with `device_public_key_pem` now requires `current_password` (and `totp_code` or a recovery code when MFA is on); already-enrolled devices keep working.
+- `GET /api/v1/credentials/{id}` shares the web reveal limit and answers 429 with `Retry-After` when exceeded.
+- `POST /api/v1/auth/login` answers 403 "Two-factor authentication is required..." for accounts that must have MFA and have none.
+
+### Changed
+- **RivetCore 1.0.0-rc.55 to rc.60:** shared UI assets updated; includes the rc.59 CSP/XSS fixes in the webhook wizard and the migrations above. The audit chain is installed but **not switched on** (no `AuditChainWriter` wired yet).
+- **Add device page** uses the RivetIT layout (one card, platform buttons, device type, Advanced section, "what this server can build"); the Mesh wizard and Agent fleet pages got the RivetIT-style cleanups (calm empty state, KPI tiles, one button style).
+- **Update page:** the web server user no longer runs git on files it does not own. With the new root helper (`deploy/install-web-update.sh`, one sudo rule) Update App takes a backup, updates as the file owner, runs composer and the migrations and reloads PHP-FPM (`php<full version>-fpm` first); without it, a checkout the web user owns updates in the page as before, otherwise the page tells you how to set up the helper. `deploy/update.sh` no longer hard-codes php8.4-fpm and fails loudly when no PHP-FPM unit is active.
+
+### Fixed
+- The .deb install command makes the package readable by apt's `_apt` user (no more "unsandboxed as root" warning).
+
 ## [26.10.51] - 2026-11-10
 
 No database change (DB stays 2.6.136).
