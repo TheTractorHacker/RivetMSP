@@ -29,4 +29,14 @@ $m = $f('includes/modal_header.php');
 $ok('INJ-9 modals: money modals need module_financial/module_sales, ticket modals module_support', str_contains($m, "'payment' => 'module_financial'") && str_contains($m, "'invoice' => 'module_sales'") && str_contains($m, "'ticket' => 'module_support'"));
 $ok('INJ-9 ticket modals: the ticket\'s client is checked', str_contains($m, 'You do not have access to this client.'));
 $ok('INJ-10 dashboard: the old GET flag page only redirects (widgets carry module and client gates)', !str_contains($f('agent/dashboard.php'), 'enable_financial') && str_contains($f('src/Reports/Widgets/WidgetRegistry.php'), "'modules' => ['module_financial']"));
+// the modal map must list every agent/modals folder and file (fail closed otherwise, but a new one should be put in the map deliberately)
+$mapSrc = $f('includes/modal_header.php');
+$missing = [];
+foreach (scandir("$root/agent/modals") as $e) {
+    if ($e === '.' || $e === '..') { continue; }
+    $key = is_dir("$root/agent/modals/$e") ? $e : basename($e, '.php');
+    if (!str_contains($mapSrc, "'$key' =>")) { $missing[] = $key; }
+}
+$ok('INJ-9: every agent/modals folder/file is in the module map' . ($missing ? ' (missing: ' . implode(', ', $missing) . ')' : ''), $missing === []);
+$ok('INJ-9: an unmapped folder fails closed to module_support', str_contains($mapSrc, "?? 'module_support'"));
 exit($fail ? 1 : 0);
