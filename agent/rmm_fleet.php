@@ -66,7 +66,7 @@ if ($rmm_installer !== null) {
     $rmm_installer['autoopen'] = isset($_GET['quick']);   // ?quick=1 opens the quick dialog straight away (the "Quick download" link of the full page)
 }
 $rmm_installer_scripts = $rmm_installer !== null;   // includes/footer.php links js/rmm_installer.js only when this is set
-$rmm_entry = rivetRmmInstallerEntry($mysqli, (int) $session_user_id, !empty($session_is_admin), (bool) $config_core_rmm_enabled);
+$rmm_entry = rivetRmmInstallerEntry($mysqli, (int) $session_user_id, !empty($session_is_admin), (bool) $config_core_rmm_enabled, 'btn btn-primary btn-sm');
 echo rivetRmmUiFleetPage($rmm_fleet, (string) ($_SESSION['csrf_token'] ?? ''), $rmm_installer, $rmm_entry);
 
 require_once "../includes/footer.php";
