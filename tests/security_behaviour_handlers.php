@@ -83,4 +83,18 @@ $ok('INJ-26(a): the amount to charge is the balance ($100 invoice, $60 paid -> $
 $ok('INJ-26(a): nothing to charge once fully paid', ($q("INSERT INTO payments (payment_id, payment_invoice_id, payment_amount, payment_date) VALUES (802,701,40,'2026-01-02')") && invoiceBalanceDue($m, 701, 100) <= 0));
 $run('payment.php', 2, [], ['delete_payment' => 801]);
 $ok('INJ-26(d): delete_payment needs level 3 (this tech has 3: allowed) and the invoice status is recomputed from what is left', (int) $one("SELECT COUNT(*) FROM payments WHERE payment_id=801") === 0);
+// INJ-1 (the two Highs' first half): archive/restore/delete client as the client-restricted tech (restricted to client 1)
+$run('client.php', 3, [], ['archive_client' => 2]);
+$ok('INJ-1: a restricted tech cannot archive a client outside their restriction', $one("SELECT client_archived_at FROM clients WHERE client_id=2") === null);
+$q("UPDATE clients SET client_archived_at = NOW() WHERE client_id = 2");
+$run('client.php', 3, [], ['restore_client' => 2]);
+$ok('INJ-1: nor restore one', $one("SELECT client_archived_at FROM clients WHERE client_id=2") !== null);
+$q("UPDATE clients SET client_archived_at = NULL WHERE client_id = 2");
+$run('client.php', 3, [], ['delete_client' => 2]);
+$ok('INJ-1: nor delete one (the row and its data survive)', (int) $one("SELECT COUNT(*) FROM clients WHERE client_id=2") === 1 && (int) $one("SELECT COUNT(*) FROM projects WHERE project_client_id=2") === 1);
+$run('client.php', 3, [], ['archive_client' => 1]);
+$ok('INJ-1: the same tech can still archive a client they may access', $one("SELECT client_archived_at FROM clients WHERE client_id=1") !== null);
+$q("UPDATE clients SET client_archived_at = NULL WHERE client_id = 1");
+$run('client.php', 2, [], ['archive_client' => 2]);
+$ok('INJ-1: an unrestricted tech can archive any client', $one("SELECT client_archived_at FROM clients WHERE client_id=2") !== null);
 exit($fail ? 1 : 0);
