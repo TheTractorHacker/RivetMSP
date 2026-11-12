@@ -49,7 +49,7 @@ if ($action === 'test') {
 
 // ---- Full sync ----
 if ($action === 'sync') {
-    if (!lookupUserPermission('module_rmm_sync')) {
+    if ((int) lookupUserPermission('module_rmm_sync') < 2) {   // MSP-INJ-3: Write, not just Read
         echo json_encode(['success' => false, 'error' => 'No sync permission']);
         exit;
     }
@@ -102,7 +102,7 @@ if ($action === 'sync') {
 
 // ---- Assign an RMM-synced asset to an ITFlow client ----
 if ($action === 'assign_client') {
-    if (!lookupUserPermission('module_rmm_sync')) {
+    if ((int) lookupUserPermission('module_rmm_sync') < 2) {   // MSP-INJ-3: Write, not just Read
         echo json_encode(['success' => false, 'error' => 'No sync permission']);
         exit;
     }
@@ -146,7 +146,7 @@ if ($action === 'assign_client') {
 
 // ---- Sync scripts from Tactical ----
 if ($action === 'sync_scripts') {
-    if (!lookupUserPermission('module_rmm_scripts')) {
+    if ((int) lookupUserPermission('module_rmm_scripts') < 2) {   // MSP-INJ-3
         echo json_encode(['success' => false, 'error' => 'No scripts permission']);
         exit;
     }
