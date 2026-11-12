@@ -8,6 +8,8 @@ This file documents all notable changes made to ITFlow.
 
 Database 2.6.137 (RivetCore migrations 0048 audit hash chain tables and 0049 installer `managed_externally`; both additive, applied by Update Database). **Do not deploy before the mobile apps are updated** (see "Mobile API changes").
 
+> **Do not press Update App (or run `deploy/update.sh`) on a server with mobile-app users until the mobile apps have shipped their update.** The GitHub "pre-release" flag gates nothing: Update App pulls the *branch* of the configured release channel (production = `master`, beta = `beta`) and does not look at releases, and both branches contain these changes. Updating also runs the database migrations (Update Database).
+
 ### Security
 - **Client access:** archive/restore/delete client, notes on clients/contacts/assets, `edit_transfer`, `edit_project` and linking tickets to projects, worksheets, the client and expense CSV exports, the vendor-contact import/export and RMM `assign_client` now check the user's client restriction on the client stored on the record (not the one in the request). Credentials under an asset or service stay within the asset's client; a credential can only be linked to an asset of the same client. Closed worksheets (signed by the customer) can no longer be edited or deleted.
 - **Modals:** `agent/modals/*` now need the module their folder belongs to (financial, sales, client, credential, KB, support); an unmapped folder fails closed to module_support. Ticket modals check the ticket's client.
