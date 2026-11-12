@@ -1999,6 +1999,7 @@ CREATE TABLE `endpoint_agent_installer_options` (
   `token_id` int(11) NOT NULL,
   `install_mesh_agent` tinyint(1) NOT NULL DEFAULT 0,
   `device_type` varchar(20) NOT NULL DEFAULT 'auto',
+  `managed_externally` tinyint(1) NOT NULL DEFAULT 0,   -- RivetCore migration 0049 (rc.60)
   `created_at` datetime NOT NULL,
   PRIMARY KEY (`token_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

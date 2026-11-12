@@ -2668,6 +2668,7 @@ class ComposerStaticInit690e04a27fa241bad9da145ee44cf2eb
         'RivetCore\\Rmm\\Migration\\Migration0042RmmDataStore' => __DIR__ . '/..' . '/rivet/rivet-core/src/Rmm/Migration/Migration0042RmmDataStore.php',
         'RivetCore\\Rmm\\Migration\\Migration0043RmmStoreDenormalisation' => __DIR__ . '/..' . '/rivet/rivet-core/src/Rmm/Migration/Migration0043RmmStoreDenormalisation.php',
         'RivetCore\\Rmm\\Migration\\Migration0044RmmStoreSwitch' => __DIR__ . '/..' . '/rivet/rivet-core/src/Rmm/Migration/Migration0044RmmStoreSwitch.php',
+        'RivetCore\\Rmm\\Migration\\Migration0049InstallerManagedExternally' => __DIR__ . '/..' . '/rivet/rivet-core/src/Rmm/Migration/Migration0049InstallerManagedExternally.php',
         'RivetCore\\Rmm\\Migration\\MsiTemplateSchema' => __DIR__ . '/..' . '/rivet/rivet-core/src/Rmm/Migration/MsiTemplateSchema.php',
         'RivetCore\\Rmm\\Migration\\PatchSchema' => __DIR__ . '/..' . '/rivet/rivet-core/src/Rmm/Migration/PatchSchema.php',
         'RivetCore\\Rmm\\Migration\\RemoteSchema' => __DIR__ . '/..' . '/rivet/rivet-core/src/Rmm/Migration/RemoteSchema.php',

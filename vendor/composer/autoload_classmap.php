@@ -2539,6 +2539,7 @@ return array(
     'RivetCore\\Rmm\\Migration\\Migration0042RmmDataStore' => $vendorDir . '/rivet/rivet-core/src/Rmm/Migration/Migration0042RmmDataStore.php',
     'RivetCore\\Rmm\\Migration\\Migration0043RmmStoreDenormalisation' => $vendorDir . '/rivet/rivet-core/src/Rmm/Migration/Migration0043RmmStoreDenormalisation.php',
     'RivetCore\\Rmm\\Migration\\Migration0044RmmStoreSwitch' => $vendorDir . '/rivet/rivet-core/src/Rmm/Migration/Migration0044RmmStoreSwitch.php',
+    'RivetCore\\Rmm\\Migration\\Migration0049InstallerManagedExternally' => $vendorDir . '/rivet/rivet-core/src/Rmm/Migration/Migration0049InstallerManagedExternally.php',
     'RivetCore\\Rmm\\Migration\\MsiTemplateSchema' => $vendorDir . '/rivet/rivet-core/src/Rmm/Migration/MsiTemplateSchema.php',
     'RivetCore\\Rmm\\Migration\\PatchSchema' => $vendorDir . '/rivet/rivet-core/src/Rmm/Migration/PatchSchema.php',
     'RivetCore\\Rmm\\Migration\\RemoteSchema' => $vendorDir . '/rivet/rivet-core/src/Rmm/Migration/RemoteSchema.php',
