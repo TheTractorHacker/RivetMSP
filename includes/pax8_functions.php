@@ -65,6 +65,16 @@ if (!function_exists('pax8SyncSubscriptionsForCompany')) {
     function pax8SyncSubscriptionsForCompany(mysqli $mysqli, Pax8Client $pax8, string $companyId, int $client_id): int {
         $subs = $pax8->getSubscriptionsForCompany($companyId);
         $company_id_esc = mysqli_real_escape_string($mysqli, $companyId);
+        // MSP-INJ-22(d): the replace (DELETE then INSERT) runs under the SAME named lock as the billing run and inside one transaction, so a billing run can never
+        // see a company with zero subscriptions half way through and zero out its invoice. If the lock cannot be had in 30 s the replace is skipped (the old
+        // rows stay, which is the safe state) and logged; the next sync tries again.
+        $got_lock = mysqli_fetch_row(mysqli_query($mysqli, "SELECT GET_LOCK('rivet_pax8_billing_sync', 30)"));
+        if (!$got_lock || intval($got_lock[0]) !== 1) {
+            error_log('pax8SyncSubscriptionsForCompany: billing run holds the lock; subscription refresh skipped for ' . $companyId);
+            return 0;
+        }
+        mysqli_begin_transaction($mysqli);
+        try {
         mysqli_query($mysqli, "DELETE FROM pax8_subscriptions WHERE pax8_company_id = '$company_id_esc'");
         foreach ($subs as $s) {
             $sub_id_esc  = mysqli_real_escape_string($mysqli, $s['id']);
@@ -79,6 +89,14 @@ if (!function_exists('pax8SyncSubscriptionsForCompany')) {
                     client_id = $client_sql, product_name = '$name_esc', quantity = " . intval($s['quantity']) . ",
                     unit_cost = " . floatval($s['unitCost']) . ", total_cost = " . floatval($s['totalCost']) . ",
                     billing_term = '$term_esc', status = '$status_esc', synced_at = NOW()");
+        }
+            mysqli_commit($mysqli);
+        } catch (\Throwable $e) {
+            mysqli_rollback($mysqli);
+            error_log('pax8SyncSubscriptionsForCompany rolled back: ' . $e->getMessage());
+            throw $e;
+        } finally {
+            mysqli_query($mysqli, "SELECT RELEASE_LOCK('rivet_pax8_billing_sync')");
         }
         return count($subs);
     }
@@ -266,7 +284,8 @@ if (!function_exists('pax8BillingSyncForClient')) {
             return ['skipped' => 'global billing sync is disabled'];
         }
 
-        $map = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM pax8_client_map WHERE client_id = " . intval($client_id) . " LIMIT 1"));
+        // MSP-INJ-22 (b): deterministic - the first company row WITH billing on (oldest first), never an arbitrary one when several companies map to one client
+        $map = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM pax8_client_map WHERE client_id = " . intval($client_id) . " AND billing_sync_enabled = 1 ORDER BY map_id ASC LIMIT 1"));
         if (!$map || intval($map['billing_sync_enabled']) !== 1) {
             return ['skipped' => 'billing sync is not enabled for this client'];
         }
@@ -285,7 +304,8 @@ if (!function_exists('pax8BillingSyncForClient')) {
         $added = 0; $updated = 0; $archived = 0; $skipped_no_rule = 0;
         $seen_subscription_ids = [];
 
-        $subs_res = mysqli_query($mysqli, "SELECT * FROM pax8_subscriptions WHERE client_id = " . intval($client_id) . " AND status = 'ACTIVE'");
+        // only subscriptions of companies that are mapped to THIS client with billing on (a company that was un-mapped or has billing off is never billed)
+        $subs_res = mysqli_query($mysqli, "SELECT s.* FROM pax8_subscriptions s JOIN pax8_client_map m ON m.pax8_company_id = s.pax8_company_id WHERE m.client_id = " . intval($client_id) . " AND m.billing_sync_enabled = 1 AND s.client_id = " . intval($client_id) . " AND s.status = 'ACTIVE'");
         while ($subs_res && ($sub = mysqli_fetch_assoc($subs_res))) {
             $product_name = (string) $sub['product_name'];
             $rule = $rules[$product_name] ?? null;

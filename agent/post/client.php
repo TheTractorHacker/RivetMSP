@@ -387,6 +387,8 @@ if (isset($_GET['archive_client'])) {
 
     $client_id = intval($_GET['archive_client']);
 
+    enforceClientAccess($client_id);   // MSP-INJ-1: module permission alone must not reach clients outside the user's client restriction
+
     // Archive client
     mysqli_query($mysqli, "UPDATE clients SET client_archived_at = NOW() WHERE client_id = $client_id");
 
@@ -417,6 +419,8 @@ if (isset($_GET['restore_client'])) {
 
     $client_id = intval($_GET['restore_client']);
 
+    enforceClientAccess($client_id);   // MSP-INJ-1: module permission alone must not reach clients outside the user's client restriction
+
     // Get Client Name
     $client_name = sanitizeInput(getFieldById('clients', $client_id, 'client_name'));
 
@@ -437,6 +441,8 @@ if (isset($_GET['delete_client'])) {
     enforceUserPermission('module_client', 3);
 
     $client_id = intval($_GET['delete_client']);
+
+    enforceClientAccess($client_id);   // MSP-INJ-1: module permission alone must not reach clients outside the user's client restriction
 
     // Get Client Name
     $client_name = sanitizeInput(getFieldById('clients', $client_id, 'client_name'));
@@ -539,9 +545,11 @@ if (isset($_POST['export_clients_csv'])) {
     enforceUserPermission('module_client', 1);
 
     //get records from database
+    // MSP-INJ-8: a client-restricted user exports only the clients they may access
     $sql = mysqli_query($mysqli, "SELECT * FROM clients
         LEFT JOIN contacts ON clients.client_id = contacts.contact_client_id AND contact_primary = 1
         LEFT JOIN locations ON clients.client_id = locations.location_client_id AND location_primary = 1
+        WHERE 1 = 1 $access_permission_query
         ORDER BY client_name ASC
     ");
 
@@ -1678,6 +1686,7 @@ if (isset($_POST["export_client_pdf"])) {
         while ($row = mysqli_fetch_assoc($sql_credentials)) {
             $credential_name = nullable_htmlentities($row["credential_name"]);
             $credential_description = getFallback(nullable_htmlentities($row["credential_description"]));
+            vaultGate('client pdf', max(1, mysqli_num_rows($sql_credentials)), true);
             $credential_username = nullable_htmlentities(decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username'));
             $credential_password = nullable_htmlentities(decryptCredentialEntry($row['credential_password'], $row['credential_id'] ?? null, 'password'));
             $credential_totp_secret = getFallback(nullable_htmlentities($row['credential_otp_secret']));

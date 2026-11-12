@@ -155,6 +155,7 @@ $sql_related_credentials = mysqli_query($mysqli, "
     LEFT JOIN credential_tags ON credential_tags.credential_id = credentials.credential_id
     LEFT JOIN tags ON tags.tag_id = credential_tags.tag_id
     WHERE credential_asset_id = $asset_id
+      AND credential_client_id = (SELECT asset_client_id FROM assets WHERE asset_id = $asset_id)
       AND credential_archived_at IS NULL
     GROUP BY credentials.credential_id
     ORDER BY credential_name DESC
@@ -529,6 +530,7 @@ ob_start();
                         } else {
                             $credential_uri_display = "$credential_uri";
                         }
+                        vaultGate('asset modal');
                         $credential_username = nullable_htmlentities(decryptCredentialEntry($row['credential_username'], ($row['credentials_credential_id'] ?? $row['credential_id'] ?? null), 'username'));
                         if (empty($credential_username)) {
                             $credential_username_display = "-";

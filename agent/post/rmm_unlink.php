@@ -19,7 +19,7 @@ if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
     exit;
 }
 
-enforceUserPermission('module_rmm_sync');
+enforceUserPermission('module_rmm_sync', 2);   // MSP-INJ-3: unlinking changes data
 
 $link_id = intval($_POST['link_id'] ?? 0);
 

@@ -1049,7 +1049,10 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
         if ($provider->supports('charge_saved_method')) {
             if ($provider_private_key && $stripe_customer_id && $stripe_payment_method_id) {
 
-                $balance_to_pay = round($invoice_amount, 2);
+                $balance_to_pay = invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount);   // MSP-INJ-26(a): the balance, not the invoice total
+                if ($balance_to_pay <= 0) {
+                    continue;
+                }
                 $pi_description = "RivetMSP: $client_name payment of $recurring_payment_currency_code $balance_to_pay for $invoice_prefix$invoice_number";
 
                 // Stable for one minute so an overlapping/retried cron run collapses into a

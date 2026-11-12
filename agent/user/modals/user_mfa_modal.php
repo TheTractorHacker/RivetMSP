@@ -41,6 +41,10 @@ $data = "otpauth://totp/RivetMSP:$session_email?secret=$token";
                             <input type="text" class="form-control" inputmode="numeric" pattern="[0-9]*" minlength="6" maxlength="6" name="verify_code" placeholder="Enter 6 digit code to verify MFA" required>
                         </div>
                     </div>
+                    <div class="form-group">
+                        <label for="mfa_current_password">Your current password</label>
+                        <input type="password" class="form-control" id="mfa_current_password" name="current_password" autocomplete="current-password" required>
+                    </div>
 
                 </div>
                 <div class="modal-footer">

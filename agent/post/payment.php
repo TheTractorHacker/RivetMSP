@@ -490,7 +490,11 @@ if (isset($_POST['add_payment_stripe'])) {
     require_once __DIR__ . '/../../includes/payment_provider_factory.php';
     $provider = getPaymentProvider($provider_id);
 
-    $balance_to_pay = round($invoice_amount, 2);
+    $balance_to_pay = invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount);   // MSP-INJ-26(a): the balance, not the invoice total
+    if ($balance_to_pay <= 0) {
+        flash_alert('Nothing left to charge on this invoice', 'error');
+        redirect();
+    }
     $pi_description = "RivetMSP: $client_name payment of $invoice_currency_code $balance_to_pay for $invoice_prefix$invoice_number";
 
     // Charge the saved payment method (off-session). The idempotency key is stable for
@@ -686,7 +690,11 @@ if (isset($_GET['add_payment_stripe'])) {
     require_once __DIR__ . '/../plugins/stripe-php/init.php';
     $stripe = new \Stripe\StripeClient($config_stripe_secret);
 
-    $balance_to_pay = round($invoice_amount, 2);
+    $balance_to_pay = invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount);   // MSP-INJ-26(a): the balance, not the invoice total
+    if ($balance_to_pay <= 0) {
+        flash_alert('Nothing left to charge on this invoice', 'error');
+        redirect();
+    }
     $pi_description = "RivetMSP: $client_name payment of $invoice_currency_code $balance_to_pay for $invoice_prefix$invoice_number";
 
     // Create a payment intent
@@ -965,8 +973,9 @@ if (isset($_GET['delete_payment'])) {
 
     validateCSRFToken($_GET['csrf_token']);
 
-    enforceUserPermission('module_sales', 2);
-    enforceUserPermission('module_financial', 2);
+    // MSP-INJ-26(d): deleting a payment reopens a paid invoice, so it needs the same level as editing one (3/3), not 2/2
+    enforceUserPermission('module_sales', 3);
+    enforceUserPermission('module_financial', 3);
 
     $payment_id = intval($_GET['delete_payment']);
 

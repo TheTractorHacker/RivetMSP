@@ -202,9 +202,19 @@ if (isset($_POST['edit_project'])) {
     $project_manager = intval($_POST['project_manager']);
     $client_id = intval($_POST['client_id']);
 
-    // Don't Enforce Client Access if Project doesn't have an assigned client
+    // MSP-INJ-6: check the client the project is stored under (a restricted user must not edit or move another client's project) AND the client it
+    // is being given. Internal projects (client 0) stay open to anyone with module_support write.
+    $stored_project = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT project_client_id FROM projects WHERE project_id = $project_id"));
+    if (!$stored_project) {
+        flash_alert('Project not found', 'error');
+        redirect();
+        exit;
+    }
+    if (intval($stored_project['project_client_id'])) {
+        enforceClientAccess(intval($stored_project['project_client_id']));
+    }
     if ($client_id) {
-        enforceClientAccess();
+        enforceClientAccess($client_id);
     }
 
     // Optional planning/budget fields
@@ -362,21 +372,26 @@ if (isset($_POST['link_ticket_to_project'])) {
 
     // Don't Enforce Client Access if Project doesn't have an assigned client
     if ($client_id) {
-        enforceClientAccess();
+        enforceClientAccess($client_id);
     }
 
     // Add Tickets
     if (isset($_POST['tickets'])) {
 
         // Get Selected Count
-        $count = count($_POST['tickets']);
+        $count = 0;
 
         foreach ($_POST['tickets'] as $ticket) {
             $ticket_id = intval($ticket);
 
             // Get Ticket Info
-            $sql = mysqli_query($mysqli, "SELECT ticket_prefix, ticket_number, ticket_subject FROM tickets WHERE ticket_id = $ticket_id");
+            $sql = mysqli_query($mysqli, "SELECT ticket_prefix, ticket_number, ticket_subject, ticket_client_id FROM tickets WHERE ticket_id = $ticket_id");
             $row = mysqli_fetch_assoc($sql);
+            // MSP-INJ-6: only tickets of the project's own client (internal projects take only client-0 tickets); never re-parent another client's ticket
+            if (!$row || intval($row['ticket_client_id']) !== $client_id) {
+                continue;
+            }
+            $count++;
             $ticket_prefix = sanitizeInput($row['ticket_prefix']);
             $ticket_number = intval($row['ticket_number']);
             $ticket_subject = sanitizeInput($row['ticket_subject']);

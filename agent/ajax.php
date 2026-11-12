@@ -307,6 +307,8 @@ if (isset($_POST['client_set_notes'])) {
     $client_id = intval($_POST['client_id']);
     $notes = sanitizeInput($_POST['notes']);
 
+    enforceClientAccess($client_id);   // MSP-INJ-4: a client-restricted user may only edit notes of their own clients
+
     // Update notes
     mysqli_query($mysqli, "UPDATE clients SET client_notes = '$notes' WHERE client_id = $client_id");
 
@@ -332,6 +334,8 @@ if (isset($_POST['contact_set_notes'])) {
     $contact_name = sanitizeInput($row['contact_name']);
     $client_id = intval($row['contact_client_id']);
 
+    enforceClientAccess($client_id);   // MSP-INJ-4: the client comes from the stored contact row; a missing row (client 0) is refused
+
     // Update notes
     mysqli_query($mysqli, "UPDATE contacts SET contact_notes = '$notes' WHERE contact_id = $contact_id");
 
@@ -356,6 +360,8 @@ if (isset($_POST['asset_set_notes'])) {
     $row = mysqli_fetch_assoc($sql);
     $asset_name = sanitizeInput($row['asset_name']);
     $client_id = intval($row['asset_client_id']);
+
+    enforceClientAccess($client_id);   // MSP-INJ-4: the client comes from the stored asset row; a missing row (client 0) is refused
 
     // Update notes
     mysqli_query($mysqli, "UPDATE assets SET asset_notes = '$notes' WHERE asset_id = $asset_id");
@@ -466,6 +472,7 @@ if (isset($_GET['share_generate_link'])) {
         $item_name = sanitizeInput($row['credential_name']);
 
         // Decrypt & re-encrypt username/password for sharing
+        vaultGate('share link');
         $credential_encryption_key = randomString();
 
         $credential_username_cleartext = decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username');
@@ -685,6 +692,7 @@ if (isset($_GET['get_totp_token_via_id'])) {
     $sql = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT credential_name, credential_otp_secret, credential_client_id FROM credentials WHERE credential_id = $credential_id"));
     $name = sanitizeInput($sql['credential_name']);
     $totp_secret_raw = $sql['credential_otp_secret'];
+    vaultGate('totp code', 1, false, false);
     $totp_secret = decryptOtpSecret($totp_secret_raw, $credential_id);
     $client_id = intval($sql['credential_client_id']);
 

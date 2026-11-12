@@ -17,7 +17,7 @@ if (!isset($_POST['csrf_token']) || !validateCSRFToken($_POST['csrf_token'])) {
     exit;
 }
 
-enforceUserPermission('module_rmm');
+enforceUserPermission('module_rmm', 2);   // MSP-INJ-3: linking and unlinking change data, so Read is not enough
 
 $action = sanitizeInput($_POST['action'] ?? '');
 

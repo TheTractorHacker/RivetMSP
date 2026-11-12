@@ -22,6 +22,13 @@ if (isset($_POST['edit_your_user_details'])) {
 
     $existing_file_name = sanitizeInput(getFieldById('users', $session_user_id, 'user_avatar'));
 
+    // MSP-WEB-3: the sign-in email is a recovery path, so changing it needs the current password.
+    $email_before = (string) (mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_email FROM users WHERE user_id = $session_user_id"))['user_email'] ?? '');
+    if (strcasecmp(trim((string) $_POST['email']), $email_before) !== 0 && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['current_password'] ?? ''))) {
+        flash_alert('To change your email address, enter your current password.', 'error');
+        redirect();
+    }
+
     $logout = false;
     $extended_log_description = '';
 
@@ -235,6 +242,12 @@ if (isset($_POST['enable_mfa'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
+    // MSP-WEB-3: a live session alone must not be able to attach an authenticator to the account.
+    if (!secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['current_password'] ?? ''))) {
+        flash_alert('Current password is incorrect', 'error');
+        redirect('user_security.php');
+    }
+
     require_once "../../plugins/totp/totp.php";
 
     // Grab the code from the user
@@ -297,7 +310,7 @@ if (isset($_POST['enable_mfa'])) {
 
 }
 
-if (isset($_GET['disable_mfa'])){
+if (isset($_POST['disable_mfa'])) {
 
     // Required for this account by its own flag or by the global MFA policy: it cannot be turned off.
     if ($session_user_config_force_mfa || secMfaEnforcementState($mysqli, $session_user_id)['applies']) {
@@ -305,7 +318,13 @@ if (isset($_GET['disable_mfa'])){
         redirect();
     }
 
-    validateCSRFToken($_GET['csrf_token']);
+    validateCSRFToken($_POST['csrf_token']);
+
+    // MSP-WEB-3: turning off the second factor needs the password again (it was a one-click GET link before).
+    if (!secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['current_password'] ?? ''))) {
+        flash_alert('Current password is incorrect', 'error');
+        redirect();
+    }
 
     mysqli_query($mysqli,"UPDATE users SET user_token = '' WHERE user_id = $session_user_id");
     secRecoveryCodesDelete($mysqli, $session_user_id);

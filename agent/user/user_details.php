@@ -82,6 +82,12 @@ if (!empty($session_avatar) && file_exists(__DIR__ . "/../../uploads/users/$sess
                                    value="<?= nullable_htmlentities($session_email) ?>" required>
                         </div>
                     </div>
+                    <div class="form-group">
+                        <div class="input-group">
+                            <div class="input-group-prepend"><span class="input-group-text"><i class="fa fa-fw fa-lock"></i></span></div>
+                            <input type="password" class="form-control" name="current_password" placeholder="Current password (only needed to change your email)" autocomplete="current-password">
+                        </div>
+                    </div>
 
                     <div class="form-group">
                         <label>Role</label>

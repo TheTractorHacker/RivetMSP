@@ -79,7 +79,7 @@ $sql_software = mysqli_query($mysqli,
 $sql_creds = mysqli_query($mysqli,
     "SELECT c.credential_id, c.credential_name FROM credentials c
      JOIN asset_credentials ac ON ac.asset_credential_credential_id = c.credential_id
-     WHERE ac.asset_credential_asset_id=$asset_id AND c.credential_archived_at IS NULL"
+     WHERE ac.asset_credential_asset_id=$asset_id AND c.credential_client_id = (SELECT asset_client_id FROM assets WHERE asset_id = $asset_id) AND c.credential_archived_at IS NULL"
 );
 ?>
 
