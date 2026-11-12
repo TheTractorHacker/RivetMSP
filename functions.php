@@ -3806,8 +3806,16 @@ function appNotify($type, $details, $action = null, $client_id = 0, $entity_id =
         ? "NULL"
         : "'" . mysqli_real_escape_string($mysqli, substr($action, 0, 250)) . "'";
 
+    // MSP-INJ-11: a notification about one client goes only to the agents who may see that client: administrators, users with no client
+    // restriction, and users whose restriction list includes it. Notifications that are not about a client (client_id 0) still go to every agent.
+    $client_scope_sql = '';
+    if ($client_id > 0) {
+        $client_scope_sql = " AND (COALESCE((SELECT role_is_admin FROM user_roles WHERE role_id = users.user_role_id), 0) = 1
+            OR NOT EXISTS (SELECT 1 FROM user_client_permissions ucp0 WHERE ucp0.user_id = users.user_id)
+            OR EXISTS (SELECT 1 FROM user_client_permissions ucp1 WHERE ucp1.user_id = users.user_id AND ucp1.client_id = $client_id))";
+    }
     $sql = mysqli_query($mysqli, "SELECT user_id FROM users
-        WHERE user_type = 1 AND user_status = 1 AND user_archived_at IS NULL
+        WHERE user_type = 1 AND user_status = 1 AND user_archived_at IS NULL$client_scope_sql
     ");
 
     // Per-user in-app preferences (Preferences > In-app notifications): a muted category is not created at all for that user.

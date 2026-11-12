@@ -14,12 +14,14 @@ if ($method === 'GET') {
     $total = intval(mysqli_fetch_assoc(mysqli_query($mysqli,
         "SELECT COUNT(*) AS c FROM notifications
          WHERE (notification_user_id = $uid OR notification_user_id = 0)
+         AND (notification_client_id = 0 OR " . api_client_scope_sql('notification_client_id') . ")
          AND notification_dismissed_at IS NULL"))['c']);
 
     $notifs = [];
     $sql    = mysqli_query($mysqli,
         "SELECT * FROM notifications
          WHERE (notification_user_id = $uid OR notification_user_id = 0)
+         AND (notification_client_id = 0 OR " . api_client_scope_sql('notification_client_id') . ")
          AND notification_dismissed_at IS NULL
          ORDER BY notification_timestamp DESC LIMIT $limit OFFSET $offset"
     );
