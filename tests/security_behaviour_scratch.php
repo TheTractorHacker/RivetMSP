@@ -8,7 +8,7 @@ $m = new mysqli(getenv('RIVETMSP_TEST_DB_HOST') ?: 'localhost', getenv('RIVETMSP
 function nullable_htmlentities($s){return $s;}
 require ''.dirname(__DIR__).'/includes/security_policy.php';
 $q=fn($s)=>$m->query($s) or die($m->error."\n".$s);
-$q("SET SESSION sql_mode=''"); $q("DELETE FROM users"); $q("DELETE FROM user_roles"); $q("DELETE FROM user_client_permissions");
+$q("SET SESSION sql_mode=''"); $q("DELETE FROM users"); $q("DELETE FROM modules"); $q("DELETE FROM user_role_permissions"); $q("DELETE FROM user_roles"); $q("DELETE FROM user_client_permissions");
 $q("INSERT INTO user_roles (role_id, role_name, role_is_admin) VALUES (91,'Adm',1),(92,'Tech',0)");
 // users: 1 admin, 2 unrestricted tech, 3 tech restricted to client 5, 4 tech restricted to client 6
 foreach ([[1,91],[2,92],[3,92],[4,92]] as [$id,$r]) { $q("INSERT INTO users (user_id,user_name,user_email,user_password,user_role_id,user_type,user_status,user_token,user_auth_method,user_created_at) VALUES ($id,'u$id','u$id@x.test','x',$r,1,1,'','local','2020-01-01')"); }
@@ -27,4 +27,17 @@ $s=secMfaEnforcementState($m,2); $ok('policy all: unenrolled user is blocked (ou
 $q("UPDATE users SET user_token='wrapped' WHERE user_id=2"); $s=secMfaEnforcementState($m,2); $ok('enrolled user is not blocked', $s['enrolled'] && !$s['blocked']);
 $q("UPDATE users SET user_created_at=NOW() WHERE user_id=3"); $q("REPLACE INTO security_settings (setting_key,setting_value) VALUES ('mfa_policy_since','".date('Y-m-d H:i:s')."')");
 secSettingsAll($m,true); $s=secMfaEnforcementState($m,3); $ok('inside the grace period the account is not blocked', $s['in_grace'] && !$s['blocked']);
+// ---- RMM remote launch / device access (CORE-14: Mesh does not separate clients, so this edition scope is the barrier)
+require dirname(__DIR__) . '/vendor/autoload.php';
+$q("INSERT INTO modules (module_id, module_name) VALUES (901,'module_rmm'),(902,'module_rmm_remote_connect'),(903,'module_rmm_scripts')");
+$q("INSERT INTO user_role_permissions (user_role_id, module_id, user_role_permission_level) VALUES (92,901,1),(92,902,1),(92,903,1)");
+$db = new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($m);
+$auth = new \RivetCore\Rmm\Authz\RmmAuthorizer(new \RivetMSP\Core\Adapter\Endpoint\EndpointAccessPolicy($db), new \RivetMSP\Core\Adapter\Endpoint\EndpointTenancy($db), static fn (): bool => true, 'client', [], false);
+$L = \RivetCore\Rmm\Authz\RmmAbility::REMOTE_LAUNCH;
+$ok('remote.launch: tech restricted to client 5 may open a session on a client-5 device', $auth->allowed(3, $L, 5));
+$ok('remote.launch: the same tech is refused on a client-6 device', !$auth->allowed(3, $L, 6));
+$ok('remote.launch: unrestricted tech may open on client 6', $auth->allowed(2, $L, 6));
+$ok('remote.launch: needs module_rmm_remote_connect (level 0 -> refused)', (function () use ($q, $auth, $L) { $q("UPDATE user_role_permissions SET user_role_permission_level = 0 WHERE module_id = 902"); $r = !$auth->allowed(2, $L, 6); $q("UPDATE user_role_permissions SET user_role_permission_level = 1 WHERE module_id = 902"); return $r; })());
+$ok('run_script needs scripts>=3: a level-1 tech is refused, reboot (>=2) refused too', !$auth->allowed(2, \RivetCore\Rmm\Authz\RmmAbility::JOB_RUN_SCRIPT, 5) && !$auth->allowed(2, \RivetCore\Rmm\Authz\RmmAbility::JOB_REBOOT, 5));
+$ok('admin is allowed everywhere', $auth->allowed(1, $L, 6) && $auth->allowed(1, \RivetCore\Rmm\Authz\RmmAbility::JOB_RUN_SCRIPT, 6));
 echo $fail?"FAILED\n":"all ok\n";
