@@ -1,6 +1,6 @@
 # Design: one charge per invoice balance (MSP-INJ-26b)
 
-Status: DESIGN ONLY. Nothing here is implemented, and no Stripe call is needed to review or test it.
+Status: DESIGN ONLY, technically approved by Code Review; implementation waits for Blake's OK (it adds a migration and changes the payment flow). Nothing here is implemented, and no Stripe call is needed to review or test it.
 
 ## Problem (confirmed in code)
 - Three separate idempotency namespaces with a one-minute bucket: `stripeChargeIdempotencyKey()` (portal), `md5("agent_pay_stripe_...")` (agent, payment.php), `md5("cron_autopay_stripe_...")` (cron). A double submit across a minute boundary, or a portal click racing the agent button or cron autopay, creates two real PaymentIntents. The unique index on `payment_provider_ref` records both (two different intents).
@@ -17,8 +17,16 @@ Status: DESIGN ONLY. Nothing here is implemented, and no Stripe call is needed t
 6. **Webhook stays idempotent**, unchanged: `insertStripePaymentOnce` on the unique `payment_provider_ref`. Add: if a payment arrives for an invoice that is already `Paid`, record it and raise an alert ("overpayment: refund needed") instead of silently ignoring it, so money received is never unrecorded.
 7. **Cron autopay** uses the same claim; if the claim is refused it logs "skipped: payment in progress" and moves on.
 
+## Amendments from review
+- **Stale claims.** A `finally` does not cover a killed process or a timeout. A `processing` attempt older than a few minutes is taken over on the next claim (marked `abandoned`) after the provider is asked about its intent. The retry keeps the SAME deterministic key (same invoice, balance and generation), so Stripe collapses it into the original charge (keys live about 24 h) instead of charging again.
+- **Charged, but our DB write failed.** The balance is unchanged, so the key is identical and the retry returns the ORIGINAL PaymentIntent. That path records the payment from the returned intent through `insertStripePaymentOnce()`; it is never treated as a new success.
+- **Missing table fails CLOSED.** If `invoice_charge_attempts` does not exist (code deployed before the migration), the charge is refused with a clear message and autopay skips the invoice with an alert; it never charges without the claim. (Replaces the earlier "no-op with a loud log", which failed open for money.)
+- **`requires_action` / `authentication_required`** on an off-session charge counts as `failed`; `generation` is bumped only after that decline is recorded.
+- **Extra tests:** stale-`processing` reclaim keeps the same key; the same invoice from portal and autopay yields one provider charge; a payment arriving for an already-Paid invoice raises the overpayment alert.
+- **No keys, real or test,** are used until Blake decides.
+
 ## Migration
-New table only (DB step + `db.sql` mirror). No change to existing rows; code before the migration keeps the old behaviour (the claim helper no-ops, with a loud log line, if the table is missing).
+New table only (DB step + `db.sql` mirror). No change to existing rows; code deployed before the migration refuses to charge (see Amendments); the update runner applies migrations, so this only matters for a code-without-migration deploy.
 
 ## Tests (no live keys, ever)
 - A `FakePaymentProvider` implementing `includes/interface_payment_provider.php` that records every call and returns canned intents; `getPaymentProvider()` gets a test hook.
@@ -26,4 +34,4 @@ New table only (DB step + `db.sql` mirror). No change to existing rows; code bef
 - Real Stripe TEST-mode keys would add end-to-end confidence for the guest page; that is Blake's call and is not required for the logic above.
 
 ## Not in scope here
-Bounding quote and recurring-invoice discounts (separate small change), and Pax8 cost sync locking (INJ-22d).
+Bounding quote and recurring-invoice discounts (separate small change). (Pax8 cost sync locking, INJ-22d, is done separately.)

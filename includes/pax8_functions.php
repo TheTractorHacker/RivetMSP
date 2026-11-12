@@ -65,6 +65,16 @@ if (!function_exists('pax8SyncSubscriptionsForCompany')) {
     function pax8SyncSubscriptionsForCompany(mysqli $mysqli, Pax8Client $pax8, string $companyId, int $client_id): int {
         $subs = $pax8->getSubscriptionsForCompany($companyId);
         $company_id_esc = mysqli_real_escape_string($mysqli, $companyId);
+        // MSP-INJ-22(d): the replace (DELETE then INSERT) runs under the SAME named lock as the billing run and inside one transaction, so a billing run can never
+        // see a company with zero subscriptions half way through and zero out its invoice. If the lock cannot be had in 30 s the replace is skipped (the old
+        // rows stay, which is the safe state) and logged; the next sync tries again.
+        $got_lock = mysqli_fetch_row(mysqli_query($mysqli, "SELECT GET_LOCK('rivet_pax8_billing_sync', 30)"));
+        if (!$got_lock || intval($got_lock[0]) !== 1) {
+            error_log('pax8SyncSubscriptionsForCompany: billing run holds the lock; subscription refresh skipped for ' . $companyId);
+            return 0;
+        }
+        mysqli_begin_transaction($mysqli);
+        try {
         mysqli_query($mysqli, "DELETE FROM pax8_subscriptions WHERE pax8_company_id = '$company_id_esc'");
         foreach ($subs as $s) {
             $sub_id_esc  = mysqli_real_escape_string($mysqli, $s['id']);
@@ -79,6 +89,14 @@ if (!function_exists('pax8SyncSubscriptionsForCompany')) {
                     client_id = $client_sql, product_name = '$name_esc', quantity = " . intval($s['quantity']) . ",
                     unit_cost = " . floatval($s['unitCost']) . ", total_cost = " . floatval($s['totalCost']) . ",
                     billing_term = '$term_esc', status = '$status_esc', synced_at = NOW()");
+        }
+            mysqli_commit($mysqli);
+        } catch (\Throwable $e) {
+            mysqli_rollback($mysqli);
+            error_log('pax8SyncSubscriptionsForCompany rolled back: ' . $e->getMessage());
+            throw $e;
+        } finally {
+            mysqli_query($mysqli, "SELECT RELEASE_LOCK('rivet_pax8_billing_sync')");
         }
         return count($subs);
     }
