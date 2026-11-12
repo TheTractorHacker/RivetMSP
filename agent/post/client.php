@@ -545,9 +545,11 @@ if (isset($_POST['export_clients_csv'])) {
     enforceUserPermission('module_client', 1);
 
     //get records from database
+    // MSP-INJ-8: a client-restricted user exports only the clients they may access
     $sql = mysqli_query($mysqli, "SELECT * FROM clients
         LEFT JOIN contacts ON clients.client_id = contacts.contact_client_id AND contact_primary = 1
         LEFT JOIN locations ON clients.client_id = locations.location_client_id AND location_primary = 1
+        WHERE 1 = 1 $access_permission_query
         ORDER BY client_name ASC
     ");
 

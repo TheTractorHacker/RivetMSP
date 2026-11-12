@@ -348,6 +348,7 @@ if (isset($_POST['export_expenses_csv'])) {
       LEFT JOIN vendors ON expense_vendor_id = vendor_id
       LEFT JOIN accounts ON expense_account_id = account_id
       WHERE expense_vendor_id > 0
+      AND (expense_client_id = 0 OR " . ($client_access_string && !$session_is_admin ? "expense_client_id IN ($client_access_string)" : '1 = 1') . ")   -- MSP-INJ-8: only expenses of clients this user may access
       $date_query
       $account_query
       $vendor_query
