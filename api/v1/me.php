@@ -35,6 +35,46 @@ if ($method === 'PUT' && isset(json_decode(file_get_contents('php://input'), tru
         api_error(400, 'Invalid public key');
     }
 
+    // MSP-INJ-6 (mirrors RivetIT IT-INJ-6): the bearer token alone must NOT be able to enrol or replace this key, or whoever holds a stolen token enrols
+    // their own key and passes the very step-up that protects credentials. Enrolment needs the account password (and the TOTP / recovery code when
+    // MFA is on) in the body; every attempt is audited and denials are rate limited.
+    require_once __DIR__ . '/../../includes/security_policy.php';
+    require_once __DIR__ . '/../../includes/security_crypto.php';
+    require_once dirname(__DIR__, 2) . '/plugins/totp/totp.php';
+    $bio_audit = static function (string $result, string $why) use ($api_user_id): void {
+        secAudit('vault.api_stepup_key_enrol', (int) $api_user_id, 'user', (int) $api_user_id, $result, 'API biometric step-up key enrolment: ' . $why, ['via' => 'api']);
+        // the activity log is always on (the structured audit trail is only written when the Core audit module is), and the denial count below reads it
+        $GLOBALS['session_user_id'] = (int) $api_user_id;
+        logAction('API', 'Step-up Key Enrol ' . ucfirst($result), 'API biometric step-up key enrolment: ' . $why);
+    };
+    $bio_denied = mysqli_fetch_row(mysqli_query($mysqli,
+        "SELECT COUNT(*) FROM logs WHERE log_type = 'API' AND log_action = 'Step-up Key Enrol Denied' AND log_user_id = " . intval($api_user_id) . " AND log_created_at > (NOW() - INTERVAL 10 MINUTE)"));
+    if (!api_rate_limit('stepup_enrol:' . intval($api_user_id), 10, 600) || (int) ($bio_denied[0] ?? 0) >= 5) {
+        $bio_audit('blocked', 'rate limited');
+        header('Retry-After: 600');
+        api_error(429, 'Too many attempts. Try again later.');
+    }
+    $bio_user = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password, user_token FROM users WHERE user_id = " . intval($api_user_id) . " LIMIT 1"));
+    $bio_pass = (string) ($body['current_password'] ?? '');
+    if (!$bio_user || $bio_pass === '' || !password_verify($bio_pass, (string) $bio_user['user_password'])) {
+        $bio_audit('denied', 'current password missing or wrong');
+        api_error(401, 'Current password is required to register a biometric key');
+    }
+    $bio_totp_secret = secUserTotpSecret($bio_user['user_token'] ?? '', (int) $api_user_id);
+    if (!empty($bio_totp_secret)) {
+        $bio_code = trim((string) ($body['totp_code'] ?? ''));
+        $bio_code_ok = $bio_code !== '' && (
+            TokenAuth6238::verifyOnce($bio_totp_secret, $bio_code)
+            || (secLooksLikeRecoveryCode($bio_code) && secRecoveryCodeConsume($mysqli, (int) $api_user_id, $bio_code, (string) ($_SERVER['REMOTE_ADDR'] ?? '')))
+        );
+        if (!$bio_code_ok) {
+            $bio_audit('denied', 'MFA code missing or wrong');
+            api_error(401, 'MFA code required to register a biometric key');
+        }
+    }
+    $bio_had_key = (bool) mysqli_fetch_row(mysqli_query($mysqli, "SELECT 1 FROM api_biometric_keys WHERE user_id = " . intval($api_user_id) . " LIMIT 1"));
+    $bio_audit('success', $bio_had_key ? 'replaced the registered key' : 'registered a new key');
+
     $esc_pem = mysqli_real_escape_string($mysqli, $pem);
     mysqli_query($mysqli,
         "INSERT INTO api_biometric_keys (user_id, device_public_key_pem)
