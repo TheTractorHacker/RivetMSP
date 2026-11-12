@@ -26,4 +26,8 @@ foreach (['agent/asset_details.php', 'agent/assets.php', 'agent/modals/asset/ass
     $t = $src($f);
     $ok("$f: credentials are limited to the asset's client", str_contains($t, '(SELECT asset_client_id FROM assets WHERE asset_id = $asset_id)'));
 }
+foreach (['agent/modals/service/service_details.php', 'agent/modals/service/service_edit.php'] as $f) {
+    $ok("$f: service asset credentials are joined on the asset's client", str_contains($src($f), 'credentials.credential_client_id = assets.asset_client_id'));
+}
+$ok('link credential to asset: same client required', str_contains($src('agent/post/asset.php'), '$asset_client_id !== $client_id'));
 exit($fail ? 1 : 0);
