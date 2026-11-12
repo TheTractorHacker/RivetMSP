@@ -3712,6 +3712,17 @@ function enforceUserPermission($module, $check_access_level = 1) {
     }
 }
 
+/**
+ * MSP-WEB-1: call once before decrypting credential values anywhere other than the reveal endpoint (see includes/vault_reveal.php, vaultDisclosureCheck()).
+ * Refuses and stops when the reveal limit is used up or, for $bulk exports/PDFs, when the password step-up is due.
+ */
+function vaultGate(string $path, int $values = 1, bool $bulk = false, bool $countsAsReveal = true): void {
+    global $mysqli;
+    require_once __DIR__ . '/includes/security_policy.php';
+    require_once __DIR__ . '/includes/vault_reveal.php';
+    vaultDisclosureRequire($mysqli, $path, $values, $bulk, $countsAsReveal);
+}
+
 function enforceClientAccess($client_id = null) {
     global $mysqli, $session_user_id, $session_is_admin, $session_name;
 

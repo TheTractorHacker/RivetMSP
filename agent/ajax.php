@@ -466,6 +466,7 @@ if (isset($_GET['share_generate_link'])) {
         $item_name = sanitizeInput($row['credential_name']);
 
         // Decrypt & re-encrypt username/password for sharing
+        vaultGate('share link');
         $credential_encryption_key = randomString();
 
         $credential_username_cleartext = decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username');
@@ -685,6 +686,7 @@ if (isset($_GET['get_totp_token_via_id'])) {
     $sql = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT credential_name, credential_otp_secret, credential_client_id FROM credentials WHERE credential_id = $credential_id"));
     $name = sanitizeInput($sql['credential_name']);
     $totp_secret_raw = $sql['credential_otp_secret'];
+    vaultGate('totp code', 1, false, false);
     $totp_secret = decryptOtpSecret($totp_secret_raw, $credential_id);
     $client_id = intval($sql['credential_client_id']);
 

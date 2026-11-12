@@ -16,6 +16,7 @@ $credential_uri = nullable_htmlentities($row['credential_uri']);
 $credential_uri_2 = nullable_htmlentities($row['credential_uri_2']);
 $credential_uri_link = sanitize_url($row['credential_uri']);
 $credential_uri_2_link = sanitize_url($row['credential_uri_2']);
+vaultGate('credential edit form');
 $credential_username = nullable_htmlentities(decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username'));
 $credential_password = nullable_htmlentities(decryptCredentialEntry($row['credential_password'], $row['credential_id'] ?? null, 'password'));
 $credential_otp_secret = nullable_htmlentities(decryptOtpSecret($row['credential_otp_secret'] ?? '', $row['credential_id'] ?? null));

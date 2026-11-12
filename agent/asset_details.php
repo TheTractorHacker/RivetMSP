@@ -1236,6 +1236,7 @@ if (isset($_GET['asset_id'])) {
                                     } else {
                                         $credential_uri_display = "$credential_uri<button class='btn btn-sm clipboardjs' data-clipboard-text='$credential_uri'><i class='far fa-copy text-secondary'></i></button><a href='$credential_uri' target='_blank'><i class='fa fa-external-link-alt text-secondary'></i></a>";
                                     }
+                                    vaultGate('asset page');
                                     $credential_username = nullable_htmlentities(decryptCredentialEntry($row['credential_username'], ($row['credentials_credential_id'] ?? $row['credential_id'] ?? null), 'username'));
                                     if (empty($credential_username)) {
                                         $credential_username_display = "-";

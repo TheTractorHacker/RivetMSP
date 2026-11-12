@@ -40,4 +40,15 @@ $ok('remote.launch: unrestricted tech may open on client 6', $auth->allowed(2, $
 $ok('remote.launch: needs module_rmm_remote_connect (level 0 -> refused)', (function () use ($q, $auth, $L) { $q("UPDATE user_role_permissions SET user_role_permission_level = 0 WHERE module_id = 902"); $r = !$auth->allowed(2, $L, 6); $q("UPDATE user_role_permissions SET user_role_permission_level = 1 WHERE module_id = 902"); return $r; })());
 $ok('run_script needs scripts>=3: a level-1 tech is refused, reboot (>=2) refused too', !$auth->allowed(2, \RivetCore\Rmm\Authz\RmmAbility::JOB_RUN_SCRIPT, 5) && !$auth->allowed(2, \RivetCore\Rmm\Authz\RmmAbility::JOB_REBOOT, 5));
 $ok('admin is allowed everywhere', $auth->allowed(1, $L, 6) && $auth->allowed(1, \RivetCore\Rmm\Authz\RmmAbility::JOB_RUN_SCRIPT, 6));
+// ---- MSP-WEB-1: the non-reveal disclosure paths honour the reveal limit and the bulk step-up
+require dirname(__DIR__) . '/includes/vault_reveal.php';
+$GLOBALS['session_user_id'] = 2; $GLOBALS['session_name'] = 'u2'; $GLOBALS['session_is_admin'] = 0;
+$_SESSION = [];
+$q("DELETE FROM logs");
+$ok('under the limit: a one-off disclosure is allowed', vaultDisclosureCheck($m, 'asset page', 1) === null);
+$ok('bulk (export/PDF) without a recent password entry is refused', vaultDisclosureCheck($m, 'credential export', 5, true) !== null);
+$_SESSION['vault_stepup_at'] = time();
+$ok('bulk after the step-up is allowed', vaultDisclosureCheck($m, 'client pdf', 5, true) === null);
+for ($i = 0; $i < 30; $i++) { $q("INSERT INTO logs (log_type, log_action, log_description, log_user_id, log_created_at) VALUES ('Credential','Reveal','x',2,NOW())"); }
+$ok('at the limit (30 reveals in 10 minutes): every other path is refused too', vaultDisclosureCheck($m, 'global search', 1) !== null && vaultDisclosureCheck($m, 'share link', 1) !== null);
 echo $fail?"FAILED\n":"all ok\n";
