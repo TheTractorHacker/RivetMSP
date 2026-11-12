@@ -154,6 +154,30 @@ service_is_active() {
 }
 
 # command_exists(name): thin wrapper kept for readability at call sites.
+# php_fpm_unit(): print the name of the active PHP-FPM systemd unit, or nothing (exit 1) when none is active. A source-built PHP
+# (this project's servers run /opt/php-8.5.12) installs php<full version>-fpm, apt installs php<major.minor>-fpm, so try the full
+# version first. PHP_FPM_UNIT_CANDIDATES (space separated) overrides the list; tests use it with a stubbed systemctl.
+php_fpm_unit() {
+    local cands u
+    if [[ -n "${PHP_FPM_UNIT_CANDIDATES:-}" ]]; then
+        cands="${PHP_FPM_UNIT_CANDIDATES}"
+    else
+        local full mm
+        full="$(php -r 'echo PHP_VERSION;' 2>/dev/null | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')" || full=""
+        mm="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null)" || mm=""
+        cands=""
+        [[ -n "${full}" ]] && cands="php${full}-fpm"
+        [[ -n "${mm}" ]] && cands="${cands} php${mm}-fpm"
+    fi
+    for u in ${cands}; do
+        if service_is_active "${u}"; then
+            printf '%s\n' "${u}"
+            return 0
+        fi
+    done
+    return 1
+}
+
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
