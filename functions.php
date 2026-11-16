@@ -4377,6 +4377,23 @@ function getAvgResolutionTimeHours($mysqli, int $year, string $extra_where = '')
     return floatval($row['avg_h'] ?? 0);
 }
 
+// MSP-DS-159/160: addToMailQueue() binds its values, so a body or subject that was run through mysqli_real_escape_string()
+// reaches the recipient with literal backslashes. Values that callers already SQL-escaped are turned back into text here.
+function rivetUnescapeSql($value): string {
+    return (string) preg_replace_callback('/\\\\([0nrZ\\\\\'"])/', function ($m) {
+        return ['0' => "\0", 'n' => "\n", 'r' => "\r", 'Z' => "\x1a"][$m[1]] ?? $m[1];
+    }, (string) $value);
+}
+
+// MSP-DS-160: staff notification emails carry the sender's text, never the sender's HTML (links, forms, tracking pixels).
+function rivetMailSafeExcerpt($html, int $max = 3000): string {
+    $text = preg_replace('/<(br|\/p|\/div|\/li)\b[^>]*>/i', "\n", (string) $html);
+    $text = preg_replace('#<(script|style)\b.*?</\1>#is', '', $text);
+    $text = html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = trim(preg_replace("/[ \t]+/", ' ', preg_replace("/\n{3,}/", "\n\n", $text)));
+    return nl2br(nullable_htmlentities(mb_substr($text, 0, $max)));
+}
+
 function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date, $subject, $message, $attachments, $original_message_file, $ccs, $mailbox_id = null, $mail_message_id = null) {
     global $mysqli, $config_app_name, $config_ticket_prefix, $config_ticket_client_general_notifications, $config_ticket_new_ticket_notification_email, $config_base_url, $config_ticket_from_name, $config_ticket_from_email, $config_ticket_default_billable;
     $company = getCompanyNameAndPhone();
@@ -4411,6 +4428,7 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
 
     // Clean up the message
     $message = trim($message);
+    $message_notify = rivetMailSafeExcerpt($message);   // MSP-DS-160: text-only copy for the staff notification
     // Remove DOCTYPE and meta tags
     $message = preg_replace('/<!DOCTYPE[^>]*>/i', '', $message);
     $message = preg_replace('/<meta[^>]*>/i', '', $message);
@@ -4549,8 +4567,9 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
             $client_name = sanitizeInput($client_row['client_name']);
             $client_uri = "&client_id=$client_id";
         }
-        $email_subject = "$config_app_name - New Ticket - $client_name: $subject";
-        $email_body = "Hello, <br><br>This is a notification that a new ticket has been raised in RivetMSP. <br>Client: $client_name<br>Priority: Low (email parsed)<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$id$client_uri <br><br>--------------------------------<br><br><b>$subject</b><br>$message";
+        $client_name_txt = rivetUnescapeSql($client_name);
+        $email_subject = "$config_app_name - New Ticket - $client_name_txt: " . rivetUnescapeSql($subject);
+        $email_body = "Hello, <br><br>This is a notification that a new ticket has been raised in RivetMSP. <br>Client: " . nullable_htmlentities($client_name_txt) . "<br>Priority: Low (email parsed)<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$id$client_uri <br><br>--------------------------------<br><br><b>" . nullable_htmlentities(rivetUnescapeSql($subject)) . "</b><br>$message_notify";
 
         $data[] = [
             'from' => $from_email,
@@ -4559,7 +4578,7 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
             'recipient_name' => $from_name,
             'subject' => $email_subject,
             'ticket_id' => intval($id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
-            'body' => mysqli_real_escape_string($mysqli, $email_body)
+            'body' => $email_body
         ];
     }
 
@@ -4667,7 +4686,7 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
                     'recipient' => $from_email,
                     'recipient_name' => $from_email,
                     'subject' => $email_subject,
-                    'body' => mysqli_real_escape_string($mysqli, $email_body),
+                    'body' => $email_body,
                     'ticket_id' => $ticket_id
                 ]
             ];
@@ -4762,8 +4781,8 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
                 $tech_email = sanitizeInput($tech_row['user_email']);
                 $tech_name = sanitizeInput($tech_row['user_name']);
 
-                $email_subject = "$config_app_name - Ticket updated - [$config_ticket_prefix$ticket_number] $ticket_subject";
-                $email_body    = "Hello $tech_name,<br><br>A new reply has been added to the below ticket.<br><br>Client: $client_name<br>Ticket: $config_ticket_prefix$ticket_number<br>Subject: $ticket_subject<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$ticket_id$client_uri<br><br>--------------------------------<br>$message_esc";
+                $email_subject = "$config_app_name - Ticket updated - [$config_ticket_prefix$ticket_number] " . rivetUnescapeSql($ticket_subject);
+                $email_body    = "Hello " . nullable_htmlentities(rivetUnescapeSql($tech_name)) . ",<br><br>A new reply has been added to the below ticket.<br><br>Client: " . nullable_htmlentities(rivetUnescapeSql($client_name)) . "<br>Ticket: $config_ticket_prefix$ticket_number<br>Subject: " . nullable_htmlentities(rivetUnescapeSql($ticket_subject)) . "<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$ticket_id$client_uri<br><br>--------------------------------<br>" . rivetMailSafeExcerpt($message);   // MSP-DS-159/160
 
                 $data = [
                     [
@@ -4771,8 +4790,8 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
                         'from_name' => $outbound_from_name,
                         'recipient' => $tech_email,
                         'recipient_name' => $tech_name,
-                        'subject' => mysqli_real_escape_string($mysqli, $email_subject),
-                        'body' => mysqli_real_escape_string($mysqli, $email_body),
+                        'subject' => $email_subject,
+                        'body' => $email_body,
                         'ticket_id' => $ticket_id
                     ]
                 ];
