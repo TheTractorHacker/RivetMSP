@@ -121,7 +121,7 @@ if (!$row) api_error(404, 'Credential not found');
 
 // Verify the API user has permission to access this credential's client
 $cred_client_id = intval($row['credential_client_id']);
-if ($cred_client_id > 0 && !api_client_scope_ok($cred_client_id)) {
+if (!api_client_scope_ok($cred_client_id)) {   // MSP-DS-109: client 0 (internal) credentials are in scope only for unrestricted users
     api_error(403, 'Access denied');
 }
 

@@ -45,12 +45,13 @@ if (!function_exists('vaultReveal')) {
     }
 
     /**
-     * May this user reach this client's credentials? Mirrors enforceClientAccess(): administrators and global (client 0)
-     * items always; otherwise a user with no client rows may reach all, and a user with rows only those clients.
+     * May this user reach this client's credentials? Administrators always; otherwise a user with no client rows may reach all, and a user with
+     * rows only those clients. MSP-DS-109: client 0 (MSP-internal credentials) is NOT a free pass: a client-restricted user has no row for it, exactly as
+     * on every other path (credentials list, credential_view.php, LinkActor::canAccessClient()).
      */
     function vaultUserCanAccessClient(mysqli $mysqli, int $userId, bool $isAdmin, int $clientId): bool
     {
-        if ($isAdmin || $clientId === 0) {
+        if ($isAdmin) {
             return true;
         }
         $rows = [];
