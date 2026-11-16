@@ -6,6 +6,8 @@
 
 defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 
+require_once __DIR__ . '/../../includes/ticket_hygiene.php';
+
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/sla_functions.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/redis_functions.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/ai_functions.php';
@@ -656,6 +658,7 @@ if (isset($_POST['edit_ticket_contact'])) {
 
     // Update the contact
     mysqli_query($mysqli, "UPDATE tickets SET ticket_contact_id = $contact_id WHERE ticket_id = $ticket_id");
+    $url_key = ticketRotateGuestKey($mysqli, $ticket_id);   // MSP-DS-134: the previous contact's emailed link stops working; the new contact's email below carries the new key
 
     // Get New contact details
     $sql = mysqli_query($mysqli, "SELECT contact_name, contact_email FROM contacts WHERE contact_id = $contact_id");
@@ -897,6 +900,9 @@ if (isset($_GET['delete_ticket_watcher'])) {
     }
 
     mysqli_query($mysqli, "DELETE FROM ticket_watchers WHERE watcher_id = $watcher_id");
+    if (mysqli_affected_rows($mysqli) > 0 && $ticket_id) {
+        ticketRotateGuestKey($mysqli, $ticket_id);   // MSP-DS-134: the removed watcher's emailed link stops working
+    }
 
     // History
     mysqli_query($mysqli, "INSERT INTO ticket_history SET ticket_history_status = '$ticket_status_name', ticket_history_description = '$session_name removed ticket $watcher_email as a watcher', ticket_history_ticket_id = $ticket_id");
@@ -2757,7 +2763,10 @@ if (isset($_POST['merge_ticket'])) {
 
     // Move ticket replies from child > parent
     if ($move_replies) {
-        mysqli_query($mysqli, "UPDATE ticket_replies SET ticket_reply_ticket_id = $merge_into_ticket_id WHERE ticket_reply_ticket_id = $ticket_id");
+        // MSP-DS-135: replies moved across clients must not show up in the destination client's portal or guest view: Public/Client become Internal
+        $cross_client_merge = $source_client_id !== $client_id;
+        $moved_type_sql = $cross_client_merge ? ", ticket_reply_type = IF(ticket_reply_type IN ('Public', 'Client'), 'Internal', ticket_reply_type)" : '';
+        mysqli_query($mysqli, "UPDATE ticket_replies SET ticket_reply_ticket_id = $merge_into_ticket_id$moved_type_sql WHERE ticket_reply_ticket_id = $ticket_id");
     }
 
     // Update current ticket
@@ -2820,6 +2829,11 @@ if (isset($_POST['change_client_ticket'])) {
 
     // Update ticket client & contact
     mysqli_query($mysqli, "UPDATE tickets SET ticket_client_id = $client_id, ticket_contact_id = $contact_id WHERE ticket_id = $ticket_id LIMIT 1");
+
+    // MSP-DS-136: nothing of the old client stays on the ticket (watchers, guest link, contract, asset/location/vendor/project)
+    if ($current_client_id !== $client_id) {
+        ticketDetachFromOldClient($mysqli, $ticket_id);
+    }
 
     logAction("Ticket", "Change", "$session_name changed ticket client", $client_id, $ticket_id);
 
