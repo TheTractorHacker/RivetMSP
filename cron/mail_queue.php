@@ -94,14 +94,14 @@ if (empty($config_smtp_provider)) {
 /** =======================================================================
  *  Lock file
  * ======================================================================= */
-$temp_dir = sys_get_temp_dir();
+require_once dirname(__DIR__) . '/includes/cron_lock.php';
+$temp_dir = rivetCronLockDir();
 $lock_file_path = "{$temp_dir}/itflow_mail_queue_{$installation_id}.lock";
 
 if (file_exists($lock_file_path)) {
-    $file_age = time() - filemtime($lock_file_path);
-    if ($file_age > 600) {
-        unlink($lock_file_path);
-        logApp("Cron-Mail-Queue", "warning", "Cron Mail Queue detected a lock file was present but was over 10 minutes old so it removed it.");
+    if (!rivetCronLockIsLive($lock_file_path, 600)) {
+        @unlink($lock_file_path);
+        logApp("Cron-Mail-Queue", "warning", "Cron Mail Queue detected a lock file was present but was stale (over 10 minutes old, dated in the future or not ours) so it removed it.");
     } else {
         logApp("Cron-Mail-Queue", "info", "Cron Mail Queue attempted to execute but was already executing so instead it terminated.");
         exit("Script is already running. Exiting.");

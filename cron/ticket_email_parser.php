@@ -62,14 +62,14 @@ if ($config_ticket_email_parse == 0) {
 }
 
 // System temp directory & lock
-$temp_dir = sys_get_temp_dir();
+require_once dirname(__DIR__) . '/includes/cron_lock.php';
+$temp_dir = rivetCronLockDir();
 $lock_file_path = "{$temp_dir}/itflow_email_parser_{$installation_id}.lock";
 
 if (file_exists($lock_file_path)) {
-    $file_age = time() - filemtime($lock_file_path);
-    if ($file_age > 300) {
-        unlink($lock_file_path);
-        logApp("Cron-Email-Parser", "warning", "Cron Email Parser detected a lock file was present but was over 5 minutes old so it removed it.");
+    if (!rivetCronLockIsLive($lock_file_path, 300)) {
+        @unlink($lock_file_path);
+        logApp("Cron-Email-Parser", "warning", "Cron Email Parser detected a lock file was present but was stale (over 5 minutes old, dated in the future or not ours) so it removed it.");
     } else {
         logApp("Cron-Email-Parser", "warning", "Lock file present. Cron Email Parser attempted to execute but was already executing, so instead it terminated.");
         exit("Script is already running. Exiting.");
