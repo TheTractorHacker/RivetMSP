@@ -14,6 +14,8 @@ Wants=mariadb.service
 
 [Service]
 Type=oneshot
+# MSP-DS-34 RR3: a stalled run must fail loudly (and free the timer), not sit in activating forever.
+TimeoutStartSec=2h
 User=root
 ExecStart=/usr/bin/env bash /usr/local/lib/rivetmsp-deploy/restore_drill.sh --app-dir=${APP_DIR} --passphrase-file=/etc/itflow/backup-passphrase
 # Exit 2 = drill account not set up yet; 1 = the restore failed. Both are meant to show as a failed unit.

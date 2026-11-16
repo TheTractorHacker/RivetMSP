@@ -255,32 +255,55 @@ require_trusted_tooling() {
     return 0
 }
 
-# copy_trusted_sidecar SRC DEST: MSP-DS-34 (review R2). A file found NEXT TO a backup archive (the <archive>.settings-key sidecar) lives in
-# a directory the web user can write, so root must not follow or trust whatever it finds there: a symlink to /etc/shadow, a root SSH key or
-# the backup passphrase would be copied into a file the web user can read. SRC is opened once (O_RDONLY, following nothing we have not then
-# checked), and the OPEN file is verified: a regular file (not reached through a symlink: lstat of the path must be the same inode),
-# owned by root, mode 0600 or stricter, a single hard link. Only then is it copied to DEST (0600) from that same descriptor, so a swap after
-# the check changes nothing. Returns 0 on success, 1 (reason on stderr) when SRC is not safe, 2 when SRC does not exist.
+# _rivetmsp_safe_read SRC MODE [WANT_UID]: MSP-DS-34 (re-review RR3). Writes the content of one file from a web-writable directory to stdout,
+# or refuses. The order matters: lstat the PATH first and refuse everything that is not a plain regular file (symlink, FIFO, device node,
+# directory, socket) BEFORE any open(), so a planted FIFO can never block root and a symlink can never make root open /dev/watchdog or a
+# secret. Only then open with O_RDONLY|O_NOFOLLOW|O_NONBLOCK (a file swapped for a symlink fails, one swapped for a FIFO opens without
+# blocking and fails the next check), fstat the DESCRIPTOR and require the same device:inode, a regular file and a single hard link
+# (re-checked on the open file, so a swap to a hard link after the first look is caught), and read at most 64 KiB from that descriptor.
+# MODE strict: owner uid WANT_UID and no group/other permission bits (the settings-key sidecar). MODE any: any owner or mode (the web
+# user's own scratch file whose content root copies to its own file). Exit 0 content written; 1 refused (reason on stderr); 2 absent.
+# Needs perl (perl-base is Essential on Debian/Ubuntu).
+_rivetmsp_safe_read() {
+    command -v perl >/dev/null 2>&1 || { echo "perl is required to read a web-writable path safely" >&2; return 1; }
+    perl -e '
+        use strict; use Fcntl qw(:DEFAULT :mode);
+        my ($src, $mode, $want) = @ARGV;
+        sub refuse { print STDERR "$_[0]\n"; exit 1 }
+        my @l = lstat($src);
+        unless (@l) { exit 2 if $!{ENOENT} || $!{ENOTDIR}; refuse("$src cannot be examined ($!)") }
+        my $m = $l[2];
+        unless (S_ISREG($m)) {
+            my $t = S_ISLNK($m) ? "a symbolic link" : S_ISFIFO($m) ? "a FIFO" : S_ISDIR($m) ? "a directory" : (S_ISCHR($m) || S_ISBLK($m)) ? "a device node" : "not a regular file";
+            refuse("$src is $t (only a plain regular file is accepted; symbolic links are never followed)");
+        }
+        sysopen(my $fh, $src, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) or refuse("$src cannot be opened ($!)");
+        my @f = stat($fh);
+        refuse("$src changed while it was being checked") unless @f && S_ISREG($f[2]) && $f[0] == $l[0] && $f[1] == $l[1];
+        refuse(sprintf("%s has %d hard links", $src, $f[3])) unless $f[3] == 1;
+        if ($mode eq "strict") {
+            refuse("$src is owned by uid $f[4], not root") unless $f[4] == $want;
+            refuse(sprintf("%s has mode %o; a settings key must be 0600", $src, $f[2] & 07777)) if ($f[2] & 077) != 0;
+        }
+        refuse("$src is larger than 64 KiB") if $f[7] > 65536;
+        my ($buf, $n, $out) = ("", 0, "");
+        while (($n = sysread($fh, $buf, 65536)) > 0) { $out .= $buf; refuse("$src is larger than 64 KiB") if length($out) > 65536 }
+        defined $n or refuse("$src cannot be read ($!)");
+        print $out;
+    ' -- "$@"
+}
+
+# copy_trusted_sidecar SRC DEST: MSP-DS-34 (review R2, re-review RR3). A file found NEXT TO a backup archive (the <archive>.settings-key
+# sidecar) lives in a directory the web user can write, so root must not follow or trust whatever it finds there: a symlink to /etc/shadow,
+# a FIFO (which would hang root forever), a device node, a root SSH key or the backup passphrase. _rivetmsp_safe_read lstats first, opens
+# O_NOFOLLOW|O_NONBLOCK, verifies the open descriptor (regular, same inode, one link, root-owned, 0600 or stricter) and DEST (0600) is written
+# from those bytes only. Returns 0 on success, 1 (reason on stderr) when SRC is not safe, 2 when SRC does not exist.
 # (Test hook: with RIVETMSP_TRUST_TEST_NONROOT=1 and a non-root caller, RIVETMSP_TRUST_UID names the expected owner.)
 copy_trusted_sidecar() {
-    local src="$1" dest="$2" want=0 fd ftype fuid fmode fnlink fid ltype lid
+    local src="$1" dest="$2" want=0 rc=0
     if [[ "${RIVETMSP_TRUST_TEST_NONROOT:-}" == "1" && "${EUID}" -ne 0 ]]; then want="${RIVETMSP_TRUST_UID:-0}"; fi
-    [[ -e "${src}" || -L "${src}" ]] || return 2
-    { exec {fd}< "${src}"; } 2>/dev/null || { echo "${src} cannot be opened" >&2; return 1; }
-    read -r fuid fmode fnlink fid < <(stat -L -c '%u %a %h %d:%i' "/proc/self/fd/${fd}" 2>/dev/null) || fuid=""
-    ftype="$(stat -L -c '%F' "/proc/self/fd/${fd}" 2>/dev/null || true)"
-    ltype="$(stat -c '%F' -- "${src}" 2>/dev/null || true)"
-    lid="$(stat -c '%d:%i' -- "${src}" 2>/dev/null || true)"
-    local why=""
-    if [[ "${ltype}" != "regular file" ]]; then why="${src} is ${ltype:-not a regular file} (symbolic links are never followed)"
-    elif [[ "${ftype}" != "regular file" || "${fid}" != "${lid}" ]]; then why="${src} changed while it was being checked"
-    elif [[ "${fuid}" != "${want}" ]]; then why="${src} is owned by uid ${fuid}, not root"
-    elif (( (8#${fmode} & 8#077) != 0 )); then why="${src} has mode ${fmode}; a settings key must be 0600"
-    elif [[ "${fnlink}" != "1" ]]; then why="${src} has ${fnlink} hard links"
-    fi
-    if [[ -n "${why}" ]]; then exec {fd}<&-; echo "${why}" >&2; return 1; fi
-    ( umask 077; cat <&"${fd}" > "${dest}" ) || { exec {fd}<&-; return 1; }
-    exec {fd}<&-
+    ( umask 077; _rivetmsp_safe_read "${src}" strict "${want}" > "${dest}" ) || rc=$?
+    if [[ "${rc}" -ne 0 ]]; then : > "${dest}"; return "${rc}"; fi
     chmod 600 "${dest}"
     return 0
 }
@@ -309,9 +332,8 @@ rmm_pg_prepare() {
     [[ -n "${out}" ]] || return 0
     parse_rmm_pg_env "${out}"
     own_pass="$(mktemp)"; chmod 600 "${own_pass}"; register_tmpfile "${own_pass}"
-    if [[ -f "${scratch}/pgpass" && ! -L "${scratch}/pgpass" ]]; then
-        cat -- "${scratch}/pgpass" > "${own_pass}"
-    fi
+    # The scratch directory is the web user's: never open its pgpass before an lstat (a FIFO swapped in would hang the root backup).
+    _rivetmsp_safe_read "${scratch}/pgpass" any > "${own_pass}" || { [[ $? -eq 2 ]] || warn "Not using ${scratch}/pgpass: it is not a plain regular file."; : > "${own_pass}"; }
     export PGPASSFILE="${own_pass}"
     # The web user's scratch copy (that user's own 0600 file in a directory only it can enter) is what run_rmm_pg_script hands to the
     # vendor scripts, which run as that user; root never executes them.

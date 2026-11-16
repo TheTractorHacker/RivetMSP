@@ -44,6 +44,8 @@ Wants=mariadb.service
 
 [Service]
 Type=oneshot
+# MSP-DS-34 RR3: a stalled run must fail loudly (and free the timer), not sit in activating forever.
+TimeoutStartSec=6h
 User=root
 # backup.sh itself enforces EUID 0 and dies with a clear message otherwise
 # (see its own header comment for why root, not www-data, must own the
