@@ -50,6 +50,8 @@ use RivetMSP\Mail\MessageNormalizer;
 use RivetMSP\Mail\QuotedTextStripper;
 use RivetMSP\Mail\RawHeaders;
 
+// MSP-DS-93: the prefix is put into a regex below, so keep the quoted raw value (the sanitizeInput() copy is SQL-escaped and would double-escape).
+$config_ticket_prefix_re = preg_quote((string) $config_ticket_prefix, '/');
 $config_ticket_prefix = sanitizeInput($config_ticket_prefix);
 $config_ticket_from_name = sanitizeInput($config_ticket_from_name);
 // NOTE: unknown-sender parsing is now a per-mailbox setting (mailbox_parse_unknown_senders),
@@ -290,7 +292,7 @@ function processInboundMessage(
     string $original_message_file,
     array $intake = []
 ): bool {
-    global $mysqli, $config_ticket_prefix;
+    global $mysqli, $config_ticket_prefix, $config_ticket_prefix_re;
 
     $email_processed = false;
 
@@ -382,7 +384,7 @@ function processInboundMessage(
     }
 
     // 1. Reply to existing ticket with the number in subject
-    if (!$email_processed && preg_match("/\[$config_ticket_prefix(\d+)\]/", $subject, $ticket_number_matches)) {
+    if (!$email_processed && preg_match("/\[$config_ticket_prefix_re(\d+)\]/", $subject, $ticket_number_matches)) {
         $ticket_number = intval($ticket_number_matches[1]);
         $email_processed = $reply_to($ticket_number, "Matched ticket #$ticket_number by subject tag");
     }
@@ -515,7 +517,7 @@ function processInboundMessage(
  * original message belonged to. Never creates a ticket and never sends anything. Returns the detail line for the mail log.
  */
 function handleInboundNdr(array $raw_parts, string $subject, string $message_body_text, string $from_email, int $mailbox_id): string {
-    global $mysqli, $config_ticket_prefix;
+    global $mysqli, $config_ticket_prefix, $config_ticket_prefix_re;
 
     $failed_recipient  = null;
     $diagnostic_code   = null;
@@ -575,7 +577,7 @@ function handleInboundNdr(array $raw_parts, string $subject, string $message_bod
     );
 
     // If the original subject has a ticket, leave a system note there (not a client reply: the sender is a mail server)
-    if (preg_match("/\[$config_ticket_prefix(\d+)\]/", $original_subject, $ticket_number_matches)) {
+    if (preg_match("/\[$config_ticket_prefix_re(\d+)\]/", $original_subject, $ticket_number_matches)) {
         $ticket_number = intval($ticket_number_matches[1]);
         $t = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_id FROM tickets WHERE ticket_number = $ticket_number LIMIT 1"));
         if ($t) {
