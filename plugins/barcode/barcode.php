@@ -69,6 +69,9 @@ class barcode_generator {
 				break;
 			case 'svg':
 				header('Content-Type: image/svg+xml');
+				// MSP-DS-3: this script runs unauthenticated on the app origin; never let an SVG it returns execute anything.
+				header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox");
+				header('X-Content-Type-Options: nosniff');
 				echo $this->render_svg($symbology, $data, $options);
 				break;
 		}
@@ -103,6 +106,17 @@ class barcode_generator {
 		return $image;
 	}
 
+	/** MSP-DS-3: a colour reaches fill=""/stroke="" attributes, so only a hex value or a plain colour name is accepted. */
+	private function svg_color($value, $fallback) {
+		$value = trim((string) $value);
+		if ($value === '') { return ''; }
+		if (preg_match('/^#?[0-9A-Fa-f]{3,8}$/', $value) === 1) {
+			return ($value[0] === '#') ? $value : '#' . $value;
+		}
+		if (preg_match('/^[A-Za-z]{1,20}$/', $value) === 1) { return $value; }
+		return $fallback;
+	}
+
 	public function render_svg($symbology, $data, $options) {
 		list($code, $widths, $width, $height, $x, $y, $w, $h) =
 			$this->encode_and_calculate_size($symbology, $data, $options);
@@ -110,23 +124,23 @@ class barcode_generator {
 		$svg .= '<svg xmlns="http://www.w3.org/2000/svg" version="1.1"';
 		$svg .= ' width="' . $width . '" height="' . $height . '"';
 		$svg .= ' viewBox="0 0 ' . $width . ' ' . $height . '"><g>';
-		$bgcolor = (isset($options['bc']) ? $options['bc'] : 'white');
+		$bgcolor = $this->svg_color(isset($options['bc']) ? $options['bc'] : 'white', 'white');
 		if ($bgcolor) {
 			$svg .= '<rect x="0" y="0"';
 			$svg .= ' width="' . $width . '" height="' . $height . '"';
 			$svg .= ' fill="' . htmlspecialchars($bgcolor) . '"/>';
 		}
 		$colors = array(
-			(isset($options['cs']) ? $options['cs'] : ''),
-			(isset($options['cm']) ? $options['cm'] : 'black'),
-			(isset($options['c2']) ? $options['c2'] : '#FF0000'),
-			(isset($options['c3']) ? $options['c3'] : '#FFFF00'),
-			(isset($options['c4']) ? $options['c4'] : '#00FF00'),
-			(isset($options['c5']) ? $options['c5'] : '#00FFFF'),
-			(isset($options['c6']) ? $options['c6'] : '#0000FF'),
-			(isset($options['c7']) ? $options['c7'] : '#FF00FF'),
-			(isset($options['c8']) ? $options['c8'] : 'white'),
-			(isset($options['c9']) ? $options['c9'] : 'black'),
+			$this->svg_color(isset($options['cs']) ? $options['cs'] : '', ''),
+			$this->svg_color(isset($options['cm']) ? $options['cm'] : 'black', 'black'),
+			$this->svg_color(isset($options['c2']) ? $options['c2'] : '#FF0000', '#FF0000'),
+			$this->svg_color(isset($options['c3']) ? $options['c3'] : '#FFFF00', '#FFFF00'),
+			$this->svg_color(isset($options['c4']) ? $options['c4'] : '#00FF00', '#00FF00'),
+			$this->svg_color(isset($options['c5']) ? $options['c5'] : '#00FFFF', '#00FFFF'),
+			$this->svg_color(isset($options['c6']) ? $options['c6'] : '#0000FF', '#0000FF'),
+			$this->svg_color(isset($options['c7']) ? $options['c7'] : '#FF00FF', '#FF00FF'),
+			$this->svg_color(isset($options['c8']) ? $options['c8'] : 'white', 'white'),
+			$this->svg_color(isset($options['c9']) ? $options['c9'] : 'black', 'black'),
 		);
 		$svg .= $this->dispatch_render_svg(
 			$code, $x, $y, $w, $h, $colors, $widths, $options
@@ -554,6 +568,7 @@ class barcode_generator {
 	}
 
 	private function matrix_dot_svg($x, $y, $w, $h, $mc, $ms, $md) {
+		$mc = htmlspecialchars((string) $mc, ENT_QUOTES);
 		switch ($ms) {
 			default:
 				$x += (1 - $md) * $w / 2;
