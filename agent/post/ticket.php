@@ -2868,12 +2868,13 @@ if (isset($_POST['change_client_ticket'])) {
     // Confirm access to the ticket's CURRENT client before reassigning it - only
     // checking the destination (new_client_id) below let an attacker move any
     // other client's ticket into one they legitimately have access to.
-    $current_client_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_client_id FROM tickets WHERE ticket_id = $ticket_id"));
+    $current_client_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_client_id, ticket_contact_id FROM tickets WHERE ticket_id = $ticket_id"));
     if (!$current_client_row) {
         flash_alert("No ticket with that ID found.", 'error');
         redirect();
     }
     $current_client_id = intval($current_client_row['ticket_client_id']);
+    $current_contact_id = intval($current_client_row['ticket_contact_id']);
     if ($current_client_id) {
         enforceClientAccess($current_client_id);
     }
@@ -2895,6 +2896,9 @@ if (isset($_POST['change_client_ticket'])) {
     // MSP-DS-136: nothing of the old client stays on the ticket (watchers, guest link, contract, asset/location/vendor/project)
     if ($current_client_id !== $client_id) {
         ticketDetachFromOldClient($mysqli, $ticket_id);
+    } elseif ($current_contact_id !== $contact_id) {
+        // same client, different contact: the previous contact's emailed guest link must stop working (review RR10, same as edit_ticket)
+        ticketRotateGuestKey($mysqli, $ticket_id);
     }
 
     logAction("Ticket", "Change", "$session_name changed ticket client", $client_id, $ticket_id);
