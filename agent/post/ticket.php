@@ -2380,6 +2380,12 @@ if (isset($_POST['add_ticket_reply'])) {
     // Capture prior status for SLA pause accounting before it is overwritten.
     $sla_old_status_id = intval(getFieldById('tickets', $ticket_id, 'ticket_status'));
 
+    // MSP-DS-139: the posted status must be a real, active status (or the ticket's own current one); anything else keeps the current status
+    $status_ok = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_status_id FROM ticket_statuses WHERE ticket_status_id = $ticket_status AND ticket_status_active = 1 LIMIT 1"));
+    if ($ticket_status < 1 || (!$status_ok && $ticket_status !== $sla_old_status_id)) {
+        $ticket_status = $sla_old_status_id;
+    }
+
     // Update Ticket Status & updated at (in case status didn't change)
     mysqli_query($mysqli, "UPDATE tickets SET ticket_status = $ticket_status, ticket_updated_at = NOW() WHERE ticket_id = $ticket_id");
 

@@ -2906,9 +2906,10 @@ $(document).on('click', '#ai-draft-reply-btn', function(e) {
 });
 
 // Reply status split-button: pick a status and auto-submit the reply form
-$(document).on('click', '.reply-status-submit', function(e) {
+$(document).on('click', 'a.reply-status-submit[data-status-id]', function(e) {   // MSP-DS-139: only the real items (reply HTML cannot carry data-* attributes)
     e.preventDefault();
     var sid   = $(this).data('status-id');
+    if (sid === undefined || sid === '') { return; }
     var sname = $(this).data('status-name');
     $('#reply_status_val').val(sid);
     $('#reply_submit_label').text('Submit & ' + sname);
