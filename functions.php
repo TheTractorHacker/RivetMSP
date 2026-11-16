@@ -2968,6 +2968,16 @@ function recurringTicketIntervalSpec($frequency): ?string {
     return $map[strtolower(trim((string) $frequency))] ?? null;
 }
 
+/**
+ * MSP-DS-64: a task whose approval is still pending or was declined cannot be completed (server side, not only a hidden button).
+ */
+function taskApprovalBlocksCompletion($task_id): bool {
+    global $mysqli;
+    $task_id = intval($task_id);
+    $r = mysqli_query($mysqli, "SELECT 1 FROM task_approvals WHERE approval_task_id = $task_id AND approval_status IN ('pending','declined') LIMIT 1");
+    return $r && mysqli_num_rows($r) > 0;
+}
+
 function generateReadablePassword($security_level)
 {
     // Cap security level at 5

@@ -1879,6 +1879,11 @@ if (isset($_POST['update_project_task_kanban'])) {
             enforceClientAccess($task_client_id);
         }
 
+        // MSP-DS-64: the Done lane is a completion - not while an approval is pending or declined
+        if ($status_raw === 'Done' && taskApprovalBlocksCompletion($task_id)) {
+            continue;
+        }
+
         $status_esc = mysqli_real_escape_string($mysqli, $status_raw);
 
         if ($status_raw === 'Done') {
