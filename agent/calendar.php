@@ -433,7 +433,7 @@ while ($row = mysqli_fetch_assoc($sql)) {
 
             if (!isset($_GET['client_id'])) {
                 //Clients Added
-                $sql = mysqli_query($mysqli, "SELECT * FROM clients");
+                $sql = mysqli_query($mysqli, "SELECT client_id, client_name, client_created_at FROM clients WHERE client_archived_at IS NULL $access_permission_query");   // review R17: client-scoped, no archived
                 while ($row = mysqli_fetch_assoc($sql)) {
                     $event_id = intval($row['client_id']);
                     $event_title = json_encode("Client: '" . $row['client_name'] . "' created");
