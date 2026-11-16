@@ -4916,7 +4916,7 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
             if ($ticket_assigned_to) {
                 $tech_sql = mysqli_query($mysqli, "SELECT user_email, user_name FROM users WHERE user_id = $ticket_assigned_to LIMIT 1");
                 $tech_row = mysqli_fetch_assoc($tech_sql);
-                $tech_email = sanitizeInput($tech_row['user_email']);
+                $tech_email = (string) $tech_row['user_email'];   // raw: addToMailQueue() binds it (MSP-DS-159)
                 $tech_name = sanitizeInput($tech_row['user_name']);
 
                 $email_subject = "$config_app_name - Ticket updated - [$config_ticket_prefix$ticket_number] " . rivetUnescapeSql($ticket_subject);
@@ -4927,7 +4927,7 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
                         'from' => $outbound_from_email,
                         'from_name' => $outbound_from_name,
                         'recipient' => $tech_email,
-                        'recipient_name' => $tech_name,
+                        'recipient_name' => rivetUnescapeSql($tech_name),
                         'subject' => $email_subject,
                         'body' => $email_body,
                         'ticket_id' => $ticket_id

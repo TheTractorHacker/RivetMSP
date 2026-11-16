@@ -21,7 +21,10 @@ $src = file_get_contents($root . '/cron/ticket_email_parser.php');
 $code = [];
 foreach (['processInboundMessage', 'intakeHandleNormalized'] as $fn) { preg_match('/\nfunction ' . $fn . '\(.*?\n\}\n/s', $src, $m); $code[$fn] = $m[0] ?? ''; }
 $ok('extracted both parser functions', $code['processInboundMessage'] !== '' && $code['intakeHandleNormalized'] !== '');
+foreach (['MessageId', 'InboundPreparer', 'InboundRouter', 'IntakeStore', 'QuotedTextStripper', 'MailSettings', 'MailHealth'] as $c) { class_alias('RivetMSP\\Mail\\' . $c, $c); }
+function mailIntakeLimits(): array { return ['max_file_bytes' => 10485760, 'max_message_bytes' => 52428800, 'inline_max_bytes' => 1048576, 'scan' => null]; }
 eval($code['processInboundMessage']);
+eval($code['intakeHandleNormalized']);
 $ok('intakeHandleNormalized builds its values with the raw sanitiser only', str_contains($code['intakeHandleNormalized'], "sanitizeInputRaw(\$norm['subject'])") && !str_contains($code['intakeHandleNormalized'], 'sanitizeInput('));
 $ok('parser header values use the raw sanitiser', str_contains($src, '$config_ticket_prefix = sanitizeInputRaw(') && str_contains($src, '$config_ticket_from_name = sanitizeInputRaw('));
 $config_ticket_prefix_re = preg_quote($config_ticket_prefix, '/');
@@ -71,4 +74,28 @@ $ok('mail request stores subject, name and address exactly', $one("SELECT CONCAT
 $mid = (int) $one("SELECT MAX(mail_request_id) FROM mail_requests");
 $tid2 = convertMailRequestToTicket($mid, 0);
 $ok('converted ticket subject exact', $tid2 && $one("SELECT ticket_subject FROM tickets WHERE ticket_id=" . (int) $tid2) === "Stranger's mail");
+
+// 6. Hostile text through the REAL intakeHandleNormalized -> processInboundMessage -> addTicket: stored exactly, nothing injected.
+$evilSubject = "x' OR 1=1 -- \\ '; DROP TABLE contacts; -- \"q\"";
+$evilFrom = "a'b\\c@known.test";
+$evilName = "N'; UPDATE contacts SET contact_name='pwn' WHERE 1=1; -- \\";
+$mysqli->query("INSERT INTO contacts (contact_id, contact_name, contact_email, contact_client_id) VALUES (20, 'Evil Contact', '" . $mysqli->real_escape_string($evilFrom) . "', 5)");
+$rowsBefore = [(int) $one("SELECT COUNT(*) FROM contacts"), (int) $one("SELECT COUNT(*) FROM tickets")];
+$norm = ['from_email' => $evilFrom, 'from_name' => $evilName, 'subject' => $evilSubject, 'ccs' => ["c'c@known.test"], 'date' => '2026-11-16 14:00:00',
+         'html' => "<p>body ' OR 1=1 -- \\</p>", 'text' => '', 'headers' => [], 'message_id' => 'evil-1@test', 'in_reply_to' => '', 'references' => '',
+         'attachments' => [['name' => "inv'oice\\.pdf", 'content' => 'x', 'mime' => 'application/pdf', 'content_type' => 'application/pdf', 'disposition' => 'attachment', 'cid' => null]]];
+$handled = intakeHandleNormalized(1, 0, 1, $norm, '');
+$t = $mysqli->query("SELECT ticket_id, ticket_subject, ticket_contact_id FROM tickets ORDER BY ticket_id DESC LIMIT 1")->fetch_assoc();
+$ok('hostile message handled and became a ticket for the matched contact', $handled && (int) ($t['ticket_contact_id'] ?? 0) === 20);
+$ok('stored subject equals the input exactly', ($t['ticket_subject'] ?? null) === $evilSubject);
+$ok('exactly one new ticket, no new contact, contacts table intact', (int) $one("SELECT COUNT(*) FROM tickets") === $rowsBefore[1] + 1 && (int) $one("SELECT COUNT(*) FROM contacts") === $rowsBefore[0]);
+$ok('no contact was rewritten by the injected UPDATE', (int) $one("SELECT COUNT(*) FROM contacts WHERE contact_name = 'pwn'") === 0);
+$ok('mail log subject and sender equal the input', $one("SELECT mail_log_subject FROM mail_log ORDER BY mail_log_id DESC LIMIT 1") === $evilSubject && $one("SELECT mail_log_from_email FROM mail_log ORDER BY mail_log_id DESC LIMIT 1") === $evilFrom);
+$ok('attachment name stored exactly', $one("SELECT ticket_attachment_name FROM ticket_attachments WHERE ticket_attachment_ticket_id = " . (int) $t['ticket_id'] . " AND ticket_attachment_name LIKE 'inv%'") === "inv'oice\\.pdf");
+$ok('cc watcher stored exactly', (int) $one("SELECT COUNT(*) FROM ticket_watchers WHERE watcher_email = 'c\\'c@known.test' AND watcher_ticket_id = " . (int) $t['ticket_id']) === 1);
+$ok('queued mail subject carries the plain subject (bound once)', str_contains((string) $one("SELECT email_subject FROM email_queue ORDER BY email_id DESC LIMIT 1"), $evilSubject));
+// the same hostile text from an unknown sender: the mail request stores it exactly
+$norm2 = $norm; $norm2['from_email'] = "z'z\\@nobody.test"; $norm2['message_id'] = 'evil-2@test'; $norm2['attachments'] = [];
+intakeHandleNormalized(1, 0, 1, $norm2, '');
+$ok('unknown hostile sender queued with exact text', $one("SELECT CONCAT_WS('|', mail_request_from_email, mail_request_subject) FROM mail_requests ORDER BY mail_request_id DESC LIMIT 1") === "z'z\\@nobody.test|" . $evilSubject);
 exit($fail ? 1 : 0);
