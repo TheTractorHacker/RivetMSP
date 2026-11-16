@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Test-only hooks (RIVETMSP_TRUST_*, RIVETMSP_TEST_*, RIVETMSP_ETC_DIR) exist for unit tests of lib/common.sh functions; an entry script never
+# honours them from its environment, so nothing a caller (sudo from the web user included) puts there can relax a trust check.
+for _rv_v in $(compgen -v | grep -E '^(RIVETMSP_TRUST_|RIVETMSP_TEST_|RIVETMSP_ETC_DIR$)'); do unset "${_rv_v}"; done
+unset _rv_v
+
 # RivetMSP - restore drill for the root-only encrypted archives made by deploy/backup.sh.
 #
 # The nightly drill (cron/restore_drill.php, runs as www-data) can only read the in-app zips: the encrypted backup-*.tar.gz.enc is

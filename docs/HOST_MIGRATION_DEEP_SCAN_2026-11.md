@@ -52,4 +52,10 @@ override the gates for an operator who reviewed the tree; the shipped units neve
 - systemd units now run `/usr/local/lib/rivetmsp-deploy/backup.sh` and `restore_drill.sh` (re-render with `deploy/install.sh` or copy the templates) and carry `TimeoutStartSec` (6h backup, 2h drill).
 - Live nginx: add the dotfile / `config/` / `deploy|docker|scripts|backups` denies and a barcode allow-list (see `deploy/templates/itflow-locations.conf`); not applied by this repo.
 - Cron lock files and the TOTP replay store now live under `uploads/cron_locks` and `uploads/totp_replay` (the web user must be able to write `uploads/`).
-- Redis channel names are per-install: deploy every PHP process of the install together.
+- Redis channel names are per-install: every PHP process of the install must run the new code at the same time, or live ticket updates are lost
+  until the deploy finishes. On the live host that is exactly: `php8.5.12-fpm.service` (web requests, the SSE streams and the MCP endpoint all run
+  inside FPM; `deploy/update.sh` reloads it) and the cron-started PHP CLI processes of `/etc/cron.d/itflow` (they start fresh each run, so nothing to
+  restart, but do not deploy while a cron run is in flight: check `pgrep -af cron/cron.php` first). `redis-server.service` itself is NOT restarted.
+  Other units found on this host (`rivetit-agent`, `rivetit-redis`, `rivetit-demo`, `rivetmsp-demo`, the `mw-itflow-*` cron files) belong to other installs and are not touched.
+- The sudoers rule written by `install-web-update.sh` is now `Defaults!<helper> env_reset, !setenv` plus a single `NOPASSWD: <helper>` line (no argument wildcard:
+  this host's sudo-rs rejects the old `web-update.sh --branch=*` form, which would have made the installer refuse to write the rule; the helper validates `--branch=` itself).
