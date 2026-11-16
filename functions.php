@@ -5374,7 +5374,7 @@ function rivetPdfSafeHtml(string $html): string {
         'color' => 1, 'size' => 1, 'face' => 1, 'alt' => 1, 'title' => 1];
     $safeStyle = static function (string $style): string {
         $style = trim($style);
-        if ($style === '' || preg_match('/url\s*\(|@import|expression\s*\(|\\\\|javascript:|behaviou?r\s*:|-moz-binding/i', $style)) {
+        if ($style === '' || preg_match('/url\s*\(|@import|expression\s*\(|\\\\|javascript:|behaviou?r\s*:|-moz-binding|[<>]/i', $style)) {
             return '';
         }
         return $style;
@@ -5417,7 +5417,11 @@ function rivetPdfSafeHtml(string $html): string {
                     }
                 } elseif ($an === 'href' && $name === 'a') {
                     $h = preg_replace('/[\x00-\x20]+/', '', trim($av));
-                    if (preg_match('#^(https?://|mailto:|tel:|\#)#i', $h)) { $keep['href'] = $h; }
+                    if (preg_match('#^(https?://|mailto:|tel:|\#)#i', $h)) {
+                        // libxml does not escape < and > in URI attributes, and TCPDF's regex pre-pass (<style>, <cssarray>, <link>) ignores
+                        // quoting: percent-encode every character that could open or close markup or start a url() (review RR8).
+                        $keep['href'] = strtr($h, ['<' => '%3C', '>' => '%3E', '"' => '%22', "'" => '%27', '`' => '%60', '(' => '%28', ')' => '%29', '\\' => '%5C']);
+                    }
                 } elseif (isset($attrs[$an]) && !preg_match('/url\s*\(|javascript:|[<>]/i', $av)) {
                     $keep[$an] = $av;
                 }
@@ -5432,18 +5436,35 @@ function rivetPdfSafeHtml(string $html): string {
     };
     $prev = libxml_use_internal_errors(true);
     $dom = new DOMDocument('1.0', 'UTF-8');
-    $dom->loadHTML('<?xml encoding="utf-8" ?><div id="rv-root">' . $html . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+    // The fragment lives inside <body>, which user markup cannot close early (a stray </div> used to end a wrapper <div> and silently
+    // drop everything after it, review RR7). Everything the parser put in <body>, plus anything it left after it inside <html>, is kept.
+    // Stray </body>, </html> (or a second <html>/<body>/<head>) would end the document early too; the allow-list rebuild below makes dropping them safe.
+    $html = preg_replace('#</?(?:html|body|head)\b[^>]*>#i', '', $html);
+    $dom->loadHTML('<?xml encoding="utf-8" ?><html><body>' . $html . '</body></html>', LIBXML_HTML_NODEFDTD);
     libxml_clear_errors();
     libxml_use_internal_errors($prev);
-    $root = $dom->getElementById('rv-root') ?? $dom->documentElement;
-    if (!$root) {
+    $htmlEl = $dom->getElementsByTagName('html')->item(0);
+    if (!$htmlEl) {
         return '';
     }
-    $clean($root, $dom);
+    $holder = $dom->createElement('div');   // detached collector: the allow-list walk needs one parent
+    foreach (iterator_to_array($htmlEl->childNodes) as $top) {
+        if ($top instanceof DOMElement && strtolower($top->nodeName) === 'head') {
+            continue;   // title/meta/style/link the parser hoisted into <head> are dropped
+        }
+        if ($top instanceof DOMElement && strtolower($top->nodeName) === 'body') {
+            while ($top->firstChild) { $holder->appendChild($top->firstChild); }
+        } else {
+            $holder->appendChild($top);
+        }
+    }
+    $clean($holder, $dom);
     $out = '';
-    foreach ($root->childNodes as $child) {
+    foreach ($holder->childNodes as $child) {
         $out .= $dom->saveHTML($child);
     }
+    // Last line of defence: TCPDF's regex pre-pass must never see a style/cssarray/link/script opener or a url()/@import in anything we wrote.
+    $out = preg_replace('/<(\s*\/?\s*(?:style|cssarray|link|script)\b)/i', '&lt;$1', $out);
     return $out;
 }
 
