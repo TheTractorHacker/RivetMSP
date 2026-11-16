@@ -330,9 +330,15 @@ if (isset($_GET['delete_invoice'])) {
     mysqli_query($mysqli,"DELETE FROM invoices WHERE invoice_id = $invoice_id");
 
     //Delete Items Associated with the Invoice
-    $sql = mysqli_query($mysqli,"SELECT * FROM invoice_items WHERE item_invoice_id = $invoice_id");
+    $sql = mysqli_query($mysqli,"SELECT invoice_items.*, products.product_type FROM invoice_items LEFT JOIN products ON product_id = item_product_id WHERE item_invoice_id = $invoice_id");
     while($row = mysqli_fetch_assoc($sql)) {
         $item_id = intval($row['item_id']);
+        // MSP-DS-56: stocked lines go back to stock when their invoice is deleted
+        if (intval($row['item_product_id']) > 0 && ($row['product_type'] ?? '') === 'product' && floatval($row['item_quantity']) > 0) {
+            $return_qty = floatval($row['item_quantity']);
+            $return_product_id = intval($row['item_product_id']);
+            mysqli_query($mysqli,"INSERT INTO product_stock SET stock_qty = $return_qty, stock_note = 'Returned QTY $return_qty back to stock from deleted Invoice $invoice_id', stock_product_id = $return_product_id");
+        }
         mysqli_query($mysqli,"DELETE FROM invoice_items WHERE item_id = $item_id");
     }
 
@@ -529,9 +535,11 @@ if (isset($_POST['edit_invoice_item'])) {
     $total = $subtotal + $tax_amount;
 
     // Determine what type of line item
-    $sql = mysqli_query($mysqli,"SELECT item_invoice_id FROM invoice_items WHERE item_id = $item_id");
+    $sql = mysqli_query($mysqli,"SELECT item_invoice_id, item_quantity, item_product_id FROM invoice_items WHERE item_id = $item_id");
     $row = mysqli_fetch_assoc($sql);
     $invoice_id = intval($row['item_invoice_id']);
+    $old_item_quantity = floatval($row['item_quantity']);
+    $old_item_product_id = intval($row['item_product_id']);
 
     //Get Discount Amount
     $sql = mysqli_query($mysqli,"SELECT * FROM invoices WHERE invoice_id = $invoice_id");
@@ -546,6 +554,23 @@ if (isset($_POST['edit_invoice_item'])) {
     if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id, true)) {   // MSP-DS-129: lines of an invoice with payments are frozen (the total could drop below what was paid)
         flash_alert($block_reason, 'error');
         redirect();
+    }
+
+    // MSP-DS-56: a stocked line's quantity change moves the difference through stock (same availability check as adding the line);
+    // the stored line decides the product, not the posted product_id
+    if ($old_item_product_id > 0 && getFieldById('products', $old_item_product_id, 'product_type') === 'product') {
+        $stock_delta = $qty - $old_item_quantity;
+        if ($stock_delta > 0) {
+            $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COALESCE(SUM(stock_qty), 0) AS available_stock FROM product_stock WHERE stock_product_id = $old_item_product_id"));
+            if (floatval($row['available_stock']) < $stock_delta) {
+                flash_alert("Not Enough <strong>$name</strong> in stock", 'error');
+                redirect();
+            }
+            mysqli_query($mysqli,"INSERT INTO product_stock SET stock_qty = -$stock_delta, stock_note = 'QTY +$stock_delta - Invoice $invoice_id (line edited)', stock_product_id = $old_item_product_id");
+        } elseif ($stock_delta < 0) {
+            $returned = abs($stock_delta);
+            mysqli_query($mysqli,"INSERT INTO product_stock SET stock_qty = $returned, stock_note = 'Returned QTY $returned back to stock - Invoice $invoice_id (line edited)', stock_product_id = $old_item_product_id");
+        }
     }
 
     mysqli_query($mysqli,"UPDATE invoice_items SET item_name = '$name', item_description = '$description', item_quantity = $qty, item_price = $price, item_subtotal = $subtotal, item_tax = $tax_amount, item_total = $total, item_tax_id = $tax_id WHERE item_id = $item_id");
@@ -606,8 +631,8 @@ if (isset($_GET['delete_invoice_item'])) {
 
     mysqli_query($mysqli,"DELETE FROM invoice_items WHERE item_id = $item_id");
 
-    // Return Product Inventory
-    if ($item_product_id) {
+    // Return Product Inventory (only stocked products ever left stock - MSP-DS-56)
+    if ($item_product_id && $item_quantity > 0 && getFieldById('products', $item_product_id, 'product_type') === 'product') {
         mysqli_query($mysqli,"INSERT INTO product_stock SET stock_qty = $item_quantity, stock_note = 'Returned QTY $item_quantity back to stock from Invoice $invoice_id', stock_product_id = $item_product_id");
     }
 
