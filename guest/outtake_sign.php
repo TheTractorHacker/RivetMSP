@@ -61,8 +61,8 @@ $existing_sig  = $row['outtake_signature'];
 // Load ticket replies
 $sql_replies = mysqli_query($mysqli, "SELECT tr.ticket_reply, tr.ticket_reply_type, tr.ticket_reply_created_at, u.user_name, co3.contact_name as reply_contact
     FROM ticket_replies tr
-    LEFT JOIN users u ON tr.ticket_reply_by = u.user_id
-    LEFT JOIN contacts co3 ON tr.ticket_reply_by = co3.contact_id
+    LEFT JOIN users u ON tr.ticket_reply_by = u.user_id AND tr.ticket_reply_type = 'Public'
+    LEFT JOIN contacts co3 ON tr.ticket_reply_by = co3.contact_id AND tr.ticket_reply_type = 'Client'
     WHERE tr.ticket_reply_ticket_id = $ticket_id AND tr.ticket_reply_archived_at IS NULL AND tr.ticket_reply_type IN ('Public', 'Client')
     ORDER BY tr.ticket_reply_id ASC LIMIT 10");
 
@@ -165,7 +165,7 @@ $sql_replies = mysqli_query($mysqli, "SELECT tr.ticket_reply, tr.ticket_reply_ty
     <div class="section-bar">Ticket Comments</div>
     <div class="section-body">
         <?php while ($reply = mysqli_fetch_assoc($sql_replies)) {
-            $by = $reply['ticket_reply_type'] == 'Agent' ? nullable_htmlentities($reply['user_name']) : nullable_htmlentities($reply['reply_contact']);
+            $by = $reply['ticket_reply_type'] == 'Client' ? nullable_htmlentities($reply['reply_contact']) : nullable_htmlentities($reply['user_name']);   // MSP-DS-163
             $dt = date('M j, Y', strtotime($reply['ticket_reply_created_at']));
             $body = htmlspecialchars(substr(strip_tags($reply['ticket_reply']), 0, 400));
         ?>
