@@ -8496,28 +8496,38 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         // --- MSP-DS-141: one staff account per e-mail. Client portal accounts (user_type 2) may share an address, so the index sits on a virtual column that is NULL for them.
         if (!$db_has_index('users', 'uniq_users_staff_email')) {
-            $res = mysqli_query($mysqli,
-                "SELECT u.user_id, u.user_email FROM users u
-                 JOIN (SELECT user_email AS e FROM users WHERE user_type = 1 AND user_email <> '' GROUP BY user_email HAVING COUNT(*) > 1) d ON u.user_email = d.e
-                 WHERE u.user_type = 1
-                 ORDER BY u.user_email, (u.user_archived_at IS NULL) DESC, u.user_status DESC, u.user_id ASC");
-            $seen = [];
-            $renames = [];
-            while ($res && ($r = mysqli_fetch_assoc($res))) {
-                $key = strtolower(rtrim($r['user_email']));
-                if (!isset($seen[$key])) {
-                    $seen[$key] = true;   // the first row of each group (active, then lowest id) keeps the address
-                    continue;
+            // Duplicates are decided in SQL under the SAME collation the index uses (utf8mb4_general_ci: 'E-acute' = 'e', 'JOSE' = 'jose', trailing spaces ignored),
+            // never with PHP string rules (MSP-DS-141 re-review MRR4: an ASCII-only PHP key left accent/case-equal pairs un-renamed and the ADD UNIQUE failed with 1062).
+            // Every row of a group carries the group's own SQL value (d.e), so that value is the group key.
+            // A second pass re-checks after the renames (a renamed address could itself land on an existing one).
+            for ($pass = 0; $pass < 3; $pass++) {
+                $res = mysqli_query($mysqli,
+                    "SELECT u.user_id, u.user_email, d.e AS grp FROM users u
+                     JOIN (SELECT user_email COLLATE utf8mb4_general_ci AS e FROM users WHERE user_type = 1 AND user_email <> '' GROUP BY user_email COLLATE utf8mb4_general_ci HAVING COUNT(*) > 1) d
+                       ON (u.user_email COLLATE utf8mb4_general_ci) = d.e
+                     WHERE u.user_type = 1
+                     ORDER BY d.e, (u.user_archived_at IS NULL) DESC, u.user_status DESC, u.user_id ASC");
+                $seen = [];
+                $renames = [];
+                while ($res && ($r = mysqli_fetch_assoc($res))) {
+                    $key = $r['grp'];
+                    if (!isset($seen[$key])) {
+                        $seen[$key] = true;   // the first row of each group (active, then lowest id) keeps the address
+                        continue;
+                    }
+                    $renames[] = $r;
                 }
-                $renames[] = $r;
-            }
-            foreach ($renames as $r) {
-                $id = (int) $r['user_id'];
-                $at = strrpos($r['user_email'], '@');
-                $new = $at === false ? substr($r['user_email'], 0, 150) . ".dup$id" : substr($r['user_email'], 0, min($at, 100)) . "+dup$id" . substr($r['user_email'], $at);
-                $new_esc = mysqli_real_escape_string($mysqli, substr($new, 0, 200));
-                mysqli_query($mysqli, "UPDATE users SET user_email = '$new_esc' WHERE user_id = $id");
-                $db_log("MSP-DS-141: staff user $id shared the e-mail " . $r['user_email'] . " with another staff account; e-mail renamed to $new (account kept, fix the address from Users)");
+                if (!$renames) {
+                    break;
+                }
+                foreach ($renames as $r) {
+                    $id = (int) $r['user_id'];
+                    $at = strrpos($r['user_email'], '@');
+                    $new = $at === false ? mb_strcut($r["user_email"], 0, 150) . ".dup$id" : mb_strcut($r["user_email"], 0, min($at, 100)) . "+dup$id" . substr($r["user_email"], $at);
+                    $new_esc = mysqli_real_escape_string($mysqli, mb_strcut($new, 0, 200));
+                    mysqli_query($mysqli, "UPDATE users SET user_email = '$new_esc' WHERE user_id = $id");
+                    $db_log("MSP-DS-141: staff user $id shared the e-mail " . $r['user_email'] . " with another staff account; e-mail renamed to $new (account kept, fix the address from Users)");
+                }
             }
             if (!$db_has_column('users', 'user_staff_email_key')) {
                 mysqli_query($mysqli, "ALTER TABLE `users` ADD COLUMN `user_staff_email_key` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci GENERATED ALWAYS AS (IF(`user_type` = 1 AND `user_email` <> '', `user_email`, NULL)) VIRTUAL");
