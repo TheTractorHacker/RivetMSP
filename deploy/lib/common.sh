@@ -303,11 +303,14 @@ app_owner_user() {
 
 # parse_rmm_pg_env <text>: MSP-DS-34. scripts/rmm_postgres_backup_env.php prints `export NAME='value'` lines. It is app code the web
 # user can change, so its output is never eval'd: only exactly these variable names with single-quoted values are accepted, and the
-# value is taken literally (no expansion).
+# value is taken literally (no expansion). The one extra line the script prints, `export PGPASSFILE='...'`, is ignored, never applied.
 parse_rmm_pg_env() {
     local line name val
     while IFS= read -r line; do
         [[ -z "${line}" ]] && continue
+        # scripts/rmm_postgres_backup_env.php always prints `export PGPASSFILE='<its scratch file>'` after the six connection lines. That
+        # path is app output and is never trusted: discard the line (rmm_pg_prepare makes root's own password file and sets PGPASSFILE).
+        [[ "${line}" =~ ^export\ PGPASSFILE=\'.*\'$ ]] && continue
         if [[ "${line}" =~ ^export\ (RIVETCORE_PG_DATABASE|RIVETCORE_PG_USER|RIVETCORE_PG_HOST|RIVETCORE_PG_PORT|RIVETCORE_PG_SSLMODE|RIVETCORE_PG_SCHEMA)=\'(.*)\'$ ]]; then
             name="${BASH_REMATCH[1]}"; val="${BASH_REMATCH[2]}"
             # A value is one single-quoted word: the only quote allowed inside is the shell idiom '\'' (close, escaped quote, reopen).

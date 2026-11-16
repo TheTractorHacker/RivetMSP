@@ -21,7 +21,7 @@ src="$(sed -n '/^parse_rmm_pg_env() {/,/^}/p' "$ROOT/deploy/lib/common.sh")"
 parse(){ bash -c 'die(){ echo "DIE $*"; exit 3; }; '"$src"'; parse_rmm_pg_env "$1" && echo OK:"$RIVETCORE_PG_USER"' _ "$1" 2>&1; }
 [[ "$(parse "export RIVETCORE_PG_USER='o'\\''b'")" == "OK:o'b" ]] && ok "normal line parsed literally" || bad "normal line"
 [[ "$(parse "export RIVETCORE_PG_USER='x'; touch $T/pwn")" == DIE* && ! -e "$T/pwn" ]] && ok "injected command rejected and not run" || bad "injection"
-[[ "$(parse "export PGPASSFILE='/etc/shadow'")" == DIE* ]] && ok "PGPASSFILE from app output is refused (root makes its own)" || bad "pgpassfile accepted"
+[[ "$(PGPASSFILE=/root/own parse "export PGPASSFILE='/etc/shadow'")" == "OK:" && "$(PGPASSFILE=/root/own bash -c "die(){ exit 3; }; $src; parse_rmm_pg_env \"export PGPASSFILE='/etc/shadow'\"; echo \$PGPASSFILE")" == /root/own ]] && ok "PGPASSFILE from app output is ignored, never applied (root makes its own)" || bad "pgpassfile from app output applied or rejected"
 grep -q 'export PGPASSFILE="${own_pass}"' "$ROOT/deploy/lib/common.sh" && ok "root exports its own PGPASSFILE" || bad "own pgpass"
 ! grep -nE '^\s*eval ' "$ROOT"/deploy/backup.sh "$ROOT"/deploy/restore.sh | grep -q . && ok "no eval in backup.sh/restore.sh" || bad "eval present"
 for f in backup.sh restore.sh restore_drill.sh update.sh; do grep -q 'require_trusted_tooling' "$ROOT/deploy/$f" && ok "$f calls require_trusted_tooling" || bad "$f does not"; done
