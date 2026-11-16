@@ -20,6 +20,13 @@ if (isset($_POST['add_payroll_period'])) {
     $start_esc = mysqli_real_escape_string($mysqli, date('Y-m-d', $start_ts));
     $end_esc = mysqli_real_escape_string($mysqli, date('Y-m-d', $end_ts));
 
+    // MSP-DS-39: a period may not overlap (or duplicate) another live period - they would read the same hours rows
+    $overlap = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payroll_period_id FROM payroll_periods WHERE payroll_period_archived_at IS NULL AND payroll_period_start_date <= '$end_esc' AND payroll_period_end_date >= '$start_esc' LIMIT 1"));
+    if ($overlap) {
+        flash_alert("That pay period overlaps an existing pay period.", 'error');
+        redirect('/admin/payroll_periods.php');
+    }
+
     mysqli_query($mysqli, "INSERT INTO payroll_periods SET payroll_period_start_date = '$start_esc', payroll_period_end_date = '$end_esc'");
     $period_id = mysqli_insert_id($mysqli);
 

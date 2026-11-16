@@ -67,12 +67,22 @@ if (isset($_POST['run_payroll'])) {
         redirect("/admin/payroll_period.php?id=$period_id");
     }
 
+    // MSP-DS-39: check-then-create under a named lock so a double submit cannot create two runs for one period
+    $lock_name = "payroll_run_period_$period_id";
+    $got_lock = mysqli_fetch_row(mysqli_query($mysqli, "SELECT GET_LOCK('$lock_name', 10)"));
+    if (!$got_lock || intval($got_lock[0]) !== 1) {
+        flash_alert("Another payroll run is being created for this period - try again.", 'error');
+        redirect("/admin/payroll_period.php?id=$period_id");
+    }
+
     $existing_run = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payroll_run_id FROM payroll_runs WHERE payroll_run_period_id = $period_id AND payroll_run_archived_at IS NULL LIMIT 1"));
     if ($existing_run) {
+        mysqli_query($mysqli, "DO RELEASE_LOCK('$lock_name')");
         redirect("/admin/payroll_run.php?id=" . intval($existing_run['payroll_run_id']));
     }
 
     $run_id = payrollCreateRun($mysqli, $period_id, intval($session_user_id), (string) $session_company_currency);
+    mysqli_query($mysqli, "DO RELEASE_LOCK('$lock_name')");
 
     logAction("Payroll", "Create", "$session_name ran payroll for pay period #$period_id");
 

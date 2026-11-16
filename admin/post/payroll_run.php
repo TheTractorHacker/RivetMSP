@@ -60,9 +60,10 @@ if (isset($_POST['edit_payroll_run_hours'])) {
 
     $run_id = intval($_POST['run_id'] ?? 0);
     $user_id = intval($_POST['user_id'] ?? 0);
-    $period_id = intval($_POST['period_id'] ?? 0);
 
     $run = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM payroll_runs WHERE payroll_run_id = $run_id AND payroll_run_archived_at IS NULL LIMIT 1"));
+    // MSP-DS-39: the period is the run's own period, never one named in the POST
+    $period_id = $run ? intval($run['payroll_run_period_id']) : 0;
     $period = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM payroll_periods WHERE payroll_period_id = $period_id LIMIT 1"));
 
     if (!$run || !$period) {
@@ -72,6 +73,11 @@ if (isset($_POST['edit_payroll_run_hours'])) {
     // Server-side guard - reject correcting hours on a finalized run.
     if ($run['payroll_run_status'] === 'finalized') {
         flash_alert("This payroll run is finalized - hours can no longer be edited.", 'error');
+        redirect("/admin/payroll_run.php?id=$run_id");
+    }
+
+    if (($period['payroll_period_status'] ?? '') === 'locked') {
+        flash_alert("This pay period is locked - hours can no longer be edited.", 'error');
         redirect("/admin/payroll_run.php?id=$run_id");
     }
 
