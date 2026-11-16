@@ -8,10 +8,13 @@ if (isset($_GET['client_id'])) {
     $client_url = "&client_id=$client_id";
 } else {
     require_once "includes/inc_all.php";
-    $client_event_query = '';
+    // MSP-DS-124: a client-restricted tech only sees events of their clients (and the general ones, client 0)
+    $client_event_query = ($client_access_string && !$session_is_admin) ? "WHERE (event_client_id = 0 OR event_client_id IN ($client_access_string))" : '';
     $client_query = 'WHERE 1 = 1';
     $client_url = '';
 }
+
+enforceUserPermission('module_support');   // MSP-DS-124 (the modal map already treats the calendar as module_support)
 
 if (isset($_GET['calendar_id'])) {
     $calendar_selected_id = intval($_GET['calendar_id']);
@@ -272,9 +275,9 @@ while ($row = mysqli_fetch_assoc($sql)) {
                 echo "{ id: $event_id, title: $event_title, start: $event_start, end: $event_end, color: $calendar_color },";
             }
 
-            // Invoices Created
-            $sql = mysqli_query($mysqli, "SELECT * FROM clients LEFT JOIN invoices ON client_id = invoice_client_id $client_query $access_permission_query");
-            while ($row = mysqli_fetch_assoc($sql)) {
+            // Invoices Created (MSP-DS-124: only for roles with the sales module)
+            $sql = lookupUserPermission('module_sales') >= 1 ? mysqli_query($mysqli, "SELECT * FROM clients LEFT JOIN invoices ON client_id = invoice_client_id $client_query $access_permission_query") : false;
+            while ($sql && ($row = mysqli_fetch_assoc($sql))) {
                 $event_id = intval($row['invoice_id']);
                 $scope = strval($row['invoice_scope']);
                 if (empty($scope)) {
@@ -287,9 +290,9 @@ while ($row = mysqli_fetch_assoc($sql)) {
                 echo "{ id: $event_id, title: $event_title, start: $event_start, display: 'list-item', color: 'blue', url: 'invoice.php?invoice_id=$event_id$client_url' },";
             }
 
-            // Quotes Created
-            $sql = mysqli_query($mysqli, "SELECT * FROM clients LEFT JOIN quotes ON client_id = quote_client_id $client_query $access_permission_query");
-            while ($row = mysqli_fetch_assoc($sql)) {
+            // Quotes Created (MSP-DS-124: only for roles with the sales module)
+            $sql = lookupUserPermission('module_sales') >= 1 ? mysqli_query($mysqli, "SELECT * FROM clients LEFT JOIN quotes ON client_id = quote_client_id $client_query $access_permission_query") : false;
+            while ($sql && ($row = mysqli_fetch_assoc($sql))) {
                 $event_id = intval($row['quote_id']);
                 $event_title = json_encode($row['quote_prefix'] . $row['quote_number'] . " " . $row['quote_scope']);
                 $event_start = json_encode($row['quote_date']);

@@ -9,6 +9,8 @@ if (isset($_GET['client_id'])) {
     $client_id = 0;
 }
 
+enforceUserPermission('module_sales');   // MSP-DS-124: matches the modal map (contract => module_sales)
+
 $sort = "contract_renewal_date";
 $order = "ASC";
 
