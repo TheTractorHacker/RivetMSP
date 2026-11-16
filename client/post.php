@@ -1320,6 +1320,12 @@ if (isset($_POST['set_recurring_payment'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
+    // Switching autopay on or off is a billing action: primary or billing contacts only (as the other billing handlers, MSP-DS-17)
+    if ($session_contact_primary != 1 && !$session_contact_is_billing_contact) {
+        flash_alert("You do not have permission to change automatic payments", 'danger');
+        redirect();
+    }
+
     $recurring_invoice_id = intval($_POST['recurring_invoice_id']);
     $saved_payment_id = intval($_POST['saved_payment_id']);
 
@@ -1351,6 +1357,12 @@ if (isset($_POST['set_recurring_payment'])) {
         ");
 
         $row = mysqli_fetch_assoc($sql);
+
+        // The saved card must be this client's own, on an active provider: no row, no autopay (MSP-DS-17)
+        if (!$row) {
+            flash_alert("Saved payment method not found", 'error');
+            redirect();
+        }
 
         $provider_id = intval($row['payment_provider_id']);
         $provider_name = sanitizeInput($row['payment_provider_name']);
