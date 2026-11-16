@@ -12,6 +12,13 @@ require_once "includes/inc_all_admin.php";
 
             <h4>Client Portal SSO via Microsoft Entra</h4>
 
+            <?php $unpinned_azure_users = secPortalEntraUnpinnedAzureUsers($mysqli); if ($unpinned_azure_users > 0) { ?>
+            <div class="alert alert-warning">
+                <i class="fas fa-fw fa-exclamation-triangle me-1"></i>
+                <strong>No Entra tenant is set.</strong> <?php echo $unpinned_azure_users; ?> portal contact(s) sign in with Microsoft, and the portal accepts a Microsoft account from <em>any</em> work or school tenant whose sign-in name matches. Enter your tenant below to limit sign-in to it.
+            </div>
+            <?php } ?>
+
             <div class="form-group">
                 <label>Identity Provider <small class='text-secondary'>(Currently only works with Microsoft Entra ID/AAD)</small></label>
                 <div class="input-group">

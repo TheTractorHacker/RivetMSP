@@ -117,6 +117,21 @@ if (!function_exists('secSetting')) {
         return $t !== '' ? $t : 'organizations';
     }
 
+    /**
+     * MSP-DS-146 (re-review MRR-13): number of active portal accounts that sign in with Microsoft while no Entra tenant is pinned (0 when a tenant
+     * is set, so the warning only shows while the multi-tenant 'organizations' authority is actually in use). The default is not changed.
+     */
+    function secPortalEntraUnpinnedAzureUsers(?mysqli $mysqli = null): int
+    {
+        $mysqli ??= $GLOBALS['mysqli'] ?? null;
+        if (!($mysqli instanceof mysqli) || secPortalEntraTenantNormalize(secSetting('portal_entra_tenant', $mysqli)) !== '') {
+            return 0;
+        }
+        $r = @mysqli_query($mysqli, "SELECT COUNT(*) FROM users WHERE user_type = 2 AND user_status = 1 AND user_archived_at IS NULL AND user_auth_method = 'azure'");
+
+        return $r ? (int) mysqli_fetch_row($r)[0] : 0;
+    }
+
     /** MSP-DS-77 (re-review MRR-8): is the mobile passkey login set to require user verification? Reads $config_passkey_mobile_require_uv (config.php), the same switch api/v1/auth.php uses. Default off. */
     function secMobilePasskeyUvRequired(): bool
     {
