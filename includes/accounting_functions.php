@@ -143,6 +143,21 @@ function enqueueAccountingSync(mysqli $mysqli, string $type, int $id, string $op
 /**
  * Append a row to the accounting sync log (audit trail for pushes/errors).
  */
+/** MSP-DS-165: the idempotency token for one create: stable across the queue's retries of the same local document (never random). */
+function accountingRequestKey(int $accounting_id, string $type, int $local_id): string {
+    return "rivet-$accounting_id-$type-$local_id";
+}
+
+/**
+ * MSP-DS-165: the pushed document carries lines only (no tax, no invoice-level discount), so the remote total can differ from RivetMSP's.
+ * Returns a sentence for the sync log when the two totals disagree by more than a cent, else ''. Never throws.
+ */
+function accountingTotalsDriftNote(float $local_total, $remote_total): string {
+    if ($remote_total === null || $remote_total === '' || !is_numeric($remote_total)) { return ''; }
+    if (abs(round($local_total, 2) - round((float) $remote_total, 2)) <= 0.01) { return ''; }
+    return sprintf(' WARNING: total in the accounting system is %.2f but RivetMSP has %.2f (tax and invoice-level discount are not pushed yet) - check it there before a payment is applied.', (float) $remote_total, $local_total);
+}
+
 function accountingLog(mysqli $mysqli, int $accounting_id, string $type, int $id, string $status, string $message): void {
     $type_esc    = mysqli_real_escape_string($mysqli, $type);
     $status_esc  = mysqli_real_escape_string($mysqli, substr($status, 0, 20));
@@ -680,6 +695,7 @@ function accountingSyncProcessJob(mysqli $mysqli, AccountingClientInterface $qbo
                 $doc_number = substr((string) $invoice['invoice_prefix'] . $invoice['invoice_number'], 0, 21);
 
                 $created = $qbo->createInvoice([
+                    '_request_key' => accountingRequestKey($acc_id, 'invoice', $job_local_id),   // MSP-DS-165
                     'CustomerRef' => ['value' => $customer_ref],
                     'TxnDate'     => (string) $invoice['invoice_date'],
                     'DueDate'     => (string) $invoice['invoice_due'],
@@ -700,6 +716,7 @@ function accountingSyncProcessJob(mysqli $mysqli, AccountingClientInterface $qbo
                 } else {
                     $message = "Pushed invoice $doc_number -> QBO Invoice #{$created['Id']}";
                 }
+                $message .= accountingTotalsDriftNote(floatval($invoice['invoice_amount']), $created['TotalAmt'] ?? null);   // MSP-DS-165
                 accountingLog($mysqli, $acc_id, 'invoice', $job_local_id, 'delivered', $message);
                 break;
             }
@@ -764,6 +781,7 @@ function accountingSyncProcessJob(mysqli $mysqli, AccountingClientInterface $qbo
                     $payload['ExpirationDate'] = (string) $quote['quote_expire'];
                 }
 
+                $payload['_request_key'] = accountingRequestKey($acc_id, 'quote', $job_local_id);   // MSP-DS-165
                 $created = $qbo->createEstimate($payload);
                 setAccountingMap($mysqli, $acc_id, 'quote', $job_local_id, (string) $created['Id'], (string) ($created['SyncToken'] ?? ''));
                 // Same QBO auto-numbering caveat as createInvoice() above - see that
@@ -808,6 +826,7 @@ function accountingSyncProcessJob(mysqli $mysqli, AccountingClientInterface $qbo
 
                 $amount = round(floatval($payment['payment_amount']), 2);
                 $created = $qbo->createPayment([
+                    '_request_key' => accountingRequestKey($acc_id, 'payment', $job_local_id),   // MSP-DS-165
                     'TotalAmt'    => $amount,
                     'CustomerRef' => ['value' => $customer_ref],
                     'TxnDate'     => (string) $payment['payment_date'],

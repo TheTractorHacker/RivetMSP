@@ -387,7 +387,8 @@ class QboClient implements AccountingClientInterface {
     // ── Invoice ──────────────────────────────────────────────────────────────
 
     public function createInvoice(array $payload): array {
-        $res = $this->request('POST', 'invoice', $payload);
+        $rk  = accountingTakeRequestKey($payload);   // MSP-DS-165
+        $res = $this->request('POST', 'invoice' . ($rk !== '' ? '?requestid=' . rawurlencode($rk) : ''), $payload);
         if (empty($res['Invoice']['Id'])) {
             throw new QboException('QBO createInvoice: unexpected response.');
         }
@@ -409,7 +410,8 @@ class QboClient implements AccountingClientInterface {
     // ── Estimate (ITFlow "Quote") ────────────────────────────────────────────
 
     public function createEstimate(array $payload): array {
-        $res = $this->request('POST', 'estimate', $payload);
+        $rk  = accountingTakeRequestKey($payload);   // MSP-DS-165
+        $res = $this->request('POST', 'estimate' . ($rk !== '' ? '?requestid=' . rawurlencode($rk) : ''), $payload);
         if (empty($res['Estimate']['Id'])) {
             throw new QboException('QBO createEstimate: unexpected response.');
         }
@@ -428,7 +430,8 @@ class QboClient implements AccountingClientInterface {
     // ── Payment ──────────────────────────────────────────────────────────────
 
     public function createPayment(array $payload): array {
-        $res = $this->request('POST', 'payment', $payload);
+        $rk  = accountingTakeRequestKey($payload);   // MSP-DS-165
+        $res = $this->request('POST', 'payment' . ($rk !== '' ? '?requestid=' . rawurlencode($rk) : ''), $payload);
         if (empty($res['Payment']['Id'])) {
             throw new QboException('QBO createPayment: unexpected response.');
         }
