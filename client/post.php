@@ -1445,12 +1445,15 @@ if (isset($_POST['client_add_document'])) {
 
     $processed_content = mysqli_escape_string(
         $mysqli,
-        rivetPdfSafeHtml(saveBase64Images(
+        // Store what the contact wrote (data: images become local files). The PDF allow-list rivetPdfSafeHtml() is applied at RENDER time
+        // (agent/post/document.php export_document) and the portal/guest pages render through HTMLPurifier, so saving does not strip legitimate
+        // structure (dl/dt/dd, del, caption/col, ids, /uploads links) for good (review RR9).
+        saveBase64Images(
             $_POST['document_content'],
             $_SERVER['DOCUMENT_ROOT'] . "/uploads/documents/",
             "uploads/documents/",
             $document_id
-        ))
+        )
     );
 
     // Document update content

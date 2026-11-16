@@ -12,7 +12,7 @@ $ok(!str_contains($out, 'evil') && !str_contains($out, '169.254') && !str_contai
 $ok(str_contains($out, '/uploads/documents/5/ok.png') && str_contains($out, 'data:image/png'), 'legit images kept');
 $ok(str_contains(file_get_contents(__DIR__ . '/../agent/post/document.php'), 'writeHTML(rivetPdfSafeHtml('), 'export_document purifies before writeHTML');
 $post = file_get_contents(__DIR__ . '/../client/post.php');
-$ok(str_contains($post, 'rivetPdfSafeHtml(saveBase64Images('), 'portal save filters document html');
+$ok(!str_contains($post, 'rivetPdfSafeHtml(saveBase64Images(') && str_contains($post, 'saveBase64Images('), 'portal save stores the original (RR9: PDF allow-list runs at render time)');
 $i = strpos($post, "isset(\$_GET['client_serve_contract_doc'])");
 $blk = substr($post, $i, 1200);
 $ok(str_contains($blk, 'contract_archived_at IS NULL') && str_contains($blk, '$session_contact_primary == 0 && !$session_contact_is_technical_contact'), 'contract download: archived excluded, primary/technical required');
