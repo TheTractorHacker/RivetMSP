@@ -66,12 +66,16 @@ switch ($sub) {
     case 'credentials':
         if ($legacy_api_key_auth) { api_error(403, 'Credentials endpoint requires a user API token'); }
         api_require_module_permission($mysqli, $uid, 'module_credential');
+        // MSP-DS-180: usernames are encrypted at rest; open them with this token's own key (as /credentials/{id} does), never return ciphertext
+        $cred_raw_token = '';
+        if (preg_match('/^Bearer\s+(\S+)$/i', $_SERVER['HTTP_AUTHORIZATION'] ?? '', $bm)) { $cred_raw_token = $bm[1]; }
         $rows = []; $sql = mysqli_query($mysqli,
             "SELECT credential_id, credential_name, credential_username, credential_uri
              FROM credentials WHERE credential_client_id = $id AND credential_archived_at IS NULL ORDER BY credential_name ASC");
         while ($r = mysqli_fetch_assoc($sql)) {
             $rows[] = ['id'=>intval($r['credential_id']),'name'=>$r['credential_name'],
-                'username'=>$r['credential_username'],'uri'=>$r['credential_uri']];
+                'username'=>_api_decrypt((string) $r['credential_username'], $cred_raw_token, is_array($api_token_row ?? null) ? $api_token_row : [], intval($r['credential_id']), 'username'),
+                'uri'=>$r['credential_uri']];
         }
         api_response(200, $rows);
 

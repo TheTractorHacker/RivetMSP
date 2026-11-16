@@ -77,3 +77,25 @@ function api_client_scope_ok(int $client_id): bool {
             OR EXISTS (SELECT 1 FROM user_client_permissions WHERE user_id = $uid AND client_id = $client_id LIMIT 1)"
     ));
 }
+
+// Decrypt a credential field using the token's stored master key
+if (!function_exists('_api_decrypt')) {
+function _api_decrypt(string $ciphertext, string $raw_token, array $token_row, $credential_id = null, string $field = 'password'): string {
+    if (!$ciphertext) return '';
+    // v3 field (credential vault v3): opened with the data key wrapped into this token at sign-in (api_tokens.token_enc_dek).
+    if (\RivetMSP\Crypto\VaultV3::isV3Field($ciphertext)) {
+        $dek = \RivetMSP\Crypto\VaultV3::unwrapFromToken($token_row['token_enc_dek'] ?? null, $raw_token);
+        if ($dek === null || $credential_id === null) return '';
+        $plain = \RivetMSP\Crypto\VaultV3::openField($ciphertext, $dek, $credential_id, $field);
+        return $plain === false ? '' : $plain;
+    }
+    if (empty($token_row['token_enc_master_key'])) return '';
+    $enc_key    = substr(hash('sha256', $raw_token . 'itflow_enc', true), 0, 16);
+    $enc_iv     = hex2bin($token_row['token_enc_master_iv']);
+    $master_key = openssl_decrypt($token_row['token_enc_master_key'], 'aes-128-cbc', $enc_key, 0, $enc_iv);
+    if (!$master_key) return '';
+    $cred_iv    = substr($ciphertext, 0, 16);
+    $cred_ct    = substr($ciphertext, 16);
+    return openssl_decrypt($cred_ct, 'aes-128-cbc', $master_key, 0, $cred_iv) ?: '';
+}
+}

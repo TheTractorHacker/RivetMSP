@@ -132,7 +132,10 @@ if (isset($_POST['edit_vendor_template'])) {
         // Remove the first comma to prevent MySQL error
         $sql = preg_replace('/,/', '', $sql, 1);
 
-        mysqli_query($mysqli,"UPDATE vendors SET $sql WHERE vendor_template_id = $vendor_template_id");
+        // MSP-DS-179: nothing ticked means nothing to update (an empty SET list is a syntax error)
+        if (trim($sql) !== '') {
+            mysqli_query($mysqli,"UPDATE vendors SET $sql WHERE vendor_template_id = $vendor_template_id");
+        }
     }
 
     logAction("Vendor Template", "Edit", "$session_name edited vendor template $name", 0, $vendor_template_id);
