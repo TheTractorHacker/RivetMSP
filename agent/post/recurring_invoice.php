@@ -616,9 +616,17 @@ if (isset($_POST['set_recurring_payment'])) {
             SELECT * FROM payment_providers
             LEFT JOIN client_saved_payment_methods ON saved_payment_provider_id = payment_provider_id
             WHERE saved_payment_id = $saved_payment_id
+            AND saved_payment_client_id = $client_id
+            AND payment_provider_active = 1
         ");
 
         $row = mysqli_fetch_assoc($sql);
+
+        // MSP-DS-58: only this client's own saved method on an active provider (the portal handler does the same)
+        if (!$row) {
+            flash_alert("Saved payment method not found for this client.", 'error');
+            redirect();
+        }
 
         $provider_id = intval($row['payment_provider_id']);
         $provider_name = sanitizeInput($row['payment_provider_name']);
