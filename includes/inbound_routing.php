@@ -81,6 +81,26 @@ function inboundTrustedContact(mysqli $mysqli, string $email): ?array
 }
 
 /**
+ * MSP-DS-91: true when this client's portal has been refused $max contact addresses within the last hour (logged as 'Contact Address
+ * Refused'). The add/edit contact forms then refuse everything with their one generic message, so they cannot be used as a
+ * who-has-an-account oracle by trying many addresses.
+ */
+function portalContactProbeLimited(mysqli $mysqli, int $clientId, int $max = 5): bool
+{
+    $stmt = mysqli_prepare($mysqli, "SELECT COUNT(*) FROM logs WHERE log_type = 'Client Portal' AND log_action = 'Contact Address Refused' AND log_client_id = ? AND log_created_at > NOW() - INTERVAL 1 HOUR");
+    if (!$stmt) {
+        return false;
+    }
+    mysqli_stmt_bind_param($stmt, 'i', $clientId);
+    mysqli_stmt_execute($stmt);
+    $n = 0;
+    mysqli_stmt_bind_result($stmt, $n);
+    mysqli_stmt_fetch($stmt);
+    mysqli_stmt_close($stmt);
+    return $n >= $max;
+}
+
+/**
  * Portal contacts may not claim an address that already belongs to a contact of another client (archived ones count), nor an address
  * whose domain another client lists. Returns the reason, or '' when the address is free for this client.
  * $email must be the RAW address (not already SQL-escaped): this function escapes it itself (MSP-DS-16, review R33).

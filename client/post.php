@@ -556,9 +556,18 @@ if (isset($_POST['add_contact'])) {
         $contact_billing = 0;
     }
 
+    // MSP-DS-91: every refusal below is logged, and a portal client that collects 5 refusals in an hour is refused outright (with the same
+    // generic message), so the form cannot be used to probe which addresses exist as staff logins or other clients' contacts.
+    require_once dirname(__DIR__) . '/includes/inbound_routing.php';
+    if (portalContactProbeLimited($mysqli, intval($session_client_id))) {
+        flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');
+        redirect('contact_add.php');
+    }
+
     // Check the email isn't already in use
     $sql = mysqli_query($mysqli, "SELECT user_id FROM users WHERE user_email = '$contact_email'");
     if ($sql && mysqli_num_rows($sql) > 0) {
+        logAction('Client Portal', 'Contact Address Refused', 'A portal contact tried to add an address that is already a login', $session_client_id, 0);
         flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');   // MSP-DS-16/91 (review R32): one answer for every refusal reason, so this form is no existence oracle
         redirect('contact_add.php');
     }
@@ -652,9 +661,17 @@ if (isset($_POST['edit_contact'])) {
         $contact_billing = intval($row['contact_billing']);
     }
 
+    // MSP-DS-91: refusals are logged and rate-limited (see add_contact)
+    require_once dirname(__DIR__) . '/includes/inbound_routing.php';
+    if (portalContactProbeLimited($mysqli, intval($session_client_id))) {
+        flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');
+        redirect('contact_edit.php?id=' . $contact_id);
+    }
+
     // Check the email isn't already in use
     $sql = mysqli_query($mysqli, "SELECT user_id FROM users WHERE user_email = '$contact_email' AND user_id != $contact_user_id");
     if ($sql && mysqli_num_rows($sql) > 0) {
+        logAction('Client Portal', 'Contact Address Refused', 'A portal contact tried to set an address that is already a login', $session_client_id, 0);
         flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');   // MSP-DS-16/91 (review R32): one answer for every refusal reason
         redirect('contact_edit.php?id=' . $contact_id);
     }
