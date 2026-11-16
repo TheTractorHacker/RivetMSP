@@ -327,19 +327,33 @@ if (isset($_GET['delete_invoice'])) {
         redirect();
     }
 
+    // MSP-DS-56 (re-review MRR-3): the delete is one transaction. The lines are locked first (the same order delete_invoice_item uses: line, then invoice),
+    // then the invoice row, and the checks run again under the lock. Stock goes back only for a line whose own DELETE removed a row, so a double
+    // click or a race with delete_invoice_item returns each stocked line exactly once.
+    mysqli_begin_transaction($mysqli);
+    $lines = mysqli_query($mysqli,"SELECT invoice_items.*, products.product_type FROM invoice_items LEFT JOIN products ON product_id = item_product_id WHERE item_invoice_id = $invoice_id FOR UPDATE");
+    $lines = $lines ? mysqli_fetch_all($lines, MYSQLI_ASSOC) : [];
+    $inv_locked = mysqli_fetch_assoc(mysqli_query($mysqli,"SELECT invoice_id FROM invoices WHERE invoice_id = $invoice_id FOR UPDATE"));
+    if (!$inv_locked || ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id, true))) {
+        mysqli_rollback($mysqli);
+        flash_alert($inv_locked ? $block_reason : "Invoice not found (it may already have been deleted)", 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"DELETE FROM invoices WHERE invoice_id = $invoice_id");
 
     //Delete Items Associated with the Invoice
-    $sql = mysqli_query($mysqli,"SELECT invoice_items.*, products.product_type FROM invoice_items LEFT JOIN products ON product_id = item_product_id WHERE item_invoice_id = $invoice_id");
-    while($row = mysqli_fetch_assoc($sql)) {
+    foreach ($lines as $row) {
         $item_id = intval($row['item_id']);
+        mysqli_query($mysqli,"DELETE FROM invoice_items WHERE item_id = $item_id");
+        if (mysqli_affected_rows($mysqli) !== 1) {
+            continue;   // another request removed this line (and returned its stock) first
+        }
         // MSP-DS-56: stocked lines go back to stock when their invoice is deleted
         if (intval($row['item_product_id']) > 0 && ($row['product_type'] ?? '') === 'product' && floatval($row['item_quantity']) > 0) {
             $return_qty = floatval($row['item_quantity']);
-            $return_product_id = intval($row['item_product_id']);
-            mysqli_query($mysqli,"INSERT INTO product_stock SET stock_qty = $return_qty, stock_note = 'Returned QTY $return_qty back to stock from deleted Invoice $invoice_id', stock_product_id = $return_product_id");
+            productStockMove($mysqli, intval($row['item_product_id']), $return_qty, "Returned QTY $return_qty back to stock from deleted Invoice $invoice_id");
         }
-        mysqli_query($mysqli,"DELETE FROM invoice_items WHERE item_id = $item_id");
     }
 
     //Delete History Associated with the Invoice
@@ -358,6 +372,7 @@ if (isset($_GET['delete_invoice'])) {
 
     //unlink tickets from invoice
     mysqli_query($mysqli,"UPDATE tickets SET ticket_invoice_id = 0 WHERE ticket_invoice_id = $invoice_id");
+    mysqli_commit($mysqli);
 
     logAction("Invoice", "Delete", "$session_name deleted invoice $invoice_prefix$invoice_number", $client_id);
 
