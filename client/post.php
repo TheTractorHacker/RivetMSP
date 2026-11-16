@@ -799,7 +799,7 @@ if (isset($_GET['add_payment_by_provider'])) {
     // Create a payment intent
     try {
         $payment_intent = $stripe->paymentIntents->create([
-            'amount' => moneyToCents($balance_to_pay), // Times by 100 as Stripe expects values in cents
+            'amount' => stripeAmountToMinor($balance_to_pay, $invoice_currency_code), // MSP-DS-161: the currency's minor unit (JPY x1, KWD x1000), same helper as the agent/guest/cron sites
             'currency' => $invoice_currency_code,
             'customer' => $payment_provider_client,
             'payment_method' => $saved_payment_method,
@@ -828,7 +828,7 @@ if (isset($_GET['add_payment_by_provider'])) {
         logApp("Stripe", "error", "Exception during PI for invoice ID $invoice_id: $error");
     }
 
-    if ($payment_intent->status == "succeeded" && moneyToCents($balance_to_pay) === moneyToCents($pi_amount_paid)) {
+    if ($payment_intent->status == "succeeded" && stripeAmountToMinor($balance_to_pay, $invoice_currency_code) === intval($payment_intent->amount_received)) {
 
         // Record the payment first, exactly once per PaymentIntent (the webhook may have recorded it already)
         if (!insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $account_id, 'Stripe', $pi_id, $invoice_id)) {

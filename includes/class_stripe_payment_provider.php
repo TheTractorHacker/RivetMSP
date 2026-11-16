@@ -147,7 +147,10 @@ class StripePaymentProvider implements PaymentProviderInterface
     {
         $params = ['payment_intent' => $reference];
         if ($amount !== null) {
-            $params['amount'] = intval(round($amount * 100)); // Stripe expects cents
+            // MSP-DS-161 (review R10): Stripe wants the currency's minor unit (JPY x1, KWD x1000), not always cents
+            require_once __DIR__ . '/billing_guards.php';
+            $pi = $this->client()->paymentIntents->retrieve($reference, []);
+            $params['amount'] = stripeAmountToMinor($amount, $pi->currency);
         }
         return $this->client()->refunds->create($params);
     }
