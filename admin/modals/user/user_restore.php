@@ -77,7 +77,8 @@ ob_start();
         </div>
 
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer flex-wrap">
+        <input type="password" class="form-control mb-2" name="admin_current_password" placeholder="Your password (required to restore a user as an administrator)" autocomplete="current-password">
         <button type="submit" name="restore_user" class="btn btn-primary text-bold"><i class="fas fa-check me-2"></i>Restore</button>
         <button type="button" class="btn btn-light" data-bs-dismiss="modal"><i class="fas fa-times me-2"></i>Cancel</button>
     </div>

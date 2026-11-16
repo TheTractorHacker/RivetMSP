@@ -156,16 +156,28 @@ if (isset($_POST['edit_user'])) {
     $user_id = intval($_POST['user_id']);
     $new_password = trim($_POST['new_password']);
 
-    // MSP-DS-121: changing your own sign-in email, role, password or two-factor from here needs your current password, like the profile page.
+    // MSP-DS-121 (review R22/R23): the acting administrator's current password is needed for every change that could hand an attacker with a
+    // stolen session a durable administrator account:
+    //  - changing your own sign-in email, role, password, two-factor or Force-MFA setting (like the profile page),
+    //  - promoting ANY user into an administrator role they did not already have,
+    //  - changing the email or password of an account that is already an administrator (that is an account takeover).
+    $target_now = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT u.user_email, u.user_role_id, r.role_is_admin AS cur_is_admin, COALESCE(s.user_config_force_mfa, 0) AS cur_force_mfa
+        FROM users u LEFT JOIN user_roles r ON r.role_id = u.user_role_id LEFT JOIN user_settings s ON s.user_id = u.user_id WHERE u.user_id = $user_id"));
+    $new_role_is_admin = intval(getFieldById('user_roles', intval($role), 'role_is_admin')) === 1;
+    $role_changed = $target_now && intval($target_now['user_role_id']) !== intval($role);
+    $email_differs = $target_now && strcasecmp((string) $target_now['user_email'], trim((string) ($_POST['email'] ?? ''))) !== 0;
+    $reauth_needed = ($new_role_is_admin && $role_changed)
+        || ($target_now && intval($target_now['cur_is_admin']) === 1 && ($new_password !== '' || $email_differs));
     if ($user_id === intval($session_user_id)) {
-        $self_now = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_email, user_role_id FROM users WHERE user_id = $user_id"));
-        $self_sensitive = $new_password !== ''
+        $reauth_needed = $reauth_needed
+            || $new_password !== ''
             || (($_POST['2fa'] ?? '') === 'disable')
-            || ($self_now && (strcasecmp((string) $self_now['user_email'], trim((string) ($_POST['email'] ?? ''))) !== 0 || intval($self_now['user_role_id']) !== intval($_POST['role'] ?? 0)));
-        if ($self_sensitive && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
-            flash_alert('Your current password is required (and must be correct) to change your own email, role, password or two-factor.', 'error');
-            redirect();
-        }
+            || $email_differs || $role_changed
+            || ($target_now && intval($target_now['cur_force_mfa']) !== ($force_mfa ? 1 : 0));
+    }
+    if ($reauth_needed && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert('Your current password is required (and must be correct) to make someone an administrator, change an administrator\'s email or password, or change your own email, role, password, two-factor or Force MFA.', 'error');
+        redirect();
     }
 
     if ($new_password !== '') {
@@ -336,9 +348,14 @@ if (isset($_GET['disable_user'])) {
 
 }
 
-if (isset($_GET['disable_2fa'])) {
-    validateCSRFToken($_GET['csrf_token']);
-    $user_id   = intval($_GET['disable_2fa']);
+// MSP-DS-121 (review R23): removing a second factor or a passkey is a POST with CSRF and the acting administrator's password (it used to be a GET link).
+if (isset($_POST['disable_2fa'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $user_id   = intval($_POST['disable_2fa']);
+    if (!secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert('Your current password is required (and must be correct) to disable two-factor authentication.', 'error');
+        redirect();
+    }
     $user_name = sanitizeInput(getFieldById('users', $user_id, 'user_name'));
     mysqli_query($mysqli, "UPDATE users SET user_token = NULL WHERE user_id = $user_id");
     mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
@@ -348,10 +365,14 @@ if (isset($_GET['disable_2fa'])) {
     redirect();
 }
 
-if (isset($_GET['delete_passkey'])) {
-    validateCSRFToken($_GET['csrf_token']);
-    $passkey_id = intval($_GET['delete_passkey']);
-    $user_id    = intval($_GET['user_id']);
+if (isset($_POST['delete_passkey'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $passkey_id = intval($_POST['delete_passkey']);
+    $user_id    = intval($_POST['user_id']);
+    if (!secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert('Your current password is required (and must be correct) to delete a passkey.', 'error');
+        redirect();
+    }
     $user_name  = sanitizeInput(getFieldById('users', $user_id, 'user_name'));
     mysqli_query($mysqli, "DELETE FROM user_passkeys WHERE passkey_id = $passkey_id AND passkey_user_id = $user_id");
     logAction("User", "Edit", "$session_name deleted a passkey for $user_name", 0, $user_id);
@@ -418,6 +439,13 @@ if (isset($_POST['restore_user'])) {
 
     $user_name = getFieldById('users', $user_id, 'user_name');
     $user_name = sanitizeInput(str_replace(" (archived)", "", $user_name)); //Removed (archived) from user_name
+
+    // MSP-DS-121 (review R22): restoring an account into an administrator role needs the acting administrator's password
+    if (intval(getFieldById('user_roles', $role, 'role_is_admin')) === 1
+        && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert('Your current password is required (and must be correct) to restore a user as an administrator.', 'error');
+        redirect();
+    }
 
     // MSP-DS-42: the password policy is checked before the account is reactivated
     if (!empty($new_password)) {

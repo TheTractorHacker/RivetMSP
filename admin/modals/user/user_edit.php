@@ -155,6 +155,12 @@ ob_start();
             <!-- Security Tab -->
             <div class="tab-pane fade" id="pills-user-security<?php echo $user_id; ?>">
 
+                <!-- Removing a second factor or a passkey is a POST with the acting administrator's password (separate form below the modal form, linked with form="") -->
+                <!-- A disabled first submit button: pressing Enter in the password box must NOT fire the Disable / Delete buttons below (a disabled default button blocks implicit submission) -->
+                <button type="submit" form="userSecForm<?= $user_id ?>" disabled hidden tabindex="-1" aria-hidden="true"></button>
+                <input type="password" class="form-control mb-3" form="userSecForm<?= $user_id ?>" name="admin_current_password" autocomplete="current-password"
+                       placeholder="Your password (required to disable 2FA or delete a passkey)">
+
                 <!-- 2FA -->
                 <h6 class="text-uppercase text-muted mb-2" style="font-size:.75rem;letter-spacing:.05em">
                     <i class="fas fa-shield-alt me-1"></i>Two-Factor Authentication
@@ -162,10 +168,10 @@ ob_start();
                 <?php if (!empty($user_token)): ?>
                     <div class="d-flex align-items-center justify-content-between p-2 mb-2 border rounded">
                         <span><i class="fas fa-lock text-success me-2"></i><strong>Enabled</strong> — TOTP authenticator app</span>
-                        <a href="post.php?disable_2fa=<?= $user_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>"
+                        <button type="submit" form="userSecForm<?= $user_id ?>" name="disable_2fa" value="<?= $user_id ?>" formnovalidate
                            class="btn btn-sm btn-outline-danger confirm-link">
                             <i class="fas fa-unlock me-1"></i>Disable
-                        </a>
+                        </button>
                     </div>
                 <?php else: ?>
                     <div class="d-flex align-items-center p-2 mb-2 border rounded">
@@ -202,10 +208,10 @@ ob_start();
                                 <strong><?= $pk_name ?></strong>
                                 <small class="text-muted ms-2">Added <?= $pk_created ?> · Last used <?= $pk_used ?></small>
                             </div>
-                            <a href="post.php?delete_passkey=<?= $pk_id ?>&user_id=<?= $user_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>"
+                            <button type="submit" form="userSecForm<?= $user_id ?>" name="delete_passkey" value="<?= $pk_id ?>" formnovalidate
                                class="btn btn-xs btn-outline-danger confirm-link" title="Delete passkey">
                                 <i class="fas fa-trash"></i>
-                            </a>
+                            </button>
                         </li>
                     <?php endforeach; ?>
                     </ul>
@@ -283,13 +289,16 @@ ob_start();
 
     </div>
     <div class="modal-footer flex-wrap">
-        <?php if ($user_id === intval($session_user_id)) { ?>
-            <input type="password" class="form-control mb-2" name="admin_current_password" placeholder="Your password (required to change your own email, role, password or 2FA)" autocomplete="current-password">
-        <?php } ?>
+        <input type="password" class="form-control mb-2" name="admin_current_password" placeholder="Your password (required to make an administrator, change an administrator's email or password, or change your own email, role, password, 2FA or Force MFA)" autocomplete="current-password">
         <button type="submit" name="edit_user" class="btn btn-primary text-bold"><i class="fas fa-check me-2"></i>Save</button>
         <button type="button" class="btn btn-light" data-bs-dismiss="modal"><i class="fas fa-times me-2"></i>Cancel</button>
     </div>
 </form>
+<form id="userSecForm<?= $user_id ?>" action="post.php" method="post" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token'] ?>">
+    <input type="hidden" name="user_id" value="<?php echo $user_id; ?>">
+</form>
+
 
 <script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
 (function () {
