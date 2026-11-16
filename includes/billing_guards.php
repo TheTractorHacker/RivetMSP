@@ -299,3 +299,14 @@ function invoiceChargeUnlock($mysqli): void
         $GLOBALS['rivet_charge_lock_held'] = null;
     }
 }
+
+/**
+ * MSP-DS-102: the active payment provider's card threshold (Admin > Payment Providers: invoices at or above it are not paid by card), enforced where the card
+ * is charged, not only where the Pay button is shown. 0 means no limit. Same comparison as the button in guest_view_invoice.php / client/unpaid_invoices.php.
+ */
+function cardPaymentAllowedForInvoice($mysqli, $invoice_amount): bool
+{
+    $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payment_provider_threshold FROM payment_providers WHERE payment_provider_active = 1 LIMIT 1")) ?: [];
+    $threshold = floatval($row['payment_provider_threshold'] ?? 0);
+    return $threshold == 0 || $threshold > floatval($invoice_amount);
+}

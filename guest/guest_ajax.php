@@ -62,6 +62,11 @@ if (isset($_GET['stripe_create_pi'])) {
         exit("No balance outstanding");
     }
 
+    // MSP-DS-102: invoices at or above the provider's card threshold are not payable by card, whatever page the request came from
+    if (!cardPaymentAllowedForInvoice($mysqli, $invoice_amount)) {
+        exit("This invoice cannot be paid by card");
+    }
+
     // Setup payment provider (Stripe) from payment_providers via the factory
     $stripe_provider = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payment_provider_id FROM payment_providers WHERE payment_provider_name = 'Stripe' LIMIT 1"));
     if (!$stripe_provider) {

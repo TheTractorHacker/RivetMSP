@@ -775,6 +775,9 @@ if (isset($_GET['add_payment_by_provider'])) {
     } elseif ($invoice_amount == 0) {
         flash_alert("Invalid invoice amount", 'error');
         redirect();
+    } elseif (!cardPaymentAllowedForInvoice($mysqli, $invoice_amount)) {   // MSP-DS-102
+        flash_alert("This invoice cannot be paid by card", 'error');
+        redirect();
     }
 
     // Initialize Stripe

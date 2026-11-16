@@ -60,6 +60,13 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
     $client_id             = intval($row['client_id']);
     $client_name           = nullable_htmlentities($row['client_name']);
 
+    // MSP-DS-102: invoices at or above the provider's card threshold are not payable by card (the Pay button is hidden there too)
+    if (!cardPaymentAllowedForInvoice($mysqli, $invoice_amount)) {
+        echo "<div class='card mt-4'><div class='card-body text-center py-5'><h1 class='h3 mb-0'>This invoice cannot be paid by card. Please contact us for another way to pay.</h1></div></div>";
+        require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
+        exit();
+    }
+
     // Company info for currency formatting, etc
     $sql_company = mysqli_query($mysqli, "SELECT * FROM companies WHERE company_id = 1");
     $company_row = mysqli_fetch_assoc($sql_company);
