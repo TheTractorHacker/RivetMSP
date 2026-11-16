@@ -250,8 +250,23 @@ if (!function_exists('secSessionLimits')) {
     function secSessionsOnPasswordChange(mysqli $mysqli, int $userId, ?int $keepRowId = null): int
     {
         mysqli_query($mysqli, "DELETE FROM remember_tokens WHERE remember_token_user_id = $userId");
+        // MSP-DS-140: a passkey is a password-less way back in, so it must not outlive the password change that was meant to lock an intruder out
+        secPasskeysRevoke($mysqli, $userId);
 
         return secSessionRevokeAll($mysqli, $userId, $keepRowId, 'password_changed');
+    }
+
+    /**
+     * MSP-DS-140: remove every passkey of the user. Used by password change, administrator password set, IR reset and sign-out-everywhere. The user
+     * can enrol a new passkey (password re-check) afterwards. The passkey-wrapped vault key columns are left alone: they are the vault-repair
+     * source for a broken password wrap and are useless without the (now cleared) browser cookie key.
+     * Returns how many passkeys were removed. API bearer tokens are revoked by the callers (the API's own password change keeps the calling token).
+     */
+    function secPasskeysRevoke(mysqli $mysqli, int $userId): int
+    {
+        mysqli_query($mysqli, "DELETE FROM user_passkeys WHERE passkey_user_id = $userId");
+
+        return max(0, mysqli_affected_rows($mysqli));
     }
 
     /** The user's live sessions, newest activity first. @return array<int,array<string,mixed>> */

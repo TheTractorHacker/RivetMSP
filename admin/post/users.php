@@ -583,7 +583,7 @@ if (isset($_POST['ir_reset_user_password'])) {
 
         mysqli_query($mysqli, "UPDATE users SET user_password = '$new_password', user_specific_encryption_ciphertext = '$user_specific_encryption_ciphertext' WHERE user_id = $user_id");
         mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
-        mysqli_query($mysqli, "DELETE FROM user_passkeys WHERE passkey_user_id = $user_id");   // MSP-DS-140: a passkey enrolled by an intruder must not survive the reset
+        // MSP-DS-140: a passkey enrolled by an intruder must not survive the reset (secSessionsOnPasswordChange below removes the passkeys)
         secSessionsOnPasswordChange($mysqli, $user_id, null);
 
         echo "<br><br>";

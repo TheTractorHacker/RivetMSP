@@ -436,6 +436,8 @@ if (isset($_POST['sign_out_everywhere'])) {
     mysqli_query($mysqli, "DELETE FROM remember_tokens WHERE remember_token_user_id = $session_user_id");
     // MSP-DS-142: mobile API bearer tokens never expire, so "sign out everywhere" has to revoke them too.
     mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $session_user_id");
+    // MSP-DS-140: and registered passkeys: an intruder's passkey must not survive "sign out everywhere".
+    secPasskeysRevoke($mysqli, (int) $session_user_id);
     logAction("User Account", "Edit", "$session_name signed out of every session ($ended)");
     secAudit('auth.sign_out_everywhere', $session_user_id, 'user', $session_user_id, 'success', "$session_name signed out of every session", ['sessions' => $ended]);
 
