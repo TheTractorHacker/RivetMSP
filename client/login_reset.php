@@ -88,7 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
 
             $token = randomString(32);
             $token_hash = hash('sha256', $token);
-            $url = "https://$config_base_url/client/login_reset.php?email=$email&token=$token&client=$client";
+            // MSP-DS-89: the address is URL-encoded from the stored (unescaped) value, so + and & survive the round trip
+            $url = "https://$config_base_url/client/login_reset.php?" . http_build_query(['email' => (string) $row['user_email'], 'token' => $token, 'client' => $client]);
             mysqli_query($mysqli, "UPDATE users SET user_password_reset_token = '$token_hash' WHERE user_id = $user_id LIMIT 1");
             mysqli_query($mysqli, "INSERT INTO logs SET log_type = 'Contact', log_action = 'Modify', log_description = 'Sent a portal password reset e-mail for $email.', log_ip = '$ip', log_user_agent = '$user_agent', log_client_id = $client");
 
