@@ -478,11 +478,15 @@ restore_rmm_postgres() {
     chmod 600 "${pg_passfile}"
     register_tmpfile "${pg_passfile}"
     local pg_env pg_rc=0
-    pg_env="$(php "${APP_DIR}/scripts/rmm_postgres_backup_env.php" --app-dir="${APP_DIR}" --passfile="${pg_passfile}")" || pg_rc=$?
+    # MSP-DS-34: run as the web user and parse (not eval) the output; see run_app_php / parse_rmm_pg_env in lib/common.sh.
+    local pg_owner; pg_owner="$(app_owner_user "${APP_DIR}")"
+    [[ -n "${pg_owner}" ]] && chown "${pg_owner}" "${pg_passfile}"
+    pg_env="$(run_app_php "${APP_DIR}" "${APP_DIR}/scripts/rmm_postgres_backup_env.php" --app-dir="${APP_DIR}" --passfile="${pg_passfile}")" || pg_rc=$?
     if [[ "${pg_rc}" -ne 0 || -z "${pg_env}" ]]; then
         die "Could not read the RMM PostgreSQL connection to restore into (scripts/rmm_postgres_backup_env.php exited ${pg_rc}). The control database and uploads/ are already restored; fix the connection in Administration > RMM > Data store, then restore ${dump} by hand with vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh."
     fi
-    eval "${pg_env}"
+    parse_rmm_pg_env "${pg_env}"
+    [[ -n "${pg_owner}" ]] && chown root:root "${pg_passfile}" && chmod 600 "${pg_passfile}"
     info "Restoring into PostgreSQL database '${RIVETCORE_PG_DATABASE}' (RMM_PG_RESTORE_CLEAN=1: an existing schema there is replaced)..."
     if ! RMM_PG_RESTORE_CLEAN=1 "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh" < "${dump}"; then
         die "rmm-postgres-restore.sh failed. The control database and uploads/ are already restored; the PostgreSQL store may be partially restored — investigate before opening the site (docs/rmm/POSTGRES.md section 8.6)."
@@ -491,7 +495,7 @@ restore_rmm_postgres() {
 
     announce "Reconciling the control database against the restored RMM store (read-only)..."
     local verify_rc=0
-    php "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-store-verify.php" --bootstrap="${APP_DIR}/scripts/rmm_store_bootstrap.php" || verify_rc=$?
+    run_app_php "${APP_DIR}" "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-store-verify.php" --bootstrap="${APP_DIR}/scripts/rmm_store_bootstrap.php" || verify_rc=$?
     if [[ "${verify_rc}" -eq 0 ]]; then
         success "rmm-store-verify.php: clean — the control database and the RMM store agree."
     else

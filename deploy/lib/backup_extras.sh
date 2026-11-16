@@ -17,7 +17,11 @@ BACKUP_OFFSITE_RESULT=""
 backup_make_snapshot() {
     local out="$1"
     : > "${out}"; chmod 600 "${out}"
-    php "${SCRIPT_DIR}/lib/table_snapshot.php" "${APP_DIR}" "${out}" || true
+    # MSP-DS-34: the snapshot script loads the app's config.php, so it runs as the web user (which gets the file for the run).
+    local snap_owner; snap_owner="$(app_owner_user "${APP_DIR}")"
+    [[ -n "${snap_owner}" ]] && chown "${snap_owner}" "${out}"
+    run_app_php "${APP_DIR}" "${SCRIPT_DIR}/lib/table_snapshot.php" "${APP_DIR}" "${out}" || true
+    [[ -n "${snap_owner}" ]] && chown root:root "${out}"
     [[ -s "${out}" ]]
 }
 
@@ -52,7 +56,7 @@ backup_report_status() {
     fi
     [[ -n "${err}" ]] && args+=(--error="${err}")
     [[ -n "${BACKUP_OFFSITE_RESULT}" ]] && args+=(--offsite="${BACKUP_OFFSITE_RESULT}")
-    php "${SCRIPT_DIR}/lib/backup_status.php" "${args[@]}" >/dev/null 2>&1 || true
+    run_app_php "${APP_DIR}" "${SCRIPT_DIR}/lib/backup_status.php" "${args[@]}" >/dev/null 2>&1 || true
 }
 
 # backup_exit_hook <exit-code>: registered with register_exit_hook; reports a run that died before backup_post_steps finished.

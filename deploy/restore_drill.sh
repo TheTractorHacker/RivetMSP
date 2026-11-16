@@ -78,7 +78,7 @@ info "=== restore drill: ${NAME} ==="
 
 drill_fail() {   # record "this archive cannot be restored" as the drill result and stop
     error "$1"
-    "${PHP_BIN}" "${APP_DIR}/cron/restore_drill.php" --trigger=script --fail="$1" --source-name="${NAME}" || true
+    run_app_php "${APP_DIR}" "${APP_DIR}/cron/restore_drill.php" --trigger=script --fail="$1" --source-name="${NAME}" || true
     exit 1
 }
 
@@ -119,8 +119,15 @@ if [[ -n "${KEY_FILE}" ]]; then
     [[ -f "${KEY_FILE}" ]] || die "--settings-key-file '${KEY_FILE}' does not exist."
     KEY_ARGS=(--settings-key-file="${KEY_FILE}")
 fi
+# MSP-DS-34: cron/restore_drill.php is app code the web user can change, so it runs as that user, never as root. It gets the unpacked
+# archive (and the settings-key file, if any) to read.
+drill_owner="$(app_owner_user "${APP_DIR}")"
+if [[ -n "${drill_owner}" ]]; then
+    chown -R "${drill_owner}" "${WORK}" 2>/dev/null || true
+    [[ -n "${KEY_FILE}" ]] && { chmod o+r "${KEY_FILE}" 2>/dev/null || true; }
+fi
 set +e
-"${PHP_BIN}" "${APP_DIR}/cron/restore_drill.php" --trigger=script --extracted-dir="${UNPACKED}" --source-name="${NAME}" --source-mtime="${MTIME}" "${KEY_ARGS[@]}"
+run_app_php "${APP_DIR}" "${APP_DIR}/cron/restore_drill.php" --trigger=script --extracted-dir="${UNPACKED}" --source-name="${NAME}" --source-mtime="${MTIME}" "${KEY_ARGS[@]}"
 rc=$?
 set -e
 exit "${rc}"

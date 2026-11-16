@@ -203,11 +203,52 @@ command_exists() {
 # config.php is a trusted local file this same install already wrote, so
 # requiring it here carries no more risk than the app's own every-request
 # bootstrap already does.
+# run_app_php <app_dir> <php args...>: MSP-DS-34. Application PHP (config.php, scripts/*.php, the app's own bootstrap) is writable by the
+# web user, so root must never execute it. When running as root, drop to the account that owns config.php (the web user) first; as a
+# normal user (or when config.php is root-owned) it simply runs php. Callers get only the output, which they treat as data.
+run_app_php() {
+    local app_dir="$1"; shift
+    local owner=""
+    if [[ "${EUID}" -eq 0 && -f "${app_dir}/config.php" ]]; then
+        owner="$(stat -c '%U' "${app_dir}/config.php" 2>/dev/null || true)"
+    fi
+    if [[ -n "${owner}" && "${owner}" != "root" ]]; then
+        ( cd / && runuser -u "${owner}" -- "${PHP_BIN:-php}" "$@" )
+    else
+        ( cd / && "${PHP_BIN:-php}" "$@" )
+    fi
+}
+
+# app_owner_user <app_dir>: the non-root account that owns config.php ("" when root-owned or unknown).
+app_owner_user() {
+    local o; o="$(stat -c '%U' "$1/config.php" 2>/dev/null || true)"
+    [[ -n "${o}" && "${o}" != "root" ]] && printf '%s' "${o}"
+    return 0
+}
+
+# parse_rmm_pg_env <text>: MSP-DS-34. scripts/rmm_postgres_backup_env.php prints `export NAME='value'` lines. It is app code the web
+# user can change, so its output is never eval'd: only exactly these variable names with single-quoted values are accepted, and the
+# value is taken literally (no expansion).
+parse_rmm_pg_env() {
+    local line name val
+    while IFS= read -r line; do
+        [[ -z "${line}" ]] && continue
+        if [[ "${line}" =~ ^export\ (RIVETCORE_PG_DATABASE|RIVETCORE_PG_USER|RIVETCORE_PG_HOST|RIVETCORE_PG_PORT|RIVETCORE_PG_SSLMODE|RIVETCORE_PG_SCHEMA|PGPASSFILE)=\'(.*)\'$ ]]; then
+            name="${BASH_REMATCH[1]}"; val="${BASH_REMATCH[2]}"
+            val="${val//\'\\\'\'/\'}"
+            [[ "${val}" == *"'"* ]] && die "Unexpected output from scripts/rmm_postgres_backup_env.php; refusing to use it."
+            printf -v "${name}" '%s' "${val}"; export "${name}"
+        else
+            die "Unexpected output from scripts/rmm_postgres_backup_env.php; refusing to use it."
+        fi
+    done <<< "$1"
+}
+
 read_app_config() {
     local app_dir="$1"
     info "Reading configuration from ${app_dir}/config.php..."
     local raw
-    if ! raw="$(php -r '
+    if ! raw="$(run_app_php "${app_dir}" -r '
         require $argv[1];
         echo $dbhost . "\n" . $dbusername . "\n" . $dbpassword . "\n" . $database . "\n";
         echo ($installation_id ?? "") . "\n";
