@@ -760,9 +760,9 @@ if ($method === 'POST' && $id === null) {
     global $config_ticket_prefix;
     $client_uri = $client ? "&client_id=$client" : '';
     if ($assigned != 0 && $assigned != $uid) {
-        notifyUser($assigned, 'Ticket', "New ticket {$config_ticket_prefix}$next_num - $subject has been assigned to you", "/agent/ticket.php?ticket_id=$new_id$client_uri", $client, $new_id);
+        notifyUser($assigned, 'Ticket', "New ticket {$config_ticket_prefix}$next_num - $subject_raw has been assigned to you", "/agent/ticket.php?ticket_id=$new_id$client_uri", $client, $new_id);
     } elseif ($assigned == 0) {
-        appNotify('Ticket', "New ticket {$config_ticket_prefix}$next_num - $subject has been created via API", "/agent/ticket.php?ticket_id=$new_id$client_uri", $client, $new_id);
+        appNotify('Ticket', "New ticket {$config_ticket_prefix}$next_num - $subject_raw has been created via API", "/agent/ticket.php?ticket_id=$new_id$client_uri", $client, $new_id);
     }
 
     // Fire the outbound webhook (mirrors agent/post/ticket.php's create handler).

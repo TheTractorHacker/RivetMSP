@@ -140,7 +140,8 @@ if ($resource === 'worksheets' && $id !== null && $sub === null && $method === '
 // Sign a worksheet
 if ($resource === 'worksheets' && $id !== null && $sub === 'sign' && $method === 'POST') {
     $body       = json_decode(file_get_contents('php://input'), true) ?? [];
-    $signed_name = mysqli_real_escape_string($mysqli, trim($body['signed_name'] ?? ''));
+    $signed_name_raw = trim((string) ($body['signed_name'] ?? ''));
+    $signed_name = mysqli_real_escape_string($mysqli, $signed_name_raw);
     $signature   = $body['signature'] ?? '';
 
     if (empty($signed_name)) api_error(400, 'signed_name required');
@@ -160,14 +161,15 @@ if ($resource === 'worksheets' && $id !== null && $sub === 'sign' && $method ===
             worksheet_completed_at = IFNULL(worksheet_completed_at, NOW()),
             $esc_sig
             worksheet_id = worksheet_id
-         WHERE worksheet_id = $id"
+         WHERE worksheet_id = $id AND worksheet_signed_at IS NULL"   // MSP-DS-86: a signed worksheet can never be re-signed
     );
+    if (mysqli_affected_rows($mysqli) < 1) api_error(409, 'Worksheet is already signed');
 
     // Log the signing as a ticket reply
     $ws = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT worksheet_ticket_id FROM ticket_worksheets WHERE worksheet_id = $id"));
     if ($ws) {
         $ticket_id = intval($ws['worksheet_ticket_id']);
-        $msg = mysqli_real_escape_string($mysqli, "Worksheet signed by $signed_name");
+        $msg = mysqli_real_escape_string($mysqli, "Worksheet signed by $signed_name_raw");
         mysqli_query($mysqli,
             "INSERT INTO ticket_replies (ticket_reply, ticket_reply_type, ticket_reply_by, ticket_reply_ticket_id)
              VALUES ('$msg', 'Internal', $uid, $ticket_id)"
@@ -252,6 +254,9 @@ if ($resource === 'tickets' && $id !== null && $sub === 'worksheets' && $method 
 if ($resource === 'worksheets' && $id !== null && $sub === 'responses' && $method === 'POST') {
     $body      = json_decode(file_get_contents('php://input'), true) ?? [];
     $responses = $body['responses'] ?? [];
+    // MSP-DS-86: the answers on a customer-signed worksheet are frozen (agent/post/worksheet.php refuses the same edit).
+    $signed_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT worksheet_signed_at FROM ticket_worksheets WHERE worksheet_id = $id LIMIT 1"));
+    if (!empty($signed_row['worksheet_signed_at'])) api_error(409, 'Worksheet is already signed');
     foreach ($responses as $resp) {
         $field_id = intval($resp['field_id'] ?? 0);
         $value    = mysqli_real_escape_string($mysqli, $resp['value'] ?? '');
@@ -269,8 +274,10 @@ if ($resource === 'worksheets' && $id !== null && $sub === 'responses' && $metho
 
 // Delete a worksheet
 if ($resource === 'worksheets' && $id !== null && $sub === null && $method === 'DELETE') {
+    // MSP-DS-86: a signed worksheet is evidence and is not deleted (the web handler refuses too); the delete itself is conditional so it is atomic.
+    mysqli_query($mysqli, "DELETE FROM ticket_worksheets WHERE worksheet_id = $id AND worksheet_signed_at IS NULL");
+    if (mysqli_affected_rows($mysqli) < 1) api_error(409, 'Worksheet is already signed');
     mysqli_query($mysqli, "DELETE FROM ticket_worksheet_responses WHERE response_worksheet_id = $id");
-    mysqli_query($mysqli, "DELETE FROM ticket_worksheets WHERE worksheet_id = $id");
     api_response(200, ['ok' => true]);
 }
 
