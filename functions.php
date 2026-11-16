@@ -157,14 +157,55 @@ function getUserAgent() {
     return $_SERVER['HTTP_USER_AGENT'];
 }
 
+// MSP-DS-158: is $ip inside any of the CIDR blocks / plain addresses in $list (IPv4 and IPv6)?
+function ipInTrustedList(string $ip, array $list): bool {
+    $bin = @inet_pton($ip);
+    if ($bin === false) { return false; }
+    foreach ($list as $entry) {
+        $entry = trim((string) $entry);
+        if ($entry === '') { continue; }
+        [$net, $bits] = array_pad(explode('/', $entry, 2), 2, null);
+        $nbin = @inet_pton($net);
+        if ($nbin === false || strlen($nbin) !== strlen($bin)) { continue; }
+        $bits = $bits === null || $bits === '' ? strlen($bin) * 8 : (int) $bits;
+        if ($bits < 0 || $bits > strlen($bin) * 8) { continue; }
+        $bytes = intdiv($bits, 8); $rem = $bits % 8;
+        if ($bytes > 0 && substr($bin, 0, $bytes) !== substr($nbin, 0, $bytes)) { continue; }
+        if ($rem > 0) {
+            $mask = (0xFF << (8 - $rem)) & 0xFF;
+            if ((ord($bin[$bytes]) & $mask) !== (ord($nbin[$bytes]) & $mask)) { continue; }
+        }
+        return true;
+    }
+    return false;
+}
+
+// MSP-DS-158: the client address from an X-Forwarded-For chain, given the immediate peer ($remote) and the trusted proxy list. The header is
+// only believed when the peer itself is a trusted proxy; then the chain is read from the RIGHT, skipping trusted hops, and the first
+// untrusted address is the client (the left-most entry is whatever the client typed, so it is never used).
+function clientIpFromForwardedFor(string $remote, string $xff, array $trusted): string {
+    if (!$trusted || !ipInTrustedList($remote, $trusted)) { return $remote; }
+    $hops = array_reverse(array_map('trim', explode(',', $xff)));
+    foreach ($hops as $hop) {
+        if ($hop === '' || !filter_var($hop, FILTER_VALIDATE_IP)) { return $remote; }   // malformed chain: do not guess
+        if (!ipInTrustedList($hop, $trusted)) { return $hop; }
+    }
+    return $remote;
+}
+
 function getIP() {
 
     // Default way to get IP
     $ip = $_SERVER['REMOTE_ADDR'];
 
     // Allow overrides via config.php in-case we use a proxy - https://docs.itflow.org/config_php
+    // HTTP_X_FORWARDED_FOR is only honoured together with CONST_TRUSTED_PROXIES (array or comma list of proxy addresses/CIDRs); without it the
+    // header is ignored because any client can send it (MSP-DS-158). With nginx real_ip configured (deploy --trusted-proxy), REMOTE_ADDR is
+    // already the client and neither is needed.
     if (defined("CONST_GET_IP_METHOD") && CONST_GET_IP_METHOD == "HTTP_X_FORWARDED_FOR") {
-        $ip = explode(',', getenv('HTTP_X_FORWARDED_FOR'))[0] ?? $_SERVER['REMOTE_ADDR'];
+        $trusted = defined('CONST_TRUSTED_PROXIES') ? CONST_TRUSTED_PROXIES : [];
+        if (is_string($trusted)) { $trusted = explode(',', $trusted); }
+        $ip = clientIpFromForwardedFor((string) $_SERVER['REMOTE_ADDR'], (string) getenv('HTTP_X_FORWARDED_FOR'), (array) $trusted);
     } elseif (defined("CONST_GET_IP_METHOD") && CONST_GET_IP_METHOD == "HTTP_CF_CONNECTING_IP") {
         $ip = $_SERVER["HTTP_CF_CONNECTING_IP"] ?? $_SERVER['REMOTE_ADDR'];
     }

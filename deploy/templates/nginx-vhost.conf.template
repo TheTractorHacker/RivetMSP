@@ -77,6 +77,9 @@ server {
     absolute_redirect off;
     port_in_redirect off;
     server_name_in_redirect off;
+    # MSP-DS-158: the installer swaps the line below for the trusted-proxy directives given with --trusted-proxy, or removes it.
+    # Without them every visitor shares the proxy's address.
+    # __REAL_IP_BLOCK__
     # END PROXY-MODE ONLY
 
     ssl_certificate ${SSL_CERT_PATH};

@@ -227,6 +227,32 @@ rivetmsp_path_trusted() {
     return 0
 }
 
+# apply_real_ip_block <rendered-vhost-file> <comma-separated proxy addresses/CIDRs>: MSP-DS-158. Replaces the template's
+# "# __REAL_IP_BLOCK__" line with nginx real_ip directives so REMOTE_ADDR (and limit_req) see the visitor, not the reverse proxy. With an empty
+# list the line is dropped and a warning explains the consequence. Dies on anything that is not an IPv4/IPv6 address or CIDR.
+apply_real_ip_block() {
+    local file="$1" list="${2:-}" item lines="" n=0
+    local IFS=','
+    for item in ${list}; do
+        item="${item//[[:space:]]/}"
+        [[ -z "${item}" ]] && continue
+        [[ "${item}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2})?$ || "${item}" =~ ^[0-9A-Fa-f:]+(/[0-9]{1,3})?$ ]] \
+            || die "--trusted-proxy '${item}' is not an IPv4/IPv6 address or CIDR."
+        lines+="    set_real_ip_from ${item};"$'\n'
+        n=$((n + 1))
+    done
+    unset IFS
+    if [[ "${n}" -eq 0 ]]; then
+        sed -i '/# __REAL_IP_BLOCK__/d' "${file}"
+        warn "Proxy mode without --trusted-proxy: every visitor will appear to come from the reverse proxy, so one visitor's failed logins can lock everyone out. Re-run with --trusted-proxy=<proxy address/CIDR>."
+        return 0
+    fi
+    lines+="    real_ip_header X-Forwarded-For;"$'\n'"    real_ip_recursive on;"
+    local tmp; tmp="$(mktemp)"
+    awk -v block="${lines}" '/# __REAL_IP_BLOCK__/ { print block; next } { print }' "${file}" > "${tmp}" && cat "${tmp}" > "${file}"
+    rm -f "${tmp}"
+}
+
 # require_trusted_tooling <calling-script>: refuse to run privileged tooling (backup, restore, restore drill, update) from a tree the web
 # user can write, because that user could replace common.sh or the script itself and become root at the next timer run. The refusal is
 # loud: non-zero exit, a syslog entry, and (best effort, as the web user) a failed-backup report the application shows to administrators.
