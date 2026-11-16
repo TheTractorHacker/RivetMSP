@@ -1747,6 +1747,7 @@ if (isset($_POST['bulk_merge_tickets'])) {
     if (isset($_POST['ticket_ids'])) {
 
         $ticket_count = count($_POST['ticket_ids']); // Get a ticket count
+        $skipped_merge_count = 0;
 
         foreach ($_POST['ticket_ids'] as $ticket_id) {
             $ticket_id = intval($ticket_id);
@@ -1769,6 +1770,12 @@ if (isset($_POST['bulk_merge_tickets'])) {
                     enforceClientAccess();
                 }
 
+                // MSP-DS-66: a merge force-closes the source ticket - skip tickets whose outtake custody is incomplete
+                if (ticketCloseBlockReason($ticket_id)) {
+                    $skipped_merge_count++;
+                    continue;
+                }
+
                 // Update current ticket
                 if (empty($ticket_first_response_at)) {
                     mysqli_query($mysqli, "UPDATE tickets SET ticket_first_response_at = NOW() WHERE ticket_id = $ticket_id");
@@ -1789,7 +1796,11 @@ if (isset($_POST['bulk_merge_tickets'])) {
 
         mysqli_query($mysqli, "UPDATE tickets SET ticket_updated_at = NOW() WHERE ticket_id = $merge_into_ticket_id");
 
-        flash_alert("<strong>$ticket_count</strong> tickets merged into <strong>$ticket_prefix$merge_into_ticket_number</strong>");
+        $merged_count = $ticket_count - $skipped_merge_count;
+        flash_alert("<strong>$merged_count</strong> tickets merged into <strong>$ticket_prefix$merge_into_ticket_number</strong>");
+        if ($skipped_merge_count > 0) {
+            flash_alert("<strong>$skipped_merge_count</strong> ticket(s) were not merged because they have an unsigned outtake form or unfinalized outtake worksheet.", 'info');
+        }
 
     }
 
@@ -1828,14 +1839,8 @@ if (isset($_POST['bulk_resolve_tickets'])) {
         foreach ($_POST['ticket_ids'] as $ticket_id) {
             $ticket_id = intval($ticket_id);
 
-            // Check to make sure Tasks are complete before resolving
-            $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COUNT('task_id') AS num FROM tasks WHERE task_completed_at IS NULL AND task_ticket_id = $ticket_id"));
-            $num_of_open_tasks = $row['num'];
-
-            // MSP-DS-66: tickets with an unsigned outtake form / unfinalized outtake worksheet are skipped like tickets with open tasks
-            if ($num_of_open_tasks == 0 && ticketCloseBlockReason($ticket_id)) {
-                $num_of_open_tasks = 1;
-            }
+            // Open tasks, an unsigned outtake form and an unfinalized outtake worksheet all block a resolve (MSP-DS-66: one shared helper)
+            $num_of_open_tasks = ticketCloseBlockReason($ticket_id, true) ? 1 : 0;
 
             if ($num_of_open_tasks == 0) {
                 // Count the Ticket Loop
@@ -2823,6 +2828,12 @@ if (isset($_POST['merge_ticket'])) {
         redirect();
     }
 
+    // MSP-DS-66: a merge force-closes the source ticket, so it honours the same close preconditions (outtake custody) as every other close path
+    if ($close_block = ticketCloseBlockReason($ticket_id)) {
+        flash_alert("Cannot merge ticket - $close_block", 'error');
+        redirect();
+    }
+
     // Move ticket replies from child > parent
     if ($move_replies) {
         // MSP-DS-135: replies moved across clients must not show up in the destination client's portal or guest view: Public/Client become Internal
@@ -2830,6 +2841,7 @@ if (isset($_POST['merge_ticket'])) {
         $moved_type_sql = $cross_client_merge ? ", ticket_reply_type = IF(ticket_reply_type IN ('Public', 'Client'), 'Internal', ticket_reply_type)" : '';
         mysqli_query($mysqli, "UPDATE ticket_replies SET ticket_reply_ticket_id = $merge_into_ticket_id$moved_type_sql WHERE ticket_reply_ticket_id = $ticket_id");
     }
+
 
     // Update current ticket
     if (empty($ticket_first_response_at)) {
@@ -2931,17 +2943,9 @@ if (isset($_GET['resolve_ticket'])) {
         enforceClientAccess();
     }
 
-    // Block resolve if unsigned dedicated outtake form exists
-    $sql_outtake_check = mysqli_query($mysqli, "SELECT COUNT(*) FROM ticket_outtake_forms WHERE outtake_ticket_id = $ticket_id AND outtake_signed_at IS NULL");
-    if (intval(mysqli_fetch_row($sql_outtake_check)[0]) > 0) {
-        flash_alert("Cannot resolve ticket — there is an unsigned outtake form. Have the customer sign it first.", "error");
-        redirect();
-    }
-
-    // Block resolve if outtake worksheet not finalized
-    $sql_ws_outtake = mysqli_query($mysqli, "SELECT COUNT(*) FROM ticket_worksheets WHERE worksheet_ticket_id = $ticket_id AND worksheet_is_outtake = 1 AND worksheet_completed_at IS NULL");
-    if (intval(mysqli_fetch_row($sql_ws_outtake)[0]) > 0) {
-        flash_alert("Cannot resolve ticket — there is an unfinalized outtake worksheet. Finalize it first.", "error");
+    // MSP-DS-66: same close preconditions as every other close path (outtake custody, open tasks)
+    if ($close_block = ticketCloseBlockReason($ticket_id, true)) {
+        flash_alert("Cannot resolve ticket - $close_block", 'error');
         redirect();
     }
 
@@ -3067,17 +3071,9 @@ if (isset($_GET['close_ticket'])) {
         enforceClientAccess();
     }
 
-    // Block close if unsigned dedicated outtake form exists
-    $sql_ot_close = mysqli_query($mysqli, "SELECT COUNT(*) FROM ticket_outtake_forms WHERE outtake_ticket_id = $ticket_id AND outtake_signed_at IS NULL");
-    if (intval(mysqli_fetch_row($sql_ot_close)[0]) > 0) {
-        flash_alert("Cannot close ticket — there is an unsigned outtake form. Have the customer sign it first.", "error");
-        redirect();
-    }
-
-    // Block close if outtake worksheet not finalized
-    $sql_ws_ot_close = mysqli_query($mysqli, "SELECT COUNT(*) FROM ticket_worksheets WHERE worksheet_ticket_id = $ticket_id AND worksheet_is_outtake = 1 AND worksheet_completed_at IS NULL");
-    if (intval(mysqli_fetch_row($sql_ws_ot_close)[0]) > 0) {
-        flash_alert("Cannot close ticket — there is an unfinalized outtake worksheet. Finalize it first.", "error");
+    // MSP-DS-66: same close preconditions as every other close path (outtake custody, open tasks)
+    if ($close_block = ticketCloseBlockReason($ticket_id, true)) {
+        flash_alert("Cannot close ticket - $close_block", 'error');
         redirect();
     }
 

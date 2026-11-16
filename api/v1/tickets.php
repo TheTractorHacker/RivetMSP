@@ -308,6 +308,12 @@ if ($method === 'POST' && $id !== null && $sub === 'reply') {
          FROM tickets WHERE ticket_id = $id LIMIT 1"));
     if (!$ticket_row) api_error(404, 'Ticket not found');
 
+    // MSP-DS-66: a reply that resolves/closes the ticket honours the same close preconditions as the web app (checked before anything is written).
+    // Same {error: "..."} shape as the other refusals of this endpoint.
+    if ($status_id_check && in_array($status_id_check['ticket_status_name'], ['Resolved', 'Closed'], true) && ($close_block = ticketCloseBlockReason($id))) {
+        api_error(400, "Cannot close ticket - $close_block");
+    }
+
     $t_prefix     = $ticket_row['ticket_prefix'];
     $t_number     = $ticket_row['ticket_number'];
     $t_subject    = $ticket_row['ticket_subject'];
@@ -813,6 +819,11 @@ if ($method === 'POST' && $id !== null && $sub === 'status') {
 
     $status_name_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_status_name FROM ticket_statuses WHERE ticket_status_id = $status"));
     if (!$status_name_row) api_error(400, 'invalid status_id');
+
+    // MSP-DS-66: same close preconditions as the web app's close paths (existing {error} shape)
+    if ($status_name_row['ticket_status_name'] === 'Closed' && ($close_block = ticketCloseBlockReason($id))) {
+        api_error(400, "Cannot close ticket - $close_block");
+    }
 
     // Mirror the web app's close-ticket behavior exactly (ticket_status +
     // ticket_resolved_at + ticket_closed_at + ticket_closed_by all together) -

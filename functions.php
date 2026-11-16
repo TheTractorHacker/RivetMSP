@@ -2997,10 +2997,11 @@ function parseTimeWorked($input): ?string {
 }
 
 /**
- * MSP-DS-66: why a ticket may not be resolved/closed yet (the customer-signed outtake custody control), or null when it may.
- * resolve_ticket and close_ticket always had these checks; every other path that closes a ticket now asks here too.
+ * MSP-DS-66: why a ticket may not be resolved/closed yet, or null when it may. The single set of close preconditions shared by every
+ * path that resolves/closes a ticket (resolve/close, status dropdown, quick status, reply-with-status, bulk reply/resolve, Kanban,
+ * merge, bulk merge, api/v1). Always: the customer-signed outtake custody control. With $with_tasks: open tasks too.
  */
-function ticketCloseBlockReason($ticket_id): ?string {
+function ticketCloseBlockReason($ticket_id, bool $with_tasks = false): ?string {
     global $mysqli;
     $ticket_id = intval($ticket_id);
     $r = mysqli_query($mysqli, "SELECT COUNT(*) FROM ticket_outtake_forms WHERE outtake_ticket_id = $ticket_id AND outtake_signed_at IS NULL");
@@ -3011,32 +3012,13 @@ function ticketCloseBlockReason($ticket_id): ?string {
     if ($r && intval(mysqli_fetch_row($r)[0]) > 0) {
         return "there is an unfinalized outtake worksheet. Finalize it first.";
     }
-    return null;
-}
-
-/**
- * MSP-DS-69: neutralise spreadsheet formula injection in one CSV data row. Text cells that begin with = + - @ | TAB or CR get a
- * leading apostrophe; numbers (including genuine negatives) are written as they are. Use it on every row handed to fputcsv(),
- * and write with an EMPTY escape character (fputcsv($f, $row, ',', '"', '')): with PHP's default backslash escape a value such as
- * x\",=2+5,y is split by RFC 4180 readers into a formula cell that this first-character check never saw (review R21).
- * $rawColumns lists 0-based columns that are written untouched. Only the credential export uses it, for the username / password /
- * TOTP columns: that export is a vault-gated secret dump whose format is also the import format (and what people copy from),
- * so an apostrophe there silently corrupts every secret that starts with - + = @ (review R7).
- */
-function csvSafeRow($row, array $rawColumns = []): array {
-    $out = [];
-    foreach ((array) $row as $i => $v) {
-        if (in_array($i, $rawColumns, true) || is_int($v) || is_float($v) || $v === null) {
-            $out[$i] = $v;
-            continue;
+    if ($with_tasks) {
+        $r = mysqli_query($mysqli, "SELECT COUNT(*) FROM tasks WHERE task_completed_at IS NULL AND task_ticket_id = $ticket_id");
+        if ($r && intval(mysqli_fetch_row($r)[0]) > 0) {
+            return "there are open tasks. Complete them first.";
         }
-        $v = (string) $v;
-        if ($v !== '' && !is_numeric($v) && in_array($v[0], ['=', '+', '-', '@', '|', "\t", "\r"], true)) {
-            $v = "'" . $v;
-        }
-        $out[$i] = $v;
     }
-    return $out;
+    return null;
 }
 
 function generateReadablePassword($security_level)
