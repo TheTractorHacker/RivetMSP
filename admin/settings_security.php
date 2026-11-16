@@ -197,7 +197,7 @@ foreach (($kp_inventory['totals'] ?? []) as $kp_label => $kp_n) {
                     <div class="input-group-prepend">
                         <span class="input-group-text"><i class="fa fa-fw fa-key"></i></span>
                     </div>
-                    <input type="text" class="form-control" name="config_login_key_secret" pattern="\w{3,99}" placeholder="Something really easy for techs to remember: e.g. MYSECRET" value="<?php echo nullable_htmlentities($config_login_key_secret); ?>">
+                    <input type="text" class="form-control" name="config_login_key_secret" pattern="\w{16,99}" placeholder="At least 16 letters, digits or underscores" value="<?php echo nullable_htmlentities($config_login_key_secret); ?>">
                 </div>
             </div>
 

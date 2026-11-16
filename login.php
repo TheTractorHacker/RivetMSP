@@ -288,6 +288,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
 
             $ut = intval($r['user_type']);
 
+            // MSP-DS-120: the login key is checked BEFORE any agent password is verified, so a wrong key looks exactly like an unknown
+            // account (same 401) and cannot be used to test passwords.
+            if ($ut === 1 && $config_login_key_required
+                && (!isset($_GET['key']) || !is_string($_GET['key']) || !hash_equals((string) $config_login_key_secret, $_GET['key']))) {
+                continue;
+            }
+
             if ($is_login_step) {
                 // Only Step 1 checks password
                 if (!password_verify($password, $r['user_password'])) {
@@ -1045,7 +1052,7 @@ $show_login_form = (!$show_role_choice && !$show_mfa_form);
                     <!-- STEP 1: Email + Password -->
                     <div class="input-group mb-3">
                         <input type="email" class="form-control"
-                            placeholder="<?php if ($config_login_key_required) { if (!isset($_GET['key']) || !hash_equals((string) $config_login_key_secret, (string) $_GET['key'])) { echo "Client "; } } echo "Email"; ?>"
+                            placeholder="Email"
                             name="email"
                             value="<?php echo htmlspecialchars($email ?? '', ENT_QUOTES); ?>"
                             required autofocus

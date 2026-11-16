@@ -156,6 +156,13 @@ if (isset($_POST['edit_security_settings'])) {
         $security_retention_raised = true;
     }
 
+    // MSP-DS-120: a login key is a secret, not a hint: at least 16 characters, letters/digits/underscore only (it travels in a URL)
+    $posted_login_key = trim(strip_tags((string) ($_POST['config_login_key_secret'] ?? '')));
+    if ($posted_login_key !== '' && !preg_match('/^\w{16,99}$/', $posted_login_key)) {
+        flash_alert('The login key must be 16 to 99 characters (letters, digits and underscore). Security settings were not saved.', 'error');
+        redirect();
+    }
+
     // Disallow turning on login key without a secret
     if (empty($config_login_key_secret)) {
         $config_login_key_required = 0;
