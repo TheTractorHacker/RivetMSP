@@ -803,6 +803,25 @@ if (isset($_POST['guest_quote_upload_file'])) {
     $quote_id = intval($_POST['quote_id']);
     $url_key = sanitizeInput($_POST['url_key']);
 
+    // MSP-DS-162 (complete): a per-address request limit (10 upload requests per 10 minutes, Redis bucket when Redis is configured AND a count of
+    // the attempts recorded in logs, so it also holds without Redis). Over the limit nothing is read, stored or notified.
+    $upload_ip = (string) getIP();
+    require_once __DIR__ . '/../includes/redis_guards.php';
+    $upload_throttled = !rivetRateLimit('guest-quote-upload:ip:' . $upload_ip, 10, 600)['allowed'];
+    if (!$upload_throttled) {
+        $upload_ip_esc = mysqli_real_escape_string($mysqli, $upload_ip);
+        $upload_recent = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM logs WHERE log_type = 'Guest' AND log_action = 'Quote Upload Attempt' AND log_ip = '$upload_ip_esc' AND log_created_at > (NOW() - INTERVAL 10 MINUTE)"));
+        if ($upload_recent && intval($upload_recent[0]) >= 10) {
+            $upload_throttled = true;
+        } else {
+            mysqli_query($mysqli, "INSERT INTO logs SET log_type = 'Guest', log_action = 'Quote Upload Attempt', log_description = 'Guest quote upload request', log_ip = '$upload_ip_esc', log_user_agent = '', log_client_id = 0, log_user_id = 0, log_entity_id = $quote_id");
+        }
+    }
+    if ($upload_throttled) {
+        flash_alert('Too many uploads from your address. Please wait a few minutes and try again.', 'error');
+        redirect();
+    }
+
     // Select only the necessary fields
     $sql = mysqli_query($mysqli, "SELECT quote_prefix, quote_number, quote_status, quote_expire, client_id FROM quotes LEFT JOIN clients ON quote_client_id = client_id WHERE quote_id = $quote_id AND quote_url_key = '$url_key'");
 
