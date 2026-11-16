@@ -266,6 +266,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                   )
         ");
 
+        // MSP-DS-178: an unknown email must cost the same password hash as a known one (same dummy as api/v1/auth.php),
+        // or response time tells an attacker which addresses are accounts.
+        if ($is_login_step && mysqli_num_rows($sql) === 0) {
+            password_verify((string) $password, '$argon2id$v=19$m=65536,t=3,p=1$N1VaRC5XUEdVbnU5Z2UubA$C4R2R3xEKv6O2YVS6Sq6jZL+L90lDoCQBl+nigKL/t8');
+        }
+
         $agentRow  = null;
         $clientRow = null;
 
