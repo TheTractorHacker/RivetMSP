@@ -8,7 +8,8 @@ $uid = $api_user_id;
 
 $my_open = mysqli_fetch_assoc(mysqli_query($mysqli,
     "SELECT COUNT(*) AS c FROM tickets
-     WHERE ticket_assigned_to = $uid AND ticket_resolved_at IS NULL AND ticket_archived_at IS NULL"))['c'];
+     WHERE ticket_assigned_to = $uid AND ticket_resolved_at IS NULL AND ticket_archived_at IS NULL
+     AND " . api_client_scope_sql('ticket_client_id')))['c'];   // MSP-DS-81: same client scope as every other counter
 
 $all_open = mysqli_fetch_assoc(mysqli_query($mysqli,
     "SELECT COUNT(*) AS c FROM tickets
@@ -47,6 +48,7 @@ $sql = mysqli_query($mysqli,
      LEFT JOIN clients c ON t.ticket_client_id = c.client_id
      LEFT JOIN ticket_statuses ts ON t.ticket_status = ts.ticket_status_id
      WHERE t.ticket_assigned_to = $uid AND t.ticket_resolved_at IS NULL AND t.ticket_archived_at IS NULL
+     AND " . api_client_scope_sql('t.ticket_client_id') . "
      ORDER BY t.ticket_due_at ASC, t.ticket_created_at DESC
      LIMIT 10"
 );
