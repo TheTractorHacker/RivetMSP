@@ -303,6 +303,12 @@ foreach ($lines as $line) {
 }
 echo "Database imported successfully.\n";
 
+// MSP-DS-172 begin: every CLI value goes into SQL below, so escape it once here (the web wizard sanitizeInput()s the same fields)
+foreach (['company_name', 'country', 'address', 'city', 'state', 'zip', 'phone', 'company_email', 'website', 'locale', 'timezone', 'currency_code', 'user_name', 'user_email'] as $_cli_var) {
+    $$_cli_var = mysqli_real_escape_string($mysqli, (string) ($$_cli_var ?? ''));
+}
+// MSP-DS-172 end
+
 // Create User
 $password_hash = secPasswordHash(trim($user_password_plain));
 $site_encryption_master_key = randomString();
