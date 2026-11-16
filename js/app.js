@@ -1,3 +1,16 @@
+// MSP-DS-46: the ticket / client the editor belongs to, so the server can honour the per-client AI opt-out for Reword.
+function rewordContext(editor) {
+    var ctx = { ticket_id: 0, client_id: 0 };
+    try {
+        var form = editor.getElement().form || document;
+        var t = form.querySelector('[name="ticket_id"]') || document.querySelector('input[name="ticket_id"]');
+        var c = form.querySelector('[name="client_id"]') || document.querySelector('input[name="client_id"]');
+        ctx.ticket_id = t ? parseInt(t.value, 10) || 0 : 0;
+        ctx.client_id = c ? parseInt(c.value, 10) || 0 : 0;
+    } catch (e) { }
+    return ctx;
+}
+
 // Adds Rich Text / Markdown / HTML tabs around a TinyMCE editor whose
 // underlying textarea has the "tinymce-builder" class. TinyMCE stays the
 // canonical source of truth: switching tabs always syncs edits made in the
@@ -329,7 +342,7 @@ function initTinyMCEEditors() {
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({ text: content, csrf_token: window.csrfToken }),
+                        body: JSON.stringify(Object.assign({ text: content, csrf_token: window.csrfToken }, rewordContext(editor))),
                     })
                         .then(response => {
                             if (!response.ok) {
@@ -450,7 +463,7 @@ function initTinyMCEEditors() {
                     fetch('/agent/ajax.php?ai_reword', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: content, csrf_token: window.csrfToken }),
+                        body: JSON.stringify(Object.assign({ text: content, csrf_token: window.csrfToken }, rewordContext(editor))),
                     })
                         .then(response => {
                             if (!response.ok) throw new Error('Network response was not ok');
@@ -627,7 +640,7 @@ function initTinyMCEEditors() {
                     fetch('ajax.php?ai_reword', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: content, csrf_token: window.csrfToken }),
+                        body: JSON.stringify(Object.assign({ text: content, csrf_token: window.csrfToken }, rewordContext(editor))),
                     })
                         .then(response => {
                             if (!response.ok) throw new Error('Network response was not ok');

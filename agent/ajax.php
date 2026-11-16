@@ -1161,6 +1161,21 @@ if (isset($_GET['ai_reword'])) {
 
     validateCSRFToken($input['csrf_token'] ?? '');
 
+    // MSP-DS-46: honour the per-client AI opt-out. The client is the ticket's when a ticket id is sent, else the one the editor's form names.
+    $reword_client_id = intval($input['client_id'] ?? 0);
+    $reword_ticket_id = intval($input['ticket_id'] ?? 0);
+    if ($reword_ticket_id > 0) {
+        $reword_t = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_client_id FROM tickets WHERE ticket_id = $reword_ticket_id LIMIT 1"));
+        $reword_client_id = intval($reword_t['ticket_client_id'] ?? 0);
+    }
+    if ($reword_client_id > 0) {
+        enforceClientAccess($reword_client_id);
+        if (!aiEnabled($reword_client_id)) {
+            echo json_encode(['ok' => false, 'error' => 'AI is disabled for this client']);
+            exit;
+        }
+    }
+
     // The reword system prompt comes from the configured 'General' model.
     $promptText = '';
     $model_q = mysqli_query($mysqli, "SELECT ai_model_prompt FROM ai_models WHERE ai_model_use_case = 'General' LIMIT 1");
@@ -1176,7 +1191,7 @@ if (isset($_GET['ai_reword'])) {
     ];
 
     // Centralised call: gains timeout, input cap and max_tokens for free.
-    $ai = aiChat($messages, 'General', ['temperature' => 0.5]);
+    $ai = aiChat($messages, 'General', ['temperature' => 0.5, 'client_id' => $reword_client_id]);
 
     if ($ai['ok']) {
         // Get the response content.
