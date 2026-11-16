@@ -11,6 +11,11 @@ require_once "../functions.php";
 require_once "../includes/check_login.php";
 require_once "../plugins/totp/totp.php";
 
+// IT-WEB-2 / MSP-DS-28: every branch is JSON unless it says otherwise. PHP defaults to text/html, which turned a stored value such as
+// <img onerror=...> into a reflected-XSS page on direct navigation. HTML-fragment branches send their own text/html header.
+header('Content-Type: application/json; charset=utf-8');
+header('X-Content-Type-Options: nosniff');
+
 /*
  * Leads board: move a lead to another pipeline stage (drag and drop). POST + CSRF, JSON response.
  * Moving a card to "Converted" turns the lead into a client, same as the Convert action on the list.
@@ -1356,8 +1361,10 @@ if (isset($_GET['ai_ticket_summary'])) {
 
             if (!class_exists('HTMLPurifier')) {
                 require_once __DIR__ . '/../plugins/htmlpurifier/HTMLPurifier.standalone.php';
+                require_once __DIR__ . '/../plugins/htmlpurifier/rivet_html_policy.php';
             }
             $purifier_config = HTMLPurifier_Config::createDefault();
+            rivet_html_policy_apply($purifier_config, 'strict');
             $purifier_config->set('Cache.DefinitionImpl', null);
             $purifier_config->set('URI.AllowedSchemes', ['http' => true, 'https' => true]);
             $purifier = new HTMLPurifier($purifier_config);

@@ -5184,20 +5184,20 @@ function saveBase64Images(string $html, string $baseFsPath, string $baseWebPath,
             $mimeType = strtolower($matches[1]);
             $base64   = $matches[2];
 
-            $binary = base64_decode($base64);
-            if ($binary === false) {
+            $binary = base64_decode($base64, true);
+            if ($binary === false || $binary === '') {
                 continue;
             }
 
-            // Extension mapping
-            switch ($mimeType) {
-                case 'jpeg':
-                case 'jpg': $ext = 'jpg'; break;
-                case 'png': $ext = 'png'; break;
-                case 'gif': $ext = 'gif'; break;
-                case 'webp': $ext = 'webp'; break;
-                default: $ext = 'png';
+            // MSP-DS-22: the bytes must really be a raster image of the declared type. Otherwise a JSON/script body would be stored
+            // under the app origin as img_*.png for the ajax-modal gadget to fetch.
+            $detected = @getimagesizefromstring($binary);
+            $detectedExt = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_GIF => 'gif', IMAGETYPE_WEBP => 'webp'][$detected[2] ?? 0] ?? null;
+            if ($detectedExt === null) {
+                $img->setAttribute('src', '');
+                continue;
             }
+            $ext = $detectedExt;
 
             // Secure random filename
             $uid = bin2hex(random_bytes(16));
