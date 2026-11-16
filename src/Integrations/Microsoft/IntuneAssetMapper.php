@@ -111,9 +111,15 @@ class IntuneAssetMapper
 
         // ----- Step 1: already linked for THIS integration (and therefore this client) -----
         $existing = mysqli_fetch_assoc(mysqli_query($m,
-            "SELECT id, asset_id FROM asset_intune_links
-             WHERE microsoft_integration_id=$intg_id AND intune_device_id='$intune_device_id_esc' LIMIT 1"
+            "SELECT l.id, l.asset_id, a.asset_client_id FROM asset_intune_links l
+             LEFT JOIN assets a ON a.asset_id = l.asset_id
+             WHERE l.microsoft_integration_id=$intg_id AND l.intune_device_id='$intune_device_id_esc' LIMIT 1"
         ));
+
+        // MSP-DS-174: an asset that was moved to another client is no longer this tenant's to update; leave it (and the stale link) alone
+        if ($existing && (int) ($existing['asset_client_id'] ?? 0) !== $client_id) {
+            return 'skipped';
+        }
 
         if ($existing) {
             mysqli_query($m, "UPDATE asset_intune_links SET $link_fields_sql WHERE id=" . intval($existing['id']));
