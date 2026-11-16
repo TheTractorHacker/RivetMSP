@@ -25,5 +25,7 @@ $wh = file_get_contents(__DIR__ . '/../guest/payment_webhook.php');
 $k = strpos($wh, 'Invoice unknown or no longer payable'); $l = strpos($wh, '$invoice_id            = intval($inv', $k);
 $wb = substr($wh, $k, $l - $k);
 $ok('webhook: an unrecordable succeeded payment raises a notification and history row', str_contains($wb, 'invoiceHistoryOnce(') && str_contains($wb, 'appNotify('));
-$ok("webhook: the event is flagged 'error' (needs review), not 'ignored'", str_contains($wb, "event_status = 'error'") && !str_contains($wb, "event_status = 'ignored'"));
+// review R29: a foreign install's intent is 'ignored' (before the alert); our own unrecordable payment is still flagged 'error'
+$own = strpos($wb, 'stripeUnrecordedIntentIsOurs(');
+$ok("webhook: our unrecordable payment is flagged 'error' (needs review); only a foreign intent (checked first) is 'ignored'", str_contains($wb, "event_status = 'error'") && $own !== false && substr_count($wb, "event_status = 'ignored'") === 1 && strpos($wb, "event_status = 'ignored'") > $own && strpos($wb, "event_status = 'ignored'") < strpos($wb, 'invoiceHistoryOnce('));
 exit($fail ? 1 : 0);
