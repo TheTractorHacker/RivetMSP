@@ -249,7 +249,7 @@ decrypt_and_extract() {
     register_tmpfile "${EXTRACT_DIR}"
 
     info "Extracting archive..."
-    if ! tar -xzf "${combined}" -C "${EXTRACT_DIR}"; then
+    if ! tar -xzf "${combined}" -C "${EXTRACT_DIR}" --no-same-owner; then
         die "tar extraction failed. ${BACKUP_FILE} may be corrupt, or --passphrase-file decrypted it into garbage (wrong passphrase can produce a file that 'looks' decrypted but isn't valid gzip)."
     fi
 
@@ -393,19 +393,30 @@ restore_uploads() {
         return 0
     fi
 
+    # MSP-DS-34 (re-review RR4): APP_DIR is owned by the web user, which can swap uploads/ for a symlink (ln -s /etc/profile.d uploads) before an
+    # operator restores; a root rsync --delete through it would delete in, and write the archive's files into, the symlink's target. So:
+    # (1) refuse a symlinked or non-directory destination, (2) the existing uploads/ must belong to the web user (root mode), and
+    # (3) the copy itself runs AS the web user (run_app_exec), so even a symlink planted between the check and the copy can only reach what the
+    # web user could already reach. The archive's uploads/ is staged in a private directory handed to the web user, and the tar is extracted
+    # --no-same-owner, so nothing in it keeps an attacker-chosen owner; links inside the archive are skipped (--no-links).
+    local dest="${APP_DIR}/uploads" web=""
+    if [[ -L "${dest}" ]]; then die "${dest} is a symbolic link; refusing to restore uploads through it as root. Remove the link (and inspect where it pointed), then re-run."; fi
+    if [[ -e "${dest}" && ! -d "${dest}" ]]; then die "${dest} exists and is not a directory; refusing to replace it."; fi
+    web="$(_app_exec_user "${APP_DIR}")" || die "Refusing to restore uploads: no non-root web user could be determined."
+    if [[ -n "${web}" && -d "${dest}" && "$(stat -c '%U' -- "${dest}")" != "${web}" ]]; then
+        die "${dest} is owned by '$(stat -c '%U' -- "${dest}")', not the web user '${web}'; refusing to write into it as root. Fix the ownership (chown -R ${web} '${dest}') and re-run."
+    fi
+    local stage; stage="$(mktemp -d)"; register_tmpfile "${stage}"
+    mv -- "${src_uploads}" "${stage}/uploads"
+    if [[ -n "${web}" ]]; then chown -R -h "${web}" "${stage}"; fi
+    chmod 700 "${stage}"
+
     announce "Replacing ${APP_DIR}/uploads with the backup's uploads/ (rsync --delete — anything added since the backup that isn't in it will be removed)."
-    mkdir -p "${APP_DIR}/uploads"
-    if ! rsync -a --delete "${src_uploads}/" "${APP_DIR}/uploads/"; then
+    run_app_exec "${APP_DIR}" mkdir -p -- "${dest}"
+    # D770/F660 = what install.sh leaves (750/640 widened by u+rwX,g+rwX); the files belong to the web user because the web user wrote them.
+    if ! run_app_exec "${APP_DIR}" rsync -a --delete --no-links --chmod=D770,F660 "${stage}/uploads/" "${dest}/"; then
         die "rsync failed while restoring uploads/. The database has already been imported at this point — investigate the uploads/ mismatch manually."
     fi
-
-    info "Restoring ownership (www-data:www-data) and permissions under ${APP_DIR}/uploads..."
-    chown -R www-data:www-data "${APP_DIR}/uploads"
-    find "${APP_DIR}/uploads" -type d -exec chmod 750 {} +
-    find "${APP_DIR}/uploads" -type f -exec chmod 640 {} +
-    # Same widening install.sh applies: uploads/ needs to stay writable by
-    # the www-data group for the app to save new files into it.
-    chmod -R u+rwX,g+rwX "${APP_DIR}/uploads"
     success "uploads/ restored."
 }
 
@@ -428,10 +439,18 @@ apply_settings_enc_key() {
     fi
 
     announce "Updating ${APP_DIR}/config.php's \$config_settings_enc_key to match ${BACKUP_FILE} so restored encrypted settings decrypt correctly."
-    if ! php -r '
+    # MSP-DS-34 (re-review RR4): config.php is in the web user's directory. As root, file_put_contents + chmod + chown would follow a symlink
+    # swapped in during the minutes of DB import (-> /etc/shadow becomes web-owned). So: refuse a symlink, and do the edit AS the web user
+    # (run_app_php), writing a temp file in the same directory and rename()ing it over config.php (a rename replaces the name, it never
+    # follows it). No root chown/chmod of a path is left.
+    if [[ -L "${APP_DIR}/config.php" ]]; then die "${APP_DIR}/config.php is a symbolic link; refusing to rewrite it as root."; fi
+    if ! run_app_php "${APP_DIR}" -r '
         $path = $argv[1];
         $key  = $argv[2];
         $lines = file($path, FILE_IGNORE_NEW_LINES);
+        if ($lines === false) {
+            exit(1);
+        }
         $line = "\$config_settings_enc_key = " . var_export($key, true) . ";";
         $found = false;
         foreach ($lines as $i => $l) {
@@ -444,14 +463,14 @@ apply_settings_enc_key() {
         if (!$found) {
             $lines[] = $line;
         }
-        if (file_put_contents($path, implode("\n", $lines) . "\n") === false) {
+        $tmp = tempnam(dirname($path), ".config.php.");
+        if ($tmp === false || file_put_contents($tmp, implode("\n", $lines) . "\n") === false || !chmod($tmp, 0640) || !rename($tmp, $path)) {
+            if ($tmp !== false) { @unlink($tmp); }
             exit(1);
         }
     ' -- "${APP_DIR}/config.php" "${MANIFEST_SETTINGS_ENC_KEY}"; then
         die "Failed to update \$config_settings_enc_key in ${APP_DIR}/config.php. The database and uploads/ have already been restored — fix config.php by hand (see backup-manifest.json's settings_enc_key inside the extracted archive, already shredded now — re-run with the same --backup to recover it again if needed)."
     fi
-    chmod 640 "${APP_DIR}/config.php"
-    chown www-data:www-data "${APP_DIR}/config.php"
     success "config_settings_enc_key updated."
 }
 
