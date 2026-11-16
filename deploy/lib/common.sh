@@ -246,7 +246,8 @@ require_trusted_tooling() {
             msg="Refusing to run as root from a tree the web user can modify (${why}). Run: sudo deploy/install-trusted-tooling.sh, then use /usr/local/lib/rivetmsp-deploy/$(basename "${caller:-backup.sh}") and point the systemd units there."
             logger -t rivetmsp-deploy -p user.crit "${msg}" 2>/dev/null || true
             if [[ -n "${APP_DIR:-}" && -f "${APP_DIR}/deploy/lib/backup_status.php" ]]; then
-                run_app_php "${APP_DIR}" "${APP_DIR}/deploy/lib/backup_status.php" --app-dir="${APP_DIR}" --ok=0 --started="$(date +%s)" --error="${msg}" >/dev/null 2>&1 || true
+                # subshell: with no resolvable web user run_app_php dies, and that must not pre-empt the refusal below
+                ( run_app_php "${APP_DIR}" "${APP_DIR}/deploy/lib/backup_status.php" --app-dir="${APP_DIR}" --ok=0 --started="$(date +%s)" --error="${msg}" ) >/dev/null 2>&1 || true
             fi
             die "${msg}"
         fi
@@ -300,7 +301,7 @@ rmm_pg_prepare() {
     local app_dir="$1" owner scratch out rc=0 own_pass
     RMM_PG_READY=0
     RMM_PG_USER_PASSFILE=""
-    owner="$(app_owner_user "${app_dir}")"
+    owner="$(_app_exec_user "${app_dir}")" || die "Refusing to run application code as root."
     scratch="$(mktemp -d)"; register_tmpfile "${scratch}"; chmod 700 "${scratch}"
     [[ -n "${owner}" ]] && chown "${owner}" "${scratch}"
     out="$(run_app_php "${app_dir}" "${app_dir}/scripts/rmm_postgres_backup_env.php" --app-dir="${app_dir}" --passfile="${scratch}/pgpass")" || rc=$?
@@ -319,27 +320,83 @@ rmm_pg_prepare() {
     return 0
 }
 
-# _app_exec_user <app_dir>: the account application code must run as ("" = no drop needed). When running as root it is the non-root owner
-# of config.php (the web user); as a normal user, or when config.php is root-owned, it is empty. (Tests override this function.)
+# _rivetmsp_root_mode: true when this process is root (or, in tests only, pretends to be: RIVETMSP_TRUST_TEST_NONROOT=1 plus
+# RIVETMSP_TEST_AS_ROOT=1 from a non-root caller, so the real root-only code paths run with `runuser` replaced on PATH).
+_rivetmsp_root_mode() {
+    [[ "${EUID}" -eq 0 ]] && return 0
+    [[ "${RIVETMSP_TRUST_TEST_NONROOT:-}" == "1" && "${RIVETMSP_TEST_AS_ROOT:-}" == "1" ]]
+}
+
+# rivetmsp_web_user <app_dir>: MSP-DS-34 (re-review RR1). The account application code must run as when this process is root. It comes from
+# a ROOT-CONTROLLED source, never from a file the web user can rename or replace (config.php, anything inside APP_DIR):
+#   1. WEB_USER= in /etc/rivetmsp/web-user.conf, then in /etc/rivetmsp/web-update.conf (written at install time by install.sh,
+#      install-web-update.sh, install-trusted-tooling.sh); each must be a root-owned regular file, not a symlink, not group/other-writable;
+#   2. else (installs from before those files) the owner of APP_DIR itself: the web user cannot change it (chown needs root, and the
+#      parent directory is root's), provided it is not root and APP_DIR is a real directory, not a symlink.
+# Prints the user name. Fails (non-zero, loud) when nothing yields a valid non-root account, so nothing ever falls through to running app
+# code as root. (Test hooks, only with RIVETMSP_TRUST_TEST_NONROOT=1 and a non-root caller: RIVETMSP_ETC_DIR, RIVETMSP_TRUST_UID.)
+# Call as: u="$(rivetmsp_web_user "${APP_DIR}")" || die ...   (a die inside $(...) ends only the subshell, so callers must check.)
+rivetmsp_web_user() {
+    local app_dir="$1" etc=/etc/rivetmsp want=0 f u="" src="" st
+    if [[ "${RIVETMSP_TRUST_TEST_NONROOT:-}" == "1" && "${EUID}" -ne 0 ]]; then
+        etc="${RIVETMSP_ETC_DIR:-/etc/rivetmsp}"; want="${RIVETMSP_TRUST_UID:-0}"
+    fi
+    for f in web-user.conf web-update.conf; do
+        f="${etc}/${f}"
+        [[ -f "${f}" && ! -L "${f}" ]] || continue
+        st="$(stat -c '%u %a' -- "${f}" 2>/dev/null)" || continue
+        [[ "${st%% *}" == "${want}" ]] || { echo "WARNING: ${f} is not owned by root; ignoring it." >&2; continue; }
+        (( (8#${st##* } & 8#022) == 0 )) || { echo "WARNING: ${f} is group/other-writable; ignoring it." >&2; continue; }
+        u="$(sed -n -E 's/^WEB_USER=(.*)$/\1/p' "${f}" | head -n 1 | sed -E "s/^['\"]//; s/['\"]\$//")"
+        if [[ -n "${u}" ]]; then src="${f}"; break; fi
+    done
+    if [[ -z "${u}" && -n "${app_dir}" && -d "${app_dir}" && ! -L "${app_dir}" ]]; then
+        u="$(stat -c '%U' -- "${app_dir}" 2>/dev/null || true)"; src="the owner of ${app_dir}"
+    fi
+    if ! [[ "${u}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+        echo "ERROR: cannot determine the web user (no WEB_USER in ${etc}/web-user.conf and ${app_dir:-APP_DIR} is not owned by a normal account). Refusing to run application code as root. Run: sudo deploy/install-trusted-tooling.sh --web-user=www-data" >&2
+        return 1
+    fi
+    if [[ "${u}" == "root" || "$(id -u "${u}" 2>/dev/null || echo 0)" == "0" ]]; then
+        echo "ERROR: the web user from ${src} is root or does not exist. Refusing to run application code as root." >&2
+        return 1
+    fi
+    printf '%s' "${u}"
+}
+
+# write_web_user_conf <user>: install-time half of rivetmsp_web_user (root only): /etc/rivetmsp/web-user.conf, root:root 0644.
+write_web_user_conf() {
+    local u="$1"
+    [[ "${u}" =~ ^[a-z_][a-z0-9_-]{0,31}$ && "${u}" != "root" ]] || die "Not a usable web user name: '${u}'."
+    install -d -m 0755 -o root -g root /etc/rivetmsp
+    printf 'WEB_USER=%s\n' "${u}" > /etc/rivetmsp/web-user.conf.new
+    chown root:root /etc/rivetmsp/web-user.conf.new; chmod 0644 /etc/rivetmsp/web-user.conf.new
+    mv -fT /etc/rivetmsp/web-user.conf.new /etc/rivetmsp/web-user.conf
+}
+
+# _app_exec_user <app_dir>: the account application code must run as. Root: the web user from rivetmsp_web_user (never empty, never root;
+# non-zero otherwise). A normal user: "" (it just runs the command as itself, which gains nothing). No path returns "" to a root caller.
 _app_exec_user() {
-    [[ "${EUID}" -eq 0 ]] && app_owner_user "$1"
+    if _rivetmsp_root_mode; then rivetmsp_web_user "$1"; return; fi
     return 0
 }
 
 # run_app_php <app_dir> <php args...>: MSP-DS-34. Application PHP (config.php, scripts/*.php, the app's own bootstrap, vendor/) is writable by
-# the web user, so root must never execute it. When running as root, drop to the account that owns config.php (the web user) first; as a
-# normal user (or when config.php is root-owned) it simply runs php. Callers get only the output, which they treat as data.
+# the web user, so root must never execute it. As root it always drops to the web user (rivetmsp_web_user; dies when there is none); as a
+# normal user it simply runs php. Callers get only the output, which they treat as data.
 run_app_php() {
     local app_dir="$1"; shift
     run_app_exec "${app_dir}" "${PHP_BIN:-php}" "$@"
 }
 
 # run_app_exec <app_dir> <command> [args...]: run any command that lives in, or loads code from, the application tree (php, or an
-# executable under vendor/) as the web user when this is root. Review R3: a root process must never execute a file the web user can write.
+# executable under vendor/) as the web user when this is root. Review R3 / RR1: a root process must never execute a file the web user can
+# write, so a root caller that cannot name a non-root web user dies instead of running the command.
 run_app_exec() {
     local app_dir="$1"; shift
-    local owner; owner="$(_app_exec_user "${app_dir}")"
-    if [[ -n "${owner}" && "${owner}" != "root" ]]; then
+    local owner; owner="$(_app_exec_user "${app_dir}")" || die "Refusing to run application code as root."
+    if _rivetmsp_root_mode; then
+        [[ -n "${owner}" && "${owner}" != "root" ]] || die "Refusing to run application code as root (no web user)."
         ( cd / && runuser -u "${owner}" -- "$@" )
     else
         ( cd / && "$@" )
@@ -350,24 +407,18 @@ run_app_exec() {
 # vendor/ (web-writable), so they are NOT executed by root: they run as the web user, which already holds the RMM PostgreSQL credentials,
 # with the RIVETCORE_PG_* values root validated and the password file the web user's own scratch copy (from rmm_pg_prepare). STDIN/STDOUT
 # are inherited, so root keeps opening the dump file (backup: `> dump`, restore: `< dump`) in its root-only staging directory. Nothing the
-# script prints is trusted, and the dump is only data. When no drop is needed (non-root caller, or a root-owned config.php) it runs directly
-# with root's own password file.
+# script prints is trusted, and the dump is only data. A non-root caller runs it directly with its own password file; a root caller with no
+# resolvable web user dies (RR1).
 run_rmm_pg_script() {
     local app_dir="$1" script="$2"; shift 2
-    local owner; owner="$(_app_exec_user "${app_dir}")"
-    if [[ -n "${owner}" && "${owner}" != "root" ]]; then
+    local owner; owner="$(_app_exec_user "${app_dir}")" || die "Refusing to run application code as root."
+    if _rivetmsp_root_mode; then
+        [[ -n "${owner}" && "${owner}" != "root" ]] || die "Refusing to run application code as root (no web user)."
         [[ -n "${RMM_PG_USER_PASSFILE:-}" && -f "${RMM_PG_USER_PASSFILE}" && ! -L "${RMM_PG_USER_PASSFILE}" ]] || die "No password file prepared for the RMM PostgreSQL step."
         ( cd / && PGPASSFILE="${RMM_PG_USER_PASSFILE}" runuser -u "${owner}" -- "${script}" "$@" )
     else
         ( cd / && "${script}" "$@" )
     fi
-}
-
-# app_owner_user <app_dir>: the non-root account that owns config.php ("" when root-owned or unknown).
-app_owner_user() {
-    local o; o="$(stat -c '%U' "$1/config.php" 2>/dev/null || true)"
-    [[ -n "${o}" && "${o}" != "root" ]] && printf '%s' "${o}"
-    return 0
 }
 
 # parse_rmm_pg_env <text>: MSP-DS-34. scripts/rmm_postgres_backup_env.php prints `export NAME='value'` lines. It is app code the web

@@ -39,10 +39,12 @@ rm -rf "${DEST}"; mv "${DEST}.new" "${DEST}"
 umask 022
 {
     echo "APP_DIR=${APP_DIR}"
+    echo "WEB_USER=${WEB_USER}"
     [[ -n "${PASSPHRASE_FILE}" ]] && echo "PASSPHRASE_FILE=${PASSPHRASE_FILE}"
     [[ "${NO_BACKUP}" -eq 1 ]] && echo "NO_BACKUP_CONFIRMED=1"
 } > /etc/rivetmsp/web-update.conf
 chown root:root /etc/rivetmsp/web-update.conf; chmod 0644 /etc/rivetmsp/web-update.conf
+write_web_user_conf "${WEB_USER}"   # MSP-DS-34 RR1: the root-controlled source of the account the tooling drops app code to
 
 RULE="/etc/sudoers.d/rivetmsp-web-update"
 TMP="$(mktemp)"

@@ -429,6 +429,8 @@ setup_upload_dirs() {
 set_file_permissions() {
     info "Setting ownership (www-data:www-data) and permissions under ${APP_DIR}..."
     chown -R www-data:www-data "${APP_DIR}"
+    # MSP-DS-34 RR1: record the web user in a root-controlled file; the root tooling takes the account it drops app code to from here.
+    write_web_user_conf www-data
     find "${APP_DIR}" -type d -exec chmod 750 {} +
     find "${APP_DIR}" -type f -exec chmod 640 {} +
     # Widen only uploads/ and backups/ back to writable — everything else

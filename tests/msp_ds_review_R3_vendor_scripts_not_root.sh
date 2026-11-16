@@ -27,10 +27,12 @@ echo "RESTORE clean=${RMM_PG_RESTORE_CLEAN} got=$(cat) passfile=${PGPASSFILE}" >
 S
 chmod +x "$T"/app/vendor/rivet/rivet-core/scripts/*.sh
 echo '<?php' > "$T/app/config.php"
+mkdir -p "$T/etc"; echo WEB_USER=nobody > "$T/etc/web-user.conf"; chmod 644 "$T/etc/web-user.conf"
 cat > "$T/run.sh" <<EOS
 set -uo pipefail
+# RR1: the real _app_exec_user runs (root mode through the test hooks, web user from a root-controlled conf); only runuser is stood in for.
+export RIVETMSP_TRUST_TEST_NONROOT=1 RIVETMSP_TEST_AS_ROOT=1 RIVETMSP_TRUST_UID=\$(id -u) RIVETMSP_ETC_DIR="$T/etc"
 source "$ROOT/deploy/lib/common.sh"
-_app_exec_user() { echo webuser; }
 runuser() { [[ "\$1" == -u && "\$3" == -- ]] || exit 9; echo "RUNUSER \$2" >> "$T/runuser.log"; shift 3; "\$@"; }
 RMM_PG_USER_PASSFILE="$T/web-pgpass"; : > "\$RMM_PG_USER_PASSFILE"
 export PGPASSFILE="/root/own-pgpass" RIVETCORE_PG_DATABASE=rmmdb
@@ -39,7 +41,7 @@ echo dumpdata > "$T/dump.in"; export RESULT_OUT="$T/restore.out"
 RMM_PG_RESTORE_CLEAN=1 run_rmm_pg_script "$T/app" "$T/app/vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh" < "$T/dump.in"
 EOS
 bash "$T/run.sh" 2>&1
-[[ "$(grep -c 'RUNUSER webuser' "$T/runuser.log" 2>/dev/null)" == 2 ]] && ok "both vendor scripts were started through runuser as the web user" || bad "vendor scripts not run via runuser: $(cat "$T/runuser.log" 2>/dev/null)"
+[[ "$(grep -c 'RUNUSER nobody' "$T/runuser.log" 2>/dev/null)" == 2 ]] && ok "both vendor scripts were started through runuser as the web user" || bad "vendor scripts not run via runuser: $(cat "$T/runuser.log" 2>/dev/null)"
 [[ "$(cat "$T/dump.out" 2>/dev/null)" == "DUMP user_env=rmmdb passfile=$T/web-pgpass" ]] && ok "dump is written to root's redirect; web user gets its own password file, not root's" || bad "dump env: $(cat "$T/dump.out" 2>/dev/null)"
 [[ "$(cat "$T/restore.out" 2>/dev/null)" == "RESTORE clean=1 got=dumpdata passfile=$T/web-pgpass" ]] && ok "restore gets the dump on stdin and RMM_PG_RESTORE_CLEAN through the drop" || bad "restore: $(cat "$T/restore.out" 2>/dev/null)"
 exit $fail

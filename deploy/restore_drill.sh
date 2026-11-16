@@ -65,6 +65,9 @@ require_trusted_tooling "${BASH_SOURCE[0]}"
 pf_perm="$(stat -c '%a' "${PASSPHRASE_FILE}")"
 [[ "${pf_perm: -2}" == "00" ]] || die "--passphrase-file has permissions ${pf_perm}; it must be owner-only (chmod 600)."
 [[ -n "${DEST}" ]] || DEST="${APP_DIR}/backups"
+# MSP-DS-34 (re-review RR1): resolve the web user from a root-controlled source BEFORE any work (and before drill_fail can run app code), so
+# nothing below can ever fall through to running application PHP as root; no web user = loud refusal.
+drill_owner="$(rivetmsp_web_user "${APP_DIR}")" || die "Refusing to run the restore drill: no non-root web user could be determined (see above)."
 
 touch "${LOG_FILE}" 2>/dev/null && chmod 640 "${LOG_FILE}" && exec > >(tee -a "${LOG_FILE}") 2>&1 || warn "cannot write ${LOG_FILE}; logging to the terminal only"
 
@@ -134,15 +137,12 @@ if [[ -n "${KEY_FILE}" ]]; then
 fi
 # MSP-DS-34: cron/restore_drill.php is app code the web user can change, so it runs as that user, never as root. It gets the unpacked
 # archive (and the settings-key file, if any) to read.
-drill_owner="$(app_owner_user "${APP_DIR}")"
-if [[ -n "${drill_owner}" ]]; then
-    chown -R "${drill_owner}" "${WORK}" 2>/dev/null || true
-    if [[ -n "${KEY_FILE}" ]]; then
-        # Hand the web user a private copy (0400, deleted on exit) instead of loosening the original key file's mode.
-        drill_key_copy="$(mktemp)"; register_tmpfile "${drill_key_copy}"
-        install -m 0400 -o "${drill_owner}" "${KEY_FILE}" "${drill_key_copy}"
-        KEY_ARGS=(--settings-key-file="${drill_key_copy}")
-    fi
+chown -R "${drill_owner}" "${WORK}" 2>/dev/null || true
+if [[ -n "${KEY_FILE}" ]]; then
+    # Hand the web user a private copy (0400, deleted on exit) instead of loosening the original key file's mode.
+    drill_key_copy="$(mktemp)"; register_tmpfile "${drill_key_copy}"
+    install -m 0400 -o "${drill_owner}" "${KEY_FILE}" "${drill_key_copy}"
+    KEY_ARGS=(--settings-key-file="${drill_key_copy}")
 fi
 set +e
 run_app_php "${APP_DIR}" "${APP_DIR}/cron/restore_drill.php" --trigger=script --extracted-dir="${UNPACKED}" --source-name="${NAME}" --source-mtime="${MTIME}" "${KEY_ARGS[@]}"
