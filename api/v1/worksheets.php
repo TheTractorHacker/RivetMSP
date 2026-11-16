@@ -257,15 +257,28 @@ if ($resource === 'worksheets' && $id !== null && $sub === 'responses' && $metho
     // MSP-DS-86: the answers on a customer-signed worksheet are frozen (agent/post/worksheet.php refuses the same edit).
     $signed_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT worksheet_signed_at FROM ticket_worksheets WHERE worksheet_id = $id LIMIT 1"));
     if (!empty($signed_row['worksheet_signed_at'])) api_error(409, 'Worksheet is already signed');
+    // MSP-DS-87: only fields of this worksheet's own template are accepted, and an existing answer is updated in place (ticket_worksheet_responses has
+    // no unique key, so ON DUPLICATE KEY never fired and every save added a second row). Same select-then-update as agent/post/worksheet.php.
+    $tpl_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT worksheet_template_id FROM ticket_worksheets WHERE worksheet_id = $id LIMIT 1"));
+    $tpl_id  = intval($tpl_row['worksheet_template_id'] ?? 0);
+    $valid_fields = [];
+    if ($tpl_id) {
+        $vf = mysqli_query($mysqli, "SELECT field_id FROM worksheet_template_fields WHERE field_template_id = $tpl_id");
+        while ($v = mysqli_fetch_assoc($vf)) { $valid_fields[intval($v['field_id'])] = true; }
+    }
     foreach ($responses as $resp) {
         $field_id = intval($resp['field_id'] ?? 0);
         $value    = mysqli_real_escape_string($mysqli, $resp['value'] ?? '');
-        if (!$field_id) continue;
-        mysqli_query($mysqli,
-            "INSERT INTO ticket_worksheet_responses (response_worksheet_id, response_field_id, response_value)
-             VALUES ($id, $field_id, '$value')
-             ON DUPLICATE KEY UPDATE response_value = '$value'"
-        );
+        if (!$field_id || !isset($valid_fields[$field_id])) continue;
+        $existing = mysqli_fetch_row(mysqli_query($mysqli,
+            "SELECT response_id FROM ticket_worksheet_responses WHERE response_worksheet_id = $id AND response_field_id = $field_id LIMIT 1"));
+        if ($existing) {
+            // every row for this pair (older saves left duplicates), so the web and guest pages agree
+            mysqli_query($mysqli, "UPDATE ticket_worksheet_responses SET response_value = '$value' WHERE response_worksheet_id = $id AND response_field_id = $field_id");
+        } else {
+            mysqli_query($mysqli,
+                "INSERT INTO ticket_worksheet_responses (response_worksheet_id, response_field_id, response_value) VALUES ($id, $field_id, '$value')");
+        }
     }
     // Mark completed
     mysqli_query($mysqli, "UPDATE ticket_worksheets SET worksheet_completed_at = NOW() WHERE worksheet_id = $id AND worksheet_completed_at IS NULL");

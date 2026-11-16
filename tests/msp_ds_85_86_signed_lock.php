@@ -1,6 +1,6 @@
 <?php
 // MSP-DS-86 (signed worksheets/outtakes cannot be re-signed, edited or deleted through the API) and MSP-DS-85 (no doubled escaping in sign replies). Run:
-// SCRATCH_TABLES="tickets ticket_worksheets ticket_worksheet_responses ticket_outtake_forms ticket_replies user_client_permissions users user_roles" tests/lib/with_scratch_db.sh php tests/msp_ds_85_86_signed_lock.php
+// SCRATCH_TABLES="tickets ticket_worksheets ticket_worksheet_responses worksheet_templates worksheet_template_fields ticket_outtake_forms ticket_replies user_client_permissions users user_roles" tests/lib/with_scratch_db.sh php tests/msp_ds_85_86_signed_lock.php
 if (getenv('RIVETMSP_TEST_DB') !== '1' || !preg_match('/scratch/i', (string) getenv('RIVETMSP_TEST_DB_NAME'))) { fwrite(STDERR, "scratch DB only\n"); exit(2); }
 mysqli_report(MYSQLI_REPORT_OFF);
 $mysqli = new mysqli('localhost', getenv('RIVETMSP_TEST_DB_USER'), getenv('RIVETMSP_TEST_DB_PASS'), getenv('RIVETMSP_TEST_DB_NAME'));
@@ -44,6 +44,14 @@ $rep = $mysqli->query("SELECT ticket_reply FROM ticket_replies WHERE ticket_repl
 $ok('worksheet: reply reads O\'Brien without backslash (' . ($rep[0] ?? '') . ')', ($rep[0] ?? '') === "Worksheet signed by O'Brien");
 $ok('worksheet: second sign of that one -> 409', call($ws, 'worksheets', 2, 'sign', 'POST', ['signed_name' => 'Again']) === 409);
 $ok('worksheet: unsigned worksheet can still be deleted', call($ws, 'worksheets', 3, null, 'DELETE') === 200);
+// MSP-DS-87: responses update in place, only template fields accepted
+$mysqli->query("INSERT INTO worksheet_templates (worksheet_template_id, worksheet_template_name) VALUES (1,'T')");
+$mysqli->query("INSERT INTO worksheet_template_fields (field_id, field_template_id, field_name) VALUES (5,1,'F5'),(6,2,'other template')");
+$mysqli->query("INSERT INTO ticket_worksheets (worksheet_id, worksheet_ticket_id, worksheet_template_id) VALUES (4,10,1)");
+call($ws, 'worksheets', 4, 'responses', 'POST', ['responses' => [['field_id' => 5, 'value' => 'one'], ['field_id' => 6, 'value' => 'foreign']]]);
+call($ws, 'worksheets', 4, 'responses', 'POST', ['responses' => [['field_id' => 5, 'value' => 'two']]]);
+$rows = $mysqli->query("SELECT response_field_id, response_value FROM ticket_worksheet_responses WHERE response_worksheet_id = 4")->fetch_all();
+$ok('MSP-DS-87: two saves leave one row with the latest value', count($rows) === 1 && $rows[0][0] == 5 && $rows[0][1] === 'two');
 $ok('outtake: re-sign a signed outtake -> 409', call($ot, 'outtakes', 1, 'sign', 'POST', ['signed_name' => 'Forged']) === 409);
 $ok('outtake: delete a signed outtake -> 409', call($ot, 'outtakes', 1, null, 'DELETE') === 409);
 $ok('outtake: signed outtake still exists', (int) $mysqli->query("SELECT COUNT(*) FROM ticket_outtake_forms WHERE outtake_id = 1")->fetch_row()[0] === 1);
