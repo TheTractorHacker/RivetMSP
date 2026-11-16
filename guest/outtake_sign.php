@@ -233,7 +233,9 @@ $sql_replies = mysqli_query($mysqli, "SELECT tr.ticket_reply, tr.ticket_reply_ty
 
 <link rel="stylesheet" href="/plugins/fontawesome-free/css/all.min.css">
 <script src="/js/signature_pad.js"></script>
+<script src="/js/rivet_dialog.js" nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>"></script>   <?php /* MSP-DS-186: RivetDialog is used below */ ?>
 <script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
+document.addEventListener('click', function (e) { if (e.target.closest('.js-print-page')) { window.print(); } });   // MSP-DS-186: app.js is not loaded on this page
 function clearSig() {
     var hidden = document.getElementById('sig_data');
     if (hidden) hidden.value = '';

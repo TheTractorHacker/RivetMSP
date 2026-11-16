@@ -225,7 +225,7 @@ if ($ticket_row) {
             $ticket_reply_by_display = nullable_htmlentities($row['contact_name']);
             $user_initials = initials($row['contact_name']);
             $user_avatar = $row['contact_photo'];
-            $avatar_link = "../uploads/clients/$ticket_reply_by/$user_avatar";
+            $avatar_link = "../uploads/clients/" . intval($row['contact_client_id']) . "/" . rawurlencode((string) $user_avatar);   // MSP-DS-186: photos live under the client id, not the contact id
         } else {
             $ticket_reply_by_display = nullable_htmlentities($row['user_name']);
             $user_id = intval($row['user_id']);

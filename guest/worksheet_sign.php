@@ -107,7 +107,7 @@ $fields = mysqli_query($mysqli, "SELECT f.*, COALESCE(r.response_value,'') AS re
     <!-- Header -->
     <div class="outtake-header">
         <div>
-            <?php if ($co_logo) { ?><img src="<?= $co_logo ?>" style="max-height:50px;margin-bottom:8px;"><br><?php } ?>
+            <?php if ($co_logo) { ?><img src="/uploads/settings/<?= $co_logo ?>" alt="" style="max-height:50px;margin-bottom:8px;"><br><?php } ?>
             <h4><?= $co_name ?></h4>
             <div class="co-info">
                 <?= $co_address ? $co_address . '<br>' : '' ?>
@@ -248,7 +248,9 @@ $fields = mysqli_query($mysqli, "SELECT f.*, COALESCE(r.response_value,'') AS re
     <?php } // end not-signed ?>
 </div>
 
+<script src="/js/rivet_dialog.js" nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>"></script>   <?php /* MSP-DS-186: RivetDialog is used below */ ?>
 <script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
+document.addEventListener('click', function (e) { if (e.target.closest('.js-print-page')) { window.print(); } });   // MSP-DS-186: app.js is not loaded on this page
 var sigPads = {};
 function initSig(id) {
     var c = document.getElementById('sig_canvas_' + id);
