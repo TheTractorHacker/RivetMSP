@@ -90,15 +90,13 @@ if (!function_exists('vaultReveal')) {
      */
     function vaultDisclosureCheck(mysqli $mysqli, string $path, int $values = 1, bool $bulk = false, bool $countsAsReveal = true): ?string
     {
-        static $done = [];
         global $session_user_id, $session_name, $session_is_admin;
         $userId = (int) ($session_user_id ?? 0);
         if ($userId <= 0) {
             return 'Sign in again.';
         }
-        if (isset($done[$path])) {
-            return null;   // one decision per path and request, however many rows the loop decrypts
-        }
+        // MSP-DS-26: no per-path/per-request shortcut any more. Pages that decrypt several credentials call this once per credential, so each
+        // one is counted against the reveal limit and logged; a bulk caller passes $values and gets that many log lines.
         $limit = secSettingInt('vault_reveal_limit', $mysqli);
         if ($limit > 0 && vaultRevealCount($mysqli, $userId) >= $limit) {
             if (function_exists('logAction')) {
@@ -115,9 +113,12 @@ if (!function_exists('vaultReveal')) {
                 return 'Exporting or printing credentials needs your password again: reveal any credential on the Credentials page (it asks for your password), then repeat this.';
             }
         }
-        $done[$path] = true;
         if ($countsAsReveal && function_exists('logAction')) {
-            logAction('Credential', 'Reveal', ($session_name ?? 'A user') . " viewed up to $values credential value(s) through $path", 0, 0);
+            // The limit counts log lines, so a disclosure of $values credentials writes $values lines (capped so one export cannot flood the log).
+            $lines = max(1, min($values, 500));
+            for ($i = 0; $i < $lines; $i++) {
+                logAction('Credential', 'Reveal', ($session_name ?? 'A user') . ($lines > 1 ? " viewed credential value $i of $values" : ' viewed 1 credential value') . " through $path", 0, 0);
+            }
         }
 
         return null;
