@@ -103,6 +103,15 @@ function quoteCanBeAnswered($status, $expire, ?int $now = null): bool
  * A quote may only be turned into an invoice once the client (or an agent) accepted it.
  * Re-invoicing an already Invoiced quote is refused.
  */
+/**
+ * MSP-DS-57: a quote's items, discount and dates are editable only while the client has not answered it. Accepted, Declined and
+ * Invoiced quotes are read-only (the invoice must match what the client accepted).
+ */
+function quoteContentEditable($status): bool
+{
+    return !in_array((string) $status, ['Accepted', 'Declined', 'Invoiced'], true);
+}
+
 function quoteCanBeInvoiced($status): bool
 {
     return (string) $status === 'Accepted';

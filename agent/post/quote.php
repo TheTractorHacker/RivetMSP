@@ -261,6 +261,12 @@ if (isset($_POST['add_quote_item'])) {
 
     enforceClientAccess();
 
+    $qs_status = getFieldById('quotes', $quote_id, 'quote_status');
+    if (!quoteContentEditable($qs_status)) {
+        flash_alert("This quote is already answered or invoiced - its items, discount and dates can no longer be changed.", 'error');
+        redirect();
+    }
+
     $subtotal = $price * $qty;
 
     if ($tax_id > 0) {
@@ -349,6 +355,12 @@ if (isset($_POST['edit_quote_item'])) {
 
     enforceClientAccess();
 
+    $qs_status = (string) ($row['quote_status'] ?? '');
+    if (!quoteContentEditable($qs_status)) {
+        flash_alert("This quote is already answered or invoiced - its items, discount and dates can no longer be changed.", 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"UPDATE quote_items SET item_name = '$name', item_description = '$description', item_quantity = $qty, item_price = $price, item_subtotal = $subtotal, item_tax = $tax_amount, item_total = $total, item_tax_id = $tax_id WHERE item_id = $item_id");
 
     //Update Quote Balances by tallying up items
@@ -412,6 +424,12 @@ if (isset($_POST['edit_quote'])) {
     $client_id = intval($row['quote_client_id']);
 
     enforceClientAccess();
+
+    $qs_status = (string) ($row['quote_status'] ?? '');
+    if (!quoteContentEditable($qs_status)) {
+        flash_alert("This quote is already answered or invoiced - its items, discount and dates can no longer be changed.", 'error');
+        redirect();
+    }
 
     //Calculate the new quote amount
     $sql = mysqli_query($mysqli,"SELECT * FROM quote_items WHERE item_quote_id = $quote_id");
@@ -506,6 +524,12 @@ if (isset($_GET['delete_quote_item'])) {
     $client_id = intval($row['quote_client_id']);
 
     enforceClientAccess();
+
+    $qs_status = (string) ($row['quote_status'] ?? '');
+    if (!quoteContentEditable($qs_status)) {
+        flash_alert("This quote is already answered or invoiced - its items, discount and dates can no longer be changed.", 'error');
+        redirect();
+    }
 
     $new_quote_amount = max(0, floatval($row['quote_amount']) - $item_total);
 
