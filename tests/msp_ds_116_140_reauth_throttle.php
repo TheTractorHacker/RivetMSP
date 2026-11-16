@@ -34,7 +34,7 @@ $ok(strpos($blk, "=== ''") !== false && strpos($blk, 'could not retrieve') !== f
 $pos = strpos($u, "isset(\$_POST['ir_reset_user_password'])"); $blk = substr($u, $pos, 2600);
 $ok(strpos($blk, 'secReauthPassword(') !== false && strpos($blk, 'password_verify') === false, '116: IR reset uses secReauthPassword');
 $ok(strpos($blk, 'user_type = 1') !== false, '122: IR reset selects agents only');
-$ok(strpos($blk, 'DELETE FROM user_passkeys') !== false, '140: IR reset removes passkeys');
+$ok(strpos($blk, 'secSessionsOnPasswordChange(') !== false, '140: IR reset removes passkeys (secSessionsOnPasswordChange revokes them)');
 $ok(substr_count($p, 'password_verify(') === 0, '140: profile.php has no unthrottled password_verify');
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

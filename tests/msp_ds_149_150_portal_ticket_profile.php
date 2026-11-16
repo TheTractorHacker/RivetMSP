@@ -14,6 +14,6 @@ $ok(str_contains(nullable_htmlentities('<b>x</b>'), '&lt;b&gt;'), 'subject is en
 $ok(str_contains($post, '$details_safe') && !str_contains($post, '<b>$subject</b><br>$details"'), 'email body uses the escaped values');
 $i = strpos($post, "isset(\$_POST['edit_profile'])");
 $blk = substr($post, $i, 1400);
-$ok(str_contains($blk, 'password_verify') && strpos($blk, 'password_verify') < strpos($blk, 'UPDATE users SET user_password'), 'current password verified before the UPDATE');
+$ok(str_contains($blk, 'secReauthPassword') && strpos($blk, 'secReauthPassword') < strpos($blk, 'UPDATE users SET user_password'), 'current password verified before the UPDATE');
 $ok(str_contains($form, 'name="current_password"'), 'profile form asks for the current password');
 echo "\n$pass passed, $fail failed\n"; exit($fail ? 1 : 0);

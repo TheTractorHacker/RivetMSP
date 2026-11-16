@@ -2,7 +2,7 @@
 // MSP-DS-162: guest quote upload is status/count limited and notifies once per batch; "viewed" pushes are hourly. Run: php tests/msp_ds_162_guest_quote_upload.php
 $fail = 0; $ok = function (string $n, bool $c) use (&$fail) { echo ($c ? 'ok   ' : 'FAIL ') . $n . "\n"; $fail += $c ? 0 : 1; };
 $g = file_get_contents(__DIR__ . '/../guest/guest_post.php');
-$blk = substr($g, strpos($g, "isset(\$_POST['guest_quote_upload_file'])"), 6500);
+$blk = substr($g, strpos($g, "isset(\$_POST['guest_quote_upload_file'])"), 9000);
 $ok('status gate (Sent/Viewed/Accepted)', str_contains($blk, "['Sent', 'Viewed', 'Accepted']"));
 $ok('expiry checked', str_contains($blk, 'quote_expire'));
 $ok('per-request and per-quote file caps', str_contains($blk, '$i < 5') && str_contains($blk, '$upload_existing + $i < 20'));
