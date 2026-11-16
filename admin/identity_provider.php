@@ -59,6 +59,13 @@ require_once "includes/inc_all_admin.php";
                 <div class="form-text">Strongly recommended: with this blank any Entra tenant can reach the portal sign-in, and a contact is matched on the account's sign-in name alone. A single-tenant app registration needs its tenant here.</div>
             </div>
 
+            <h4 class="mt-4">Mobile app passkey sign-in</h4>
+            <p class="mb-1">
+                User verification (PIN or biometric) is
+                <?php if (secMobilePasskeyUvRequired()) { ?><span class="badge bg-success">required</span><?php } else { ?><span class="badge bg-warning text-dark">not required (presence only)</span><?php } ?>
+            </p>
+            <div class="form-text">Set in config.php: <code>$config_passkey_mobile_require_uv = true;</code>. While it is off, a security key that only proves presence (no PIN) can sign in to the mobile app. Turn it on once every enrolled passkey supports user verification. This page only shows the state.</div>
+
             <hr>
 
             <button type="submit" name="edit_identity_provider" class="btn btn-primary text-bold"><i class="fa fa-check me-2"></i>Save</button>

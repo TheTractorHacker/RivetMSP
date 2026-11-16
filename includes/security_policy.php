@@ -115,6 +115,12 @@ if (!function_exists('secSetting')) {
         return $t !== '' ? $t : 'organizations';
     }
 
+    /** MSP-DS-77 (re-review MRR-8): is the mobile passkey login set to require user verification? Reads $config_passkey_mobile_require_uv (config.php), the same switch api/v1/auth.php uses. Default off. */
+    function secMobilePasskeyUvRequired(): bool
+    {
+        return !empty($GLOBALS['config_passkey_mobile_require_uv']);
+    }
+
     /** Store one setting. Unknown keys are ignored (returns false). */
     function secSettingSet(mysqli $mysqli, string $key, $value): bool
     {
