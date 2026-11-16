@@ -16,7 +16,7 @@ foreach (['platform', 'app_version_name', 'device_model', 'os_version', 'thread_
     $ok(str_contains($c, "\$$k") && preg_match("/\\\$$k\s*= substr\(\\\$crash_oneline\(/", $c) === 1, "$k goes through the one-line filter");
 }
 $cr = file_get_contents("$root/api/v1/credentials.php");
-preg_match('/function _api_decrypt\(.*?\n\}\n/s', $cr, $fm);
+preg_match('/function _api_decrypt\(.*?\n\}\n/s', file_get_contents("$root/api/v1/includes/api_permissions.php"), $fm);   // shared helper (MSP-DS-180)
 eval($fm[0]);
 // legacy encoding: aes-128-cbc, master key, 16-char iv, as encryptOtpSecret() does
 $master = random_bytes(8); $master = bin2hex($master);   // 16 chars
