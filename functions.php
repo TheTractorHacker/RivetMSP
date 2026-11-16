@@ -2993,6 +2993,24 @@ function parseTimeWorked($input): ?string {
     return sprintf('%02d:%02d:%02d', $hours, intval($m[2]), intval($m[3]));
 }
 
+/**
+ * MSP-DS-66: why a ticket may not be resolved/closed yet (the customer-signed outtake custody control), or null when it may.
+ * resolve_ticket and close_ticket always had these checks; every other path that closes a ticket now asks here too.
+ */
+function ticketCloseBlockReason($ticket_id): ?string {
+    global $mysqli;
+    $ticket_id = intval($ticket_id);
+    $r = mysqli_query($mysqli, "SELECT COUNT(*) FROM ticket_outtake_forms WHERE outtake_ticket_id = $ticket_id AND outtake_signed_at IS NULL");
+    if ($r && intval(mysqli_fetch_row($r)[0]) > 0) {
+        return "there is an unsigned outtake form. Have the customer sign it first.";
+    }
+    $r = mysqli_query($mysqli, "SELECT COUNT(*) FROM ticket_worksheets WHERE worksheet_ticket_id = $ticket_id AND worksheet_is_outtake = 1 AND worksheet_completed_at IS NULL");
+    if ($r && intval(mysqli_fetch_row($r)[0]) > 0) {
+        return "there is an unfinalized outtake worksheet. Finalize it first.";
+    }
+    return null;
+}
+
 function generateReadablePassword($security_level)
 {
     // Cap security level at 5

@@ -578,6 +578,12 @@ if (isset($_POST['edit_ticket_status'])) {
         enforceClientAccess();
     }
 
+    // MSP-DS-66: closing through the status dropdown honours the outtake custody checks too
+    if ($new_status_id == 5 && ($close_block = ticketCloseBlockReason($ticket_id))) {
+        flash_alert("Cannot close ticket - $close_block", 'error');
+        redirect();
+    }
+
     $sql_new_status = mysqli_query($mysqli, "SELECT ticket_status_name, ticket_status_color FROM ticket_statuses WHERE ticket_status_id = $new_status_id LIMIT 1");
     $new_status_row = mysqli_fetch_assoc($sql_new_status);
     $new_status_name = sanitizeInput($new_status_row['ticket_status_name']);
@@ -1197,6 +1203,11 @@ if (isset($_POST['quick_status_ticket'])) {
 
     if ($client_id) { enforceClientAccess($client_id); }
 
+    // MSP-DS-66: quick status honours the outtake custody checks when it would close the ticket
+    if (in_array($new_status_id, [4, 5], true) && ticketCloseBlockReason($ticket_id)) {
+        echo json_encode(['ok' => false, 'error' => 'Cannot close ticket - ' . ticketCloseBlockReason($ticket_id)]); exit;
+    }
+
     $sql_ns = mysqli_query($mysqli, "SELECT ticket_status_name, ticket_status_color FROM ticket_statuses WHERE ticket_status_id = $new_status_id LIMIT 1");
     $ns = mysqli_fetch_assoc($sql_ns);
     if (!$ns) { echo json_encode(['ok' => false]); exit; }
@@ -1815,6 +1826,11 @@ if (isset($_POST['bulk_resolve_tickets'])) {
             $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COUNT('task_id') AS num FROM tasks WHERE task_completed_at IS NULL AND task_ticket_id = $ticket_id"));
             $num_of_open_tasks = $row['num'];
 
+            // MSP-DS-66: tickets with an unsigned outtake form / unfinalized outtake worksheet are skipped like tickets with open tasks
+            if ($num_of_open_tasks == 0 && ticketCloseBlockReason($ticket_id)) {
+                $num_of_open_tasks = 1;
+            }
+
             if ($num_of_open_tasks == 0) {
                 // Count the Ticket Loop
                 $ticket_count++;
@@ -1940,7 +1956,7 @@ if (isset($_POST['bulk_resolve_tickets'])) {
     flash_alert("Resolved <strong>$ticket_count</strong> Tickets");
 
     if ($skipped_count > 0) {
-        flash_alert("Resolved <strong>$ticket_count</strong> Tickets <strong>$skipped_count</strong> ticket(s) could not be resolved because they have open tasks.", 'info');
+        flash_alert("Resolved <strong>$ticket_count</strong> Tickets <strong>$skipped_count</strong> ticket(s) could not be resolved because they have open tasks or an incomplete outtake.", 'info');
     }
 
     redirect();
@@ -1992,6 +2008,11 @@ if (isset($_POST['bulk_ticket_reply'])) {
             // Don't Enforce Client Access if Ticket doesn't have an assigned client
             if ($client_id) {
                 enforceClientAccess();
+            }
+
+            // MSP-DS-66: a bulk reply that would resolve the ticket skips tickets whose outtake is not complete
+            if (in_array($ticket_status, [4, 5], true) && ticketCloseBlockReason($ticket_id)) {
+                continue;
             }
 
             if ($client_id) {
@@ -2338,6 +2359,12 @@ if (isset($_POST['add_ticket_reply'])) {
 
     if ($client_id) {
         enforceClientAccess();
+    }
+
+    // MSP-DS-66: a reply that resolves/closes the ticket honours the outtake custody checks (nothing is saved when it is blocked)
+    if (in_array($ticket_status, [4, 5], true) && ($close_block = ticketCloseBlockReason($ticket_id))) {
+        flash_alert("Cannot resolve ticket - $close_block", 'error');
+        redirect();
     }
 
     // Time tracking, inputs & combine into string
