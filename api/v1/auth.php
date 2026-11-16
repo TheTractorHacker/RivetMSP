@@ -36,7 +36,7 @@ if ($method === 'GET') {
         'timeout'          => 60000,
         'rpId'             => wa_rp_id(),
         'allowCredentials' => [],
-        'userVerification' => 'preferred',
+        'userVerification' => !empty($config_passkey_mobile_require_uv) ? 'required' : 'preferred',   // MSP-DS-77 (config.php switch, off = shipped behaviour)
         'challengeToken'   => $challenge_token,
     ]);
 }
@@ -115,7 +115,7 @@ if (isset($body['passkey_response'], $body['challenge_token'])) {
             intval($pkRow['passkey_sign_count']),
             $row['challenge_b64u'],
             $androidOrigins,
-            false   // requireUV=false — we ask for 'preferred', not 'required'
+            !empty($config_passkey_mobile_require_uv)   // MSP-DS-77: true refuses presence-only assertions; default false keeps shipped apps working
         );
 
         $passkey_id = intval($pkRow['passkey_id']);
