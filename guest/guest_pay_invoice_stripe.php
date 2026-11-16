@@ -71,7 +71,7 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
     $sql_company = mysqli_query($mysqli, "SELECT * FROM companies WHERE company_id = 1");
     $company_row = mysqli_fetch_assoc($sql_company);
     $company_locale = nullable_htmlentities($company_row['company_locale']);
-    $config_base_url = nullable_htmlentities($company_row['company_base_url'] ?? ''); // You might want to pull from settings if needed
+    // MSP-DS-103: companies has no company_base_url column; $config_base_url from config.php stays as it is (it was blanked here before)
 
     // Add up all payments made to the invoice
     $sql_amount_paid = mysqli_query($mysqli, "SELECT SUM(payment_amount) AS amount_paid FROM payments WHERE payment_invoice_id = $invoice_id");
@@ -214,10 +214,8 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
         $existing_invoice_id  = intval($existing_payment['payment_invoice_id']);
         $existing_invoice_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT invoice_url_key FROM invoices WHERE invoice_id = $existing_invoice_id LIMIT 1"));
         $existing_url_key     = sanitizeInput($existing_invoice_row['invoice_url_key'] ?? '');
-        // Company info isn't loaded yet on this branch (see below) - fetch just the
-        // base URL needed for the redirect.
-        $existing_base_url_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT company_base_url FROM companies WHERE company_id = 1"));
-        $existing_base_url     = sanitizeInput($existing_base_url_row['company_base_url'] ?? '');
+        // MSP-DS-103: the host comes from config.php; the old lookup read a column that does not exist and threw (HTTP 500) when the webhook had won the race.
+        $existing_base_url     = (string) $config_base_url;
         header('Location: //' . $existing_base_url . '/guest/guest_view_invoice.php?invoice_id=' . $existing_invoice_id . '&url_key=' . $existing_url_key);
         exit;
     }

@@ -188,7 +188,8 @@ $company_row = mysqli_fetch_assoc(mysqli_query($mysqli, "
 $company_name    = sanitizeInput($company_row['company_name']);
 $company_phone   = sanitizeInput(formatPhoneNumber($company_row['company_phone'], $company_row['company_phone_country_code']));
 $company_locale  = sanitizeInput($company_row['company_locale']);
-$config_base_url = sanitizeInput($company_row['company_base_url'] ?? '');
+// MSP-DS-103: companies has no company_base_url column; the host comes from config.php ($config_base_url), already loaded above
+$config_base_url = (string) ($config_base_url ?? '');
 $config_smtp_host = $company_row['config_smtp_host'] ?? '';
 $config_invoice_from_name  = sanitizeInput($company_row['config_invoice_from_name'] ?? '');
 $config_invoice_from_email = sanitizeInput($company_row['config_invoice_from_email'] ?? '');
