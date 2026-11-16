@@ -103,6 +103,10 @@ if (isset($_GET['global_search_live'])) {
     // sequence (a prefix starting with n/r/Z follows the backslash of \n, \r, \Z) and leave a bare backslash in the quoted literal.
     $ticket_num_query = sanitizeInput(str_replace((string) $config_ticket_prefix, '', cleanInput($raw_query)));
 
+    require_once dirname(__DIR__) . '/includes/search_scope.php';
+    $gs_deny_sales = searchModuleDeny(lookupUserPermission('module_sales'));
+    $gs_deny_support = searchModuleDeny(lookupUserPermission('module_support'));
+
     $groups = [];
 
     // Clients
@@ -162,6 +166,7 @@ if (isset($_GET['global_search_live'])) {
             OR ticket_details LIKE '%$query%'
             OR CONCAT(ticket_prefix,ticket_number) LIKE '%$query%'
             OR ticket_number = '$ticket_num_query')
+            $gs_deny_support
             $access_permission_query
         ORDER BY ticket_id DESC LIMIT 5"
     );
@@ -185,6 +190,7 @@ if (isset($_GET['global_search_live'])) {
         LEFT JOIN clients ON quote_client_id = client_id
         WHERE quote_archived_at IS NULL
             AND (CONCAT(quote_prefix,quote_number) LIKE '%$query%' OR quote_number LIKE '%$query%' OR quote_scope LIKE '%$query%')
+            $gs_deny_sales
             $access_permission_query
         ORDER BY quote_number DESC LIMIT 5"
     );
@@ -208,6 +214,7 @@ if (isset($_GET['global_search_live'])) {
         LEFT JOIN clients ON invoice_client_id = client_id
         WHERE invoice_archived_at IS NULL
             AND (CONCAT(invoice_prefix,invoice_number) LIKE '%$query%' OR invoice_number LIKE '%$query%' OR invoice_scope LIKE '%$query%')
+            $gs_deny_sales
             $access_permission_query
         ORDER BY invoice_number DESC LIMIT 5"
     );

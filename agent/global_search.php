@@ -1,6 +1,9 @@
 <?php
 
 require_once "includes/inc_all.php";
+require_once dirname(__DIR__) . "/includes/search_scope.php";
+$gs_deny_sales = searchModuleDeny(lookupUserPermission("module_sales"));
+$gs_deny_support = searchModuleDeny(lookupUserPermission("module_support"));
 
 // Initialize the HTML Purifier to prevent XSS
 require "../plugins/htmlpurifier/HTMLPurifier.standalone.php";
@@ -72,6 +75,7 @@ if (isset($_GET['query'])) {
     $sql_products = mysqli_query($mysqli, "SELECT * FROM products
         WHERE product_archived_at IS NULL
             AND product_name LIKE '%$query%'
+        $gs_deny_sales
         ORDER BY product_id DESC LIMIT 5"
     );
 
@@ -79,6 +83,7 @@ if (isset($_GET['query'])) {
         LEFT JOIN clients on document_client_id = clients.client_id
         WHERE document_archived_at IS NULL
             AND MATCH(document_content_raw) AGAINST ('$query')
+            $gs_deny_support
             $access_permission_query
         ORDER BY document_id DESC LIMIT 5"
     );
@@ -89,6 +94,7 @@ if (isset($_GET['query'])) {
         WHERE file_archived_at IS NULL
             AND (file_name LIKE '%$query%'
             OR file_description LIKE '%$query%')
+            $gs_deny_support
             $access_permission_query
         ORDER BY file_id DESC LIMIT 5"
     );
@@ -101,6 +107,7 @@ if (isset($_GET['query'])) {
             OR ticket_details LIKE '%$query%'
             OR CONCAT(ticket_prefix,ticket_number) LIKE '%$query%'
             OR ticket_number = '$ticket_num_query')
+            $gs_deny_support
             $access_permission_query
         ORDER BY ticket_id DESC LIMIT 5"
     );
@@ -118,6 +125,7 @@ if (isset($_GET['query'])) {
         LEFT JOIN clients ON recurring_ticket_client_id = client_id
         WHERE (recurring_ticket_subject LIKE '%$query%'
             OR recurring_ticket_details LIKE '%$query%')
+            $gs_deny_support
             $access_permission_query
         ORDER BY recurring_ticket_id DESC LIMIT 5"
     );
@@ -136,6 +144,7 @@ if (isset($_GET['query'])) {
         LEFT JOIN categories ON quote_category_id = category_id
         WHERE quote_archived_at IS NULL
             AND (CONCAT(quote_prefix,quote_number) LIKE '%$query%' OR quote_number LIKE '%$query%' OR quote_scope LIKE '%$query%')
+            $gs_deny_sales
             $access_permission_query
         ORDER BY quote_number DESC LIMIT 5"
     );
@@ -145,6 +154,7 @@ if (isset($_GET['query'])) {
         LEFT JOIN categories ON invoice_category_id = category_id
         WHERE invoice_archived_at IS NULL
             AND (CONCAT(invoice_prefix,invoice_number) LIKE '%$query%' OR invoice_number LIKE '%$query%' OR invoice_scope LIKE '%$query%')
+            $gs_deny_sales
             $access_permission_query
         ORDER BY invoice_number DESC LIMIT 5"
     );
@@ -165,6 +175,7 @@ if (isset($_GET['query'])) {
         LEFT JOIN clients ON ticket_client_id = client_id
         WHERE ticket_reply_archived_at IS NULL
             AND (ticket_reply LIKE '%$query%')
+            $gs_deny_support
             $access_permission_query
         ORDER BY ticket_id DESC, ticket_reply_id ASC LIMIT 20"
     );
