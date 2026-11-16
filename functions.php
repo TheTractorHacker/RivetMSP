@@ -2978,6 +2978,21 @@ function taskApprovalBlocksCompletion($task_id): bool {
     return $r && mysqli_num_rows($r) > 0;
 }
 
+/**
+ * MSP-DS-65: a logged-time string for a TIME column - strictly H:MM:SS .. HHH:MM:SS, 0 to 838 hours, never negative.
+ * Returns the normalised HH:MM:SS string, or null when the input is not acceptable.
+ */
+function parseTimeWorked($input): ?string {
+    if (!is_string($input) || !preg_match('/^(\d{1,3}):([0-5]\d):([0-5]\d)$/', trim($input), $m)) {
+        return null;
+    }
+    $hours = intval($m[1]);
+    if ($hours > 838) {
+        return null;
+    }
+    return sprintf('%02d:%02d:%02d', $hours, intval($m[2]), intval($m[3]));
+}
+
 function generateReadablePassword($security_level)
 {
     // Cap security level at 5

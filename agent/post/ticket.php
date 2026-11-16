@@ -1788,7 +1788,12 @@ if (isset($_POST['bulk_resolve_tickets'])) {
 
     // POST variables
     $details = mysqli_escape_string($mysqli, $_POST['bulk_details']);
-    $ticket_reply_time_worked = sanitizeInput($_POST['time']);
+    // MSP-DS-65: strict H:MM:SS, 0-838 hours, never negative
+    $ticket_reply_time_worked = parseTimeWorked($_POST['time'] ?? '');
+    if ($ticket_reply_time_worked === null) {
+        flash_alert("Time worked must be HH:MM:SS (0 to 838 hours)", 'error');
+        redirect();
+    }
     $private_note = intval($_POST['bulk_private_note']);
     if ($private_note == 1) {
         $ticket_reply_type = 'Internal';
@@ -1951,7 +1956,12 @@ if (isset($_POST['bulk_ticket_reply'])) {
     // POST variables
     $ticket_reply = mysqli_escape_string($mysqli, $_POST['bulk_reply_details']);
     $ticket_status = intval($_POST['bulk_status']);
-    $ticket_reply_time_worked = sanitizeInput($_POST['time']);
+    // MSP-DS-65: strict H:MM:SS, 0-838 hours, never negative
+    $ticket_reply_time_worked = parseTimeWorked($_POST['time'] ?? '');
+    if ($ticket_reply_time_worked === null) {
+        flash_alert("Time worked must be HH:MM:SS (0 to 838 hours)", 'error');
+        redirect();
+    }
     $private_note = intval($_POST['bulk_private_reply']);
     if ($private_note == 1) {
         $ticket_reply_type = 'Internal';
@@ -2331,9 +2341,10 @@ if (isset($_POST['add_ticket_reply'])) {
     }
 
     // Time tracking, inputs & combine into string
-    $hours = intval($_POST['hours']);
-    $minutes = intval($_POST['minutes']);
-    $seconds = intval($_POST['seconds']);
+    // MSP-DS-65: clamped to what a TIME column and a sane reply can hold (a negative value used to cancel out logged time)
+    $hours = max(0, min(838, intval($_POST['hours'])));
+    $minutes = max(0, min(59, intval($_POST['minutes'])));
+    $seconds = max(0, min(59, intval($_POST['seconds'])));
     $ticket_reply_time_worked = sanitizeInput(sprintf("%02d:%02d:%02d", $hours, $minutes, $seconds));
     $reply_labor_type_id = intval($_POST['reply_labor_type_id'] ?? 0);
     $reply_charge_now    = isset($_POST['reply_charge_now']) ? 1 : 0;
@@ -2617,7 +2628,12 @@ if (isset($_POST['edit_ticket_reply'])) {
     $ticket_reply_id = intval($_POST['ticket_reply_id']);
     $ticket_reply = mysqli_real_escape_string($mysqli, $_POST['ticket_reply']);
     $ticket_reply_type = sanitizeInput($_POST['ticket_reply_type']);
-    $ticket_reply_time_worked = sanitizeInput($_POST['time']);
+    // MSP-DS-65: strict H:MM:SS, 0-838 hours, never negative
+    $ticket_reply_time_worked = parseTimeWorked($_POST['time'] ?? '');
+    if ($ticket_reply_time_worked === null) {
+        flash_alert("Time worked must be HH:MM:SS (0 to 838 hours)", 'error');
+        redirect();
+    }
 
     // Derive client_id from the reply's ticket (not from POST) to prevent IDOR bypass
     $reply_ticket_id = intval(getFieldById('ticket_replies', $ticket_reply_id, 'ticket_reply_ticket_id'));
