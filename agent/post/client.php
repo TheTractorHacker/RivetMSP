@@ -1140,9 +1140,10 @@ if (isset($_POST['bulk_send_client_email']) && isset($_POST['client_ids'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
-    enforceUserPermission('module_client', 1);
+    // Sending mail to every contact of the selected clients is a write-level action (MSP-DS-9 / MSP-INJ-14)
+    enforceUserPermission('module_client', 2);
 
-    $client_ids = array_map('intval', $_POST['client_ids']);
+    $client_ids = array_map('intval', (array) $_POST['client_ids']);
     $count = count($client_ids);
 
     foreach ($client_ids as $bulk_email_client_id) {
@@ -1150,6 +1151,11 @@ if (isset($_POST['bulk_send_client_email']) && isset($_POST['client_ids'])) {
     }
 
     // Email metadata
+    require_once dirname(__DIR__, 2) . '/includes/bulk_mail_scope.php';
+    if (!bulkMailFromAllowed((string) ($_POST['mail_from'] ?? ''), [$config_mail_from_email, $config_invoice_from_email, $config_quote_from_email, $config_ticket_from_email])) {
+        flash_alert("Choose one of the configured From addresses", 'error');
+        redirect();
+    }
     $mail_from = sanitizeInput($_POST['mail_from']);
     $mail_from_name = sanitizeInput($_POST['mail_from_name']);
     $subject = sanitizeInput($_POST['subject']);

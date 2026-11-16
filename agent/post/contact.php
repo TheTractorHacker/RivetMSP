@@ -570,11 +570,18 @@ if (isset($_POST['send_bulk_mail_now'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
-    enforceUserPermission('module_client');
+    // Sending mail to a list of contacts is a write-level action (MSP-DS-9 / MSP-INJ-14)
+    enforceUserPermission('module_client', 2);
 
-    if (isset($_POST['contact_ids'])) {
+    if (isset($_POST['contact_ids']) && is_array($_POST['contact_ids'])) {
 
         $count = count($_POST['contact_ids']);
+
+        require_once dirname(__DIR__, 2) . '/includes/bulk_mail_scope.php';
+        if (!bulkMailFromAllowed((string) ($_POST['mail_from'] ?? ''), [$config_mail_from_email, $config_invoice_from_email, $config_quote_from_email, $config_ticket_from_email])) {
+            flash_alert("Choose one of the configured From addresses", 'error');
+            redirect();
+        }
 
         $mail_from = sanitizeInput($_POST['mail_from']);
         $mail_from_name = sanitizeInput($_POST['mail_from_name']);
@@ -588,11 +595,14 @@ if (isset($_POST['send_bulk_mail_now'])) {
 
             $sql = mysqli_query($mysqli,"SELECT * FROM contacts WHERE contact_id = $contact_id");
             $row = mysqli_fetch_assoc($sql);
+            if (!$row) {
+                continue;
+            }
             $contact_name = sanitizeInput($row['contact_name']);
             $contact_email = sanitizeInput($row['contact_email']);
             $client_id = intval($row['contact_client_id']);
 
-            enforceClientAccess();
+            enforceClientAccess($client_id);
 
             // Queue Mail
             $data[] = [
