@@ -3,6 +3,7 @@
 // POST /api/v1/notifications/{id}/read     mark read
 // POST /api/v1/notifications/read-all      mark all read
 defined('FROM_API') || die();
+require_once __DIR__ . '/includes/api_permissions.php';   // MSP-DS-83: api_client_scope_sql() lives here
 
 $uid = $api_user_id;
 

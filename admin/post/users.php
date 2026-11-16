@@ -167,7 +167,9 @@ if (isset($_POST['edit_user'])) {
     }
 
     // Update Client Access
-    mysqli_query($mysqli,"DELETE FROM user_client_permissions WHERE user_id = $user_id");
+    // MSP-DS-5: the edit form only lists clients that are not archived, so only those rows can be changed from it. A row for an archived or
+    // deleted client is kept: dropping it could leave the user with no rows at all, which means "every client".
+    mysqli_query($mysqli,"DELETE FROM user_client_permissions WHERE user_id = $user_id AND client_id IN (SELECT client_id FROM clients WHERE client_archived_at IS NULL)");
     if (isset($_POST['clients'])) {
         foreach($_POST['clients'] as $client_id) {
             $client_id = intval($client_id);
