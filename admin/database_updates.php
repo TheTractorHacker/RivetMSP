@@ -8653,6 +8653,43 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.139'");
     }
 
+    if ($rivetit_db_version() == '2.6.139') {
+        // DB 2.6.140 (deep-scan 2026-11 group C):
+        //  - MSP-DS-16/33: domains.domain_route_mail: inbound mail is auto-filed by sender DOMAIN only when an administrator switched this on for the
+        //    domain. Existing domains that the earlier unambiguous-claim rule already routed (one client lists the name, not a public mailbox provider)
+        //    keep routing (backfilled to 1, once, when the column is added); everything else, and every domain added later by a non-admin, is 0.
+        //  - MSP-DS-156: report_schedules.schedule_created_by: the schedule's creator is re-checked at send time. Existing rows stay NULL (creator
+        //    unknown: they keep sending to eligible recipients only).
+        $col_exists = function ($table, $col) use ($mysqli) {
+            $t = mysqli_real_escape_string($mysqli, $table);
+            $c = mysqli_real_escape_string($mysqli, $col);
+            $r = mysqli_query($mysqli, "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$t' AND COLUMN_NAME = '$c' LIMIT 1");
+            return $r && mysqli_num_rows($r) > 0;
+        };
+
+        if (!$col_exists('domains', 'domain_route_mail')) {
+            mysqli_query($mysqli, "ALTER TABLE `domains` ADD `domain_route_mail` TINYINT(1) NOT NULL DEFAULT 0 AFTER `domain_client_id`");
+            // Grandfather exactly what routed before: an active domain that one client alone lists and that is not a public mailbox provider
+            require_once dirname(__DIR__) . '/includes/inbound_routing.php';
+            $dres = mysqli_query($mysqli, "SELECT domain_id, domain_name, domain_client_id FROM domains WHERE domain_archived_at IS NULL AND domain_client_id > 0");
+            $grandfather = [];
+            while ($dres && ($d = mysqli_fetch_assoc($dres))) {
+                if (inboundDomainOwnerClient($mysqli, $d['domain_name']) === (int) $d['domain_client_id']) {
+                    $grandfather[] = (int) $d['domain_id'];
+                }
+            }
+            if ($grandfather) {
+                mysqli_query($mysqli, "UPDATE domains SET domain_route_mail = 1 WHERE domain_id IN (" . implode(',', $grandfather) . ")");
+            }
+        }
+
+        if (!$col_exists('report_schedules', 'schedule_created_by')) {
+            mysqli_query($mysqli, "ALTER TABLE `report_schedules` ADD `schedule_created_by` INT(11) DEFAULT NULL AFTER `schedule_created_at`");
+        }
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.140'");
+    }
+
 // Core migrations catch-up, on EVERY Update Database run (idempotent: MigrationRunner keeps its own state in rivet_core_migrations). The version steps above run Core's
 // migrations only when their number is reached, so a database that was moved to a newer edition number while the files on disk still had an older RivetCore (an update
 // that stopped half way) would otherwise never get the Core migrations the newer package brings (for example 0048/0049 with RivetCore rc.60).

@@ -1595,6 +1595,7 @@ CREATE TABLE `domains` (
   `domain_dnshost` int(11) NOT NULL DEFAULT 0,
   `domain_mailhost` int(11) NOT NULL DEFAULT 0,
   `domain_client_id` int(11) NOT NULL DEFAULT 0,
+  `domain_route_mail` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`domain_id`),
   KEY `idx_domains_client_archived_expire` (`domain_client_id`,`domain_archived_at`,`domain_expire`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -3808,6 +3809,7 @@ CREATE TABLE `report_schedules` (
   `schedule_last_sent` datetime DEFAULT NULL,
   `schedule_active` tinyint(4) DEFAULT 1,
   `schedule_created_at` datetime DEFAULT current_timestamp(),
+  `schedule_created_by` int(11) DEFAULT NULL,
   PRIMARY KEY (`schedule_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;

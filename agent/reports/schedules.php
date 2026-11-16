@@ -51,7 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_schedule'])) {
 
     // Validate against the whitelists so only known reports/frequencies land in the table.
     // Recipients must be addresses of active staff accounts: company financials are never emailed to outside addresses.
-    $filtered = reportScheduleFilterRecipients($recipients, reportScheduleStaffEmails($mysqli));
+    // MSP-DS-156: ... and who may read this report (their role has its module, and they are not restricted to some clients)
+    $filtered = reportScheduleFilterRecipients($recipients, array_intersect(reportScheduleStaffEmails($mysqli), reportScheduleEligibleEmails($mysqli, $report)));
     $valid_emails = $filtered['allowed'];
 
     if (!isset($schedulable[$report])) {
@@ -62,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_schedule'])) {
         $_SESSION['alert_message'] = 'Please choose a valid frequency.';
     } elseif (!empty($filtered['rejected'])) {
         $_SESSION['alert_type'] = 'danger';
-        $_SESSION['alert_message'] = 'Recipients must be email addresses of active staff users. Not accepted: ' . implode(', ', array_map('htmlspecialchars', $filtered['rejected']));
+        $_SESSION['alert_message'] = 'Recipients must be email addresses of active staff users whose role may read this report and who are not limited to certain clients. Not accepted: ' . implode(', ', array_map('htmlspecialchars', $filtered['rejected']));
     } elseif (empty($valid_emails)) {
         $_SESSION['alert_type'] = 'danger';
         $_SESSION['alert_message'] = 'Please enter at least one valid recipient email address.';
@@ -73,8 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_schedule'])) {
         $recipients_esc = mysqli_real_escape_string($mysqli, implode(', ', $valid_emails));
 
         mysqli_query($mysqli,
-            "INSERT INTO report_schedules (schedule_report, schedule_frequency, schedule_recipients, schedule_active)
-             VALUES ('$report_esc', '$frequency_esc', '$recipients_esc', 1)");
+            "INSERT INTO report_schedules (schedule_report, schedule_frequency, schedule_recipients, schedule_active, schedule_created_by)
+             VALUES ('$report_esc', '$frequency_esc', '$recipients_esc', 1, " . intval($session_user_id) . ")");
 
         if (function_exists('logAction')) {
             logAction("Report Schedule", "Create", "Scheduled '{$schedulable[$report]}' ($frequency) to " . implode(', ', $valid_emails));

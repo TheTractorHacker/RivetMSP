@@ -83,3 +83,28 @@ function reportScheduleEligibleEmails($mysqli, $report_key): array
     }
     return $out;
 }
+
+/**
+ * MSP-DS-156: may the schedule's creator still send this report? Re-checked on every send, so a schedule stops when its creator is
+ * archived/disabled or no longer holds module_reporting (write) and the report's module. NULL creator = a schedule created before the
+ * creator was recorded: unknown, so it keeps sending (recipients are still filtered).
+ */
+function reportScheduleCreatorMaySend($mysqli, $created_by, $report_key): bool
+{
+    if ($created_by === null || $created_by === '') {
+        return true;
+    }
+    $uid = (int) $created_by;
+    $module = $mysqli->real_escape_string(reportScheduleRequiredModule($report_key));
+    $res = mysqli_query($mysqli,
+        "SELECT 1 FROM users u
+         JOIN user_roles r ON r.role_id = u.user_role_id
+         WHERE u.user_id = $uid AND u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL
+           AND (r.role_is_admin = 1 OR (
+                EXISTS (SELECT 1 FROM user_role_permissions rp JOIN modules m ON m.module_id = rp.module_id
+                        WHERE rp.user_role_id = u.user_role_id AND m.module_name = 'module_reporting' AND rp.user_role_permission_level >= 2)
+                AND EXISTS (SELECT 1 FROM user_role_permissions rp2 JOIN modules m2 ON m2.module_id = rp2.module_id
+                        WHERE rp2.user_role_id = u.user_role_id AND m2.module_name = '$module' AND rp2.user_role_permission_level >= 1)))
+         LIMIT 1");
+    return $res && mysqli_num_rows($res) > 0;
+}
