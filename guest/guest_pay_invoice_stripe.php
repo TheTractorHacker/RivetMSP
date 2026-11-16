@@ -5,7 +5,7 @@ require_once 'includes/inc_all_guest.php';
 // This page embeds Stripe Elements (script + iframe + XHR to Stripe's domains),
 // which the shared guest CSP doesn't allow — override with a Stripe-inclusive
 // policy for this page only. header() replaces the prior same-name header.
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$csp_nonce' https://js.stripe.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; frame-src https://js.stripe.com; connect-src 'self' https://api.stripe.com https://cloudflareinsights.com");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$csp_nonce' https://js.stripe.com" . cspCloudflareScript() . "; style-src 'self' 'unsafe-inline'; frame-src https://js.stripe.com; connect-src 'self' https://api.stripe.com" . cspCloudflareConnect());
 
 DEFINE("WORDING_PAYMENT_FAILED", "<br><h2>There was an error verifying your payment. Please contact us for more information before attempting payment again.</h2>");
 

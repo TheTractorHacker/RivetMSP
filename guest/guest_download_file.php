@@ -2,12 +2,15 @@
 // Not including the full guest header as we don't want any HTML output,
 // but still apply the same security headers as the rest of the guest/ surface.
 $csp_nonce = base64_encode(random_bytes(16));
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$csp_nonce' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.foleyit.com; connect-src 'self' https://cloudflareinsights.com");
 header("X-Frame-Options: DENY");
 header("X-Content-Type-Options: nosniff");
 header("Referrer-Policy: strict-origin-when-cross-origin");
 
 require_once "../config.php";
+// MSP-DS-183: installation-specific CSP sources come from config.php ($config_csp_img_src, $config_csp_cloudflare_insights)
+require_once __DIR__ . '/../includes/csp_policies.php';
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$csp_nonce'" . cspCloudflareScript() . "; style-src 'self' 'unsafe-inline'; " . cspImgSrc() . "; connect-src 'self'" . cspCloudflareConnect());
+
 
 // Set Timezone
 require_once "../includes/inc_set_timezone.php";
