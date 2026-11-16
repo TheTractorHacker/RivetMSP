@@ -513,8 +513,9 @@ if (isset($_POST['edit_profile'])) {
 
     if (!empty($new_password)) {
         // MSP-DS-150: a changed portal password needs the current one (same as the agent profile)
-        $cur_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $session_user_id LIMIT 1"));
-        if (!$cur_row || !password_verify((string) ($_POST['current_password'] ?? ''), $cur_row['user_password'])) {
+        // MSP-DS-150 (complete): the check is counted and limited (5 wrong guesses per 5 minutes per account, atomic), so a stolen portal cookie cannot guess the password here
+        require_once __DIR__ . '/../includes/security_policy.php';
+        if (!secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['current_password'] ?? ''), 2)) {
             logAction("Contact", "Edit", "Client contact $session_contact_name entered a wrong current password when changing their portal password", $session_client_id, $session_contact_id);
             flash_alert("Current password is incorrect", 'danger');
             redirect('profile.php');

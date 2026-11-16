@@ -417,21 +417,22 @@ if (!function_exists('secSetting')) {
      * MSP-WEB-3: re-confirm the signed-in user's own password before a change that can take the account over (email, two-factor, passkeys).
      * A stolen session cookie alone must not be enough. Failures are audited and counted like a failed sign-in.
      */
-    function secReauthPassword(mysqli $mysqli, int $userId, string $password): bool
+    function secReauthPassword(mysqli $mysqli, int $userId, string $password, int $userType = 1): bool
     {
+        $userType = $userType === 2 ? 2 : 1;   // 1 = agent (default), 2 = client-portal login (MSP-DS-150)
         // MSP-DS-140: an attempt is reserved atomically BEFORE the password is checked (5 per 5 minutes per account, the same counter
         // as the sign-in and the mobile API), so a stolen session cannot guess the password in a loop. A correct password resets it.
         mysqli_query($mysqli, "UPDATE users SET
                 user_failed_login_count = IF(user_failed_login_at IS NULL OR user_failed_login_at <= UTC_TIMESTAMP() - INTERVAL 300 SECOND, 1, user_failed_login_count + 1),
                 user_failed_login_at = UTC_TIMESTAMP()
-            WHERE user_id = $userId AND user_type = 1 AND user_status = 1 AND user_archived_at IS NULL
+            WHERE user_id = $userId AND user_type = $userType AND user_status = 1 AND user_archived_at IS NULL
               AND (user_failed_login_count < 5 OR user_failed_login_at IS NULL OR user_failed_login_at <= UTC_TIMESTAMP() - INTERVAL 300 SECOND)");
         if (mysqli_affected_rows($mysqli) < 1) {
             secAudit('auth.reauth_locked', $userId, 'user', $userId, 'failure', 'Password re-check refused: too many attempts');
 
             return false;
         }
-        $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $userId AND user_type = 1 AND user_status = 1 AND user_archived_at IS NULL LIMIT 1"));
+        $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $userId AND user_type = $userType AND user_status = 1 AND user_archived_at IS NULL LIMIT 1"));
         $ok = $row && $password !== '' && password_verify($password, (string) $row['user_password']);
         if ($ok) {
             mysqli_query($mysqli, "UPDATE users SET user_failed_login_count = 0 WHERE user_id = $userId");

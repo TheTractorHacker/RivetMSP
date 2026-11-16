@@ -20,7 +20,7 @@ $gate = function (array $session) {
     $p = proc_open([PHP_BINARY, __DIR__ . '/lib/run_portal_gate.php', json_encode(['session' => $session])], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
     $out = stream_get_contents($pipes[1]); stream_get_contents($pipes[2]); proc_close($p);
 
-    return preg_match('/::END::(PASS|BLOCKED):sv=(\S*)/', $out, $x) ? [$x[1], $x[2]] : ['ERR', $out];
+    return preg_match('/::END::(PASS|BLOCKED):sv=([^:]*):/', $out, $x) ? [$x[1], $x[2]] : ['ERR', $out];
 };
 $new = function () use ($m) {   // a portal sign-in exactly as login.php does it
     $s = ['client_logged_in' => true, 'client_id' => 7, 'user_id' => 20, 'contact_id' => 30, 'user_type' => 2, 'csrf_token' => 'x'];
