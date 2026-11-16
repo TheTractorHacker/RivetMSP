@@ -76,7 +76,7 @@ if (isset($_GET['stripe_create_pi'])) {
 
     // Same intent arguments as before (card-only preserves exact prior behaviour).
     $pi_args = [
-        'amount' => intval(round($balance_to_pay * 100)), // Stripe expects cents - round before truncating so float representation error (e.g. 19.99*100 = 1998.9999...) can't undercharge by a cent
+        'amount' => stripeAmountToMinor($balance_to_pay, $invoice_currency_code), // Stripe expects cents - round before truncating so float representation error (e.g. 19.99*100 = 1998.9999...) can't undercharge by a cent
         'currency' => $invoice_currency_code,
         'description' => $pi_description,
         'metadata' => [

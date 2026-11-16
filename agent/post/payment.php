@@ -504,7 +504,7 @@ if (isset($_POST['add_payment_stripe'])) {
     $idempotency_key = md5("agent_pay_stripe_{$invoice_id}_{$saved_payment_id}_" . intdiv(time(), 60));
     try {
         $payment_intent = $provider->chargeSavedMethod([
-            'amount' => intval(round($balance_to_pay * 100)), // Times by 100 as Stripe expects values in cents - round before truncating so float representation error can't undercharge by a cent
+            'amount' => stripeAmountToMinor($balance_to_pay, $invoice_currency_code), // Times by 100 as Stripe expects values in cents - round before truncating so float representation error can't undercharge by a cent
             'currency' => $invoice_currency_code,
             'customer' => $payment_provider_client,
             'payment_method' => $saved_payment_method,
@@ -522,7 +522,7 @@ if (isset($_POST['add_payment_stripe'])) {
         // Get details from PI
         $pi_id = sanitizeInput($payment_intent->id);
         $pi_date = date('Y-m-d', $payment_intent->created);
-        $pi_amount_paid = floatval(($payment_intent->amount_received / 100));
+        $pi_amount_paid = stripeAmountFromMinor($payment_intent->amount_received, $payment_intent->currency);
         $pi_currency = strtoupper(sanitizeInput($payment_intent->currency));
         $pi_livemode = $payment_intent->livemode;
 
@@ -700,7 +700,7 @@ if (isset($_GET['add_payment_stripe'])) {
     // Create a payment intent
     try {
         $payment_intent = $stripe->paymentIntents->create([
-            'amount' => intval(round($balance_to_pay * 100)), // Times by 100 as Stripe expects values in cents - round before truncating so float representation error can't undercharge by a cent
+            'amount' => stripeAmountToMinor($balance_to_pay, $invoice_currency_code), // Times by 100 as Stripe expects values in cents - round before truncating so float representation error can't undercharge by a cent
             'currency' => $invoice_currency_code,
             'customer' => $stripe_id,
             'payment_method' => $stripe_pm,
@@ -718,7 +718,7 @@ if (isset($_GET['add_payment_stripe'])) {
         // Get details from PI
         $pi_id = sanitizeInput($payment_intent->id);
         $pi_date = date('Y-m-d', $payment_intent->created);
-        $pi_amount_paid = floatval(($payment_intent->amount_received / 100));
+        $pi_amount_paid = stripeAmountFromMinor($payment_intent->amount_received, $payment_intent->currency);
         $pi_currency = strtoupper(sanitizeInput($payment_intent->currency));
         $pi_livemode = $payment_intent->livemode;
 

@@ -219,7 +219,7 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
     $pi_date = date('Y-m-d', $pi_obj->created);
     $pi_invoice_id = intval($pi_obj->metadata->itflow_invoice_id);
     $pi_client_id = intval($pi_obj->metadata->itflow_client_id);
-    $pi_amount_paid = floatval(($pi_obj->amount_received / 100));
+    $pi_amount_paid = stripeAmountFromMinor($pi_obj->amount_received, $pi_obj->currency);
     $pi_currency = strtoupper(sanitizeInput($pi_obj->currency));
     $pi_livemode = $pi_obj->livemode;
 

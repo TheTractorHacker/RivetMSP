@@ -1109,7 +1109,7 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
 
                 try {
                     $payment_intent = $provider->chargeSavedMethod([
-                        'amount' => intval(round($balance_to_pay * 100)), // round before truncating so float representation error can't undercharge by a cent
+                        'amount' => stripeAmountToMinor($balance_to_pay, $recurring_payment_currency_code), // round before truncating so float representation error can't undercharge by a cent
                         'currency' => $recurring_payment_currency_code,
                         'customer' => $stripe_customer_id,
                         'payment_method' => $stripe_payment_method_id,
@@ -1126,7 +1126,7 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
 
                     $pi_id = sanitizeInput($payment_intent->id);
                     $pi_date = date('Y-m-d', $payment_intent->created);
-                    $pi_amount_paid = floatval($payment_intent->amount_received / 100);
+                    $pi_amount_paid = stripeAmountFromMinor($payment_intent->amount_received, $payment_intent->currency);
                     $pi_currency = strtoupper(sanitizeInput($payment_intent->currency));
                     $pi_livemode = $payment_intent->livemode;
 

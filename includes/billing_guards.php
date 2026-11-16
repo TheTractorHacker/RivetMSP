@@ -205,3 +205,33 @@ function invoiceHistoryOnce($mysqli, int $invoice_id, string $status, string $de
 
     return mysqli_affected_rows($mysqli) >= 1;
 }
+
+/**
+ * MSP-DS-161: Stripe amounts are in the currency's smallest unit. Zero-decimal currencies (JPY, KRW, VND ...) are whole units,
+ * three-decimal currencies (KWD, BHD ...) use 1000. ISK/UGX stay at 100: Stripe's API still wants two decimals for them.
+ */
+function stripeMinorFactor($currency): int
+{
+    $c = strtoupper((string) $currency);
+    if (in_array($c, ['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'], true)) {
+        return 1;
+    }
+    if (in_array($c, ['BHD', 'JOD', 'KWD', 'OMR', 'TND'], true)) {
+        return 1000;
+    }
+    return 100;
+}
+
+/** Major-unit amount -> the integer Stripe expects. Three-decimal currencies must end in 0 (Stripe rule), so round to 10 minor units. */
+function stripeAmountToMinor($amount, $currency): int
+{
+    $f = stripeMinorFactor($currency);
+    $minor = intval(round(floatval($amount) * $f));   // round before truncating so float error (19.99*100) cannot undercharge
+    return $f === 1000 ? intval(round($minor / 10) * 10) : $minor;
+}
+
+/** Integer from Stripe -> major-unit amount recorded in the books. */
+function stripeAmountFromMinor($minor, $currency): float
+{
+    return floatval($minor) / stripeMinorFactor($currency);
+}

@@ -92,7 +92,7 @@ $pi = $event->data->object;
 
 $pi_id          = sanitizeInput($pi->id);
 $pi_date        = date('Y-m-d', intval($pi->created));
-$pi_amount_paid = floatval($pi->amount_received / 100);
+$pi_amount_paid = stripeAmountFromMinor($pi->amount_received, $pi->currency);
 $pi_currency    = strtoupper(sanitizeInput($pi->currency));
 $pi_livemode    = $pi->livemode;
 $pi_invoice_id  = intval($pi->metadata->itflow_invoice_id ?? 0);
