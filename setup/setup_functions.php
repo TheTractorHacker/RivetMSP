@@ -622,6 +622,11 @@ if (!function_exists('applyManifestSettingsEncKey')) {
             }
         }
 
+        // MSP-DS-27: whatever its source (the uploaded manifest is attacker-controlled), the key is written into PHP source, so it must be hex.
+        if (!preg_match('/^[0-9a-fA-F]{32,128}$/', $key)) {
+            return ['status' => 'bad_supplied_key', 'message' => 'The settings-encryption key in this backup is not a hex string, so it was not applied. config_settings_enc_key was left as-is.'];
+        }
+
         $configContents = @file_get_contents($configPath);
         if ($configContents === false || !preg_match('/^\$config_settings_enc_key = \'.*\';$/m', $configContents)) {
             return ['status' => 'no_config_line', 'message' => "config.php has no \$config_settings_enc_key line to update - this instance's config.php may predate that setting. Investigate before trusting restored SMTP/IMAP/RMM/webhook secrets."];
@@ -630,9 +635,9 @@ if (!function_exists('applyManifestSettingsEncKey')) {
         // setup_cli.php / deploy/restore.sh's own equivalent both rely on this same
         // guarantee: $config_settings_enc_key is always bin2hex() output through a
         // single-quoted var_export-style literal, so no escaping is needed here.
-        $newContents = preg_replace(
+        $newContents = preg_replace_callback(
             '/^\$config_settings_enc_key = \'.*\';$/m',
-            "\$config_settings_enc_key = '" . $key . "';",
+            static fn (array $m): string => "\$config_settings_enc_key = " . var_export($key, true) . ';',
             $configContents,
             1
         );

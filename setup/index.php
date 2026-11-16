@@ -150,6 +150,17 @@ if (isset($_POST['add_database'])) {
 
 if (isset($_POST['restore'])) {
 
+    // MSP-DS-27 / MSP-WEB-23: restore replaces every table and needs no login, so it is only ever allowed while the instance has no users
+    // (the same guard add_user has). Once an account exists, setup cannot be used to overwrite the database or config.php.
+    $restore_users = $mysqli_available ? @mysqli_query($mysqli, "SHOW TABLES LIKE 'users'") : false;
+    if ($restore_users && mysqli_num_rows($restore_users) > 0) {
+        $restore_user_count = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM users"))[0]);
+        if ($restore_user_count > 0) {
+            http_response_code(403);
+            exit('Users already exist in the database. Restore is only available on an empty installation.');
+        }
+    }
+
     // ---------- Long-running guards ----------
     @set_time_limit(0);
     if (function_exists('ini_set')) { @ini_set('memory_limit', '1024M'); }
