@@ -261,6 +261,12 @@ if ($method === 'POST' && $id !== null && $sub === 'reply') {
     }
     $reply_raw  = trim($body['reply'] ?? '');
     $time_w_raw = trim($body['time_worked'] ?? '');
+    // MSP-DS-65 (review R16): same range/sign check as the web handlers (HH:MM:SS, 0..838h); empty stays "no time"
+    if ($time_w_raw !== '') {
+        $time_w_parsed = parseTimeWorked($time_w_raw);
+        if ($time_w_parsed === null) api_error(400, 'time_worked must be HH:MM:SS between 00:00:00 and 838:59:59');
+        $time_w_raw = $time_w_parsed;
+    }
     $reply      = mysqli_real_escape_string($mysqli, $reply_raw);
     $time_w     = mysqli_real_escape_string($mysqli, $time_w_raw);
     $onsite     = isset($body['onsite']) ? intval($body['onsite']) : 0;
@@ -459,10 +465,10 @@ if ($method === 'DELETE' && $id !== null && $sub === 'reply') {
 // LOG TIME
 if ($method === 'POST' && $id !== null && $sub === 'time') {
     $body       = json_decode(file_get_contents('php://input'), true) ?? [];
-    $time_worked = mysqli_real_escape_string($mysqli, trim($body['time_worked'] ?? ''));
+    $time_worked = parseTimeWorked(trim((string) ($body['time_worked'] ?? '')));   // MSP-DS-65 (review R16): no negative / out-of-range TIME
     $note        = mysqli_real_escape_string($mysqli, trim($body['note'] ?? 'Time logged via mobile app'));
 
-    if (!$time_worked) api_error(400, 'time_worked required (HH:MM:SS)');
+    if ($time_worked === null) api_error(400, 'time_worked required (HH:MM:SS, 00:00:00 to 838:59:59)');
 
     mysqli_query($mysqli,
         "INSERT INTO ticket_replies (ticket_reply, ticket_reply_type, ticket_reply_time_worked, ticket_reply_by, ticket_reply_ticket_id, ticket_reply_created_at)
