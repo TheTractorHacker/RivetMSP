@@ -7,12 +7,22 @@ defined('FROM_API') || die();
  * lacks at least $min_level access to $module_name. Admin roles always pass.
  */
 function api_require_module_permission(mysqli $mysqli, int $api_user_id, string $module_name, int $min_level = 1): void {
+    if (!api_module_permission_ok($mysqli, $api_user_id, $module_name, $min_level)) {
+        api_error(403, 'Insufficient permissions');
+    }
+}
+
+/**
+ * Non-terminating form of api_require_module_permission(): true when the API user's role grants at least $min_level on $module_name
+ * (admin roles always pass). MSP-DS-84: lets one endpoint answer per section instead of refusing the whole request.
+ */
+function api_module_permission_ok(mysqli $mysqli, int $api_user_id, string $module_name, int $min_level = 1): bool {
     $role = mysqli_fetch_assoc(mysqli_query($mysqli,
         "SELECT u.user_role_id, r.role_is_admin
          FROM users u LEFT JOIN user_roles r ON r.role_id = u.user_role_id
          WHERE u.user_id = $api_user_id LIMIT 1"
     ));
-    if ($role && $role['role_is_admin']) return;
+    if ($role && $role['role_is_admin']) return true;
 
     $module_esc = mysqli_real_escape_string($mysqli, $module_name);
     $has_perm = $role ? mysqli_fetch_assoc(mysqli_query($mysqli,
@@ -25,9 +35,7 @@ function api_require_module_permission(mysqli $mysqli, int $api_user_id, string 
          LIMIT 1"
     )) : null;
 
-    if (!$has_perm) {
-        api_error(403, 'Insufficient permissions');
-    }
+    return (bool) $has_perm;
 }
 
 /**
