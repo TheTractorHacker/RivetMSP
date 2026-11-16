@@ -39,7 +39,7 @@ if (!$link) {
     exit;
 }
 
-if ($link['asset_client_id']) { enforceClientAccess(intval($link['asset_client_id'])); }
+enforceClientAccess(intval($link['asset_client_id']));   // MSP-DS-132: client 0 (unassigned) is refused for restricted users, like rmm_action.php
 
 try {
     $client   = getRmmClient(intval($link['integration_id']));

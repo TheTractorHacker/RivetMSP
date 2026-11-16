@@ -34,7 +34,7 @@ if (!$run) {
     echo json_encode(['success' => false, 'error' => 'Run not found']);
     exit;
 }
-if ($run['asset_client_id']) { enforceClientAccess(intval($run['asset_client_id'])); }
+enforceClientAccess(intval($run['asset_client_id']));   // MSP-DS-132: client 0 (unassigned) is refused for restricted users, like rmm_action.php
 
 // If the run is still in flight, poll the RMM vendor for the real result and
 // persist it so the run doesn't stay "running" forever.

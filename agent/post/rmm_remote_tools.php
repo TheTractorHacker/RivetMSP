@@ -252,6 +252,6 @@ switch ($action) {
         $fromCore($actions->uninstallMeshAgent($who, $deviceId, $flag('confirm')), ['job_id']);
     case 'mesh':
         $view = $str('view', 12);
-        $fromCore($rmm->technician()->launchRemote($who, $deviceId, $flag('force'), (string) ($_SERVER['REMOTE_ADDR'] ?? ''), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), $view !== '' ? $view : 'desktop'), ['url', 'session_id']);
+        $fromCore($rmm->technician()->launchRemote($who, $deviceId, $flag('force'), (string) getIP(), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), $view !== '' ? $view : 'desktop'), ['url', 'session_id']);
 }
 $reply(422, false, 'invalid', 'Unknown action.');
