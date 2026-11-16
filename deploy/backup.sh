@@ -329,20 +329,12 @@ EOF
     # warning: the whole point of this step is to never produce a backup that silently omits RMM history
     # just because the PostgreSQL connection briefly could not be read.
     local rmm_pg_dump="${stage}/rmm-postgres.dump"
-    local rmm_pg_passfile
-    rmm_pg_passfile="$(mktemp)"
-    chmod 600 "${rmm_pg_passfile}"
-    register_tmpfile "${rmm_pg_passfile}"
-    local rmm_pg_env rmm_pg_rc=0
-    # MSP-DS-34: app PHP runs as the web user, never as root; the passfile is handed to that user to write, and its output is parsed, not eval'd.
-    local rmm_pg_owner; rmm_pg_owner="$(app_owner_user "${APP_DIR}")"
-    [[ -n "${rmm_pg_owner}" ]] && chown "${rmm_pg_owner}" "${rmm_pg_passfile}"
-    rmm_pg_env="$(run_app_php "${APP_DIR}" "${APP_DIR}/scripts/rmm_postgres_backup_env.php" --app-dir="${APP_DIR}" --passfile="${rmm_pg_passfile}")" || rmm_pg_rc=$?
+    # MSP-DS-34: the app script runs as the web user; root builds its own password file from what it wrote (see rmm_pg_prepare).
+    local rmm_pg_rc=0
+    rmm_pg_prepare "${APP_DIR}" || rmm_pg_rc=$?
     [[ "${rmm_pg_rc}" -eq 0 ]] || die "Could not prepare the RMM PostgreSQL connection for backup (scripts/rmm_postgres_backup_env.php exited ${rmm_pg_rc}; see the error above). Fix the connection in Administration > RMM > Data store first — refusing to produce a backup that would silently omit the RMM history."
     local -a rmm_pg_member=()
-    if [[ -n "${rmm_pg_env}" ]]; then
-        parse_rmm_pg_env "${rmm_pg_env}"
-        [[ -n "${rmm_pg_owner}" ]] && chown root:root "${rmm_pg_passfile}" && chmod 600 "${rmm_pg_passfile}"
+    if [[ "${RMM_PG_READY}" == "1" ]]; then
         info "Dumping the RMM PostgreSQL store (database '${RIVETCORE_PG_DATABASE}')..."
         : > "${rmm_pg_dump}"
         chmod 600 "${rmm_pg_dump}"
@@ -407,6 +399,7 @@ main() {
     parse_args "$@"
     require_root "$@"
     validate_args
+    require_trusted_tooling "${BASH_SOURCE[0]}"
     setup_logging
 
     info "=== RivetMSP backup starting for ${APP_DIR} ==="

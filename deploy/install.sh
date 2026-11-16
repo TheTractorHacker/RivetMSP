@@ -749,6 +749,9 @@ install_backup_timers() {
         warn "Created ${pass_file}. COPY IT TO AN OFFLINE PLACE NOW (password manager vault + a printed sealed copy): every encrypted backup is unreadable without it."
     fi
 
+    # The timers run as root: they execute a root-owned copy, never the web-user-writable app tree (MSP-DS-34).
+    bash "${SCRIPT_DIR}/install-trusted-tooling.sh"
+
     local unit
     for unit in backup restore-drill; do
         sed "s|\${APP_DIR}|${APP_DIR}|g" "${tpl}/itflow-${unit}.service" > "${unit_dir}/rivetmsp-${unit}-${safe_name}.service"

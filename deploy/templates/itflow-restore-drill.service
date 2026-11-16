@@ -15,6 +15,6 @@ Wants=mariadb.service
 [Service]
 Type=oneshot
 User=root
-ExecStart=/usr/bin/env bash ${APP_DIR}/deploy/restore_drill.sh --app-dir=${APP_DIR} --passphrase-file=/etc/itflow/backup-passphrase
+ExecStart=/usr/bin/env bash /usr/local/lib/rivetmsp-deploy/restore_drill.sh --app-dir=${APP_DIR} --passphrase-file=/etc/itflow/backup-passphrase
 # Exit 2 = drill account not set up yet; 1 = the restore failed. Both are meant to show as a failed unit.
 SuccessExitStatus=0

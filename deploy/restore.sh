@@ -473,20 +473,12 @@ restore_rmm_postgres() {
     fi
 
     announce "Restoring the RMM PostgreSQL store from ${dump}..."
-    local pg_passfile
-    pg_passfile="$(mktemp)"
-    chmod 600 "${pg_passfile}"
-    register_tmpfile "${pg_passfile}"
-    local pg_env pg_rc=0
-    # MSP-DS-34: run as the web user and parse (not eval) the output; see run_app_php / parse_rmm_pg_env in lib/common.sh.
-    local pg_owner; pg_owner="$(app_owner_user "${APP_DIR}")"
-    [[ -n "${pg_owner}" ]] && chown "${pg_owner}" "${pg_passfile}"
-    pg_env="$(run_app_php "${APP_DIR}" "${APP_DIR}/scripts/rmm_postgres_backup_env.php" --app-dir="${APP_DIR}" --passfile="${pg_passfile}")" || pg_rc=$?
-    if [[ "${pg_rc}" -ne 0 || -z "${pg_env}" ]]; then
+    # MSP-DS-34: the app script runs as the web user; root builds its own password file from what it wrote (see rmm_pg_prepare).
+    local pg_rc=0
+    rmm_pg_prepare "${APP_DIR}" || pg_rc=$?
+    if [[ "${pg_rc}" -ne 0 || "${RMM_PG_READY}" != "1" ]]; then
         die "Could not read the RMM PostgreSQL connection to restore into (scripts/rmm_postgres_backup_env.php exited ${pg_rc}). The control database and uploads/ are already restored; fix the connection in Administration > RMM > Data store, then restore ${dump} by hand with vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh."
     fi
-    parse_rmm_pg_env "${pg_env}"
-    [[ -n "${pg_owner}" ]] && chown root:root "${pg_passfile}" && chmod 600 "${pg_passfile}"
     info "Restoring into PostgreSQL database '${RIVETCORE_PG_DATABASE}' (RMM_PG_RESTORE_CLEAN=1: an existing schema there is replaced)..."
     if ! RMM_PG_RESTORE_CLEAN=1 "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh" < "${dump}"; then
         die "rmm-postgres-restore.sh failed. The control database and uploads/ are already restored; the PostgreSQL store may be partially restored — investigate before opening the site (docs/rmm/POSTGRES.md section 8.6)."
@@ -507,6 +499,7 @@ main() {
     parse_args "$@"
     require_root "$@"
     validate_args
+    require_trusted_tooling "${BASH_SOURCE[0]}"
     setup_logging
 
     info "=== RivetMSP restore starting: ${BACKUP_FILE} -> ${APP_DIR} ==="

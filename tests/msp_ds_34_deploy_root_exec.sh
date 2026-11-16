@@ -10,7 +10,7 @@ source <(sed -n '/^parse_rmm_pg_env() {/,/^}/p' deploy/lib/common.sh)
 unset RIVETCORE_PG_DATABASE PGPASSFILE
 out="export RIVETCORE_PG_DATABASE='rivet db'
 export RIVETCORE_PG_USER='o'\\''brien'
-export PGPASSFILE='/tmp/x'"
+export RIVETCORE_PG_HOST='h'"
 ( parse_rmm_pg_env "$out" && [[ "${RIVETCORE_PG_DATABASE}" == "rivet db" && "${RIVETCORE_PG_USER}" == "o'brien" ]] ); ok $? "well-formed output is parsed literally (quotes handled)"
 touch /tmp/ds34_marker_should_not_exist; rm -f /tmp/ds34_marker_should_not_exist
 ( parse_rmm_pg_env "export RIVETCORE_PG_DATABASE='x'; touch /tmp/ds34_pwned" 2>/dev/null ); r=$?

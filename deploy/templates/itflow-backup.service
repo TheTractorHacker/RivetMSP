@@ -50,7 +50,7 @@ User=root
 # final encrypted file). `env bash` rather than a bare path so this keeps
 # working unmodified if PATH-based bash ever moves, matching how the rest
 # of this deploy tooling invokes its own scripts.
-ExecStart=/usr/bin/env bash ${APP_DIR}/deploy/backup.sh --app-dir=${APP_DIR} --passphrase-file=/etc/itflow/backup-passphrase
+ExecStart=/usr/bin/env bash /usr/local/lib/rivetmsp-deploy/backup.sh --app-dir=${APP_DIR} --passphrase-file=/etc/itflow/backup-passphrase
 
 # Defense in depth beyond backup.sh's own logic: even if backup.sh somehow
 # ran to completion despite a corrupted/missing config, a non-zero exit

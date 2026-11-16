@@ -203,6 +203,81 @@ command_exists() {
 # config.php is a trusted local file this same install already wrote, so
 # requiring it here carries no more risk than the app's own every-request
 # bootstrap already does.
+# ---------------------------------------------------------------------------
+# Root must not run code the web user can rewrite (MSP-DS-34; same design as RivetIT IT-DS-28)
+# ---------------------------------------------------------------------------
+# rivetmsp_path_trusted PATH: succeeds only when PATH, what it resolves to and every parent directory are owned by root and not writable
+# by group or others. Prints why on failure. (Test hook: RIVETMSP_TRUST_TEST_NONROOT=1 lets a non-root test name another trusted owner via
+# RIVETMSP_TRUST_UID and a stop directory via RIVETMSP_TRUST_STOP.)
+rivetmsp_path_trusted() {
+    local p="$1" want=0 stop="/" q d u m
+    if [[ "${RIVETMSP_TRUST_TEST_NONROOT:-}" == "1" && "${EUID}" -ne 0 ]]; then want="${RIVETMSP_TRUST_UID:-0}"; stop="${RIVETMSP_TRUST_STOP:-/}"; fi
+    [[ "${p}" == /* ]] || { echo "not an absolute path: ${p}"; return 1; }
+    for q in "${p}" "$(readlink -f -- "${p}" 2>/dev/null || echo "${p}")"; do
+        [[ -e "${q}" ]] || { echo "missing: ${q}"; return 1; }
+        d="${q}"
+        while :; do
+            read -r u m < <(stat -c '%u %a' -- "${d}")
+            [[ "${u}" == "${want}" ]] || { echo "${d} is not owned by root"; return 1; }
+            if (( (8#${m} & 8#022) != 0 )); then echo "${d} is writable by group or others (mode ${m})"; return 1; fi
+            [[ "${d}" == "/" || "${d}" == "${stop}" ]] && break
+            d="$(dirname -- "${d}")"
+        done
+    done
+    return 0
+}
+
+# require_trusted_tooling <calling-script>: refuse to run privileged tooling (backup, restore, restore drill, update) from a tree the web
+# user can write, because that user could replace common.sh or the script itself and become root at the next timer run. The refusal is
+# loud: non-zero exit, a syslog entry, and (best effort, as the web user) a failed-backup report the application shows to administrators.
+# Install the root-owned copy with deploy/install-trusted-tooling.sh and run (and point the systemd units at) that copy.
+# RIVETMSP_ALLOW_UNTRUSTED_TOOLING=1 overrides, for an operator who reviewed the tree; the shipped units never set it.
+require_trusted_tooling() {
+    local caller="${1:-}" lib why f msg
+    lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    for f in "${lib}/common.sh" "${caller}"; do
+        [[ -n "${f}" ]] || continue
+        [[ "${f}" == /* ]] || f="$(cd "$(dirname "${f}")" && pwd)/$(basename "${f}")"
+        if ! why="$(rivetmsp_path_trusted "${f}")"; then
+            if [[ "${RIVETMSP_ALLOW_UNTRUSTED_TOOLING:-}" == "1" ]]; then
+                warn "Running although the tooling is not root-protected (${why}); RIVETMSP_ALLOW_UNTRUSTED_TOOLING=1 was set."
+                return 0
+            fi
+            msg="Refusing to run as root from a tree the web user can modify (${why}). Run: sudo deploy/install-trusted-tooling.sh, then use /usr/local/lib/rivetmsp-deploy/$(basename "${caller:-backup.sh}") and point the systemd units there."
+            logger -t rivetmsp-deploy -p user.crit "${msg}" 2>/dev/null || true
+            if [[ -n "${APP_DIR:-}" && -f "${APP_DIR}/deploy/lib/backup_status.php" ]]; then
+                run_app_php "${APP_DIR}" "${APP_DIR}/deploy/lib/backup_status.php" --app-dir="${APP_DIR}" --ok=0 --started="$(date +%s)" --error="${msg}" >/dev/null 2>&1 || true
+            fi
+            die "${msg}"
+        fi
+    done
+    return 0
+}
+
+# rmm_pg_prepare APP_DIR: MSP-DS-34. Runs scripts/rmm_postgres_backup_env.php as the web user and sets RIVETCORE_PG_* from its
+# output (validated, never eval'd). The script writes the connection's PGPASSFILE into a directory only that user can reach; root
+# then reads that file (never through a symlink) and writes its OWN root-owned 0600 password file, and PGPASSFILE is set to that:
+# a path taken from app output is never trusted. Returns 0 with RMM_PG_READY=1 when a PostgreSQL store is configured, 0 with
+# RMM_PG_READY=0 when it is not, non-zero when the script failed.
+rmm_pg_prepare() {
+    local app_dir="$1" owner scratch out rc=0 own_pass
+    RMM_PG_READY=0
+    owner="$(app_owner_user "${app_dir}")"
+    scratch="$(mktemp -d)"; register_tmpfile "${scratch}"; chmod 700 "${scratch}"
+    [[ -n "${owner}" ]] && chown "${owner}" "${scratch}"
+    out="$(run_app_php "${app_dir}" "${app_dir}/scripts/rmm_postgres_backup_env.php" --app-dir="${app_dir}" --passfile="${scratch}/pgpass")" || rc=$?
+    [[ "${rc}" -eq 0 ]] || return "${rc}"
+    [[ -n "${out}" ]] || return 0
+    parse_rmm_pg_env "${out}"
+    own_pass="$(mktemp)"; chmod 600 "${own_pass}"; register_tmpfile "${own_pass}"
+    if [[ -f "${scratch}/pgpass" && ! -L "${scratch}/pgpass" ]]; then
+        cat -- "${scratch}/pgpass" > "${own_pass}"
+    fi
+    export PGPASSFILE="${own_pass}"
+    RMM_PG_READY=1
+    return 0
+}
+
 # run_app_php <app_dir> <php args...>: MSP-DS-34. Application PHP (config.php, scripts/*.php, the app's own bootstrap) is writable by the
 # web user, so root must never execute it. When running as root, drop to the account that owns config.php (the web user) first; as a
 # normal user (or when config.php is root-owned) it simply runs php. Callers get only the output, which they treat as data.
@@ -233,10 +308,12 @@ parse_rmm_pg_env() {
     local line name val
     while IFS= read -r line; do
         [[ -z "${line}" ]] && continue
-        if [[ "${line}" =~ ^export\ (RIVETCORE_PG_DATABASE|RIVETCORE_PG_USER|RIVETCORE_PG_HOST|RIVETCORE_PG_PORT|RIVETCORE_PG_SSLMODE|RIVETCORE_PG_SCHEMA|PGPASSFILE)=\'(.*)\'$ ]]; then
+        if [[ "${line}" =~ ^export\ (RIVETCORE_PG_DATABASE|RIVETCORE_PG_USER|RIVETCORE_PG_HOST|RIVETCORE_PG_PORT|RIVETCORE_PG_SSLMODE|RIVETCORE_PG_SCHEMA)=\'(.*)\'$ ]]; then
             name="${BASH_REMATCH[1]}"; val="${BASH_REMATCH[2]}"
+            # A value is one single-quoted word: the only quote allowed inside is the shell idiom '\'' (close, escaped quote, reopen).
+            local rest="${val//\'\\\'\'/}"
+            [[ "${rest}" == *"'"* ]] && die "Unexpected output from scripts/rmm_postgres_backup_env.php; refusing to use it."
             val="${val//\'\\\'\'/\'}"
-            [[ "${val}" == *"'"* ]] && die "Unexpected output from scripts/rmm_postgres_backup_env.php; refusing to use it."
             printf -v "${name}" '%s' "${val}"; export "${name}"
         else
             die "Unexpected output from scripts/rmm_postgres_backup_env.php; refusing to use it."

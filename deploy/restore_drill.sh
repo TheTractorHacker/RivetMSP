@@ -59,6 +59,7 @@ for arg in "$@"; do
 done
 
 require_root "$@"
+require_trusted_tooling "${BASH_SOURCE[0]}"
 [[ -n "${APP_DIR}" && -d "${APP_DIR}" && -f "${APP_DIR}/cron/restore_drill.php" ]] || die "--app-dir must be a RivetMSP webroot containing cron/restore_drill.php."
 [[ -n "${PASSPHRASE_FILE}" && -f "${PASSPHRASE_FILE}" ]] || die "--passphrase-file is required and must exist."
 pf_perm="$(stat -c '%a' "${PASSPHRASE_FILE}")"

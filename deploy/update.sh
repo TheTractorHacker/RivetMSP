@@ -277,6 +277,7 @@ main() {
     parse_args "$@"
     require_root "$@"
     validate_args
+    require_trusted_tooling "${BASH_SOURCE[0]}"
     setup_logging
 
     info "=== RivetMSP update starting for ${APP_DIR} ==="
