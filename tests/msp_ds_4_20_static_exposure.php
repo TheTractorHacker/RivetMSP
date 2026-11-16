@@ -11,7 +11,7 @@ foreach (['/agent/index.php', '/uploads/tickets/1/a.png', '/css/app.css'] as $p)
 foreach (['docker/nginx.conf', 'deploy/templates/itflow-locations.conf'] as $f) {
     $c = file_get_contents("$root/$f");
     $ok(str_contains($c, 'location ~ /\.(?!well-known/)'), "$f denies dotfiles");
-    $ok(str_contains($c, '(config|deploy|docker|scripts|backups)'), "$f denies config/deploy/docker/scripts/backups");
+    $ok(str_contains($c, '(config|deploy|docker|docs|scripts|backups)'), "$f denies config/deploy/docker/docs/scripts/backups");
     // the dotfile regex itself
     $ok(preg_match('#/\.(?!well-known/)#', '/.env') === 1 && preg_match('#/\.(?!well-known/)#', '/.well-known/acme-challenge/x') !== 1, "$f dotfile regex keeps .well-known");
 }
