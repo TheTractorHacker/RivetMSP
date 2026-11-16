@@ -125,8 +125,18 @@ $inv = mysqli_fetch_assoc(mysqli_query($mysqli, "
     LIMIT 1
 "));
 if (!$inv) {
-    // Invoice unknown or no longer payable — nothing to record
-    mysqli_query($mysqli, "UPDATE payment_webhook_events SET event_status = 'ignored' WHERE event_id = $event_row_id");
+    // Invoice unknown or no longer payable. MSP-DS-35: the money HAS been received (this is payment_intent.succeeded and no payment row exists
+    // for it), so never drop it silently: put a row on the invoice, tell billing once, and flag the event for review.
+    require_once __DIR__ . '/../includes/billing_guards.php';
+    $unrecorded_invoice = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT invoice_id, invoice_prefix, invoice_number, invoice_status, invoice_client_id FROM invoices WHERE invoice_id = $pi_invoice_id LIMIT 1"));
+    if ($unrecorded_invoice) {
+        $unrec_label = sanitizeInput($unrecorded_invoice['invoice_prefix']) . intval($unrecorded_invoice['invoice_number']);
+        if (invoiceHistoryOnce($mysqli, $pi_invoice_id, 'Payment unrecorded', 'Stripe payment received but not recorded (invoice not payable; refund or credit needed). Stripe PaymentIntent', $pi_id)) {
+            appNotify("Invoice Payment Needs Review", "Stripe received $pi_currency $pi_amount_paid for invoice $unrec_label ({$unrecorded_invoice['invoice_status']}) but it was not recorded: the invoice is not payable. Refund or credit it ($pi_id).", "/agent/invoice.php?invoice_id=$pi_invoice_id", intval($unrecorded_invoice['invoice_client_id']));
+            logAction("Invoice", "Payment", "Stripe payment of $pi_currency $pi_amount_paid for invoice $unrec_label not recorded (invoice status {$unrecorded_invoice['invoice_status']}) - $pi_id $extended_log_desc", intval($unrecorded_invoice['invoice_client_id']), $pi_invoice_id);
+        }
+    }
+    mysqli_query($mysqli, "UPDATE payment_webhook_events SET event_status = 'error' WHERE event_id = $event_row_id");
     http_response_code(200);
     exit('OK');
 }

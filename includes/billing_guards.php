@@ -189,3 +189,19 @@ function invoiceChangeBlockReason($mysqli, $invoice_id, bool $block_if_payments 
     }
     return null;
 }
+
+/**
+ * MSP-DS-35: write one invoice-history row per (invoice, PaymentIntent, kind) and say whether this call wrote it. $pi_id must already be
+ * SQL-escaped by the caller (sanitizeInput). Used for the two Stripe cases that must never be silent: a bank debit that is still 'processing'
+ * when the customer returns to the pay page, and a succeeded PaymentIntent the webhook could not record against a payable invoice.
+ * Returns true only for the call that inserted the row, so the caller notifies once however often the page or the event is replayed.
+ */
+function invoiceHistoryOnce($mysqli, int $invoice_id, string $status, string $description_prefix, string $pi_id): bool
+{
+    $description = $description_prefix . ' ' . $pi_id;
+    mysqli_query($mysqli, "INSERT INTO history (history_status, history_description, history_invoice_id)
+        SELECT '$status', '$description', $invoice_id FROM DUAL
+        WHERE NOT EXISTS (SELECT 1 FROM history WHERE history_invoice_id = $invoice_id AND history_description = '$description')");
+
+    return mysqli_affected_rows($mysqli) >= 1;
+}

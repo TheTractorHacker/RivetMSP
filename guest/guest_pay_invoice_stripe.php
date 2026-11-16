@@ -179,6 +179,17 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
     if ($pi_obj->client_secret !== $pi_cs) {
         error_log("Stripe payment error - Payment intent ID/Secret mismatch for $pi_id");
         exit(WORDING_PAYMENT_FAILED);
+    } elseif ($pi_obj->status === "processing") {
+        // MSP-DS-35: a bank (ACH) debit is accepted but settles days later. That is not a failure: say so, leave a history row and tell
+        // billing once, and let the webhook (payment_intent.succeeded) record the payment when it clears.
+        require_once '../includes/billing_guards.php';
+        $processing_invoice_id = intval($pi_obj->metadata->itflow_invoice_id ?? 0);
+        if ($processing_invoice_id > 0 && invoiceHistoryOnce($mysqli, $processing_invoice_id, 'Payment pending', 'Bank payment submitted and processing (not yet settled). Stripe PaymentIntent', $pi_id)) {
+            $processing_client_id = intval($pi_obj->metadata->itflow_client_id ?? 0);
+            appNotify("Invoice Payment Pending", "A bank payment for invoice ID $processing_invoice_id is processing at Stripe ($pi_id). It will be recorded when it clears; check that it settles.", "/agent/invoice.php?invoice_id=$processing_invoice_id", $processing_client_id);
+            logAction("Invoice", "Payment", "Bank payment for invoice ID $processing_invoice_id submitted and processing - $pi_id", $processing_client_id, $processing_invoice_id);
+        }
+        exit("<br><h2>Your bank payment has been submitted and is processing.</h2><p>Bank payments can take several business days to clear. Your invoice will be marked paid once the payment settles, so please do not pay it again.</p>");
     } elseif ($pi_obj->status !== "succeeded") {
         exit(WORDING_PAYMENT_FAILED);
     } elseif ($pi_obj->amount !== $pi_obj->amount_received) {
