@@ -1,5 +1,5 @@
 <?php
-// A child object linked to a ticket must belong to the ticket's client (MSP-DS-11 / MSP-INJ-12).
+// A child object linked to a ticket or service must belong to that record's client (MSP-DS-11 / MSP-DS-30 / MSP-INJ-12).
 
 /**
  * True when object $id of $kind belongs to $client_id. An id of 0 (nothing chosen) is fine. A project with client 0 is a shared
@@ -14,6 +14,10 @@ function childBelongsToClient(mysqli $mysqli, string $kind, int $id, int $client
         'vendor'   => ['vendors',   'vendor_id',   'vendor_client_id'],
         'location' => ['locations', 'location_id', 'location_client_id'],
         'project'  => ['projects',  'project_id',  'project_client_id'],
+        'document'    => ['documents',    'document_id',    'document_client_id'],
+        'credential'  => ['credentials',  'credential_id',  'credential_client_id'],
+        'domain'      => ['domains',      'domain_id',      'domain_client_id'],
+        'certificate' => ['certificates', 'certificate_id', 'certificate_client_id'],
     ];
     if ($id <= 0) {
         return true;
