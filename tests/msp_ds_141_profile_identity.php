@@ -12,7 +12,7 @@ $p = file_get_contents(__DIR__ . '/../agent/user/post/profile.php');
 preg_match('/mysqli_query\(\$mysqli, "(SELECT COUNT\(\*\) FROM users WHERE user_id != \$session_user_id[^"]+)"\)\);/s', $p, $m);
 $ok(!empty($m[1]), 'collision query present');
 $check = function (int $uid, string $name, string $email) use ($mysqli, $m) {
-    $session_user_id = $uid; $q = str_replace(['$session_user_id', '$email', '$name'], [$uid, $mysqli->real_escape_string($email), $mysqli->real_escape_string($name)], $m[1]);
+    $session_user_id = $uid; $q = str_replace(['$name_changed', '$email_changed', '$session_user_id', '$email', '$name'], [1, 1, $uid, $mysqli->real_escape_string($email), $mysqli->real_escape_string($name)], $m[1]);
     return (int) $mysqli->query($q)->fetch_row()[0];
 };
 $ok($check(2, 'Mallory', 'victim@corp.test') > 0, 'taking another staff email is refused');
