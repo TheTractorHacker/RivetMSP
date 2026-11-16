@@ -243,8 +243,10 @@ if (!function_exists('pax8CreateBillingRecurringInvoice')) {
         ");
         $recurring_invoice_number = mysqli_insert_id($mysqli);
 
-        $prefix_sql   = mysqli_real_escape_string($mysqli, (string) ($config_recurring_invoice_prefix ?? ''));
-        $currency_sql = mysqli_real_escape_string($mysqli, (string) ($session_company_currency ?? 'USD'));
+        // MSP-DS-168: read the prefix and currency from the settings, not from web-session globals (cron has neither)
+        $cfg = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT config_recurring_invoice_prefix, company_currency FROM companies, settings WHERE companies.company_id = settings.company_id AND companies.company_id = 1 LIMIT 1"));
+        $prefix_sql   = mysqli_real_escape_string($mysqli, (string) ($cfg['config_recurring_invoice_prefix'] ?? $config_recurring_invoice_prefix ?? ''));
+        $currency_sql = mysqli_real_escape_string($mysqli, (string) (($cfg['company_currency'] ?? '') !== '' ? $cfg['company_currency'] : ($session_company_currency ?? 'USD')));
 
         mysqli_query($mysqli, "INSERT INTO recurring_invoices SET
             recurring_invoice_prefix = '$prefix_sql', recurring_invoice_number = $recurring_invoice_number,
