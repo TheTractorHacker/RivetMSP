@@ -105,6 +105,12 @@ if (isset($_POST['edit_invoice'])) {
 
     $invoice_amount = max(0, $invoice_amount - $invoice_discount);
 
+    // MSP-DS-129: the new total may never be lower than what has already been paid
+    if (invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount) < 0) {
+        flash_alert("The new total would be lower than the payments already recorded on this invoice", 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"UPDATE invoices SET invoice_scope = '$scope', invoice_date = '$date', invoice_due = '$due', invoice_category_id = $category, invoice_discount_amount = '$invoice_discount', invoice_amount = '$invoice_amount' WHERE invoice_id = $invoice_id");
 
     logAction("Invoice", "Edit", "$session_name edited Invoice $invoice_prefix$invoice_number - $scope", $client_id, $invoice_id);
@@ -537,7 +543,7 @@ if (isset($_POST['edit_invoice_item'])) {
 
     enforceClientAccess();
 
-    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id)) {
+    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id, true)) {   // MSP-DS-129: lines of an invoice with payments are frozen (the total could drop below what was paid)
         flash_alert($block_reason, 'error');
         redirect();
     }
@@ -589,7 +595,7 @@ if (isset($_GET['delete_invoice_item'])) {
 
     enforceClientAccess();
 
-    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id)) {
+    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id, true)) {   // MSP-DS-129: lines of an invoice with payments are frozen (the total could drop below what was paid)
         flash_alert($block_reason, 'error');
         redirect();
     }
