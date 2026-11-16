@@ -1086,9 +1086,26 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
                 }
                 $pi_description = "RivetMSP: $client_name payment of $recurring_payment_currency_code $balance_to_pay for $invoice_prefix$invoice_number";
 
-                // Stable for one minute so an overlapping/retried cron run collapses into a
-                // single Stripe charge instead of billing the card twice for the same invoice.
-                $idempotency_key = md5("cron_autopay_stripe_{$invoice_id}_{$recurring_payment_saved_payment_id}_" . intdiv(time(), 60));
+                // MSP-DS-32: this block is reached on every cron run of the due date. Claim (invoice, day) with an atomic conditional insert
+                // into history BEFORE any Stripe call and skip when it was already claimed: one autopay attempt per invoice per day, whatever
+                // its outcome (a decline, an error, or a bank debit that stays 'processing' for days is not charged again every run).
+                // Serialised with a named lock so two overlapping runs cannot both pass the NOT EXISTS check (see MSP-DS-2).
+                $autopay_marker = 'Cron autopay attempt on ' . date('Y-m-d');
+                $got_autopay_lock = mysqli_fetch_row(mysqli_query($mysqli, "SELECT GET_LOCK('rivet_cron_autopay_claim', 10)"))[0] ?? 0;
+                if ((int) $got_autopay_lock !== 1) {
+                    continue;
+                }
+                mysqli_query($mysqli, "INSERT INTO history (history_status, history_description, history_invoice_id)
+                    SELECT 'Sent', '$autopay_marker', $invoice_id FROM DUAL
+                    WHERE NOT EXISTS (SELECT 1 FROM history WHERE history_invoice_id = $invoice_id AND history_description = '$autopay_marker')");
+                $autopay_claimed_now = mysqli_affected_rows($mysqli) >= 1;
+                mysqli_query($mysqli, "DO RELEASE_LOCK('rivet_cron_autopay_claim')");
+                if (!$autopay_claimed_now) {
+                    continue;
+                }
+
+                // One key per invoice, balance, saved method and day: even a repeat that got past the claim cannot create a second PaymentIntent.
+                $idempotency_key = md5("cron_autopay_stripe_{$invoice_id}_{$recurring_payment_saved_payment_id}_" . moneyToCents($balance_to_pay) . '_' . date('Y-m-d'));
 
                 try {
                     $payment_intent = $provider->chargeSavedMethod([
