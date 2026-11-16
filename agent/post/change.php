@@ -94,6 +94,19 @@ if (isset($_POST['edit_change'])) {
     // with the client must keep working. Only the first time client approval is actually turned on is a key made.
     $change_url_key = $requires_client_approval && empty($existing['url_key']) ? randomString(32) : $existing['url_key'];
 
+    // MSP-DS-51: a client's decision belongs to the change they were shown. Moving the change to another client rotates the guest
+    // link (the first client's emailed link stops working) and every decision is reset to pending whenever the client or any of
+    // the content they approve (title, risk, reason, impact, plans) changes. Compared byte for byte in SQL, before the update.
+    if ($change_client_id !== $old_client_id) {
+        $change_url_key = $requires_client_approval ? randomString(32) : null;
+    }
+    $reset = $mysqli->prepare(
+        "UPDATE changes SET client_decision = 'pending', client_decided_at = NULL WHERE change_id = ? AND client_decision <> 'pending' AND (client_id <> ? OR BINARY title <> BINARY ? OR risk <> ? OR NOT (BINARY reason <=> BINARY ?) OR NOT (BINARY impact <=> BINARY ?) OR NOT (BINARY implementation_plan <=> BINARY ?) OR NOT (BINARY rollback_plan <=> BINARY ?))"
+    );
+    $reset->bind_param('iissssss', $change_id, $change_client_id, $title, $risk, $reason, $impact, $implementation_plan, $rollback_plan);
+    $reset->execute();
+    $reset->close();
+
     $stmt = $mysqli->prepare(
         "UPDATE changes SET title = ?, risk = ?, reason = ?, impact = ?, implementation_plan = ?, rollback_plan = ?, client_id = ?, requires_client_approval = ?, url_key = ? WHERE change_id = ?"
     );
