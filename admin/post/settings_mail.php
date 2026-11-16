@@ -89,6 +89,7 @@ if (isset($_POST['oauth_connect_microsoft_mail'])) {
     // Mailboxes flow in admin/post/mailbox.php. See admin/oauth_microsoft_mail_callback.php.
     $scope = 'offline_access openid profile https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send';
     $_SESSION['mail_oauth_scope'] = $scope;
+    unset($_SESSION['mail_oauth_mailbox_id']);   // MSP-DS-118: an abandoned Mailboxes connect must not receive these legacy-scope tokens
 
     $authorize_url = MICROSOFT_OAUTH_BASE_URL . rawurlencode($config_mail_oauth_tenant_id) . '/oauth2/v2.0/authorize?'
         . http_build_query([
