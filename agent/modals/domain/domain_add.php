@@ -208,7 +208,7 @@ ob_start();
             {apex_domain_check: 'true', domain: domain},
             function(data) {
                 //If we get a response from ajax.php, parse it as JSON
-                const domain_check_data = JSON.parse(data);
+                const domain_check_data = (typeof data === "string") ? JSON.parse(data) : data;
                 document.getElementById("domain_check_info").innerHTML = domain_check_data.message;
             }
         );

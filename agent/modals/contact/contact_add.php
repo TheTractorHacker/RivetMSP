@@ -324,7 +324,7 @@ function generatePassword() {
             get_readable_pass: 'true'
         },
         function(data) {
-            const password = JSON.parse(data);
+            const password = (typeof data === "string") ? JSON.parse(data) : data;
             document.getElementById("password").value = password;
         }
     );
@@ -356,7 +356,7 @@ $(document).ready(function() {
             {contact_email_check: 'true', email: email},
             function(data) {
                 //If we get a response from ajax.php, parse it as JSON
-                const contact_check_data = JSON.parse(data);
+                const contact_check_data = (typeof data === "string") ? JSON.parse(data) : data;
                 document.getElementById("contact_check_info").innerHTML = contact_check_data.message;
             }
         );

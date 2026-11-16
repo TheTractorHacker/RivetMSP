@@ -301,7 +301,7 @@ ob_start();
                 get_readable_pass: 'true'
             },
             function(data) {
-                input.value = JSON.parse(data);
+                input.value = data; // jQuery already parsed the application/json response (review R1)
             }
         );
     }
