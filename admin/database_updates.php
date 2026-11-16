@@ -8588,6 +8588,41 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
           KEY `idx_payment_reversal_invoice` (`reversal_invoice_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
+        // MSP-DS-39 payroll: a fixed company workweek (default 'period' = the legacy behaviour), and the DB-level one-live-run-per-period / one-live-period-per-dates
+        // keys (generated columns that are NULL once archived, so archived rows never collide). Duplicates that already exist are archived first (the finalized or
+        // oldest run / the oldest period is kept) - a unique index could not be created over them.
+        mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_payroll_workweek_start` varchar(10) NOT NULL DEFAULT 'period'");
+        if (!$ds_has_col('payroll_runs', 'payroll_run_live_period_id')) {
+            mysqli_query($mysqli, "UPDATE payroll_runs r JOIN (
+                    SELECT payroll_run_period_id AS pid, MIN(CASE WHEN payroll_run_status = 'finalized' THEN payroll_run_id END) AS keep_final, MIN(payroll_run_id) AS keep_first
+                    FROM payroll_runs WHERE payroll_run_archived_at IS NULL GROUP BY payroll_run_period_id HAVING COUNT(*) > 1
+                ) d ON d.pid = r.payroll_run_period_id
+                SET r.payroll_run_archived_at = NOW()
+                WHERE r.payroll_run_archived_at IS NULL AND r.payroll_run_id <> COALESCE(d.keep_final, d.keep_first)");
+            mysqli_query($mysqli, "ALTER TABLE `payroll_runs` ADD COLUMN `payroll_run_live_period_id` int(11) GENERATED ALWAYS AS (if(`payroll_run_archived_at` is null,`payroll_run_period_id`,NULL)) STORED");
+        }
+        if (!$ds_has_index('payroll_runs', 'uniq_payroll_run_live_period')) {
+            mysqli_query($mysqli, "ALTER TABLE `payroll_runs` ADD UNIQUE KEY `uniq_payroll_run_live_period` (`payroll_run_live_period_id`)");
+        }
+        if (!$ds_has_col('payroll_periods', 'payroll_period_live_key')) {
+            // a duplicate period with no live run is archived (the oldest is kept); two duplicates that both carry runs are left alone and the index below is skipped
+            mysqli_query($mysqli, "UPDATE payroll_periods p JOIN (
+                    SELECT payroll_period_start_date AS sd, payroll_period_end_date AS ed, MIN(payroll_period_id) AS keep_id
+                    FROM payroll_periods WHERE payroll_period_archived_at IS NULL GROUP BY payroll_period_start_date, payroll_period_end_date HAVING COUNT(*) > 1
+                ) d ON d.sd = p.payroll_period_start_date AND d.ed = p.payroll_period_end_date
+                SET p.payroll_period_archived_at = NOW()
+                WHERE p.payroll_period_archived_at IS NULL AND p.payroll_period_id <> d.keep_id
+                  AND NOT EXISTS (SELECT 1 FROM payroll_runs x WHERE x.payroll_run_period_id = p.payroll_period_id AND x.payroll_run_archived_at IS NULL)");
+            mysqli_query($mysqli, "ALTER TABLE `payroll_periods` ADD COLUMN `payroll_period_live_key` varchar(21) GENERATED ALWAYS AS (if(`payroll_period_archived_at` is null,concat(`payroll_period_start_date`,'|',`payroll_period_end_date`),NULL)) STORED");
+        }
+        if (!$ds_has_index('payroll_periods', 'uniq_payroll_period_live_key')) {
+            try {
+                mysqli_query($mysqli, "ALTER TABLE `payroll_periods` ADD UNIQUE KEY `uniq_payroll_period_live_key` (`payroll_period_live_key`)");
+            } catch (\Throwable $e) {
+                error_log('DB 2.6.139: payroll period unique key skipped (duplicate live periods that both have runs): ' . $e->getMessage());
+            }
+        }
+
         // [group B additions are appended above this line]
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.139'");
     }

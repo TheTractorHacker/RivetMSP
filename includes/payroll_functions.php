@@ -14,25 +14,54 @@
  */
 
 /**
- * Split a period into 7-day workweek buckets anchored at the period's own start
- * date (a legitimate fixed FLSA workweek, not necessarily Mon-Sun). The last
- * bucket may be shorter than 7 days for odd-length periods (e.g. semimonthly).
- * Returns a list of ['start' => 'Y-m-d', 'end' => 'Y-m-d'].
+ * The company workweek anchor: null = legacy ('period': 7-day buckets restarting at every period start), or 0-6 (date('w'): 0 = Sunday ... 6 = Saturday) for a
+ * FIXED company workweek. $value defaults to settings.config_payroll_workweek_start (the loaded global).
  */
-function payrollGetWeekBuckets(string $period_start, string $period_end): array {
+function payrollWorkweekAnchor(?string $value = null): ?int {
+    $value = strtolower(trim((string) ($value ?? ($GLOBALS['config_payroll_workweek_start'] ?? 'period'))));
+    $days = ['sun' => 0, 'mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6];
+    return $days[$value] ?? null;
+}
+
+/**
+ * Split a period into workweek buckets. Returns a list of ['start' => 'Y-m-d', 'end' => 'Y-m-d'].
+ *
+ * Legacy ($anchor null, the default): 7-day buckets anchored at the period's own start; the last bucket may be shorter (semimonthly), and every
+ * bucket gets its own full overtime threshold - a 50-hour week that crosses the 15th/16th is paid with little or no overtime.
+ *
+ * Fixed workweek ($anchor = weekday, MSP-DS-39): buckets are the company's real 7-day workweeks (always whole weeks). A workweek belongs to the ONE period
+ * that contains its START date, so consecutive periods (weekly, biweekly, semimonthly, monthly) tile the calendar without gaps or double counting and
+ * overtime is judged on the whole week, whichever period it is paid in. The days of a period before its first anchor day belong to the week that began
+ * in the previous period. Hours entries are keyed by the week's start date, so the same entry is never read by two periods.
+ */
+function payrollGetWeekBuckets(string $period_start, string $period_end, ?string $anchor = null): array {
     $buckets = [];
     $cursor = strtotime($period_start);
     $end_ts = strtotime($period_end);
     if ($cursor === false || $end_ts === false || $cursor > $end_ts) {
         return $buckets;
     }
+    $anchor_day = payrollWorkweekAnchor($anchor);
+    if ($anchor_day !== null) {
+        while ((int) date('w', $cursor) !== $anchor_day) {
+            $cursor = strtotime('+1 day', $cursor);
+        }
+        while ($cursor <= $end_ts) {
+            $buckets[] = [
+                'start' => date('Y-m-d', $cursor),
+                'end'   => date('Y-m-d', strtotime('+6 days', $cursor)),
+            ];
+            $cursor = strtotime('+7 days', $cursor);
+        }
+        return $buckets;
+    }
     while ($cursor <= $end_ts) {
-        $bucket_end_ts = min($cursor + 6 * 86400, $end_ts);
+        $bucket_end_ts = min(strtotime('+6 days', $cursor), $end_ts);
         $buckets[] = [
             'start' => date('Y-m-d', $cursor),
             'end'   => date('Y-m-d', $bucket_end_ts),
         ];
-        $cursor = $bucket_end_ts + 86400;
+        $cursor = strtotime('+1 day', $bucket_end_ts);
     }
     return $buckets;
 }
@@ -65,7 +94,7 @@ function payrollUpsertHoursEntry(mysqli $mysqli, int $user_id, string $week_star
  * - callers persist the result as a snapshot, this function itself has no side
  * effects.
  */
-function payrollComputeEmployeeLineItem(mysqli $mysqli, array $employee, int $period_id, string $period_start, string $period_end, float $overtime_threshold, float $overtime_multiplier): array {
+function payrollComputeEmployeeLineItem(mysqli $mysqli, array $employee, int $period_id, string $period_start, string $period_end, float $overtime_threshold, float $overtime_multiplier, ?string $workweek_anchor = null): array {
     $user_id   = intval($employee['user_id']);
     $pay_type  = $employee['payroll_pay_rate_type'] === 'salary' ? 'salary' : 'hourly';
     $rate      = round(floatval($employee['payroll_pay_rate_amount']), 2);
@@ -79,7 +108,7 @@ function payrollComputeEmployeeLineItem(mysqli $mysqli, array $employee, int $pe
         // Flat amount per period - no proration for partial periods (v1 limitation).
         $gross_pay = $rate;
     } else {
-        foreach (payrollGetWeekBuckets($period_start, $period_end) as $bucket) {
+        foreach (payrollGetWeekBuckets($period_start, $period_end, $workweek_anchor) as $bucket) {
             $row = mysqli_fetch_assoc(mysqli_query(
                 $mysqli,
                 "SELECT payroll_hours_entry_worked_time FROM payroll_hours_entries
@@ -196,7 +225,8 @@ function payrollComputeRunLineItems(mysqli $mysqli, int $run_id, int $period_id,
     if (!$period) {
         return;
     }
-    $settings = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT config_payroll_overtime_threshold_hours, config_payroll_overtime_multiplier FROM settings WHERE company_id = 1 LIMIT 1"));
+    $settings = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM settings WHERE company_id = 1 LIMIT 1"));
+    $workweek_anchor = (string) ($settings['config_payroll_workweek_start'] ?? 'period');
     $overtime_threshold  = floatval($settings['config_payroll_overtime_threshold_hours'] ?? 40);
     $overtime_multiplier = floatval($settings['config_payroll_overtime_multiplier'] ?? 1.5);
     $currency_esc = mysqli_real_escape_string($mysqli, $currency_code);
@@ -227,7 +257,7 @@ function payrollComputeRunLineItems(mysqli $mysqli, int $run_id, int $period_id,
     $total_net = 0.0;
 
     while ($emp = mysqli_fetch_assoc($employees_sql)) {
-        $calc = payrollComputeEmployeeLineItem($mysqli, $emp, $period_id, $period['payroll_period_start_date'], $period['payroll_period_end_date'], $overtime_threshold, $overtime_multiplier);
+        $calc = payrollComputeEmployeeLineItem($mysqli, $emp, $period_id, $period['payroll_period_start_date'], $period['payroll_period_end_date'], $overtime_threshold, $overtime_multiplier, $workweek_anchor);
 
         $name_esc = mysqli_real_escape_string($mysqli, $calc['employee_name']);
         $pay_type_esc = $calc['pay_type'];
@@ -300,7 +330,16 @@ function payrollComputeRunLineItems(mysqli $mysqli, int $run_id, int $period_id,
  */
 function payrollCreateRun(mysqli $mysqli, int $period_id, int $created_by_user_id, string $currency_code): int {
     $currency_esc = mysqli_real_escape_string($mysqli, $currency_code);
-    mysqli_query($mysqli, "INSERT INTO payroll_runs SET payroll_run_period_id = $period_id, payroll_run_status = 'draft', payroll_run_created_by = $created_by_user_id, payroll_run_currency_code = '$currency_esc'");
+    try {
+        $inserted = mysqli_query($mysqli, "INSERT INTO payroll_runs SET payroll_run_period_id = $period_id, payroll_run_status = 'draft', payroll_run_created_by = $created_by_user_id, payroll_run_currency_code = '$currency_esc'");
+    } catch (\mysqli_sql_exception $e) {
+        $inserted = false;
+    }
+    if (!$inserted) {
+        // MSP-DS-39: UNIQUE(live run per period) refused a second run (double submit / concurrent request): hand back the existing one, create nothing
+        $existing = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payroll_run_id FROM payroll_runs WHERE payroll_run_period_id = $period_id AND payroll_run_archived_at IS NULL LIMIT 1"));
+        return $existing ? intval($existing['payroll_run_id']) : 0;
+    }
     $run_id = mysqli_insert_id($mysqli);
     payrollComputeRunLineItems($mysqli, $run_id, $period_id, $currency_code);
     return $run_id;
@@ -317,7 +356,11 @@ function payrollFinalizeRun(mysqli $mysqli, int $run_id, int $finalized_by_user_
     if (!$run || $run['payroll_run_status'] === 'finalized') {
         return false;
     }
-    mysqli_query($mysqli, "UPDATE payroll_runs SET payroll_run_status = 'finalized', payroll_run_finalized_at = NOW(), payroll_run_finalized_by = $finalized_by_user_id WHERE payroll_run_id = $run_id");
+    // MSP-DS-39: the draft -> finalized flip is one conditional UPDATE, so two concurrent finalizes (or a finalize racing an edit) cannot both win
+    mysqli_query($mysqli, "UPDATE payroll_runs SET payroll_run_status = 'finalized', payroll_run_finalized_at = NOW(), payroll_run_finalized_by = $finalized_by_user_id WHERE payroll_run_id = $run_id AND payroll_run_status = 'draft'");
+    if (mysqli_affected_rows($mysqli) < 1) {
+        return false;
+    }
     mysqli_query($mysqli, "UPDATE payroll_periods SET payroll_period_status = 'locked' WHERE payroll_period_id = " . intval($run['payroll_run_period_id']));
     return true;
 }

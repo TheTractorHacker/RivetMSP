@@ -3255,7 +3255,9 @@ CREATE TABLE `payroll_periods` (
   `payroll_period_created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `payroll_period_updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
   `payroll_period_archived_at` datetime DEFAULT NULL,
-  PRIMARY KEY (`payroll_period_id`)
+  `payroll_period_live_key` varchar(21) GENERATED ALWAYS AS (if(`payroll_period_archived_at` is null,concat(`payroll_period_start_date`,'|',`payroll_period_end_date`),NULL)) STORED,
+  PRIMARY KEY (`payroll_period_id`),
+  UNIQUE KEY `uniq_payroll_period_live_key` (`payroll_period_live_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `payroll_run_line_item_deductions`;
@@ -3331,7 +3333,9 @@ CREATE TABLE `payroll_runs` (
   `payroll_run_finalized_at` datetime DEFAULT NULL,
   `payroll_run_finalized_by` int(11) DEFAULT NULL,
   `payroll_run_archived_at` datetime DEFAULT NULL,
+  `payroll_run_live_period_id` int(11) GENERATED ALWAYS AS (if(`payroll_run_archived_at` is null,`payroll_run_period_id`,NULL)) STORED,
   PRIMARY KEY (`payroll_run_id`),
+  UNIQUE KEY `uniq_payroll_run_live_period` (`payroll_run_live_period_id`),
   KEY `idx_payroll_run_period` (`payroll_run_period_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -5636,6 +5640,7 @@ CREATE TABLE `settings` (
   `config_payroll_overtime_threshold_hours` decimal(6,2) NOT NULL DEFAULT 40.00,
   `config_payroll_overtime_multiplier` decimal(4,2) NOT NULL DEFAULT 1.50,
   `config_payroll_default_pay_frequency` varchar(20) NOT NULL DEFAULT 'biweekly',
+  `config_payroll_workweek_start` varchar(10) NOT NULL DEFAULT 'period',
   `config_module_enable_payroll` tinyint(1) NOT NULL DEFAULT 0,
   `config_ticket_default_technician_id` int(11) DEFAULT NULL,
   `config_ticket_default_category_id` int(11) NOT NULL DEFAULT 0,

@@ -22,6 +22,13 @@ if (isset($_POST['recalculate_payroll_run'])) {
         redirect("/admin/payroll_run.php?id=$run_id");
     }
 
+    // MSP-DS-39: a locked period is closed, whatever the run row says
+    $recalc_period = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payroll_period_status FROM payroll_periods WHERE payroll_period_id = " . intval($run['payroll_run_period_id']) . " LIMIT 1"));
+    if (($recalc_period['payroll_period_status'] ?? '') === 'locked') {
+        flash_alert("This pay period is locked - the run can no longer be recalculated.", 'error');
+        redirect("/admin/payroll_run.php?id=$run_id");
+    }
+
     payrollComputeRunLineItems($mysqli, $run_id, intval($run['payroll_run_period_id']), (string) $run['payroll_run_currency_code']);
 
     logAction("Payroll", "Edit", "$session_name recalculated payroll run #$run_id");
@@ -46,7 +53,10 @@ if (isset($_POST['finalize_payroll_run'])) {
         redirect("/admin/payroll_run.php?id=$run_id");
     }
 
-    payrollFinalizeRun($mysqli, $run_id, intval($session_user_id));
+    if (!payrollFinalizeRun($mysqli, $run_id, intval($session_user_id))) {
+        flash_alert("This payroll run is already finalized.", 'error');   // a concurrent request finalized it first
+        redirect("/admin/payroll_run.php?id=$run_id");
+    }
 
     logAction("Payroll", "Edit", "$session_name finalized payroll run #$run_id");
 

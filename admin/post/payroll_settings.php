@@ -10,6 +10,11 @@ if (isset($_POST['edit_payroll_settings'])) {
     $overtime_multiplier = floatval($_POST['overtime_multiplier'] ?? 1.5);
     $default_pay_frequency = sanitizeInput($_POST['default_pay_frequency'] ?? 'biweekly');
 
+    $workweek_start = strtolower(sanitizeInput($_POST['workweek_start'] ?? 'period'));
+    if (!in_array($workweek_start, ['period', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'], true)) {
+        $workweek_start = 'period';
+    }
+
     if ($overtime_threshold_hours <= 0) {
         $overtime_threshold_hours = 40;
     }
@@ -23,7 +28,8 @@ if (isset($_POST['edit_payroll_settings'])) {
     mysqli_query($mysqli, "UPDATE settings SET
         config_payroll_overtime_threshold_hours = $overtime_threshold_hours,
         config_payroll_overtime_multiplier = $overtime_multiplier,
-        config_payroll_default_pay_frequency = '$default_pay_frequency'
+        config_payroll_default_pay_frequency = '$default_pay_frequency',
+        config_payroll_workweek_start = '$workweek_start'
         WHERE company_id = 1");
 
     logAction("Payroll", "Edit", "$session_name edited payroll settings");

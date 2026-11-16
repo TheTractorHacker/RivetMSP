@@ -83,6 +83,10 @@ if (isset($_POST['run_payroll'])) {
 
     $run_id = payrollCreateRun($mysqli, $period_id, intval($session_user_id), (string) $session_company_currency);
     mysqli_query($mysqli, "DO RELEASE_LOCK('$lock_name')");
+    if ($run_id <= 0) {
+        flash_alert("The payroll run could not be created.", 'error');
+        redirect("/admin/payroll_period.php?id=$period_id");
+    }
 
     logAction("Payroll", "Create", "$session_name ran payroll for pay period #$period_id");
 
