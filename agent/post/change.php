@@ -76,7 +76,7 @@ if (isset($_POST['edit_change'])) {
     $implementation_plan = sanitizeInput($_POST['implementation_plan'] ?? '');
     $rollback_plan = sanitizeInput($_POST['rollback_plan'] ?? '');
 
-    $existing = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT client_id, requires_client_approval, url_key FROM changes WHERE change_id = $change_id"));
+    $existing = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT client_id, requires_client_approval, url_key, status, client_decision FROM changes WHERE change_id = $change_id"));
     if (!$existing) {
         flash_alert('Change not found.', 'error');
         redirect();
@@ -90,6 +90,18 @@ if (isset($_POST['edit_change'])) {
         enforceClientAccess($change_client_id);
     }
     $requires_client_approval = !empty($_POST['requires_client_approval']) && $change_client_id > 0 ? 1 : 0;
+    // MSP-DS-67 (re-review MRR-14): once the approval has started (the change left 'draft', or the client already decided), a technician cannot switch
+    // "requires client approval" off - that would also satisfy the status gate for a change the client rejected. Only an administrator can, and the
+    // reason is mandatory and goes to the audit log.
+    $approval_override_reason = '';
+    if (!empty($existing['requires_client_approval']) && !$requires_client_approval
+        && ($existing['status'] !== 'draft' || $existing['client_decision'] !== 'pending')) {
+        $approval_override_reason = trim(strip_tags((string) ($_POST['approval_override_reason'] ?? '')));
+        if (empty($session_is_admin) || $approval_override_reason === '') {
+            flash_alert('Client approval has already started for this change. Only an administrator can remove the requirement, and a reason is required.', 'error');
+            redirect("change_details.php?id=$change_id");
+        }
+    }
     // A link, once generated, is never rotated just because the checkbox is re-saved - a guest link already shared
     // with the client must keep working. Only the first time client approval is actually turned on is a key made.
     $change_url_key = $requires_client_approval && empty($existing['url_key']) ? randomString(32) : $existing['url_key'];
@@ -115,6 +127,11 @@ if (isset($_POST['edit_change'])) {
     $stmt->close();
 
     logAction("Support", "Edit", "$session_name edited change \"$title\"", $change_client_id, $change_id);
+    if ($approval_override_reason !== '') {
+        $approval_override_log = sanitizeInput("$session_name removed the client approval requirement from change #$change_id (status {$existing['status']}, client decision {$existing['client_decision']}). Reason: $approval_override_reason");
+        logAction("Support", "Edit", $approval_override_log, $change_client_id, $change_id);
+        rivetAudit('change.client_approval_removed', $session_user_id, 'change', $change_id, 'client_approval_removed', "$session_name removed the client approval requirement from change #$change_id", ['reason' => $approval_override_reason, 'status' => $existing['status'], 'client_decision' => $existing['client_decision']]);
+    }
 
     flash_alert("Change <strong>" . nullable_htmlentities($title) . "</strong> updated");
     redirect("change_details.php?id=$change_id");
