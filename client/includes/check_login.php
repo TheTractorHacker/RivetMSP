@@ -63,6 +63,23 @@ if ($session_user_archived_at !== null) {
     redirect("/login.php");
 }
 
+// MSP-DS-145: an existing portal session also ends when the portal is switched off, when the client is archived, and when this
+// account's password changed since the session started (a reset or change signs every other browser out).
+$portal_gate = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT s.config_client_portal_enable, c.client_archived_at, u.user_password
+    FROM settings s, users u, clients c WHERE s.company_id = 1 AND u.user_id = $session_user_id AND c.client_id = $session_client_id LIMIT 1"));
+$portal_pw_fingerprint = hash('sha256', (string) ($portal_gate['user_password'] ?? ''));
+if (!isset($_SESSION['portal_pw_fp'])) {
+    $_SESSION['portal_pw_fp'] = $portal_pw_fingerprint;
+}
+if (!$portal_gate
+    || intval($portal_gate['config_client_portal_enable']) !== 1
+    || $portal_gate['client_archived_at'] !== null
+    || !hash_equals((string) $_SESSION['portal_pw_fp'], $portal_pw_fingerprint)) {
+    session_unset();
+    session_destroy();
+    redirect("/login.php");
+}
+
 // Load company session vars
 $sql = mysqli_query($mysqli, "SELECT * FROM companies WHERE company_id = 1");
 $row = mysqli_fetch_assoc($sql);

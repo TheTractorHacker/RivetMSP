@@ -507,6 +507,7 @@ if (isset($_POST['edit_profile'])) {
     if (!empty($new_password)) {
         $password_hash = password_hash($new_password, PASSWORD_DEFAULT);
         mysqli_query($mysqli, "UPDATE users SET user_password = '$password_hash' WHERE user_id = $session_user_id");
+        $_SESSION['portal_pw_fp'] = hash('sha256', (string) mysqli_fetch_row(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $session_user_id"))[0]);   // MSP-DS-145: this browser stays signed in, the others do not
 
         // Logging
         logAction("Contact", "Edit", "Client contact $session_contact_name edited their profile/password in the client portal", $session_client_id, $session_contact_id);
