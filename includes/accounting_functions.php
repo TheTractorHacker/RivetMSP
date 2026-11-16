@@ -190,6 +190,66 @@ function accountingBindConnection(mysqli $mysqli, int $accounting_id, string $pr
 }
 
 /**
+ * MSP-DS-115: the connection a map row belongs to. Every accounting_entity_map row carries the provider and the realm/tenant (QBO company id, Xero tenant id;
+ * sandbox and production are different companies, so the environment is covered by the realm) it was written under. A row is only ever READ for the
+ * connection that is current NOW, so after a reconnect to another company, a sandbox -> production switch or a provider change no old remote id can be
+ * reused against the new company - even if a stale row is still in the table (the connect callbacks also delete them, accountingBindConnection()).
+ * @return array{0:string,1:string} [provider, realm] (realm '' while disconnected)
+ */
+function accountingMapScope(mysqli $mysqli, int $accounting_id): array {
+    $res = mysqli_query($mysqli, "SELECT accounting_provider, accounting_realm_id FROM accounting_integrations WHERE accounting_id = " . intval($accounting_id) . " LIMIT 1");
+    $row = $res ? mysqli_fetch_assoc($res) : null;
+    return [(string) ($row['accounting_provider'] ?? ''), (string) ($row['accounting_realm_id'] ?? '')];
+}
+
+/** SQL fragment " AND <alias>map_provider = '..' AND <alias>map_realm_id = '..'" for the current connection. $alias like 'm.' for joins. */
+function accountingMapScopeSql(mysqli $mysqli, int $accounting_id, string $alias = ''): string {
+    [$provider, $realm] = accountingMapScope($mysqli, $accounting_id);
+    return " AND {$alias}map_provider = '" . mysqli_real_escape_string($mysqli, $provider) . "' AND {$alias}map_realm_id = '" . mysqli_real_escape_string($mysqli, $realm) . "'";
+}
+
+/** The "(map_provider, map_realm_id)" column list and value list an INSERT into the map needs for the current connection. */
+function accountingMapScopeValues(mysqli $mysqli, int $accounting_id): array {
+    [$provider, $realm] = accountingMapScope($mysqli, $accounting_id);
+    return ["'" . mysqli_real_escape_string($mysqli, $provider) . "'", "'" . mysqli_real_escape_string($mysqli, $realm) . "'"];
+}
+
+/**
+ * MSP-DS-115 (Xero): /connections lists EVERY organisation this user ever authorised for the app, not only the one just authorised. Pick from the ones this
+ * authorisation granted (authEventId = the access token's authentication_event_id claim). Exactly one -> it. Several granted in one go -> the one already bound
+ * to this install if it is among them, otherwise refuse (null) rather than guess. No usable claim -> only an unambiguous list (one connection) is accepted.
+ * @return array|null the connection row, or null when no single organisation can be chosen
+ */
+function accountingXeroPickTenant(array $connections, string $access_token, string $bound_tenant = ''): ?array {
+    $connections = array_values(array_filter($connections, fn ($c) => is_array($c) && !empty($c['tenantId'])));
+    if (!$connections) {
+        return null;
+    }
+    $event = '';
+    $parts = explode('.', $access_token);
+    if (count($parts) === 3) {
+        $payload = json_decode((string) base64_decode(strtr($parts[1], '-_', '+/') . str_repeat('=', (4 - strlen($parts[1]) % 4) % 4)), true);
+        $event = is_array($payload) ? (string) ($payload['authentication_event_id'] ?? '') : '';
+    }
+    $candidates = $connections;
+    if ($event !== '') {
+        $granted = array_values(array_filter($connections, fn ($c) => (string) ($c['authEventId'] ?? '') === $event));
+        if ($granted) {
+            $candidates = $granted;
+        }
+    }
+    if (count($candidates) === 1) {
+        return $candidates[0];
+    }
+    foreach ($candidates as $c) {
+        if ($bound_tenant !== '' && (string) $c['tenantId'] === $bound_tenant) {
+            return $c;
+        }
+    }
+    return null;
+}
+
+/**
  * Look up the remote (QBO) id a local entity is already mapped to, or null.
  */
 function getAccountingMap(mysqli $mysqli, int $accounting_id, string $type, int $id): ?array {
@@ -198,7 +258,7 @@ function getAccountingMap(mysqli $mysqli, int $accounting_id, string $type, int 
         $mysqli,
         "SELECT map_remote_id, map_remote_sync_token
          FROM accounting_entity_map
-         WHERE map_accounting_id = $accounting_id AND map_local_type = '$type_esc' AND map_local_id = $id
+         WHERE map_accounting_id = $accounting_id AND map_local_type = '$type_esc' AND map_local_id = $id" . accountingMapScopeSql($mysqli, $accounting_id) . "
          LIMIT 1"
     );
     if (!$res) {
@@ -219,7 +279,7 @@ function getAllClientMappings(mysqli $mysqli, int $accounting_id): array {
         $mysqli,
         "SELECT map_local_id, map_remote_id, map_remote_name, map_remote_sync_token, map_last_synced_at
          FROM accounting_entity_map
-         WHERE map_accounting_id = $accounting_id AND map_local_type = 'client'"
+         WHERE map_accounting_id = $accounting_id AND map_local_type = 'client'" . accountingMapScopeSql($mysqli, $accounting_id)
     );
     while ($res && ($row = mysqli_fetch_assoc($res))) {
         $out[intval($row['map_local_id'])] = $row;
@@ -235,7 +295,7 @@ function getClientMapping(mysqli $mysqli, int $accounting_id, int $client_id): ?
         $mysqli,
         "SELECT map_remote_id, map_remote_name, map_remote_sync_token, map_last_synced_at
          FROM accounting_entity_map
-         WHERE map_accounting_id = $accounting_id AND map_local_type = 'client' AND map_local_id = $client_id
+         WHERE map_accounting_id = $accounting_id AND map_local_type = 'client' AND map_local_id = $client_id" . accountingMapScopeSql($mysqli, $accounting_id) . "
          LIMIT 1"
     );
     if (!$res) {
@@ -253,13 +313,16 @@ function setClientMapping(mysqli $mysqli, int $accounting_id, int $client_id, st
     $remote_id_esc   = mysqli_real_escape_string($mysqli, $remote_id);
     $remote_name_esc = mysqli_real_escape_string($mysqli, substr($remote_name, 0, 255));
     $sync_token_esc  = mysqli_real_escape_string($mysqli, substr($sync_token, 0, 32));
+    [$scope_provider, $scope_realm] = accountingMapScopeValues($mysqli, $accounting_id);
     mysqli_query(
         $mysqli,
         "INSERT INTO accounting_entity_map
-            (map_accounting_id, map_local_type, map_local_id, map_remote_id, map_remote_name, map_remote_sync_token, map_last_synced_at)
+            (map_accounting_id, map_local_type, map_local_id, map_remote_id, map_remote_name, map_remote_sync_token, map_provider, map_realm_id, map_last_synced_at)
          VALUES
-            ($accounting_id, 'client', $client_id, '$remote_id_esc', '$remote_name_esc', '$sync_token_esc', NOW())
+            ($accounting_id, 'client', $client_id, '$remote_id_esc', '$remote_name_esc', '$sync_token_esc', $scope_provider, $scope_realm, NOW())
          ON DUPLICATE KEY UPDATE
+            map_provider = VALUES(map_provider),
+            map_realm_id = VALUES(map_realm_id),
             map_remote_id = VALUES(map_remote_id),
             map_remote_name = VALUES(map_remote_name),
             map_remote_sync_token = VALUES(map_remote_sync_token),
@@ -305,7 +368,7 @@ function getAllItemMappings(mysqli $mysqli, int $accounting_id): array {
         $mysqli,
         "SELECT map_local_id, map_local_subtype, map_remote_id, map_remote_name, map_remote_sync_token, map_last_synced_at
          FROM accounting_entity_map
-         WHERE map_accounting_id = $accounting_id AND map_local_type = 'item'"
+         WHERE map_accounting_id = $accounting_id AND map_local_type = 'item'" . accountingMapScopeSql($mysqli, $accounting_id)
     );
     while ($res && ($row = mysqli_fetch_assoc($res))) {
         $out[intval($row['map_local_id'])] = $row;
@@ -321,7 +384,7 @@ function getItemMapping(mysqli $mysqli, int $accounting_id, int $product_id): ?a
         $mysqli,
         "SELECT map_local_id, map_local_subtype, map_remote_id, map_remote_name, map_remote_sync_token, map_last_synced_at
          FROM accounting_entity_map
-         WHERE map_accounting_id = $accounting_id AND map_local_type = 'item' AND map_local_id = $product_id
+         WHERE map_accounting_id = $accounting_id AND map_local_type = 'item' AND map_local_id = $product_id" . accountingMapScopeSql($mysqli, $accounting_id) . "
          LIMIT 1"
     );
     if (!$res) {
@@ -341,13 +404,16 @@ function setItemMapping(mysqli $mysqli, int $accounting_id, int $product_id, str
     $remote_name_esc = mysqli_real_escape_string($mysqli, substr($remote_name, 0, 255));
     $sync_token_esc  = mysqli_real_escape_string($mysqli, substr($sync_token, 0, 32));
     $subtype_esc     = mysqli_real_escape_string($mysqli, substr($subtype, 0, 20));
+    [$scope_provider, $scope_realm] = accountingMapScopeValues($mysqli, $accounting_id);
     mysqli_query(
         $mysqli,
         "INSERT INTO accounting_entity_map
-            (map_accounting_id, map_local_type, map_local_id, map_local_subtype, map_remote_id, map_remote_name, map_remote_sync_token, map_last_synced_at)
+            (map_accounting_id, map_local_type, map_local_id, map_local_subtype, map_remote_id, map_remote_name, map_remote_sync_token, map_provider, map_realm_id, map_last_synced_at)
          VALUES
-            ($accounting_id, 'item', $product_id, '$subtype_esc', '$remote_id_esc', '$remote_name_esc', '$sync_token_esc', NOW())
+            ($accounting_id, 'item', $product_id, '$subtype_esc', '$remote_id_esc', '$remote_name_esc', '$sync_token_esc', $scope_provider, $scope_realm, NOW())
          ON DUPLICATE KEY UPDATE
+            map_provider = VALUES(map_provider),
+            map_realm_id = VALUES(map_realm_id),
             map_local_subtype = VALUES(map_local_subtype),
             map_remote_id = VALUES(map_remote_id),
             map_remote_name = VALUES(map_remote_name),
@@ -386,7 +452,7 @@ function getRemoteToLocalMap(mysqli $mysqli, int $accounting_id, string $type): 
         $mysqli,
         "SELECT map_remote_id, map_local_id
          FROM accounting_entity_map
-         WHERE map_accounting_id = $accounting_id AND map_local_type = '$type_esc'"
+         WHERE map_accounting_id = $accounting_id AND map_local_type = '$type_esc'" . accountingMapScopeSql($mysqli, $accounting_id)
     );
     while ($res && ($row = mysqli_fetch_assoc($res))) {
         if ((string) $row['map_remote_id'] !== '') {
@@ -403,13 +469,16 @@ function setAccountingMap(mysqli $mysqli, int $accounting_id, string $type, int 
     $type_esc       = mysqli_real_escape_string($mysqli, $type);
     $remote_id_esc  = mysqli_real_escape_string($mysqli, $remote_id);
     $sync_token_esc = mysqli_real_escape_string($mysqli, substr($sync_token, 0, 32));
+    [$scope_provider, $scope_realm] = accountingMapScopeValues($mysqli, $accounting_id);
     mysqli_query(
         $mysqli,
         "INSERT INTO accounting_entity_map
-            (map_accounting_id, map_local_type, map_local_id, map_remote_id, map_remote_sync_token, map_last_synced_at)
+            (map_accounting_id, map_local_type, map_local_id, map_remote_id, map_remote_sync_token, map_provider, map_realm_id, map_last_synced_at)
          VALUES
-            ($accounting_id, '$type_esc', $id, '$remote_id_esc', '$sync_token_esc', NOW())
+            ($accounting_id, '$type_esc', $id, '$remote_id_esc', '$sync_token_esc', $scope_provider, $scope_realm, NOW())
          ON DUPLICATE KEY UPDATE
+            map_provider = VALUES(map_provider),
+            map_realm_id = VALUES(map_realm_id),
             map_remote_id = VALUES(map_remote_id),
             map_remote_sync_token = VALUES(map_remote_sync_token),
             map_last_synced_at = NOW()"

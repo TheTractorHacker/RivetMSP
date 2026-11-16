@@ -664,6 +664,7 @@ if (isset($_POST['resync_all_unmapped'])) {
                     ON m.map_accounting_id = $accounting_id
                    AND m.map_local_type = 'invoice'
                    AND m.map_local_id = i.invoice_id
+                   " . accountingMapScopeSql($mysqli, $accounting_id, 'm.') . "
              WHERE i.invoice_archived_at IS NULL
                AND i.invoice_status NOT IN ($finalized_not_in)
                AND (m.map_remote_id IS NULL OR m.map_remote_id = '')
@@ -1497,7 +1498,7 @@ function ass_map_by_id(mysqli $mysqli, int $accounting_id, string $type): array 
         $mysqli,
         "SELECT map_local_id, map_remote_id, map_remote_name, map_last_synced_at
          FROM accounting_entity_map
-         WHERE map_accounting_id = $accounting_id AND map_local_type = '$type_esc'"
+         WHERE map_accounting_id = $accounting_id AND map_local_type = '$type_esc'" . accountingMapScopeSql($mysqli, $accounting_id)
     );
     while ($res && ($row = mysqli_fetch_assoc($res))) {
         $out[intval($row['map_local_id'])] = $row;

@@ -8623,6 +8623,32 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             }
         }
 
+        // MSP-DS-115: every accounting entity-map row records the provider and realm/tenant it was written under, and is only read for the connection that is current.
+        // Existing rows are tagged with the connection they belong to: the one remembered by the last connect/disconnect (platform_settings accounting_map_connection,
+        // "provider|realm"), else the integration's current one. Rows that cannot be attributed stay untagged and are ignored until re-synced (never reused for another company).
+        mysqli_query($mysqli, "ALTER TABLE `accounting_entity_map`
+            ADD COLUMN IF NOT EXISTS `map_provider` varchar(30) NOT NULL DEFAULT '',
+            ADD COLUMN IF NOT EXISTS `map_realm_id` varchar(64) NOT NULL DEFAULT ''");
+        $ds115_bound = '';
+        $ds115_res = mysqli_query($mysqli, "SELECT setting_value FROM platform_settings WHERE setting_key = 'accounting_map_connection' LIMIT 1");
+        if ($ds115_res && ($ds115_row = mysqli_fetch_assoc($ds115_res))) {
+            $ds115_bound = (string) $ds115_row['setting_value'];
+        }
+        $ds115_int = mysqli_query($mysqli, "SELECT accounting_id, accounting_provider, accounting_realm_id FROM accounting_integrations");
+        while ($ds115_int && ($ds115_i = mysqli_fetch_assoc($ds115_int))) {
+            $ds115_pr = (string) $ds115_i['accounting_provider'];
+            $ds115_rm = (string) $ds115_i['accounting_realm_id'];
+            if ($ds115_bound !== '' && strpos($ds115_bound, '|') !== false) {
+                [$ds115_pr, $ds115_rm] = explode('|', $ds115_bound, 2);
+            }
+            if ($ds115_rm !== '') {
+                $ds115_pr_esc = mysqli_real_escape_string($mysqli, $ds115_pr);
+                $ds115_rm_esc = mysqli_real_escape_string($mysqli, $ds115_rm);
+                mysqli_query($mysqli, "UPDATE accounting_entity_map SET map_provider = '$ds115_pr_esc', map_realm_id = '$ds115_rm_esc'
+                    WHERE map_accounting_id = " . intval($ds115_i['accounting_id']) . " AND map_realm_id = ''");
+            }
+        }
+
         // [group B additions are appended above this line]
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.139'");
     }

@@ -23,6 +23,8 @@ CREATE TABLE `accounting_entity_map` (
   `map_local_subtype` varchar(20) DEFAULT NULL,
   `map_remote_sync_token` varchar(32) DEFAULT NULL,
   `map_last_synced_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `map_provider` varchar(30) NOT NULL DEFAULT '',
+  `map_realm_id` varchar(64) NOT NULL DEFAULT '',
   PRIMARY KEY (`map_id`),
   UNIQUE KEY `uniq_map` (`map_accounting_id`,`map_local_type`,`map_local_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
