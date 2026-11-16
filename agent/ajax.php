@@ -811,8 +811,11 @@ if (isset($_POST['update_kanban_ticket'])) {
 
         // Client perms check
         $client_query = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_client_id FROM tickets WHERE ticket_id = $ticket_id"));
-        $client_id = intval($client_query['ticket_client_id']);
-        enforceClientAccess();
+        $client_id = intval($client_query['ticket_client_id'] ?? 0);
+        // MSP-DS-45: an internal ticket (client 0) has no client to check; enforceClientAccess() would end the whole request for a non-admin
+        if ($client_id) {
+            enforceClientAccess();
+        }
 
         $kanban = intval($position['ticket_order']); // ticket kanban position
         $status = intval($position['ticket_status']); // ticket statuses
@@ -1748,6 +1751,33 @@ if (isset($_GET['project_gantt'])) {
 }
 
 /*
+ * MSP-DS-47: the clients a task belongs to - the client of its ticket and the client of its project (a ticket task has no
+ * task_project_id of its own). Returns null for a task that belongs to neither a ticket nor a project, or does not exist.
+ */
+function ajaxTaskClientIds($task_id) {
+    global $mysqli;
+    $task_id = intval($task_id);
+    $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT tasks.task_ticket_id, tasks.task_project_id, tickets.ticket_client_id, tickets.ticket_project_id FROM tasks LEFT JOIN tickets ON tickets.ticket_id = tasks.task_ticket_id WHERE tasks.task_id = $task_id LIMIT 1"));
+    if (!$row) {
+        return null;
+    }
+    $has_ticket = intval($row['task_ticket_id']) > 0 && $row['ticket_client_id'] !== null;
+    $pid = intval($row['task_project_id']) ?: intval($row['ticket_project_id']);
+    if (!$has_ticket && !$pid) {
+        return null;
+    }
+    $ids = [];
+    if ($has_ticket) {
+        $ids[] = intval($row['ticket_client_id']);
+    }
+    if ($pid) {
+        $crow = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT project_client_id FROM projects WHERE project_id = $pid LIMIT 1"));
+        $ids[] = intval($crow['project_client_id'] ?? 0);
+    }
+    return array_values(array_unique(array_filter($ids)));
+}
+
+/*
  * PROJECTS - Persist a task's Gantt schedule (start / due / progress)
  * POST update_task_schedule
  * Called by the Gantt on_date_change / on_progress_change handlers.
@@ -1770,19 +1800,14 @@ if (isset($_POST['update_task_schedule'])) {
         exit;
     }
 
-    // Resolve owning project & enforce client access
-    $prow = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COALESCE(tasks.task_project_id, tickets.ticket_project_id) AS pid FROM tasks LEFT JOIN tickets ON tickets.ticket_id = tasks.task_ticket_id WHERE tasks.task_id = $task_id LIMIT 1"));
-    if (!$prow) {
+    // Resolve the owning client(s) via the task's ticket and project, and enforce client access
+    $task_clients = ajaxTaskClientIds($task_id);
+    if ($task_clients === null) {
         echo json_encode(['status' => 'error', 'message' => 'Task not found']);
         exit;
     }
-    $pid = intval($prow['pid']);
-    if ($pid) {
-        $crow = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT project_client_id FROM projects WHERE project_id = $pid LIMIT 1"));
-        $client_id = intval($crow['project_client_id'] ?? 0);
-        if ($client_id) {
-            enforceClientAccess($client_id);
-        }
+    foreach ($task_clients as $task_client_id) {
+        enforceClientAccess($task_client_id);
     }
 
     $start_raw = $_POST['start'] ?? '';
@@ -1830,18 +1855,13 @@ if (isset($_POST['update_project_task_kanban'])) {
             continue;
         }
 
-        // Resolve owning project & enforce client access
-        $prow = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COALESCE(tasks.task_project_id, tickets.ticket_project_id) AS pid FROM tasks LEFT JOIN tickets ON tickets.ticket_id = tasks.task_ticket_id WHERE tasks.task_id = $task_id LIMIT 1"));
-        if (!$prow) {
+        // Resolve the owning client(s) via the task's ticket and project, and enforce client access
+        $task_clients = ajaxTaskClientIds($task_id);
+        if ($task_clients === null) {
             continue;
         }
-        $pid = intval($prow['pid']);
-        if ($pid) {
-            $crow = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT project_client_id FROM projects WHERE project_id = $pid LIMIT 1"));
-            $client_id = intval($crow['project_client_id'] ?? 0);
-            if ($client_id) {
-                enforceClientAccess($client_id);
-            }
+        foreach ($task_clients as $task_client_id) {
+            enforceClientAccess($task_client_id);
         }
 
         $status_esc = mysqli_real_escape_string($mysqli, $status_raw);
