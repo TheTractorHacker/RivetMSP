@@ -731,18 +731,31 @@ function decryptCredentialEntry($credential_password_ciphertext, $credential_id 
     return openssl_decrypt($credential_ciphertext, 'aes-128-cbc', $site_encryption_master_key, 0, $credential_iv);
 }
 
+// MSP-DS-21: the vault master key of this browser session, or a refusal. Without the vault-key cookie (a remember-me restored session, a browser restart
+// inside the session lifetime) openssl_decrypt() returned false and openssl_encrypt() then silently used an all-zero key, storing the value in
+// plaintext-equivalent form. A locked vault now stops the write with a message instead.
+function vaultSessionMasterKeyOrStop(): string
+{
+    $ct  = $_SESSION['user_encryption_session_ciphertext'] ?? '';
+    $iv  = $_SESSION['user_encryption_session_iv'] ?? '';
+    $key = $_COOKIE['user_encryption_session_key'] ?? '';
+    $master = ($ct !== '' && $iv !== '' && $key !== '') ? openssl_decrypt($ct, 'aes-128-cbc', $key, 0, $iv) : false;
+    if (!is_string($master) || $master === '') {
+        if (PHP_SAPI === 'cli' || !function_exists('redirect')) {
+            throw new RuntimeException('The credential vault is locked for this session.');
+        }
+        flash_alert('The credential vault is locked for this session. Sign out and sign in again with your password, then retry; nothing was saved.', 'error');
+        redirect();
+        exit;
+    }
+    return $master;
+}
+
 // Encrypts a website/asset credential password
 function encryptCredentialEntry($credential_password_cleartext)
 {
     $iv = randomString();
-
-    // Get the user session info.
-    $user_encryption_session_ciphertext = $_SESSION['user_encryption_session_ciphertext'];
-    $user_encryption_session_iv =  $_SESSION['user_encryption_session_iv'];
-    $user_encryption_session_key = $_COOKIE['user_encryption_session_key'];
-
-    //Decrypt the session key to get the master key
-    $site_encryption_master_key = openssl_decrypt($user_encryption_session_ciphertext, 'aes-128-cbc', $user_encryption_session_key, 0, $user_encryption_session_iv);
+    $site_encryption_master_key = vaultSessionMasterKeyOrStop();
 
     //Encrypt the website/asset credential using the master key
     $ciphertext = openssl_encrypt($credential_password_cleartext, 'aes-128-cbc', $site_encryption_master_key, 0, $iv);
@@ -810,10 +823,7 @@ function apiEncryptCredentialEntry(#[\SensitiveParameter]$credential_cleartext, 
 function encryptOtpSecret(string $otp_plain): string {
     if (empty($otp_plain)) return '';
     $iv = randomString();
-    $user_encryption_session_ciphertext = $_SESSION['user_encryption_session_ciphertext'];
-    $user_encryption_session_iv = $_SESSION['user_encryption_session_iv'];
-    $user_encryption_session_key = $_COOKIE['user_encryption_session_key'];
-    $master_key = openssl_decrypt($user_encryption_session_ciphertext, 'aes-128-cbc', $user_encryption_session_key, 0, $user_encryption_session_iv);
+    $master_key = vaultSessionMasterKeyOrStop();
     $ct = openssl_encrypt($otp_plain, 'aes-128-cbc', $master_key, 0, $iv);
     return 'enc:' . $iv . $ct;
 }
