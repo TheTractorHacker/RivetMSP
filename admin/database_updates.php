@@ -8568,6 +8568,26 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
           KEY `idx_charge_attempt_pi` (`attempt_pi_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
+        // MSP-DS-164: refunds and disputes reported by Stripe, recorded against the payment they reverse
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `payment_reversals` (
+          `reversal_id` int(11) NOT NULL AUTO_INCREMENT,
+          `reversal_ref` varchar(100) NOT NULL,
+          `reversal_kind` varchar(10) NOT NULL DEFAULT 'refund',
+          `reversal_payment_id` int(11) NOT NULL DEFAULT 0,
+          `reversal_invoice_id` int(11) NOT NULL DEFAULT 0,
+          `reversal_pi_id` varchar(100) NOT NULL DEFAULT '',
+          `reversal_amount` decimal(15,2) NOT NULL DEFAULT 0.00,
+          `reversal_currency` varchar(10) NOT NULL DEFAULT '',
+          `reversal_status` varchar(40) NOT NULL DEFAULT '',
+          `reversal_event_type` varchar(60) NOT NULL DEFAULT '',
+          `reversal_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `reversal_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`reversal_id`),
+          UNIQUE KEY `uniq_payment_reversal_ref` (`reversal_ref`),
+          KEY `idx_payment_reversal_payment` (`reversal_payment_id`),
+          KEY `idx_payment_reversal_invoice` (`reversal_invoice_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
         // [group B additions are appended above this line]
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.139'");
     }

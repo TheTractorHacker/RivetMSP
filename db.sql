@@ -2499,6 +2499,28 @@ CREATE TABLE `invoice_charge_attempts` (
   KEY `idx_charge_attempt_pi` (`attempt_pi_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `payment_reversals`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `payment_reversals` (
+  `reversal_id` int(11) NOT NULL AUTO_INCREMENT,
+  `reversal_ref` varchar(100) NOT NULL,
+  `reversal_kind` varchar(10) NOT NULL DEFAULT 'refund',
+  `reversal_payment_id` int(11) NOT NULL DEFAULT 0,
+  `reversal_invoice_id` int(11) NOT NULL DEFAULT 0,
+  `reversal_pi_id` varchar(100) NOT NULL DEFAULT '',
+  `reversal_amount` decimal(15,2) NOT NULL DEFAULT 0.00,
+  `reversal_currency` varchar(10) NOT NULL DEFAULT '',
+  `reversal_status` varchar(40) NOT NULL DEFAULT '',
+  `reversal_event_type` varchar(60) NOT NULL DEFAULT '',
+  `reversal_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `reversal_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`reversal_id`),
+  UNIQUE KEY `uniq_payment_reversal_ref` (`reversal_ref`),
+  KEY `idx_payment_reversal_payment` (`reversal_payment_id`),
+  KEY `idx_payment_reversal_invoice` (`reversal_invoice_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `invoices`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;

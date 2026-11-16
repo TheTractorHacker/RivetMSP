@@ -82,14 +82,18 @@ if (mysqli_affected_rows($mysqli) === 0) {
 $event_row_id = intval(mysqli_insert_id($mysqli));
 
 // --- Only successful one-off/autopay payments create a payment record ---
-if (in_array($event_type, ['charge.refunded', 'charge.dispute.created', 'charge.dispute.funds_withdrawn'], true)) {
-    // MSP-DS-164: a refund or chargeback is not booked automatically, but billing is told so it is not missed
-    $obj = $event->data->object;
-    $charge_pi = sanitizeInput((string) ($obj->payment_intent ?? ''));
-    if ($charge_pi !== '' && mysqli_num_rows(mysqli_query($mysqli, "SELECT 1 FROM payments WHERE payment_reference = 'Stripe - $charge_pi' LIMIT 1")) > 0) {
-        appNotify("Payment", "Stripe reported $event_type for PaymentIntent $charge_pi - review the payment and invoice", "/agent/payments.php", 0);
-        logApp("Stripe", "warning", "Stripe event $event_type for recorded PaymentIntent $charge_pi");
+if (in_array($event_type, ['charge.refunded', 'charge.dispute.created', 'charge.dispute.funds_withdrawn', 'charge.dispute.funds_reinstated', 'charge.dispute.closed'], true)) {
+    // MSP-DS-164: a refund or chargeback is RECORDED (payment_reversals row + invoice history), not booked automatically, and billing is told. Only a payment this
+    // install recorded is touched, so another install's refund on a shared Stripe account is ignored.
+    $reversal = stripeRecordReversal($mysqli, $event_type, $event->data->object);
+    if ($reversal && $reversal['changed']) {
+        $rev_label = $reversal['kind'] === 'dispute' ? 'dispute (chargeback)' : 'refund';
+        appNotify("Payment " . ($reversal['kind'] === 'dispute' ? 'Disputed' : 'Refunded'), "Stripe reported a $rev_label ({$reversal['status']}, {$reversal['amount']}) on a payment recorded for invoice ID {$reversal['invoice_id']} - review the payment and invoice", "/agent/invoice.php?invoice_id={$reversal['invoice_id']}", 0);
+        logApp("Stripe", "warning", "Stripe event $event_type recorded for payment {$reversal['payment_id']} (invoice {$reversal['invoice_id']})");
     }
+    mysqli_query($mysqli, "UPDATE payment_webhook_events SET event_status = '" . ($reversal ? 'processed' : 'ignored') . "' WHERE event_id = $event_row_id");
+    http_response_code(200);
+    exit('OK');
 }
 if (in_array($event_type, ['payment_intent.processing', 'payment_intent.payment_failed', 'payment_intent.canceled'], true)) {
     // MSP-DS-32 / MSP-DS-166: keep the charge attempt in step with Stripe. A bank debit that is processing keeps the invoice blocked for other paths
@@ -221,12 +225,19 @@ $config_invoice_paid_notification_email = sanitizeInput($company_row['config_inv
 
 $currency_format = numfmt_create($company_locale, NumberFormatter::CURRENCY);
 
+// MSP-DS-164: the payment is recorded even when its amount is not the balance (the money was received), but a mismatch is flagged once for billing
+$balance_before_cents = moneyToCents(invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount));
+
 // --- Record the payment ---
 if (!insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $provider_account_id, $provider_display_safe, $pi_id, $invoice_id)) {
     // A concurrent handler recorded this PaymentIntent between the check above and now
     mysqli_query($mysqli, "UPDATE payment_webhook_events SET event_status = 'ignored' WHERE event_id = $event_row_id");
     http_response_code(200);
     exit('Already recorded');
+}
+
+if (moneyToCents($pi_amount_paid) !== $balance_before_cents && invoiceHistoryOnce($mysqli, $invoice_id, 'Payment amount differs', "Stripe paid $pi_currency $pi_amount_paid, balance was " . ($balance_before_cents / 100) . ". PaymentIntent", $pi_id)) {
+    appNotify("Invoice Payment Needs Review", "Stripe payment $pi_id for invoice $invoice_prefix$invoice_number was $pi_currency $pi_amount_paid but the balance was " . ($balance_before_cents / 100) . ". It was recorded; check for an over- or under-payment.", "/agent/invoice.php?invoice_id=$invoice_id", $client_id);
 }
 
 // Recompute invoice status from total payments

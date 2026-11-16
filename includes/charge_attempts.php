@@ -191,3 +191,56 @@ function autopayClaimToday($mysqli, int $invoice_id, ?string $day = null): bool
     mysqli_query($mysqli, "DO RELEASE_LOCK('rivet_cron_autopay_claim')");
     return $claimed;
 }
+
+/**
+ * MSP-DS-164: record a Stripe refund or dispute (chargeback) against the payment it reverses. $obj is the event's Charge (charge.refunded) or Dispute
+ * (charge.dispute.*) object. One payment_reversals row per refund total / dispute (UPSERT, so a replayed or later event updates it), an invoice history row
+ * per (reversal, status), and the amount/status come back for the caller's notification. Nothing is booked automatically (a refund/chargeback is a
+ * financial decision), the invoice and payment stay as they are and are flagged. Returns null when the payment is not one this install recorded.
+ * @return null|array{payment_id:int, invoice_id:int, reversal_id:int, changed:bool, amount:float, status:string, kind:string}
+ */
+function stripeRecordReversal($mysqli, string $event_type, $obj): ?array
+{
+    $pi = mysqli_real_escape_string($mysqli, (string) ($obj->payment_intent ?? ''));
+    if ($pi === '') {
+        return null;
+    }
+    $pay = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payment_id, payment_invoice_id FROM payments WHERE payment_reference = 'Stripe - $pi' LIMIT 1"));
+    if (!$pay) {
+        return null;   // not recorded here: another install's payment (or never recorded), nothing of ours to flag
+    }
+    $kind = strpos($event_type, 'dispute') !== false ? 'dispute' : 'refund';
+    $currency = strtoupper(mysqli_real_escape_string($mysqli, substr((string) ($obj->currency ?? ''), 0, 10)));
+    if ($kind === 'dispute') {
+        $ref = 'dispute:' . (string) ($obj->id ?? '');
+        $minor = intval($obj->amount ?? 0);
+        $status = (string) ($obj->status ?? 'needs_response');
+        if ($event_type === 'charge.dispute.funds_withdrawn') {
+            $status = 'funds_withdrawn';
+        } elseif ($event_type === 'charge.dispute.funds_reinstated') {
+            $status = 'funds_reinstated';
+        }
+    } else {
+        $minor = intval($obj->amount_refunded ?? 0);
+        $ref = 'refund:' . (string) ($obj->id ?? '') . ':' . $minor;   // a further partial refund has a new total, so a new row
+        $status = !empty($obj->refunded) ? 'refunded' : 'partially_refunded';
+    }
+    $ref = mysqli_real_escape_string($mysqli, substr($ref, 0, 100));
+    $status = mysqli_real_escape_string($mysqli, substr($status, 0, 40));
+    $amount = stripeAmountFromMinor($minor, $currency ?: 'USD');
+    $payment_id = intval($pay['payment_id']);
+    $invoice_id = intval($pay['payment_invoice_id']);
+
+    $before = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT reversal_id, reversal_status FROM payment_reversals WHERE reversal_ref = '$ref' LIMIT 1"));
+    mysqli_query($mysqli, "INSERT INTO payment_reversals SET reversal_ref = '$ref', reversal_kind = '$kind', reversal_payment_id = $payment_id, reversal_invoice_id = $invoice_id,
+        reversal_pi_id = '$pi', reversal_amount = $amount, reversal_currency = '$currency', reversal_status = '$status', reversal_event_type = '" . mysqli_real_escape_string($mysqli, substr($event_type, 0, 60)) . "'
+        ON DUPLICATE KEY UPDATE reversal_status = VALUES(reversal_status), reversal_amount = VALUES(reversal_amount), reversal_event_type = VALUES(reversal_event_type)");
+    $reversal_id = $before ? intval($before['reversal_id']) : intval(mysqli_insert_id($mysqli));
+    $changed = !$before || $before['reversal_status'] !== $status;
+    if ($changed && $invoice_id > 0) {
+        $label = $kind === 'dispute' ? 'Payment disputed' : 'Payment refunded';
+        invoiceHistoryOnce($mysqli, $invoice_id, $label, "Stripe $kind $status, $currency $amount. PaymentIntent", $pi);
+    }
+
+    return ['payment_id' => $payment_id, 'invoice_id' => $invoice_id, 'reversal_id' => $reversal_id, 'changed' => $changed, 'amount' => $amount, 'status' => $status, 'kind' => $kind];
+}
