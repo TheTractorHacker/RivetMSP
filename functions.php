@@ -2983,6 +2983,11 @@ function generateReadablePassword($security_level)
     return $password;
 }
 
+/** MSP-DS-6: undo the backslash-apostrophe a caller's SQL escaping left in text that is bound, not interpolated, into email_queue. */
+function mailQueueUnescape($text) {
+    return str_replace(["\\'", '\\"'], ["'", '"'], strval($text));
+}
+
 /**
  * Queue outbound email. THE single choke point for the per-ticket "Send email notifications" switch (DB 2.6.105): every ticket email - new
  * ticket, reply, status change / resolve / close, assignment, watcher, schedule, task approval, recurring, auto-close, CSAT request and reminder -
@@ -3005,8 +3010,12 @@ function addToMailQueue($data) {
         $from_name = strval($email['from_name']);
         $recipient = strval($email['recipient']);
         $recipient_name = strval($email['recipient_name']);
-        $subject = strval($email['subject']);
-        $body = strval($email['body']);
+        // MSP-DS-6: the queue binds its values, so the SQL escaping some callers still apply (sanitizeInput() on names and subjects:
+        // O'Brien -> O\'Brien) would be sent as-is. Remove exactly that, a backslash before an apostrophe or double quote, from every text field.
+        $from_name = mailQueueUnescape($from_name);
+        $recipient_name = mailQueueUnescape($recipient_name);
+        $subject = mailQueueUnescape($email['subject']);
+        $body = mailQueueUnescape($email['body']);
         $cal_str = isset($email['cal_str']) ? strval($email['cal_str']) : '';
 
         // Every queued message gets its own Message-ID (stored, and sent as the Message-ID header by cron/mail_queue.php) so a
