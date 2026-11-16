@@ -133,6 +133,11 @@ if ($method === 'PUT' || $method === 'POST') {
         $hash = secPasswordHash($new_pass);
         $esc_hash = mysqli_real_escape_string($mysqli, $hash);
         $updates[] = "user_password = '$esc_hash'";
+        // MSP-DS-13: the vault key stays readable with the new password (and no longer with the retired one)
+        $new_wrap = rewrapUserKeyForPasswordChange($mysqli, intval($api_user_id), $cur_pass, $new_pass);
+        if ($new_wrap !== null) {
+            $updates[] = "user_specific_encryption_ciphertext = '" . mysqli_real_escape_string($mysqli, $new_wrap) . "'";
+        }
     }
 
     $set = implode(', ', $updates);

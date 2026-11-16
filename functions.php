@@ -559,6 +559,40 @@ function encryptUserSpecificKey($user_password, $target_user_id = null, $old_pas
     return 'V2:' . $salt . $iv . $ciphertext;
 }
 
+/**
+ * MSP-DS-13: the vault wrap to store when a user changes their password WITHOUT a browser session (the mobile API). vw3 wraps are re-wrapped under
+ * the new password from the old one; a legacy wrap is opened with the old password and sealed again (V2 format) under the new one. Returns null
+ * when there is nothing to re-wrap or the old password does not open it (the caller then leaves the stored wrap as it was).
+ */
+function rewrapUserKeyForPasswordChange($mysqli, int $user_id, string $old_password, string $new_password)
+{
+    $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_specific_encryption_ciphertext AS w FROM users WHERE user_id = $user_id LIMIT 1"));
+    $stored = (string) ($row['w'] ?? '');
+    if ($stored === '') {
+        return null;
+    }
+    if (str_starts_with($stored, 'vw3:')) {
+        if (!class_exists(\RivetMSP\Crypto\VaultV3::class)) {
+            return null;
+        }
+        try {
+            return \RivetMSP\Crypto\VaultV3::wrapForPasswordChange($mysqli, $user_id, $new_password, $old_password);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+    $master = decryptUserSpecificKey($stored, $old_password);
+    if ($master === false || $master === '') {
+        return null;
+    }
+    $iv = randomString();
+    $salt = randomString();
+    $key = hash_pbkdf2('sha256', $new_password, $salt, 100000, 16, true);
+    $ciphertext = openssl_encrypt($master, 'aes-128-cbc', $key, 0, $iv);
+
+    return $ciphertext === false ? null : 'V2:' . $salt . $iv . $ciphertext;
+}
+
 // Given a ciphertext (incl. IV) and the user's (or API key) password, returns the site master key
 // Ran at login, to facilitate generateUserSessionKey
 function decryptUserSpecificKey($user_encryption_ciphertext, $user_password)
