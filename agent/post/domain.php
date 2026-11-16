@@ -18,6 +18,13 @@ if (isset($_POST['add_domain'])) {
 
     enforceClientAccess();
 
+    // A public mailbox provider is nobody's client domain (inbound mail from it must never be routed to one client, MSP-DS-33)
+    require_once dirname(__DIR__, 2) . '/includes/inbound_routing.php';
+    if (inboundIsFreemailDomain($name)) {
+        flash_alert("<strong>" . nullable_htmlentities($name) . "</strong> is a public mailbox provider and cannot be added as a client domain", 'error');
+        redirect();
+    }
+
     // Set/check/lookup expiry date
     if (strtotime($expire)) {
         $expire = "'" . $expire . "'";
@@ -77,6 +84,13 @@ if (isset($_POST['edit_domain'])) {
     $client_id = intval(getFieldById('domains', $domain_id, 'domain_client_id'));
 
     enforceClientAccess();
+
+    // Renaming a domain to a public mailbox provider is refused as on add (MSP-DS-33); an untouched legacy name still saves
+    require_once dirname(__DIR__, 2) . '/includes/inbound_routing.php';
+    if (inboundIsFreemailDomain($name) && strcasecmp((string) getFieldById('domains', $domain_id, 'domain_name', 'raw'), $name) !== 0) {
+        flash_alert("<strong>" . nullable_htmlentities($name) . "</strong> is a public mailbox provider and cannot be added as a client domain", 'error');
+        redirect();
+    }
 
     // Set/check/lookup expiry date
     if (strtotime($expire) && (new DateTime($expire)) > (new DateTime())) {

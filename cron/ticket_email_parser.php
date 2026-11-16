@@ -23,6 +23,7 @@ require_once "../config.php";
 
 // Set Timezone
 require_once "../includes/inc_set_timezone.php";
+require_once dirname(__DIR__) . "/includes/inbound_routing.php";
 require_once "../functions.php";
 
 // Only one copy at a time (Redis lock through RivetCore; skipped if Redis is down).
@@ -392,22 +393,15 @@ function processInboundMessage(
         $client_id  = 0;
 
         // First: check if sender is a registered contact
-        $from_email_esc = mysqli_real_escape_string($mysqli, $from_email);
-        $contact_sql = mysqli_query($mysqli, "SELECT * FROM contacts WHERE contact_email = '$from_email_esc' AND contact_archived_at IS NULL LIMIT 1");
-        $contact_row = mysqli_fetch_assoc($contact_sql);
+        // (a contact or domain claim only counts when it is unambiguous, see includes/inbound_routing.php: MSP-DS-33)
+        $contact_row = inboundTrustedContact($mysqli, $from_email);
 
         if ($contact_row) {
             $contact_id = intval($contact_row['contact_id']);
             $client_id  = intval($contact_row['contact_client_id']);
         } else {
-            // Else: check if sender domain is registered
-            $from_domain_esc = mysqli_real_escape_string($mysqli, $from_domain);
-            $domain_sql = mysqli_query($mysqli, "SELECT * FROM domains WHERE domain_name = '$from_domain_esc' AND domain_archived_at IS NULL LIMIT 1");
-            $domain_row = mysqli_fetch_assoc($domain_sql);
-
-            if ($domain_row && $from_domain == $domain_row['domain_name']) {
-                $client_id = intval($domain_row['domain_client_id']);
-            }
+            // Else: check if sender domain is registered to exactly one client
+            $client_id = inboundDomainOwnerClient($mysqli, $from_domain);
         }
 
         // If we found either a contact or a domain, check recent tickets for a matching subject
@@ -437,9 +431,7 @@ function processInboundMessage(
 
     // 3. A known, registered contact?
     if (!$email_processed) {
-        $from_email_esc = mysqli_real_escape_string($mysqli, $from_email);
-        $any_contact_sql = mysqli_query($mysqli, "SELECT * FROM contacts WHERE contact_email = '$from_email_esc' AND contact_archived_at IS NULL LIMIT 1");
-        $rowc = mysqli_fetch_assoc($any_contact_sql);
+        $rowc = inboundTrustedContact($mysqli, $from_email);
 
         if ($rowc) {
             $contact_name  = sanitizeInput($rowc['contact_name']);
@@ -458,12 +450,12 @@ function processInboundMessage(
 
     // 4. A known domain?
     if (!$email_processed) {
-        $from_domain_esc = mysqli_real_escape_string($mysqli, $from_domain);
-        $domain_sql = mysqli_query($mysqli, "SELECT * FROM domains WHERE domain_name = '$from_domain_esc' AND domain_archived_at IS NULL LIMIT 1");
-        $rowd = mysqli_fetch_assoc($domain_sql);
+        // Only a domain that exactly one client lists, and that is not a public mailbox provider, files mail without review (MSP-DS-33);
+        // everything else falls through to the unknown-sender review queue
+        $domain_owner_client_id = inboundDomainOwnerClient($mysqli, $from_domain);
 
-        if ($rowd && $from_domain == $rowd['domain_name']) {
-            $client_id = intval($rowd['domain_client_id']);
+        if ($domain_owner_client_id > 0) {
+            $client_id = $domain_owner_client_id;
 
             // Create a new contact
             $contact_name  = $from_name;

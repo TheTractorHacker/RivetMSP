@@ -547,6 +547,14 @@ if (isset($_POST['add_contact'])) {
         redirect('contact_add.php');
     }
 
+    // An address that belongs to another client (a contact of theirs, or on a domain they list) cannot be claimed here: inbound
+    // support mail from it would be filed under this client (MSP-DS-16)
+    require_once dirname(__DIR__) . '/includes/inbound_routing.php';
+    if ($contact_email !== '' && portalContactEmailConflict($mysqli, $contact_email, $session_client_id) !== '') {
+        flash_alert("Cannot add contact as that email address is already in use", 'danger');
+        redirect('contact_add.php');
+    }
+
     // Create user account with rand password for the contact
     $contact_user_id = 0;
     if ($contact_name && $contact_email && $contact_auth_method) {
@@ -629,6 +637,13 @@ if (isset($_POST['edit_contact'])) {
     // Check the email isn't already in use
     $sql = mysqli_query($mysqli, "SELECT user_id FROM users WHERE user_email = '$contact_email' AND user_id != $contact_user_id");
     if ($sql && mysqli_num_rows($sql) > 0) {
+        flash_alert("Cannot update contact as that email address is already in use", 'danger');
+        redirect('contact_edit.php?id=' . $contact_id);
+    }
+
+    // Same claim check as add_contact (MSP-DS-16)
+    require_once dirname(__DIR__) . '/includes/inbound_routing.php';
+    if ($contact_email !== '' && portalContactEmailConflict($mysqli, $contact_email, $session_client_id, $contact_id) !== '') {
         flash_alert("Cannot update contact as that email address is already in use", 'danger');
         redirect('contact_edit.php?id=' . $contact_id);
     }
