@@ -431,7 +431,15 @@ function deliverQueueRow(array $row): bool {
             !empty($row['email_auto'])
         );
 
-        mysqli_query($mysqli, "UPDATE email_queue SET email_status = 3, email_sent_at = NOW(), email_started_at = NULL, email_attempts = $email_attempts WHERE email_id = $email_id");
+        // MSP-DS-43: once delivered, a credential share link no longer keeps its #ek decryption key in the queue row
+        $content_redacted_sql = '';
+        if (isset($row['email_content']) && strpos((string) $row['email_content'], '#ek=') !== false) {
+            $redacted = preg_replace('/#ek=[A-Za-z0-9_\-+\/=%]+/', '#ek=[removed after delivery]', (string) $row['email_content']);
+            if ($redacted !== null) {
+                $content_redacted_sql = ", email_content = '" . mysqli_real_escape_string($mysqli, $redacted) . "'";
+            }
+        }
+        mysqli_query($mysqli, "UPDATE email_queue SET email_status = 3, email_sent_at = NOW(), email_started_at = NULL, email_attempts = $email_attempts$content_redacted_sql WHERE email_id = $email_id");
     } catch (\Throwable $e) {
         // email_failed_at starts the back-off clock (5, 15, 60, 240 minutes - MailQueuePolicy::BACKOFF_MINUTES).
         mysqli_query($mysqli, "UPDATE email_queue SET email_status = 2, email_failed_at = NOW(), email_started_at = NULL, email_attempts = $email_attempts WHERE email_id = $email_id");
