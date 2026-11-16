@@ -1380,7 +1380,7 @@ if (isset($_GET['contact_id'])) {
                 },
                 function(data) {
                     //If we get a response from post.php, parse it as JSON
-                    const password = (typeof data === "string") ? JSON.parse(data) : data;
+                    const password = data; // jQuery already parsed the application/json response (review RR5)
 
                     // Set the password value to the correct modal, based on the type
                     if (type == "add") {

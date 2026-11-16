@@ -324,7 +324,7 @@ function generatePassword() {
             get_readable_pass: 'true'
         },
         function(data) {
-            const password = (typeof data === "string") ? JSON.parse(data) : data;
+            const password = data; // jQuery already parsed the application/json response (review RR5)
             document.getElementById("password").value = password;
         }
     );
