@@ -617,14 +617,25 @@ require_once __DIR__ . '/backup_recovery.php';
 // ── Master key reveal ─────────────────────────────────────────────────────────
 if (isset($_POST['backup_master_key'])) {
     validateCSRFToken($_POST['csrf_token']);
-    $password = $_POST['password'];
+    $password = (string) ($_POST['password'] ?? '');
     $sql = mysqli_query($mysqli, "SELECT * FROM users WHERE user_id = $session_user_id");
     $row = mysqli_fetch_assoc($sql);
-    if (password_verify($password, $row['user_password'])) {
-        $site_encryption_master_key = decryptUserSpecificKey($row['user_specific_encryption_ciphertext'], $password);
+    // MSP-DS-116: counted and limited like every other password re-check (5 per 5 minutes per account, audited).
+    if (secReauthPassword($mysqli, (int) $session_user_id, $password) && $row) {
+        // MSP-DS-117: a vw3 wrap needs the vault v3 resolver; the legacy decrypt returns false for it.
+        $wrap = (string) $row['user_specific_encryption_ciphertext'];
+        $site_encryption_master_key = str_starts_with($wrap, 'vw3:')
+            ? vaultLoginMasterKey($mysqli, (int) $session_user_id, $wrap, $password)
+            : decryptUserSpecificKey($wrap, $password);
+        if (!is_string($site_encryption_master_key) || $site_encryption_master_key === '') {
+            logAction('Master Key', 'Download', "$session_name could not retrieve the master encryption key (no readable key for this account)");
+            flash_alert('The master key could not be read for your account. Nothing was shown.', 'error');
+            redirect();
+        }
         logAction('Master Key', 'Download', "$session_name retrieved the master encryption key");
         appNotify('Master Key', "$session_name retrieved the master encryption key");
-        echo "<div class='alert alert-warning mt-2'><strong>Master Encryption Key:</strong><br><code>$site_encryption_master_key</code></div>";
+        echo "<div class='alert alert-warning mt-2'><strong>Master Encryption Key:</strong><br><code>" . nullable_htmlentities($site_encryption_master_key) . "</code></div>";
+        exit;
     } else {
         logAction('Master Key', 'Download', "$session_name failed to retrieve the master encryption key");
         flash_alert('Incorrect password.', 'error');

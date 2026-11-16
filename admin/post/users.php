@@ -480,17 +480,16 @@ if (isset($_POST['ir_reset_user_password'])) {
     validateCSRFToken($_POST['csrf_token']);
 
     // Confirm logged-in user password, for security
-    $admin_password = $_POST['admin_password'];
-    $sql = mysqli_query($mysqli, "SELECT * FROM users WHERE user_id = $session_user_id");
-    $userRow = mysqli_fetch_assoc($sql);
+    $admin_password = (string) ($_POST['admin_password'] ?? '');
 
-    if (!password_verify($admin_password, $userRow['user_password'])) {
+    // MSP-DS-116: counted and limited like every other password re-check
+    if (!secReauthPassword($mysqli, (int) $session_user_id, $admin_password)) {
         flash_alert("Incorrect password.", 'error');
         redirect();
     }
 
-    // Get agents/users, other than the current user
-    $sql_users = mysqli_query($mysqli, "SELECT * FROM users WHERE (user_archived_at IS NULL AND user_id != $session_user_id)");
+    // Get agents, other than the current user. MSP-DS-122: client-portal logins (user_type 2) are not agents and are left alone.
+    $sql_users = mysqli_query($mysqli, "SELECT * FROM users WHERE (user_archived_at IS NULL AND user_type = 1 AND user_id != $session_user_id)");
 
     // Reset passwords
     while ($row = mysqli_fetch_assoc($sql_users)) {
@@ -504,6 +503,7 @@ if (isset($_POST['ir_reset_user_password'])) {
 
         mysqli_query($mysqli, "UPDATE users SET user_password = '$new_password', user_specific_encryption_ciphertext = '$user_specific_encryption_ciphertext' WHERE user_id = $user_id");
         mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
+        mysqli_query($mysqli, "DELETE FROM user_passkeys WHERE passkey_user_id = $user_id");   // MSP-DS-140: a passkey enrolled by an intruder must not survive the reset
         secSessionsOnPasswordChange($mysqli, $user_id, null);
 
         echo "<br><br>";

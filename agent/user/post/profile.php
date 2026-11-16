@@ -135,8 +135,7 @@ if (isset($_POST['edit_your_user_password'])) {
     }
 
     // Verify current password before allowing change
-    $pw_check = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $session_user_id"));
-    if (!$pw_check || !password_verify($current_password, $pw_check['user_password'])) {
+    if (!secReauthPassword($mysqli, (int) $session_user_id, (string) $current_password)) {   // MSP-DS-140: counted and limited
         flash_alert('Current password is incorrect', 'error');
         redirect('user_security.php');
     }
@@ -373,7 +372,7 @@ if (isset($_POST['regenerate_recovery_codes'])) {
     validateCSRFToken($_POST['csrf_token']);
 
     $own = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password, user_token FROM users WHERE user_id = $session_user_id"));
-    if (!$own || !password_verify((string) ($_POST['current_password'] ?? ''), (string) $own['user_password'])) {
+    if (!$own || !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['current_password'] ?? ''))) {   // MSP-DS-140
         flash_alert('Current password is incorrect', 'error');
         redirect('user_security.php');
     }

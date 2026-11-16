@@ -370,10 +370,23 @@ if (!function_exists('secSetting')) {
      */
     function secReauthPassword(mysqli $mysqli, int $userId, string $password): bool
     {
+        // MSP-DS-140: an attempt is reserved atomically BEFORE the password is checked (5 per 5 minutes per account, the same counter
+        // as the sign-in and the mobile API), so a stolen session cannot guess the password in a loop. A correct password resets it.
+        mysqli_query($mysqli, "UPDATE users SET
+                user_failed_login_count = IF(user_failed_login_at IS NULL OR user_failed_login_at <= UTC_TIMESTAMP() - INTERVAL 300 SECOND, 1, user_failed_login_count + 1),
+                user_failed_login_at = UTC_TIMESTAMP()
+            WHERE user_id = $userId AND user_type = 1 AND user_status = 1 AND user_archived_at IS NULL
+              AND (user_failed_login_count < 5 OR user_failed_login_at IS NULL OR user_failed_login_at <= UTC_TIMESTAMP() - INTERVAL 300 SECOND)");
+        if (mysqli_affected_rows($mysqli) < 1) {
+            secAudit('auth.reauth_locked', $userId, 'user', $userId, 'failure', 'Password re-check refused: too many attempts');
+
+            return false;
+        }
         $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $userId AND user_type = 1 AND user_status = 1 AND user_archived_at IS NULL LIMIT 1"));
         $ok = $row && $password !== '' && password_verify($password, (string) $row['user_password']);
-        if (!$ok) {
-            mysqli_query($mysqli, "UPDATE users SET user_failed_login_count = user_failed_login_count + 1, user_failed_login_at = UTC_TIMESTAMP() WHERE user_id = $userId");
+        if ($ok) {
+            mysqli_query($mysqli, "UPDATE users SET user_failed_login_count = 0 WHERE user_id = $userId");
+        } else {
             secAudit('auth.reauth_failed', $userId, 'user', $userId, 'failure', 'Wrong current password on a security change');
         }
 
