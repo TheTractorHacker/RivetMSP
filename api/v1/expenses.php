@@ -5,7 +5,8 @@ defined('FROM_API') || die();
 require_once __DIR__ . '/includes/api_permissions.php';
 
 $uid = $api_user_id;
-api_require_module_permission($mysqli, $uid, 'module_financial');
+// MSP-DS-76: creating an expense needs level 2, like agent/post/expense.php; listing stays at level 1.
+api_require_module_permission($mysqli, $uid, 'module_financial', $method === 'GET' ? 1 : 2);
 
 // Client-scope restriction, mirroring tickets.php/client_tabs.php.
 $expense_client_scope_clause = api_client_scope_sql('e.expense_client_id');
