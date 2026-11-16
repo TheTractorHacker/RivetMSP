@@ -131,16 +131,20 @@ if ($item_type == "Document") {
         exit();
     }
 
+    // MSP-DS-104: claim the view atomically before anything is rendered
+    require_once __DIR__ . '/../includes/share_views.php';
+    if (!claimSharedItemView($mysqli, $item_id)) {
+        echo "<div class='alert alert-danger'>Item cannot be viewed at this time. Check with the person that sent you this link to ensure it is correct and has not expired.</div>";
+        require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
+        exit();
+    }
+
     $doc_title = nullable_htmlentities($doc_row['document_name']);
     $doc_title_escaped = sanitizeInput($doc_row['document_name']);
     $doc_content = $purifier->purify($doc_row['document_content']);
 
     echo "<h3>$doc_title</h3>";
     echo "<div class='prettyContent'>$doc_content</div>";
-
-    // Update document view count
-    $new_item_views = $item_views + 1;
-    mysqli_query($mysqli, "UPDATE shared_items SET item_views = $new_item_views WHERE item_id = $item_id");
 
     // Logging
     $name = mysqli_real_escape_string($mysqli, $doc_title);
@@ -175,6 +179,14 @@ if ($item_type == "Document") {
         echo "<div class='alert alert-danger'>Error retrieving login.</div>";
         require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
 
+        exit();
+    }
+
+    // MSP-DS-104: claim the view atomically before the encrypted blobs are rendered
+    require_once __DIR__ . '/../includes/share_views.php';
+    if (!claimSharedItemView($mysqli, $item_id)) {
+        echo "<div class='alert alert-danger'>Item cannot be viewed at this time. Check with the person that sent you this link to ensure it is correct and has not expired.</div>";
+        require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
         exit();
     }
 
@@ -336,10 +348,6 @@ if ($item_type == "Document") {
 
 
     <?php
-
-    // Update credential view count
-    $new_item_views = $item_views + 1;
-    mysqli_query($mysqli, "UPDATE shared_items SET item_views = $new_item_views WHERE item_id = $item_id");
 
     // Logging
     $name = sanitizeInput($credential_row['credential_name']);

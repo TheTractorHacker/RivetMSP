@@ -68,15 +68,17 @@ if (isset($_GET['id']) && isset($_GET['key'])) {
     $client_id = intval($file_row['file_client_id']);
     $file_path = "../uploads/clients/$client_id/" . basename($file_reference_name);
 
+    // MSP-DS-104: claim the view atomically before the file is streamed
+    require_once __DIR__ . '/../includes/share_views.php';
+    if (!claimSharedItemView($mysqli, $item_id)) {
+        exit("Item cannot be viewed at this time (view limit exceeded).");
+    }
+
     // Display file as download
     $mime_type = mime_content_type($file_path);
     header('Content-type: '.$mime_type);
     header('Content-Disposition: attachment; filename=' . $file_name);
     readfile($file_path);
-
-    // Update file view count
-    $new_item_views = $item_views + 1;
-    mysqli_query($mysqli, "UPDATE shared_items SET item_views = $new_item_views WHERE item_id = $item_id");
 
     //Logging
     logAction("Share", "View", "Downloaded shared file $file_name via link", $client_id);
