@@ -804,7 +804,20 @@ if (isset($_POST['guest_quote_upload_file'])) {
     $url_key = sanitizeInput($_POST['url_key']);
 
     // Select only the necessary fields
-    $sql = mysqli_query($mysqli, "SELECT quote_prefix, quote_number, client_id FROM quotes LEFT JOIN clients ON quote_client_id = client_id WHERE quote_id = $quote_id AND quote_url_key = '$url_key'");
+    $sql = mysqli_query($mysqli, "SELECT quote_prefix, quote_number, quote_status, quote_expire, client_id FROM quotes LEFT JOIN clients ON quote_client_id = client_id WHERE quote_id = $quote_id AND quote_url_key = '$url_key'");
+
+    // MSP-DS-162: uploads only while the quote is open (Sent/Viewed, not expired) or accepted; at most 5 files per request and 20 per quote
+    $upload_row = mysqli_num_rows($sql) == 1 ? mysqli_fetch_assoc($sql) : null;
+    $upload_open = $upload_row
+        && in_array($upload_row['quote_status'], ['Sent', 'Viewed', 'Accepted'], true)
+        && ($upload_row['quote_status'] === 'Accepted' || empty($upload_row['quote_expire']) || $upload_row['quote_expire'] >= date('Y-m-d'));
+    if ($upload_row && !$upload_open) {
+        flash_alert('This quote is no longer accepting uploads.', 'error');
+        redirect();
+    }
+    $upload_existing = $upload_row ? intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM quote_files WHERE quote_id = $quote_id"))[0]) : 0;
+    $upload_batch_ok = 0;
+    mysqli_data_seek($sql, 0);
 
     if (mysqli_num_rows($sql) == 1) {
         $row = mysqli_fetch_assoc($sql);
@@ -819,7 +832,7 @@ if (isset($_POST['guest_quote_upload_file'])) {
         // Store attached any file
         if (!empty($_FILES)) {
 
-            for ($i = 0; $i < count($_FILES['file']['name']); $i++) {
+            for ($i = 0; $i < count($_FILES['file']['name']) && $i < 5 && $upload_existing + $i < 20; $i++) {
                 // Extract file details for this iteration
                 $single_file = [
                     'name' => $_FILES['file']['name'][$i],
@@ -870,7 +883,7 @@ if (isset($_POST['guest_quote_upload_file'])) {
                     // Logging & feedback
                     flash_alert('File uploaded!');
 
-                    appNotify("Quote File", "$file_name was uploaded to quote $quote_prefix$quote_number", "/agent/quote.php?quote_id=$quote_id", $client_id);
+                    $upload_batch_ok++;
 
                     mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Upload', history_description = 'Client uploaded file $file_name', history_quote_id = $quote_id");
 
@@ -882,6 +895,11 @@ if (isset($_POST['guest_quote_upload_file'])) {
                     logApp("Guest", "error", "Error uploading file to invoice");
                 }
 
+            }
+
+            // One notification per upload batch, without the visitor's file name in the text
+            if ($upload_batch_ok > 0) {
+                appNotify("Quote File", "$upload_batch_ok file(s) were uploaded to quote $quote_prefix$quote_number", "/agent/quote.php?quote_id=$quote_id", $client_id);
             }
         }
 
