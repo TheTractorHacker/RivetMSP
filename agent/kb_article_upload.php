@@ -10,7 +10,17 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/config.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/functions.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/check_login.php';
 
-enforceUserPermission('module_kb');
+// Writing a file is a write-level action, and a cross-site page must not be able to trigger it with the agent's cookie (MSP-DS-29).
+// TinyMCE posts the file itself and cannot add the form token, so the request must come from this site (Sec-Fetch-Site / Origin).
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/request_origin.php';
+if (!requestIsSameOrigin($_SERVER)) {
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode(['error' => ['message' => 'Cross-site upload refused']]);
+    exit;
+}
+
+enforceUserPermission('module_kb', 2);
 
 header('Content-Type: application/json');
 
