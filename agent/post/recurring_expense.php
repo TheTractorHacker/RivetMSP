@@ -13,6 +13,11 @@ if (isset($_POST['create_recurring_expense'])) {
     enforceUserPermission('module_financial', 2);
 
     $frequency = intval($_POST['frequency']);
+    // MSP-DS-92: only monthly (1) and yearly (2) exist; anything else would be re-booked on every cron run
+    if (!in_array($frequency, [1, 2], true)) {
+        flash_alert('Choose a valid frequency (monthly or yearly)', 'error');
+        redirect();
+    }
     $day = intval($_POST['day']);
     $month = intval($_POST['month']);
     $amount =  floatval(str_replace(',', '', $_POST['amount']));
@@ -58,6 +63,11 @@ if (isset($_POST['edit_recurring_expense'])) {
     if ($current_re_client_id) { enforceClientAccess($current_re_client_id); } // MSP-DS-55
 
     $frequency = intval($_POST['frequency']);
+    // MSP-DS-92: only monthly (1) and yearly (2) exist; anything else would be re-booked on every cron run
+    if (!in_array($frequency, [1, 2], true)) {
+        flash_alert('Choose a valid frequency (monthly or yearly)', 'error');
+        redirect();
+    }
     $day = intval($_POST['day']);
     $month = intval($_POST['month']);
     $amount =  floatval(str_replace(',', '', $_POST['amount']));

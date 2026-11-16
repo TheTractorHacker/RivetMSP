@@ -1238,6 +1238,13 @@ while ($row = mysqli_fetch_assoc($sql_recurring_expenses)) {
     $recurring_expense_account_id = intval($row['recurring_expense_account_id']);
     $recurring_expense_client_id = intval($row['recurring_expense_client_id']);
 
+    // MSP-DS-92: an unknown frequency used to keep the row due today and book a new expense on every run. Skip it (with a notification) and push it out a day.
+    if (!in_array($recurring_expense_frequency, [1, 2], true)) {
+        appNotify("Expense", "Recurring expense $recurring_expense_description has an unknown frequency and was skipped", "/agent/recurring_expenses.php", $recurring_expense_client_id);
+        mysqli_query($mysqli, "UPDATE recurring_expenses SET recurring_expense_next_date = DATE_ADD(CURDATE(), INTERVAL 1 DAY) WHERE recurring_expense_id = $recurring_expense_id");
+        continue;
+    }
+
     // Calculate next billing date based on frequency
     if ($recurring_expense_frequency == 1) { // Monthly
         $next_date_query = "DATE_ADD(CURDATE(), INTERVAL 1 MONTH)";
