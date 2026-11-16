@@ -408,6 +408,16 @@ if (isset($_POST['add_invoice_item'])) {
 
     $subtotal = $price * $qty;
 
+    // MSP-DS-129 (review R15): a negative price must not take the total below what was already paid
+    $line_tax_pct = 0;
+    if ($tax_id > 0) {
+        $line_tax_pct = floatval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT tax_percent FROM taxes WHERE tax_id = $tax_id"))[0] ?? 0);
+    }
+    if ($line_block = invoiceLineBlockReason($mysqli, $invoice_id, $subtotal + $subtotal * $line_tax_pct / 100)) {
+        flash_alert($line_block, 'error');
+        redirect();
+    }
+
     // Update Product Inventory
     if ($product_id) {
          // Only enforce stock for tangible products
@@ -466,6 +476,8 @@ if (isset($_POST['add_invoice_item'])) {
     $new_invoice_amount = max(0, $invoice_total - $invoice_discount);
 
     mysqli_query($mysqli,"UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
+
+    invoiceSettleStatus($mysqli, $invoice_id);
 
     logAction("Invoice", "Edit", "$session_name added item $name to invoice $invoice_prefix$invoice_number", $client_id, $invoice_id);
 

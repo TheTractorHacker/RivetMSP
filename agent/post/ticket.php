@@ -3297,6 +3297,18 @@ if (isset($_POST['add_invoice_from_ticket'])) {
             flash_alert($block_reason, 'error');
             redirect();
         }
+        // MSP-DS-129 (review R15): a negative price must not take the total below what was already paid
+        $from_ticket_tax_pct = 0;
+        $from_ticket_tax_id = intval($_POST['tax_id'] ?? 0);
+        if ($from_ticket_tax_id > 0) {
+            $from_ticket_tax_pct = floatval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT tax_percent FROM taxes WHERE tax_id = $from_ticket_tax_id"))[0] ?? 0);
+        }
+        $from_ticket_line = floatval($_POST['qty'] ?? 0) * floatval($_POST['price'] ?? 0);
+        $line_block = invoiceLineBlockReason($mysqli, $invoice_id, $from_ticket_line + $from_ticket_line * $from_ticket_tax_pct / 100);
+        if ($line_block !== null) {
+            flash_alert($line_block, 'error');
+            redirect();
+        }
         $invoice_prefix = sanitizeInput($row['invoice_prefix']);
         $invoice_number = intval($row['invoice_number']);
     }
@@ -3334,6 +3346,7 @@ if (isset($_POST['add_invoice_from_ticket'])) {
     $new_invoice_amount = max(0, floatval($row_total['invoice_total']) - $invoice_discount_from_row);
 
     mysqli_query($mysqli, "UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
+    invoiceSettleStatus($mysqli, $invoice_id);
 
     mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Draft', history_description = 'Invoice created from Ticket $ticket_prefix$ticket_number', history_invoice_id = $invoice_id");
 
@@ -3420,7 +3433,7 @@ if (isset($_POST['add_quote_from_ticket'])) {
     // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.
     $quote_prefix_sql = mysqli_real_escape_string($mysqli, (string) $config_quote_prefix);
     $company_currency_sql = mysqli_real_escape_string($mysqli, (string) $session_company_currency);
-    mysqli_query($mysqli,"INSERT INTO quotes SET quote_prefix = '$quote_prefix_sql', quote_number = $quote_number, quote_scope = '$scope', quote_date = '$date', quote_expire = '$expire', quote_amount = $total, quote_currency_code = '$company_currency_sql', quote_category_id = $category, quote_status = 'Draft', quote_url_key = '$quote_url_key', quote_client_id = $client_id");
+    mysqli_query($mysqli,"INSERT INTO quotes SET quote_prefix = '$quote_prefix_sql', quote_number = $quote_number, quote_scope = '$scope', quote_date = '$date', quote_expire = '$expire', quote_amount = " . max(0, $total) . ", quote_currency_code = '$company_currency_sql', quote_category_id = $category, quote_status = 'Draft', quote_url_key = '$quote_url_key', quote_client_id = $client_id");
 
     $quote_id = mysqli_insert_id($mysqli);
 

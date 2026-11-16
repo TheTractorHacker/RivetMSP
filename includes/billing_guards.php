@@ -200,6 +200,42 @@ function invoiceChangeBlockReason($mysqli, $invoice_id, bool $block_if_payments 
 }
 
 /**
+ * MSP-DS-68 / MSP-DS-129 (review R15): the invoice amount after adding a line of $line_total - every existing line plus the new one, minus the
+ * discount, never below zero (same formula the line-item handlers use after saving).
+ */
+function invoiceAmountAfterLine($mysqli, $invoice_id, $line_total): float
+{
+    $invoice_id = intval($invoice_id);
+    $items = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COALESCE(SUM(item_total), 0) FROM invoice_items WHERE item_invoice_id = $invoice_id"))[0] ?? 0;
+    $disc = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COALESCE(invoice_discount_amount, 0) FROM invoices WHERE invoice_id = $invoice_id"))[0] ?? 0;
+    return max(0, moneyToCents(floatval($items) + floatval($line_total) - floatval($disc)) / 100);
+}
+
+/**
+ * Reason a line of $line_total (negative = credit) cannot be added to an existing invoice, or null. A line that would take the invoice total
+ * below what has already been paid leaves a Partial invoice no payment path accepts (MSP-DS-129), so it is refused.
+ */
+function invoiceLineBlockReason($mysqli, $invoice_id, $line_total): ?string
+{
+    if (invoiceBalanceDue($mysqli, $invoice_id, invoiceAmountAfterLine($mysqli, $invoice_id, $line_total)) < 0) {
+        return 'This line would take the invoice total below the amount already paid; reconcile the payments first';
+    }
+    return null;
+}
+
+/**
+ * After an invoice total change: a Partial invoice whose payments now exactly cover the total is Paid (invoiceStatusAfterPayment).
+ */
+function invoiceSettleStatus($mysqli, $invoice_id): void
+{
+    $invoice_id = intval($invoice_id);
+    $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT invoice_status, invoice_amount FROM invoices WHERE invoice_id = $invoice_id LIMIT 1"));
+    if ($row && $row['invoice_status'] === 'Partial' && invoiceBalanceDue($mysqli, $invoice_id, $row['invoice_amount']) <= 0) {
+        mysqli_query($mysqli, "UPDATE invoices SET invoice_status = 'Paid' WHERE invoice_id = $invoice_id LIMIT 1");
+    }
+}
+
+/**
  * MSP-DS-35: write one invoice-history row per (invoice, PaymentIntent, kind) and say whether this call wrote it. $pi_id must already be
  * SQL-escaped by the caller (sanitizeInput). Used for the two Stripe cases that must never be silent: a bank debit that is still 'processing'
  * when the customer returns to the pay page, and a succeeded PaymentIntent the webhook could not record against a payable invoice.
