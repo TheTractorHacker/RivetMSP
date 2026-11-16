@@ -688,7 +688,17 @@ if (isset($_POST['edit_contact'])) {
 
     // Update Existing User
     if ($contact_user_id > 0) {
+        // MSP-DS-145 (re-review MRR-11): decided in SQL, with the same escaped values the UPDATE writes, before the row changes
+        $contact_login_changed = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT (user_email <> '$contact_email' OR user_auth_method <> '$contact_auth_method') AS changed FROM users WHERE user_id = $contact_user_id AND user_type = 2 LIMIT 1"));
         mysqli_query($mysqli, "UPDATE users SET user_name = '$contact_name', user_email = '$contact_email', user_auth_method = '$contact_auth_method' WHERE user_id = $contact_user_id AND user_type = 2");
+        // A changed sign-in email or login method ends that contact's open portal sessions (same rule as agent/post/contact.php)
+        if ($contact_login_changed && !empty($contact_login_changed['changed'])) {
+            require_once dirname(__DIR__) . '/includes/security_sessions.php';
+            $new_sv = secPortalSessionsRevoke($mysqli, $contact_user_id);
+            if ($contact_user_id === (int) $session_user_id) {
+                $_SESSION['portal_sv'] = $new_sv;   // a contact editing their own record keeps this browser
+            }
+        }
 
     // Else, create New User
     } elseif ($contact_user_id == 0 && $contact_name && $contact_email && $contact_auth_method) {
