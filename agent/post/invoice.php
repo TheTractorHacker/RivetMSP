@@ -877,6 +877,13 @@ if (isset($_POST['add_ticket_to_invoice'])) {
 
     enforceClientAccess();
 
+    // MSP-DS-67: the invoice must belong to the ticket's own client
+    $link_invoice_client_id = intval(getFieldById('invoices', $invoice_id, 'invoice_client_id'));
+    if ($link_invoice_client_id !== $client_id) {
+        flash_alert("That invoice belongs to a different client than the ticket.", 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"UPDATE tickets SET ticket_invoice_id = $invoice_id WHERE ticket_id = $ticket_id");
 
     flash_alert("Ticket linked to invoice");

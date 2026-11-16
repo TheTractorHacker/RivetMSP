@@ -2654,7 +2654,12 @@ if (isset($_POST['edit_ticket_reply'])) {
 
     $ticket_reply_id = intval($_POST['ticket_reply_id']);
     $ticket_reply = mysqli_real_escape_string($mysqli, $_POST['ticket_reply']);
-    $ticket_reply_type = sanitizeInput($_POST['ticket_reply_type']);
+    // MSP-DS-67: only the agent-side reply types can be set here ('Client' would make an agent reply render as client-authored)
+    $ticket_reply_type = (string) ($_POST['ticket_reply_type'] ?? '');
+    if (!in_array($ticket_reply_type, ['Public', 'Internal'], true)) {
+        flash_alert("Invalid reply type", 'error');
+        redirect();
+    }
     // MSP-DS-65: strict H:MM:SS, 0-838 hours, never negative
     $ticket_reply_time_worked = parseTimeWorked($_POST['time'] ?? '');
     if ($ticket_reply_time_worked === null) {
