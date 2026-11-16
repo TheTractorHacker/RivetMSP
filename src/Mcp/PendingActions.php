@@ -210,6 +210,13 @@ final class PendingActions
             return $fail('The agent who requested this no longer has access to do it. Reject it instead.');
         }
 
+        // MSP-DS-114: the OAuth client that proposed this must still be enabled and the requester must still hold a live consent for it.
+        if (!$this->oauthSourceStillLive((string) $row['oauth_client_id'], $requester)) {
+            $this->audit('mcp.action_denied', $approverId, $id, 'Proposing OAuth grant no longer live', ['requested_by' => $requester]);
+
+            return $fail('The connection that proposed this action has been revoked or disabled. Reject it instead.');
+        }
+
         // Atomic claim: exactly one caller can move pending -> approved, and only while it has not expired.
         $stmt = $this->db->prepare("UPDATE mcp_pending_actions SET status = 'approved', decided_by = ?, decided_at = NOW() WHERE action_id = ? AND status = 'pending' AND expires_at > NOW()");
         $stmt->bind_param('ii', $approverId, $id);
@@ -263,6 +270,23 @@ final class PendingActions
         $this->audit('mcp.action_executed', $approverId, $id, "Executed MCP action #$id ({$row['tool']})", ['tool' => $row['tool'], 'result' => $out['result']]);
 
         return ['ok' => true, 'message' => $msg];
+    }
+
+    /**
+     * MSP-DS-114: false when the proposal came through an OAuth client that is now disabled/deleted, or the requester no longer has
+     * a live (unrevoked, unexpired) consent for it. A proposal without an OAuth client (legacy token) is not affected.
+     * Proposals do not store the grant id (that needs a migration), so a second live consent of the same user and client still counts.
+     */
+    public function oauthSourceStillLive(string $oauthClientId, int $requesterId): bool
+    {
+        if ($oauthClientId === '') {
+            return true;
+        }
+        $rows = McpAccess::rows($this->db, "SELECT g.grant_id FROM mcp_oauth_grants g JOIN mcp_oauth_clients c ON c.client_id = g.client_id
+            WHERE g.client_id = ? AND g.user_id = ? AND g.revoked_at IS NULL AND g.expires_at > UTC_TIMESTAMP() AND c.disabled_at IS NULL
+            AND FIND_IN_SET('mcp:write', REPLACE(g.scope, ' ', ',')) > 0 LIMIT 1", 'si', [$oauthClientId, $requesterId]);
+
+        return $rows !== [];
     }
 
     /** @return array{ok:bool, message:string} */
