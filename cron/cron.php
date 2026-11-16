@@ -754,12 +754,31 @@ if ($config_send_invoice_reminders == 1) {
                 continue;
             }
 
+            // MSP-DS-2: this block is reached on every cron run of the matching calendar day. Claim (invoice, day, date) first with an
+            // atomic conditional insert into history, and skip when it was already claimed, so the late fee and the overdue email
+            // happen once per reminder day instead of once per cron tick.
+            $overdue_marker = 'Cron overdue reminder day ' . intval($day) . ' processed on ' . date('Y-m-d');
+            // The claim is serialised with a named lock: two overlapping runs (rivetCronGuard does nothing when Redis is off) cannot both
+            // pass the NOT EXISTS check. Each statement autocommits, so the second run sees the marker once the first releases.
+            $got_lock = mysqli_fetch_row(mysqli_query($mysqli, "SELECT GET_LOCK('rivet_cron_overdue_claim', 10)"))[0] ?? 0;
+            if ((int) $got_lock !== 1) {
+                continue;
+            }
+            mysqli_query($mysqli, "INSERT INTO history (history_status, history_description, history_invoice_id)
+                SELECT 'Sent', '$overdue_marker', $invoice_id FROM DUAL
+                WHERE NOT EXISTS (SELECT 1 FROM history WHERE history_invoice_id = $invoice_id AND history_description = '$overdue_marker')");
+            $claimed_now = mysqli_affected_rows($mysqli) >= 1;
+            mysqli_query($mysqli, "DO RELEASE_LOCK('rivet_cron_overdue_claim')");
+            if (!$claimed_now) {
+                continue;
+            }
+
             // Late Charges
             if ($config_invoice_late_fee_enable == 1 && $day > 1) {
 
                 $todays_date = date('Y-m-d');
-                $late_fee_amount = ($invoice_balance * $config_invoice_late_fee_percent) / 100;
-                $new_invoice_amount = $invoice_amount + $late_fee_amount;
+                $late_fee_amount = round(($invoice_balance * floatval($config_invoice_late_fee_percent)) / 100, 2);
+                $new_invoice_amount = round($invoice_amount + $late_fee_amount, 2);
 
                 mysqli_query($mysqli, "UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
 
