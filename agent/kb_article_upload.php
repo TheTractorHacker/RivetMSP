@@ -20,7 +20,7 @@ if (!requestIsSameOrigin($_SERVER)) {
     exit;
 }
 
-enforceUserPermission('module_kb', 2);
+enforceEditorImageUploadPermission();   // review R20: shared by every .tinymce editor, so Write on KB, support or client work
 validateCSRFToken($_POST['csrf_token'] ?? null);   // MSP-DS-50: the editor sends it (js/app.js)
 
 header('Content-Type: application/json');

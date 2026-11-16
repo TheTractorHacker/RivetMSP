@@ -3857,6 +3857,21 @@ function enforceUserPermission($module, $check_access_level = 1) {
 }
 
 /**
+ * Review R20 (MSP-DS-50): agent/kb_article_upload.php is the image upload behind EVERY .tinymce editor (KB articles, documents,
+ * tickets/replies/recurring tickets, client and contact bulk email), not just the KB. Saving an image is a write-level action, so
+ * it needs Write on the module of any editor that posts to it, not on module_kb specifically. Read-only roles stay refused.
+ */
+function enforceEditorImageUploadPermission(): void {
+    foreach (['module_kb', 'module_support', 'module_client'] as $module) {
+        $level = lookupUserPermission($module);
+        if ($level && $level >= 2) {
+            return;
+        }
+    }
+    enforceUserPermission('module_kb', 2); // refuses with the usual message
+}
+
+/**
  * MSP-WEB-1: call once before decrypting credential values anywhere other than the reveal endpoint (see includes/vault_reveal.php, vaultDisclosureCheck()).
  * Refuses and stops when the reveal limit is used up or, for $bulk exports/PDFs, when the password step-up is due.
  */
