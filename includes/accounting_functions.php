@@ -157,6 +157,39 @@ function accountingLog(mysqli $mysqli, int $accounting_id, string $type, int $id
 }
 
 /**
+ * MSP-DS-115: the entity map is not keyed on the connected company, so the remote ids it holds belong to the company that was connected
+ * when they were stored. Remember that company ("provider|realm") in platform_settings; when a connect lands on a different one (a
+ * sandbox -> production reconnect, another QBO company or Xero organisation, a provider switch) the old mapping is dropped so no old
+ * remote id is ever reused against the new company.
+ */
+function accountingRememberConnection(mysqli $mysqli, string $provider, ?string $realm): void {
+    $realm = (string) $realm;
+    if ($realm === '') {
+        return;
+    }
+    if (\RivetMSP\Platform\PlatformSettings::get($mysqli, 'accounting_map_connection', '') === '') {
+        \RivetMSP\Platform\PlatformSettings::set($mysqli, 'accounting_map_connection', "$provider|$realm");
+    }
+}
+
+/** Call from the connect callbacks, before the integration row is overwritten. @return int map rows dropped */
+function accountingBindConnection(mysqli $mysqli, int $accounting_id, string $provider, string $realm, ?array $prior_integration): int {
+    $bound = \RivetMSP\Platform\PlatformSettings::get($mysqli, 'accounting_map_connection', '');
+    if ($bound === '' && $prior_integration && !empty($prior_integration['accounting_realm_id'])) {
+        $bound = ($prior_integration['accounting_provider'] ?? '') . '|' . $prior_integration['accounting_realm_id'];
+    }
+    $new = "$provider|$realm";
+    $dropped = 0;
+    if ($bound !== '' && $bound !== $new) {
+        mysqli_query($mysqli, "DELETE FROM accounting_entity_map WHERE map_accounting_id = " . intval($accounting_id));
+        $dropped = max(0, (int) mysqli_affected_rows($mysqli));
+    }
+    \RivetMSP\Platform\PlatformSettings::set($mysqli, 'accounting_map_connection', $new);
+
+    return $dropped;
+}
+
+/**
  * Look up the remote (QBO) id a local entity is already mapped to, or null.
  */
 function getAccountingMap(mysqli $mysqli, int $accounting_id, string $type, int $id): ?array {

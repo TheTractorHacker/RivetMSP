@@ -146,6 +146,7 @@ if (isset($_POST['save_accounting_settings'])) {
         $prior_provider = (string) ($integration['accounting_provider'] ?? 'quickbooks_online');
         $provider_changed_sql = '';
         if ($provider !== $prior_provider) {
+            accountingRememberConnection($mysqli, $prior_provider, $integration['accounting_realm_id'] ?? null);   // MSP-DS-115
             $provider_changed_sql = "accounting_realm_id = NULL, accounting_access_token = NULL, accounting_refresh_token = NULL, accounting_token_expires_at = NULL, accounting_enabled = 0, accounting_connected_at = NULL, ";
             $enabled = 0;
         }
@@ -178,6 +179,7 @@ if (isset($_GET['disconnect'])) {
     if ($integration) {
         $disc_accounting_id = intval($integration['accounting_id']);
         $disc_provider_label = ($integration['accounting_provider'] ?? 'quickbooks_online') === 'xero' ? 'Xero' : 'QuickBooks Online';
+        accountingRememberConnection($mysqli, (string) ($integration['accounting_provider'] ?? 'quickbooks_online'), $integration['accounting_realm_id'] ?? null);   // MSP-DS-115
         mysqli_query($mysqli, "UPDATE accounting_integrations SET
             accounting_realm_id = NULL,
             accounting_access_token = NULL,

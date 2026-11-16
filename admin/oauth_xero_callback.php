@@ -148,6 +148,9 @@ $access_token_esc  = mysqli_real_escape_string($mysqli, encryptSetting($access_t
 $refresh_token_esc = mysqli_real_escape_string($mysqli, encryptSetting($refresh_token));
 $expires_at_esc    = mysqli_real_escape_string($mysqli, $expires_at);
 
+$ds115_prior = function_exists('getAccountingIntegration') ? getAccountingIntegration($mysqli) : null;
+$ds115_dropped = accountingBindConnection($mysqli, $accounting_id, 'xero', $tenant_id, is_array($ds115_prior) ? $ds115_prior : null);
+
 mysqli_query($mysqli, "UPDATE accounting_integrations SET
     accounting_provider = 'xero',
     accounting_realm_id = '$tenant_id_esc',
@@ -160,6 +163,6 @@ mysqli_query($mysqli, "UPDATE accounting_integrations SET
 ");
 
 accountingLog($mysqli, $accounting_id, 'integration', $accounting_id, 'connected', "Connected to Xero organisation \"$tenant_name\" (tenant $tenant_id)");
-logAction("Settings", "Edit", "$session_name connected Xero (tenant $tenant_id)");
+logAction("Settings", "Edit", "$session_name connected Xero (tenant $tenant_id)" . ($ds115_dropped > 0 ? "; $ds115_dropped mappings of the previously connected organisation were dropped" : ''));
 flash_alert("Xero connected successfully. Organisation: " . nullable_htmlentities($tenant_name));
 redirect($settings_accounting_path);
