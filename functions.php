@@ -1036,8 +1036,9 @@ function validateCSRFToken($token)
  */
 
 function validateAdminRole() {
-    global $session_user_role;
-    if (!isset($session_user_role) || $session_user_role != 3) {
+    // MSP-DS-98: administrator means the role's role_is_admin flag (as in admin/post.php), not the hard-coded role id 3
+    global $session_is_admin;
+    if (empty($session_is_admin)) {
         $_SESSION['alert_type'] = "danger";
         $_SESSION['alert_message'] = WORDING_ROLECHECK_FAILED;
         header("Location: " . $_SERVER["HTTP_REFERER"]);
