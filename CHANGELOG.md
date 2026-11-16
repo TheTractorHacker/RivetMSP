@@ -4,6 +4,15 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+## [26.10.53] - 2026-11-15
+
+No database version change (DB stays 2.6.137). Update Database now also catches up pending RivetCore migrations (0048/0049) on every run.
+
+### Fixed
+- **Update App refused with "the app files are not owned by the web server user".** 26.10.52 only trusted a checkout owned by the web user; the usual shared layout (checkout owned by the administrator, web user in its group) works again. The page only refuses when its own write checks fail.
+- **Update page:** a "Take a backup now" button (opens Backups) and a last-backup line.
+- **Update Database** applies RivetCore migrations a half-finished earlier update skipped (it could mark the edition database 2.6.137 while the files on disk still had RivetCore rc.55).
+
 ## [26.10.52] - 2026-11-12
 
 Database 2.6.137 (RivetCore migrations 0048 audit hash chain tables and 0049 installer `managed_externally`; both additive, applied by Update Database). **Do not deploy before the mobile apps are updated** (see "Mobile API changes").
