@@ -1,6 +1,6 @@
 <?php
 // MSP-DS-36: two Pax8 companies on one client share ONE recurring invoice, also after a re-map / billing-off. Pax8 is never called.
-// Run: SCRATCH_TABLES="pax8_integrations pax8_client_map pax8_subscriptions pax8_billing_rules recurring_invoices recurring_invoice_items settings history" tests/lib/with_scratch_db.sh php tests/msp_ds_36_pax8_one_invoice_per_client.php
+// Run: SCRATCH_TABLES="pax8_integrations pax8_client_map pax8_subscriptions pax8_billing_rules recurring_invoices recurring_invoice_items settings companies history" tests/lib/with_scratch_db.sh php tests/msp_ds_36_pax8_one_invoice_per_client.php
 if (getenv('RIVETMSP_TEST_DB') !== '1' || !preg_match('/scratch/i', (string) getenv('RIVETMSP_TEST_DB_NAME'))) { fwrite(STDERR, "scratch DB only\n"); exit(2); }
 mysqli_report(MYSQLI_REPORT_OFF);
 $mysqli = new mysqli('localhost', getenv('RIVETMSP_TEST_DB_USER'), getenv('RIVETMSP_TEST_DB_PASS'), getenv('RIVETMSP_TEST_DB_NAME'));
