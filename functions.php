@@ -976,7 +976,9 @@ function getSSL($full_name)
     }
 
     // Refuse hosts that resolve to loopback/private/reserved ranges (this runs server-side for any agent: no port-probing the LAN)
-    if (!hostResolvesOnlyToPublicIps($name)) {
+    // MSP-DS-107: connect to the address that was vetted, not to the name (a second lookup could answer differently: DNS rebinding); the name stays the TLS SNI.
+    $vetted_ips = publicIpsForHost($name);
+    if (!$vetted_ips) {
         $certificate['expire'] = '';
         $certificate['issued_by'] = '';
         $certificate['public_key'] = '';
@@ -984,8 +986,9 @@ function getSSL($full_name)
     }
 
     // Get SSL/TSL certificate (using verify peer false to allow for self-signed certs) for domain on default port
-    $socket = "ssl://$name:$port";
-    $get = stream_context_create(array("ssl" => array("capture_peer_cert" => true, "verify_peer" => false,)));
+    $connect_ip = $vetted_ips[0];
+    $socket = "ssl://" . (str_contains($connect_ip, ':') ? "[$connect_ip]" : $connect_ip) . ":$port";
+    $get = stream_context_create(array("ssl" => array("capture_peer_cert" => true, "verify_peer" => false, "peer_name" => $name, "SNI_enabled" => true, "SNI_server_name" => $name)));
     $read = stream_socket_client($socket, $errno, $errstr, 5, STREAM_CLIENT_CONNECT, $get);
 
     // If the socket connected
