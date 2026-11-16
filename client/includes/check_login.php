@@ -8,6 +8,8 @@
 if (!isset($_SESSION)) {
     // HTTP Only cookies
     ini_set("session.cookie_httponly", true);
+    // MSP-DS-145 (review R30): the portal session file must outlive the 24 hour absolute limit enforced below
+    ini_set("session.gc_maxlifetime", "86400");
     if ($config_https_only) {
         // Tell client to only send cookie(s) over HTTPS
         ini_set("session.cookie_secure", true);
@@ -16,6 +18,17 @@ if (!isset($_SESSION)) {
 }
 
 if (!isset($_SESSION['client_logged_in']) || !$_SESSION['client_logged_in']) {
+    redirect("/login.php");
+}
+
+// MSP-DS-145 (review R30): a portal session ends after 8 hours without a page request or 24 hours in all. Background polls (the SSE
+// stream, ?_bg=1) are checked but do not extend the idle timer; keepalive.php never reaches this file, so a left-open tab expires too.
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/security_sessions.php';
+$portal_background = (defined('RIVET_BACKGROUND_REQUEST') || ($_GET['_bg'] ?? '') === '1' || ($_SERVER['HTTP_X_RIVET_BACKGROUND'] ?? '') === '1'
+    || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'text/event-stream'));
+if (!secPortalSessionAlive($_SESSION, time(), $portal_background)) {
+    session_unset();
+    session_destroy();
     redirect("/login.php");
 }
 

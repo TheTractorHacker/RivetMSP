@@ -274,4 +274,43 @@ if (!function_exists('secSessionLimits')) {
         // MSP-DS-169: revoked rows are kept past the longest absolute session lifetime (90 days), so a revocation cannot be purged away
         @mysqli_query($mysqli, 'DELETE FROM user_sessions WHERE (session_revoked_at IS NULL AND session_last_seen_at < (NOW() - INTERVAL 30 DAY)) OR (session_revoked_at IS NOT NULL AND session_last_seen_at < (NOW() - INTERVAL 100 DAY))');
     }
+
+    /**
+     * MSP-DS-145 (review R30): idle and absolute lifetime for a CLIENT PORTAL session (setting-free: 8 hours idle, 24 hours absolute).
+     * $session is $_SESSION (by reference). Returns false when the session has run out and must be ended. A background request
+     * (EventSource stream, ?_bg=1, X-Rivet-Background) is still checked but never extends the idle timer. A session that pre-dates this
+     * check starts its clock on its first request.
+     */
+    function secPortalSessionAlive(array &$session, ?int $now = null, bool $background = false, int $idleSeconds = 28800, int $absoluteSeconds = 86400): bool
+    {
+        $now ??= time();
+        $started = (int) ($session['portal_started_at'] ?? 0);
+        $last    = (int) ($session['portal_last_activity'] ?? 0);
+        if ($started <= 0) {
+            $started = $now;
+            $session['portal_started_at'] = $now;
+        }
+        if ($last <= 0) {
+            $last = $now;
+        }
+        if ($now - $started > $absoluteSeconds || $now - $last > $idleSeconds) {
+            return false;
+        }
+        if (!$background) {
+            $session['portal_last_activity'] = $now;
+        } elseif (!isset($session['portal_last_activity'])) {
+            $session['portal_last_activity'] = $last;
+        }
+
+        return true;
+    }
+
+    /** Start the portal clocks and forget any password fingerprint left by an earlier sign-in in this browser (MSP-DS-145, review R30/R31). */
+    function secPortalSessionBegin(array &$session, ?int $now = null): void
+    {
+        $now ??= time();
+        $session['portal_started_at']    = $now;
+        $session['portal_last_activity'] = $now;
+        unset($session['portal_pw_fp']);
+    }
 }

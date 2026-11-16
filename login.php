@@ -770,6 +770,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                             // Keep consistent with agent flow (helps any shared session checks)
                             $_SESSION['logged']     = true;
                             session_regenerate_id(true);
+                            secPortalSessionBegin($_SESSION);   // MSP-DS-145 (review R30/R31): start the idle/absolute clocks, drop a stale password fingerprint from an earlier sign-in in this browser
                             $_SESSION['csrf_token'] = randomString(32);
 
                             // Option B: set session_user_id BEFORE logAction()

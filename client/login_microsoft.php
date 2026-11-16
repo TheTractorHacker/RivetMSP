@@ -6,6 +6,7 @@
 
 require_once '../config.php';
 require_once '../functions.php';
+require_once '../includes/security_sessions.php';
 
 if (!isset($_SESSION)) {
     // HTTP Only cookies
@@ -146,6 +147,7 @@ if ($ms_state_ok) {
             if ($user_auth_method == 'azure') {
 
                 session_regenerate_id(true);
+                secPortalSessionBegin($_SESSION);   // MSP-DS-145 (review R30/R31): start the idle/absolute clocks, drop a stale password fingerprint from an earlier sign-in in this browser
 
                 $_SESSION['client_logged_in'] = true;
                 $_SESSION['client_id'] = $client_id;
