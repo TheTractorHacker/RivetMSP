@@ -34,7 +34,14 @@ $mysqli->query("INSERT INTO accounting_integrations (accounting_id, accounting_p
 $mysqli->query("INSERT INTO accounting_entity_map (map_accounting_id, map_local_type, map_local_id, map_remote_id) VALUES (1,'client',7,'12'),(1,'invoice',301,'145')");
 
 define('LATEST_DATABASE_VERSION', '2.6.139'); define('CURRENT_DATABASE_VERSION', '2.6.138');
-$runStep = function () use ($mysqli, $root) { ob_start(); include $root . '/admin/database_updates.php'; ob_end_clean(); };
+// Run the real file up to (not including) the next group's 2.6.139 -> 2.6.140 step: later steps need tables this test does not load.
+$runStep = function () use ($mysqli, $root) {
+    $src = file_get_contents($root . '/admin/database_updates.php');
+    $cut = strpos($src, "if (\$rivetit_db_version() == '2.6.139')");
+    if ($cut === false) { $cut = strpos($src, '// Core migrations catch-up'); }
+    $tmp = $root . '/admin/.ds2_B_tmp.php'; file_put_contents($tmp, substr($src, 0, $cut));
+    ob_start(); try { include $tmp; } finally { ob_end_clean(); @unlink($tmp); }
+};
 $runStep();
 $ok('the step advances the version to 2.6.139', $one("SELECT config_current_database_version FROM settings WHERE company_id = 1") === '2.6.139');
 $ok('duplicate live runs: the finalized one is kept, the extra drafts archived', $one("SELECT GROUP_CONCAT(payroll_run_id) FROM payroll_runs WHERE payroll_run_period_id = 1 AND payroll_run_archived_at IS NULL") === '2');
@@ -75,5 +82,5 @@ foreach ($all as $t) {
     $ok("$t: migrated columns equal a fresh install's", $cols($t) === $cols("{$t}__fresh"));
     $ok("$t: migrated indexes equal a fresh install's", $idx($t) === $idx("{$t}__fresh"));
 }
-$ok('the new version constant matches', trim((string) shell_exec('grep -o "2\\.6\\.139" ' . escapeshellarg($root . '/includes/database_version.php'))) === '2.6.139');
+$ok('the version constant is at least 2.6.139', preg_match('/"(\d+\.\d+\.\d+)"/', file_get_contents($root . '/includes/database_version.php'), $vm) && version_compare($vm[1], '2.6.139', '>='));
 exit($fail ? 1 : 0);

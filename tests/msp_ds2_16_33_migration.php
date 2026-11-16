@@ -10,10 +10,10 @@ $col = function ($t, $c) use ($mysqli) { $r = $mysqli->query("SELECT COLUMN_DEFA
 // the step's own code, taken from the real file
 $f = ds_src('admin/database_updates.php');
 $a = strpos($f, "    if (\$rivetit_db_version() == '2.6.139') {");
-$b = strpos($f, '// Core migrations catch-up');
+$b = strpos($f, "    if (\$rivetit_db_version() == '2.6.140') {");
 $step = substr($f, $a, $b - $a);
 ds_t('step found and bumps to 2.6.140', $a !== false && strpos($step, "'2.6.140'") !== false);
-ds_t('LATEST_DATABASE_VERSION is 2.6.140', strpos(ds_src('includes/database_version.php'), '"2.6.140"') !== false);
+ds_t('LATEST_DATABASE_VERSION is at least 2.6.140', preg_match('/"(\d+\.\d+\.\d+)"/', ds_src('includes/database_version.php'), $vm) && version_compare($vm[1], '2.6.140', '>='));
 $rivetit_db_version = static function () use ($mysqli): string { return (string) $mysqli->query("SELECT config_current_database_version FROM settings WHERE company_id = 1")->fetch_row()[0]; };
 $run = function () use ($step, $mysqli, $rivetit_db_version) { eval($step); };   // runs the real migration step text against the scratch DB
 

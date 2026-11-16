@@ -2,7 +2,7 @@
 // MSP-DS-159: inbound mail is escaped exactly once. Runs the REAL processInboundMessage (extracted from the cron script), addTicket,
 // addReply, createMailRequestFromInbound, convertMailRequestToTicket and logMailEvent against a scratch DB with apostrophes,
 // backslashes and quotes in every field.
-// Run: SCRATCH_TABLES="companies clients domains contacts settings mailboxes tickets ticket_replies ticket_attachments ticket_watchers mail_log mail_requests mail_request_attachments email_queue logs notifications ticket_statuses categories users user_roles user_client_permissions user_settings ticket_history ticket_automation_rules ticket_automation_runs ticket_sla_events sla_policies sla_business_hours sla_business_hours_periods sla_holidays ticket_techs mail_templates mail_intake_settings mail_intake_state mail_alerts audit_events audit_chain_head platform_settings webhooks webhook_queue webhook_deliveries custom_values ticket_charges ticket_assets app_logs api_tokens ticket_metrics_daily user_role_permissions" bash tests/lib/with_scratch_db.sh php tests/msp_ds2_159.php
+// Run: SCRATCH_TABLES="assets companies clients domains contacts settings mailboxes tickets ticket_replies ticket_attachments ticket_watchers mail_log mail_requests mail_request_attachments email_queue logs notifications ticket_statuses categories users user_roles user_client_permissions user_settings ticket_history ticket_automation_rules ticket_automation_runs ticket_sla_events sla_policies sla_business_hours sla_business_hours_periods sla_holidays ticket_techs mail_templates mail_intake_settings mail_intake_state mail_alerts audit_events audit_chain_head platform_settings webhooks webhook_queue webhook_deliveries custom_values ticket_charges ticket_assets app_logs api_tokens ticket_metrics_daily user_role_permissions" bash tests/lib/with_scratch_db.sh php tests/msp_ds2_159.php
 if (getenv('RIVETMSP_TEST_DB') !== '1' || !preg_match('/scratch/i', (string) getenv('RIVETMSP_TEST_DB_NAME'))) { fwrite(STDERR, "scratch DB only\n"); exit(2); }
 mysqli_report(MYSQLI_REPORT_OFF);
 $mysqli = new mysqli('localhost', getenv('RIVETMSP_TEST_DB_USER'), getenv('RIVETMSP_TEST_DB_PASS'), getenv('RIVETMSP_TEST_DB_NAME'));
@@ -31,7 +31,7 @@ $config_ticket_prefix_re = preg_quote($config_ticket_prefix, '/');
 
 $mysqli->query("INSERT INTO companies (company_id, company_name, company_phone) VALUES (1, 'Acme', '5551234567')");
 $mysqli->query("INSERT INTO clients (client_id, client_name) VALUES (5, 'O\\'Neil \\\\ Co')");
-$mysqli->query("INSERT INTO domains (domain_name, domain_client_id) VALUES ('owned.test', 5)");
+$mysqli->query("INSERT INTO domains (domain_name, domain_client_id, domain_route_mail) VALUES ('owned.test', 5, 1)");
 $mysqli->query("INSERT INTO contacts (contact_id, contact_name, contact_email, contact_client_id) VALUES (9, 'Pat O\\'Brien', 'pat.o\\'brien@known.test', 5)");
 $mysqli->query("INSERT INTO settings (company_id, config_ticket_next_number) VALUES (1, 100) ON DUPLICATE KEY UPDATE config_ticket_next_number = 100");
 $mysqli->query("INSERT INTO mailboxes (mailbox_id, mailbox_email, mailbox_from_name) VALUES (1, 'help@x.test', 'Help')");

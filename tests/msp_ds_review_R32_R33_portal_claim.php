@@ -18,6 +18,6 @@ $ok('R33: both callers pass the raw address', substr_count($src, 'portalContactE
 $ok('R33: the raw value mirrors sanitizeInput minus escaping (strip_tags + trim)', substr_count($src, "\$contact_email_raw = trim(strip_tags((string) (\$_POST['contact_email'] ?? '')));") === 2);
 $ok('R32: the old distinguishing wording is gone', !str_contains($src, 'as that email address is already in use'));
 preg_match_all('/flash_alert\("(This email address cannot be used[^"]*)", \'danger\'\);/', $src, $mm);
-$ok('R32: all four refusals (users-table and claim, add and edit) show the same sentence', count($mm[1]) === 4 && count(array_unique($mm[1])) === 1);
-$ok('R32: claim refusals are logged for review', substr_count($src, "'Contact Address Refused'") === 2);
+$ok('R32: every refusal (users-table, claim, probe limit; add and edit) (users-table and claim, add and edit) show the same sentence', count($mm[1]) >= 4 && count(array_unique($mm[1])) === 1);
+$ok('R32: claim refusals are logged for review', substr_count($src, "'Contact Address Refused'") === 4);
 exit($fail ? 1 : 0);

@@ -38,7 +38,10 @@ function ds2_migrate(): string
         . '$mysqli = new mysqli("localhost", getenv("RIVETMSP_TEST_DB_USER"), getenv("RIVETMSP_TEST_DB_PASS"), getenv("RIVETMSP_TEST_DB_NAME"));'
         . '$mysqli->query("SET SESSION sql_mode=\'\'");'
         . 'define("LATEST_DATABASE_VERSION", "2.6.138"); define("CURRENT_DATABASE_VERSION", "2.6.137");'
-        . 'require $root . "/admin/database_updates.php";'
+        // Stop before the 2.6.138 -> 2.6.139 step: later groups' steps need tables this test does not load.
+        . '$src = file_get_contents($root . "/admin/database_updates.php"); $cut = strpos($src, "if (\\$rivetit_db_version() == \'2.6.138\')");'
+        . 'if ($cut === false) { echo "CUT_MARKER_MISSING\n"; exit(3); }'
+        . '$tmp = $root . "/admin/.ds2_migration_tmp.php"; file_put_contents($tmp, substr($src, 0, $cut)); try { require $tmp; } finally { @unlink($tmp); }'
         . 'echo "MIGRATION_DONE\n";';
     $p = proc_open([PHP_BINARY, '-r', $code], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
     $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);

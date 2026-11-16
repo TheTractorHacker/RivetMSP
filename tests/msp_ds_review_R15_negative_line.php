@@ -23,7 +23,7 @@ $ok($mysqli->query("SELECT invoice_status FROM invoices WHERE invoice_id = 2")->
 $inv = file_get_contents(__DIR__ . '/../agent/post/invoice.php');
 $tk = file_get_contents(__DIR__ . '/../agent/post/ticket.php');
 $b = substr($inv, strpos($inv, "isset(\$_POST['add_invoice_item'])"), 4000);
-$ok(str_contains($b, 'invoiceLineBlockReason(') && strpos($b, 'invoiceLineBlockReason(') < strpos($b, 'INSERT INTO invoice_items') && strpos($b, 'invoiceLineBlockReason(') < strpos($b, 'INSERT INTO product_stock'), 'add_invoice_item checks before stock/insert');
+$ok(str_contains($b, 'invoiceLineBlockReason(') && strpos($b, 'invoiceLineBlockReason(') < strpos($b, 'INSERT INTO invoice_items') && strpos($b, 'invoiceLineBlockReason(') < strpos($b, 'productStockMove('), 'add_invoice_item checks before stock/insert');
 $ok(str_contains($b, 'invoiceSettleStatus(') || str_contains(substr($inv, strpos($inv, "isset(\$_POST['add_invoice_item'])"), 7000), 'invoiceSettleStatus('), 'add_invoice_item settles status');
 $b = substr($tk, strpos($tk, "isset(\$_POST['add_invoice_from_ticket'])"), 9000);
 $ok(str_contains($b, 'invoiceLineBlockReason(') && strpos($b, 'invoiceLineBlockReason(') < strpos($b, 'INSERT INTO invoice_items'), 'add_invoice_from_ticket checks before insert');

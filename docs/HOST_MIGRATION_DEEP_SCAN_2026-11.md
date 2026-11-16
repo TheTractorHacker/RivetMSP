@@ -50,7 +50,7 @@ override the gates for an operator who reviewed the tree; the shipped units neve
 
 ## Other host changes in this release (Core owns these)
 - systemd units now run `/usr/local/lib/rivetmsp-deploy/backup.sh` and `restore_drill.sh` (re-render with `deploy/install.sh` or copy the templates) and carry `TimeoutStartSec` (6h backup, 2h drill).
-- Live nginx: add the dotfile / `config/` / `deploy|docker|scripts|backups` denies and a barcode allow-list (see `deploy/templates/itflow-locations.conf`); not applied by this repo.
+- Live nginx: add the dotfile / `config/` / `deploy|docker|scripts|backups` denies and no PHP execution under /plugins (plugins/barcode/barcode.php is hardened and still included in-process by includes/qr_data_uri.php; a direct HTTP request to it now returns 404) (see `deploy/templates/itflow-locations.conf`); not applied by this repo.
 - Cron lock files and the TOTP replay store now live under `uploads/cron_locks` and `uploads/totp_replay` (the web user must be able to write `uploads/`).
 - Redis channel names are per-install: every PHP process of the install must run the new code at the same time, or live ticket updates are lost
   until the deploy finishes. On the live host that is exactly: `php8.5.12-fpm.service` (web requests, the SSE streams and the MCP endpoint all run

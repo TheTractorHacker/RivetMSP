@@ -13,7 +13,7 @@ $try = function (string $msg) use ($m, $e): array {
     $alert = ['message' => $msg];
     $subject = eval('return ' . $e[1] . ';');
     $esc = $m->real_escape_string($subject);
-    $r = $m->query("INSERT INTO tickets SET ticket_prefix='T', ticket_number=1, ticket_subject='$esc', ticket_details='x', ticket_status=1, ticket_priority='Low', ticket_url_key='k', ticket_client_id=0, ticket_created_by=0, ticket_assigned_to=0");
+    $r = $m->query("INSERT INTO tickets SET ticket_prefix='T', ticket_number=" . ($GLOBALS['ds25_n'] = ($GLOBALS['ds25_n'] ?? 0) + 1) . ", ticket_subject='$esc', ticket_details='x', ticket_status=1, ticket_priority='Low', ticket_url_key='k', ticket_client_id=0, ticket_created_by=0, ticket_assigned_to=0");
     return [$subject, $r === true ? '' : $m->error];
 };
 foreach (['accent e-acute' => 'é', 'cyrillic' => 'Ж', 'cjk' => '漢', 'emoji' => '😀'] as $label => $ch) {
