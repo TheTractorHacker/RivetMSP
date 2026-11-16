@@ -406,11 +406,23 @@ if (mysqli_num_rows($sql_recurring_tickets) > 0) {
         $details = mysqli_real_escape_string($mysqli, $row['recurring_ticket_details']);
         $priority = sanitizeInput($row['recurring_ticket_priority']);
         $frequency = sanitizeInput(strtolower($row['recurring_ticket_frequency']));
+        // MSP-DS-18: an unknown frequency used to leave $next_run unset and fatal cron.php after the ticket was created, every run.
+        // Skip such a row (once, with a notification) and push its run date out a day instead of creating tickets with no schedule.
+        if (!in_array($frequency, ['three days', 'weekly', 'biweekly', 'monthly', 'quarterly', 'biannually', 'annually'], true)) {
+            appNotify("Ticket", "Recurring ticket $subject has an unknown frequency and was skipped", "/agent/recurring_tickets.php");
+            mysqli_query($mysqli, "UPDATE recurring_tickets SET recurring_ticket_next_run = DATE_ADD(CURDATE(), INTERVAL 1 DAY) WHERE recurring_ticket_id = $recurring_ticket_id");
+            continue;
+        }
         $billable = intval($row['recurring_ticket_billable']);
         $created_id = intval($row['recurring_ticket_created_by']);
         $assigned_id = resolveTicketAssignee(intval($row['recurring_ticket_assigned_to']));
         $client_id = intval($row['recurring_ticket_client_id']);
         $contact_id = intval($row['recurring_ticket_contact_id']);
+        // MSP-DS-31: the template's contact must belong to the template's client, or the notification goes to someone else's contact.
+        if ($contact_id > 0) {
+            $contact_ok = mysqli_query($mysqli, "SELECT 1 FROM contacts WHERE contact_id = $contact_id AND contact_client_id = $client_id");
+            if (!$contact_ok || mysqli_num_rows($contact_ok) === 0) { $contact_id = 0; }
+        }
         $asset_id = intval($row['recurring_ticket_asset_id']);
         $category = resolveTicketCategory(intval($row['recurring_ticket_category']));
         // Per-category Non-billable (DB 2.6.126): forces 0 regardless of the recurring ticket template's stored billable value.
