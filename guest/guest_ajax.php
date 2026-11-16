@@ -84,6 +84,7 @@ if (isset($_GET['stripe_create_pi'])) {
             'itflow_client_name' => $client_name,
             'itflow_invoice_number' => $invoice_prefix . $invoice_number,
             'itflow_invoice_id' => $invoice_id,
+            'itflow_install' => stripeInstallMarker(),
         ],
         'payment_method_types' => ['card'],
     ];

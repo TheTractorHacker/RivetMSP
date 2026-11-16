@@ -82,6 +82,15 @@ if (mysqli_affected_rows($mysqli) === 0) {
 $event_row_id = intval(mysqli_insert_id($mysqli));
 
 // --- Only successful one-off/autopay payments create a payment record ---
+if (in_array($event_type, ['charge.refunded', 'charge.dispute.created', 'charge.dispute.funds_withdrawn'], true)) {
+    // MSP-DS-164: a refund or chargeback is not booked automatically, but billing is told so it is not missed
+    $obj = $event->data->object;
+    $charge_pi = sanitizeInput((string) ($obj->payment_intent ?? ''));
+    if ($charge_pi !== '' && mysqli_num_rows(mysqli_query($mysqli, "SELECT 1 FROM payments WHERE payment_reference = 'Stripe - $charge_pi' LIMIT 1")) > 0) {
+        appNotify("Payment", "Stripe reported $event_type for PaymentIntent $charge_pi - review the payment and invoice", "/agent/payments.php", 0);
+        logApp("Stripe", "warning", "Stripe event $event_type for recorded PaymentIntent $charge_pi");
+    }
+}
 if ($event_type !== 'payment_intent.succeeded') {
     mysqli_query($mysqli, "UPDATE payment_webhook_events SET event_status = 'ignored' WHERE event_id = $event_row_id");
     http_response_code(200);
@@ -148,6 +157,14 @@ $invoice_amount        = floatval($inv['invoice_amount']);
 $invoice_currency_code = sanitizeInput($inv['invoice_currency_code']);
 $invoice_url_key       = sanitizeInput($inv['invoice_url_key']);
 $client_id             = intval($inv['client_id']);
+
+// MSP-DS-164: the intent must belong to this install, this invoice's client and currency; anything else is not ours to record
+if (!stripeIntentMatchesInvoice($pi->metadata, $pi_currency, $client_id, $invoice_currency_code, stripeInstallMarker())) {
+    mysqli_query($mysqli, "UPDATE payment_webhook_events SET event_status = 'ignored' WHERE event_id = $event_row_id");
+    logApp("Stripe", "warning", "Webhook ignored PaymentIntent $pi_id: metadata does not match invoice $invoice_id (install marker, client or currency)");
+    http_response_code(200);
+    exit('OK');
+}
 $client_name           = sanitizeInput($inv['client_name']);
 $contact_name          = sanitizeInput($inv['contact_name']);
 $contact_email         = sanitizeInput($inv['contact_email']);

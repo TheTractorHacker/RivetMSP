@@ -235,3 +235,31 @@ function stripeAmountFromMinor($minor, $currency): float
 {
     return floatval($minor) / stripeMinorFactor($currency);
 }
+
+/**
+ * MSP-DS-164: marker put into every PaymentIntent's metadata so a Stripe account shared by two installs (production + beta,
+ * white-label ...) does not record one install's payments on the other's invoice with the same numeric id.
+ * Not the raw installation id (it also appears in lock file names); a one-way digest of it.
+ */
+function stripeInstallMarker(): string
+{
+    $id = (string) ($GLOBALS['installation_id'] ?? '');
+    return $id === '' ? '' : substr(hash('sha256', 'stripe-install|' . $id), 0, 16);
+}
+
+/**
+ * MSP-DS-164: does this PaymentIntent belong to this install's invoice? A marker from another install, another client, or a
+ * different currency means "not ours". Intents created before the marker existed carry none and are matched on client and currency only.
+ */
+function stripeIntentMatchesInvoice($metadata, $pi_currency, $invoice_client_id, $invoice_currency_code, string $our_marker): bool
+{
+    $theirs = (string) ($metadata->itflow_install ?? '');
+    if ($theirs !== '' && $our_marker !== '' && !hash_equals($our_marker, $theirs)) {
+        return false;
+    }
+    $pi_client = (string) ($metadata->itflow_client_id ?? '');
+    if ($pi_client !== '' && intval($pi_client) !== intval($invoice_client_id)) {
+        return false;
+    }
+    return strtoupper((string) $pi_currency) === strtoupper((string) $invoice_currency_code);
+}

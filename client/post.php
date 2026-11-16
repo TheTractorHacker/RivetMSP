@@ -799,6 +799,7 @@ if (isset($_GET['add_payment_by_provider'])) {
                 'itflow_client_name' => $client_name,
                 'itflow_invoice_number' => $invoice_prefix . $invoice_number,
                 'itflow_invoice_id' => $invoice_id,
+                'itflow_install' => stripeInstallMarker(),
             ]
         ], ['idempotency_key' => stripeChargeIdempotencyKey($invoice_id, $balance_to_pay, $saved_payment_id)]);
 

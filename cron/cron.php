@@ -1121,6 +1121,7 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
                             'itflow_client_name' => $client_name,
                             'itflow_invoice_number' => $invoice_prefix . $invoice_number,
                             'itflow_invoice_id' => $invoice_id,
+                            'itflow_install' => stripeInstallMarker(),
                         ]
                     ], $idempotency_key);
 
