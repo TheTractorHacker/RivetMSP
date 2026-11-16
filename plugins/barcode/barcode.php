@@ -169,16 +169,16 @@ class barcode_generator {
 	private function encode_and_calculate_size($symbology, $data, $options) {
 		$code = $this->dispatch_encode($symbology, $data, $options);
 		$widths = array(
-			(isset($options['wq']) ? (int)$options['wq'] : 1),
-			(isset($options['wm']) ? (int)$options['wm'] : 1),
-			(isset($options['ww']) ? (int)$options['ww'] : 3),
-			(isset($options['wn']) ? (int)$options['wn'] : 1),
-			(isset($options['w4']) ? (int)$options['w4'] : 1),
-			(isset($options['w5']) ? (int)$options['w5'] : 1),
-			(isset($options['w6']) ? (int)$options['w6'] : 1),
-			(isset($options['w7']) ? (int)$options['w7'] : 1),
-			(isset($options['w8']) ? (int)$options['w8'] : 1),
-			(isset($options['w9']) ? (int)$options['w9'] : 1),
+			(isset($options['wq']) ? self::clamp_num((int)$options['wq'], 1, 10) : 1),
+			(isset($options['wm']) ? self::clamp_num((int)$options['wm'], 1, 10) : 1),
+			(isset($options['ww']) ? self::clamp_num((int)$options['ww'], 1, 10) : 3),
+			(isset($options['wn']) ? self::clamp_num((int)$options['wn'], 1, 10) : 1),
+			(isset($options['w4']) ? self::clamp_num((int)$options['w4'], 1, 10) : 1),
+			(isset($options['w5']) ? self::clamp_num((int)$options['w5'], 1, 10) : 1),
+			(isset($options['w6']) ? self::clamp_num((int)$options['w6'], 1, 10) : 1),
+			(isset($options['w7']) ? self::clamp_num((int)$options['w7'], 1, 10) : 1),
+			(isset($options['w8']) ? self::clamp_num((int)$options['w8'], 1, 10) : 1),
+			(isset($options['w9']) ? self::clamp_num((int)$options['w9'], 1, 10) : 1),
 		);
 		$size = $this->dispatch_calculate_size($code, $widths, $options);
 		$dscale = ($code && isset($code['g']) && $code['g'] == 'm') ? 4 : 1;
@@ -195,8 +195,8 @@ class barcode_generator {
 		$bottom = (isset($options['pb']) ? self::clamp_num((int)$options['pb'], 0, 100) : $vert);
 		$dwidth = ceil($size[0] * $scalex) + $left + $right;
 		$dheight = ceil($size[1] * $scaley) + $top + $bottom;
-		$iwidth = (isset($options['w']) ? self::clamp_num((int)$options['w'], 1, 1024) : min($dwidth, 4096));
-		$iheight = (isset($options['h']) ? self::clamp_num((int)$options['h'], 1, 1024) : min($dheight, 4096));
+		$iwidth = (isset($options['w']) ? self::clamp_num((int)$options['w'], 1, 1024) : min($dwidth, 2048));
+		$iheight = (isset($options['h']) ? self::clamp_num((int)$options['h'], 1, 1024) : min($dheight, 2048));
 		$swidth = $iwidth - $left - $right;
 		$sheight = $iheight - $top - $bottom;
 		return array(
@@ -355,8 +355,8 @@ class barcode_generator {
 	private function linear_render_image(
 		$image, $code, $x, $y, $w, $h, $colors, $widths, $options
 	) {
-		$textheight = (isset($options['th']) ? (int)$options['th'] : 10);
-		$textsize = (isset($options['ts']) ? (int)$options['ts'] : 1);
+		$textheight = (isset($options['th']) ? self::clamp_num((int)$options['th'], 0, 100) : 10);
+		$textsize = (isset($options['ts']) ? self::clamp_num((int)$options['ts'], 1, 5) : 1);
 		$textcolor = (isset($options['tc']) ? $options['tc'] : '000');
 		$textcolor = $this->allocate_color($image, $textcolor);
 		$width = 0;
@@ -405,9 +405,9 @@ class barcode_generator {
 	private function linear_render_svg(
 		$code, $x, $y, $w, $h, $colors, $widths, $options
 	) {
-		$textheight = (isset($options['th']) ? (int)$options['th'] : 10);
+		$textheight = (isset($options['th']) ? self::clamp_num((int)$options['th'], 0, 100) : 10);
 		$textfont = (isset($options['tf']) ? $options['tf'] : 'monospace');
-		$textsize = (isset($options['ts']) ? (int)$options['ts'] : 10);
+		$textsize = (isset($options['ts']) ? self::clamp_num((int)$options['ts'], 1, 100) : 10);
 		$textcolor = (isset($options['tc']) ? $options['tc'] : 'black');
 		$width = 0;
 		foreach ($code['b'] as $block) {
@@ -491,7 +491,7 @@ class barcode_generator {
 		$image, $code, $x, $y, $w, $h, $colors, $widths, $options
 	) {
 		$shape = (isset($options['ms']) ? strtolower($options['ms']) : '');
-		$density = (isset($options['md']) ? (float)$options['md'] : 1);
+		$density = (isset($options['md']) ? self::clamp_num((float)$options['md'], 0.1, 1) : 1);
 		list($width, $height) = $this->matrix_calculate_size($code, $widths);
 		if ($width && $height) {
 			$scale = min($w / $width, $h / $height);
@@ -522,7 +522,7 @@ class barcode_generator {
 		$code, $x, $y, $w, $h, $colors, $widths, $options
 	) {
 		$shape = (isset($options['ms']) ? strtolower($options['ms']) : '');
-		$density = (isset($options['md']) ? (float)$options['md'] : 1);
+		$density = (isset($options['md']) ? self::clamp_num((float)$options['md'], 0.1, 1) : 1);
 		list($width, $height) = $this->matrix_calculate_size($code, $widths);
 		if ($width && $height) {
 			$scale = min($w / $width, $h / $height);
