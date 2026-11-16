@@ -117,7 +117,9 @@ if (!function_exists('secSessionLimits')) {
 
                     return true;
                 }
-                // row deleted, or it belongs to someone else: fall through and register afresh
+                // MSP-DS-169: a session that already had a row must not come back to life when that row is gone (purged) or
+                // belongs to someone else; the only safe answer is to end it (sign in again registers a fresh row).
+                return false;
             }
 
             secSessionRegister($mysqli, $userId);
@@ -269,6 +271,7 @@ if (!function_exists('secSessionLimits')) {
     /** Housekeeping (cron): forget rows that ended or went quiet long ago. */
     function secSessionPurge(mysqli $mysqli): void
     {
-        @mysqli_query($mysqli, 'DELETE FROM user_sessions WHERE session_last_seen_at < (NOW() - INTERVAL 30 DAY)');
+        // MSP-DS-169: revoked rows are kept past the longest absolute session lifetime (90 days), so a revocation cannot be purged away
+        @mysqli_query($mysqli, 'DELETE FROM user_sessions WHERE (session_revoked_at IS NULL AND session_last_seen_at < (NOW() - INTERVAL 30 DAY)) OR (session_revoked_at IS NOT NULL AND session_last_seen_at < (NOW() - INTERVAL 100 DAY))');
     }
 }

@@ -30,4 +30,5 @@ session_write_close();
 $sse_stream_owner = 'portal:' . intval($session_contact_id);   // MSP-DS-138
 $sse_stream_cap = 3;
 
+$sse_portal_view = true;   // MSP-DS-170
 require '../includes/sse_ticket_stream.php';

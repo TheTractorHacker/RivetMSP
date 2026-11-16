@@ -7,6 +7,19 @@
  * after they've validated $ticket_id and the caller's access to it.
  */
 
+/** MSP-DS-170: may a customer see this ticket event? 'reply' events only for Public/Client replies. */
+function ssePortalMayReceive(string $payload): bool
+{
+    $e = json_decode($payload, true);
+    if (!is_array($e)) {
+        return false;
+    }
+    if (($e['type'] ?? '') === 'reply') {
+        return in_array($e['reply_type'] ?? '', ['Public', 'Client'], true);
+    }
+    return true;
+}
+
 header('Content-Type: text/event-stream');
 header('Cache-Control: no-cache');
 header('Connection: keep-alive');
@@ -99,6 +112,10 @@ while (time() - $start_time < $max_runtime) {
         }
 
         if ($message->kind === 'message') {
+            // MSP-DS-170: the portal wrapper sets $sse_portal_view; customers never see internal-note events (type, author, timing)
+            if (!empty($sse_portal_view) && !ssePortalMayReceive((string) $message->payload)) {
+                continue;
+            }
             echo "data: {$message->payload}\n\n";
         }
     } else {
