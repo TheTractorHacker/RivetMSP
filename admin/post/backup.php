@@ -21,6 +21,26 @@ function fwrite_ln($fh, string $s): void {
     fwrite($fh, $s . PHP_EOL);
 }
 
+/**
+ * MSP-DS-141/DS-39 (re-review MRR1): names of STORED/VIRTUAL generated columns of a table. A generated column accepts only DEFAULT in
+ * an INSERT (MariaDB 1906 / MySQL 3105 in strict mode), so the dump must leave it out; the CREATE TABLE recomputes it on restore.
+ * Detected generically from information_schema (never a hard-coded list). MySQL's DEFAULT_GENERATED (an expression DEFAULT) is a
+ * normal insertable column and is NOT matched.
+ *
+ * @return string[]
+ */
+function backup_generated_columns(mysqli $mysqli, string $table): array {
+    $out = [];
+    $t = $mysqli->real_escape_string($table);
+    $r = $mysqli->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$t'
+        AND (EXTRA LIKE '%VIRTUAL GENERATED%' OR EXTRA LIKE '%STORED GENERATED%' OR (GENERATION_EXPRESSION IS NOT NULL AND GENERATION_EXPRESSION <> ''))");
+    if ($r) {
+        while ($c = $r->fetch_row()) { $out[] = $c[0]; }
+        $r->close();
+    }
+    return $out;
+}
+
 function dump_database_streaming(mysqli $mysqli, string $sqlFile): void {
     $fh = fopen($sqlFile, 'wb');
     if (!$fh) { http_response_code(500); exit("Cannot open dump file"); }
@@ -47,9 +67,12 @@ function dump_database_streaming(mysqli $mysqli, string $sqlFile): void {
         fwrite_ln($fh, "DROP TABLE IF EXISTS `{$table}`;");
         fwrite_ln($fh, $createSQL . ";");
         fwrite_ln($fh, "");
+        $generated = array_flip(backup_generated_columns($mysqli, $table));
         $dr = $mysqli->query("SELECT * FROM `{$mysqli->real_escape_string($table)}`", MYSQLI_USE_RESULT);
         if ($dr) {
             while ($row = $dr->fetch_assoc()) {
+                if ($generated) { $row = array_diff_key($row, $generated); }
+                if (!$row) { continue; }
                 $cols = array_map(fn($c) => '`' . $mysqli->real_escape_string($c) . '`', array_keys($row));
                 $vals = array_map(fn($v) => is_null($v) ? 'NULL' : "'" . $mysqli->real_escape_string($v) . "'", array_values($row));
                 fwrite_ln($fh, "INSERT INTO `{$table}` (" . implode(', ', $cols) . ") VALUES (" . implode(', ', $vals) . ");");
