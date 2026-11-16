@@ -506,9 +506,17 @@ main() {
 
     read_app_config "${APP_DIR}"
     # The key file backup.sh writes next to the archive is used automatically unless one was named.
-    if [[ -z "${SETTINGS_KEY_FILE}" && -f "${BACKUP_FILE%.tar.gz.enc}.settings-key" ]]; then
-        SETTINGS_KEY_FILE="${BACKUP_FILE%.tar.gz.enc}.settings-key"
-        info "Found the settings-key file next to the archive: ${SETTINGS_KEY_FILE}"
+    # MSP-DS-34 (review R2): the archive's directory is writable by the web user; accept the sidecar only as a root-owned 0600 regular file,
+    # and work on a private copy (never follow a planted symlink).
+    if [[ -z "${SETTINGS_KEY_FILE}" ]]; then
+        local sidecar="${BACKUP_FILE%.tar.gz.enc}.settings-key" sc_rc=0 sc_copy sc_why
+        sc_copy="$(mktemp)"; register_tmpfile "${sc_copy}"
+        sc_why="$(copy_trusted_sidecar "${sidecar}" "${sc_copy}" 2>&1)" || sc_rc=$?
+        case "${sc_rc}" in
+            0) SETTINGS_KEY_FILE="${sc_copy}"; info "Found the settings-key file next to the archive: ${sidecar}" ;;
+            2) : ;;
+            *) refuse_untrusted_sidecar "${sc_why}" ;;
+        esac
     fi
     run_pre_restore_backup
     decrypt_and_extract

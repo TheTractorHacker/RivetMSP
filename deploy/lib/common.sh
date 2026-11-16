@@ -254,6 +254,43 @@ require_trusted_tooling() {
     return 0
 }
 
+# copy_trusted_sidecar SRC DEST: MSP-DS-34 (review R2). A file found NEXT TO a backup archive (the <archive>.settings-key sidecar) lives in
+# a directory the web user can write, so root must not follow or trust whatever it finds there: a symlink to /etc/shadow, a root SSH key or
+# the backup passphrase would be copied into a file the web user can read. SRC is opened once (O_RDONLY, following nothing we have not then
+# checked), and the OPEN file is verified: a regular file (not reached through a symlink: lstat of the path must be the same inode),
+# owned by root, mode 0600 or stricter, a single hard link. Only then is it copied to DEST (0600) from that same descriptor, so a swap after
+# the check changes nothing. Returns 0 on success, 1 (reason on stderr) when SRC is not safe, 2 when SRC does not exist.
+# (Test hook: with RIVETMSP_TRUST_TEST_NONROOT=1 and a non-root caller, RIVETMSP_TRUST_UID names the expected owner.)
+copy_trusted_sidecar() {
+    local src="$1" dest="$2" want=0 fd ftype fuid fmode fnlink fid ltype lid
+    if [[ "${RIVETMSP_TRUST_TEST_NONROOT:-}" == "1" && "${EUID}" -ne 0 ]]; then want="${RIVETMSP_TRUST_UID:-0}"; fi
+    [[ -e "${src}" || -L "${src}" ]] || return 2
+    { exec {fd}< "${src}"; } 2>/dev/null || { echo "${src} cannot be opened" >&2; return 1; }
+    read -r fuid fmode fnlink fid < <(stat -L -c '%u %a %h %d:%i' "/proc/self/fd/${fd}" 2>/dev/null) || fuid=""
+    ftype="$(stat -L -c '%F' "/proc/self/fd/${fd}" 2>/dev/null || true)"
+    ltype="$(stat -c '%F' -- "${src}" 2>/dev/null || true)"
+    lid="$(stat -c '%d:%i' -- "${src}" 2>/dev/null || true)"
+    local why=""
+    if [[ "${ltype}" != "regular file" ]]; then why="${src} is ${ltype:-not a regular file} (symbolic links are never followed)"
+    elif [[ "${ftype}" != "regular file" || "${fid}" != "${lid}" ]]; then why="${src} changed while it was being checked"
+    elif [[ "${fuid}" != "${want}" ]]; then why="${src} is owned by uid ${fuid}, not root"
+    elif (( (8#${fmode} & 8#077) != 0 )); then why="${src} has mode ${fmode}; a settings key must be 0600"
+    elif [[ "${fnlink}" != "1" ]]; then why="${src} has ${fnlink} hard links"
+    fi
+    if [[ -n "${why}" ]]; then exec {fd}<&-; echo "${why}" >&2; return 1; fi
+    ( umask 077; cat <&"${fd}" > "${dest}" ) || { exec {fd}<&-; return 1; }
+    exec {fd}<&-
+    chmod 600 "${dest}"
+    return 0
+}
+
+# refuse_untrusted_sidecar WHY: loud refusal (syslog + non-zero exit) for copy_trusted_sidecar failures.
+refuse_untrusted_sidecar() {
+    local msg="Refusing to use a settings-key file next to the archive: $1. The backup directory is writable by the web user, so only a root-owned regular 0600 file is accepted. Pass --settings-key-file=<path> explicitly to use another file."
+    logger -t rivetmsp-deploy -p user.crit "${msg}" 2>/dev/null || true
+    die "${msg}"
+}
+
 # rmm_pg_prepare APP_DIR: MSP-DS-34. Runs scripts/rmm_postgres_backup_env.php as the web user and sets RIVETCORE_PG_* from its
 # output (validated, never eval'd). The script writes the connection's PGPASSFILE into a directory only that user can reach; root
 # then reads that file (never through a symlink) and writes its OWN root-owned 0600 password file, and PGPASSFILE is set to that:

@@ -114,7 +114,19 @@ success "Decrypted and unpacked."
 
 # 4. the drill itself (PHP does the restore into the scratch database and every check)
 # The settings key travels apart from the archive (backup-<db>-<ts>.settings-key, see backup.sh); use it when it is next to the archive.
-[[ -n "${KEY_FILE}" ]] || { cand="${BACKUP_FILE%.tar.gz.enc}.settings-key"; [[ -f "${cand}" ]] && KEY_FILE="${cand}"; }
+# MSP-DS-34 (review R2): DEST is writable by the web user, so the auto-discovered sidecar is never read through a symlink or trusted unless it
+# is a root-owned 0600 regular file; root works on a private copy made from the checked descriptor. An explicit --settings-key-file is the
+# operator's own choice and is used as given.
+if [[ -z "${KEY_FILE}" ]]; then
+    cand="${BACKUP_FILE%.tar.gz.enc}.settings-key"
+    key_rc=0; auto_key="$(mktemp)"; register_tmpfile "${auto_key}"
+    key_why="$(copy_trusted_sidecar "${cand}" "${auto_key}" 2>&1)" || key_rc=$?
+    case "${key_rc}" in
+        0) KEY_FILE="${auto_key}" ;;
+        2) : ;;
+        *) refuse_untrusted_sidecar "${key_why}" ;;
+    esac
+fi
 KEY_ARGS=()
 if [[ -n "${KEY_FILE}" ]]; then
     [[ -f "${KEY_FILE}" ]] || die "--settings-key-file '${KEY_FILE}' does not exist."
