@@ -64,7 +64,8 @@ if ($method === 'POST') {
         $mime    = $finfo->file($_FILES['receipt']['tmp_name']);
         if (!in_array($mime, $allowed)) api_error(400, 'Invalid receipt file type');
 
-        $ext      = strtolower(pathinfo($_FILES['receipt']['name'], PATHINFO_EXTENSION));
+        // MSP-DS-144: the extension comes from the sniffed type, never from the client's file name
+        $ext      = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'application/pdf' => 'pdf'][$mime];
         $filename = time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
         $dest     = $_SERVER['DOCUMENT_ROOT'] . '/uploads/expenses/' . $filename;
         @mkdir(dirname($dest), 0755, true);

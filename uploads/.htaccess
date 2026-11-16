@@ -5,3 +5,9 @@ RemoveType .php .phtml .phar .phps
 <FilesMatch "\.(php|phtml|phar|phps|cgi|pl|sh)$">
   Require all denied
 </FilesMatch>
+# MSP-DS-144: uploaded files are downloads, never pages of this origin
+<IfModule mod_headers.c>
+  Header set Content-Disposition "attachment"
+  Header set X-Content-Type-Options "nosniff"
+  Header set Content-Security-Policy "default-src 'none'; sandbox"
+</IfModule>
