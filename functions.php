@@ -4140,7 +4140,7 @@ function logMailEvent(?int $mailbox_id, ?string $from_email, ?string $from_name,
 // Allow-list for saved ticket/mail-request attachments. Anything else is blocked
 // and logged rather than saved to disk.
 function ticketAttachmentAllowedExtensions(): array {
-    return ['jpg', 'jpeg', 'gif', 'png', 'webp', 'svg', 'pdf', 'txt', 'md', 'doc', 'docx', 'csv', 'xls', 'xlsx', 'xlsm', 'zip', 'tar', 'gz'];
+    return ['jpg', 'jpeg', 'gif', 'png', 'webp', 'pdf', 'txt', 'md', 'doc', 'docx', 'csv', 'xls', 'xlsx', 'xlsm', 'zip', 'tar', 'gz'];
 }
 
 // Cached per-request; used in ticket notification emails.
