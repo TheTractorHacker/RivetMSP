@@ -172,19 +172,19 @@ determine_owner() {
 
 run_git_pull() {
     local before_hash after_hash
-    before_hash="$(sudo -u "${OWNER}" git -C "${APP_DIR}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    before_hash="$(sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${APP_DIR}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
     # vendor/composer/* is build output that this script regenerates below (composer install --optimize-autoloader),
     # and Composer writes the project's current git commit into installed.php, so it differs after every run.
     # Restore the tracked copies first so a dirty tree can never block the pull.
-    sudo -u "${OWNER}" git -c core.hooksPath=/dev/null -c core.fsmonitor=false -C "${APP_DIR}" checkout -- vendor/composer 2>/dev/null || true
+    sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${APP_DIR}" checkout -- vendor/composer 2>/dev/null || true
 
     announce "Running scripts/update_cli.php --update (git pull) as ${OWNER}."
-    if ! sudo -u "${OWNER}" php "${APP_DIR}/scripts/update_cli.php" --update; then
+    if ! sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" php "${APP_DIR}/scripts/update_cli.php" --update; then
         die "scripts/update_cli.php --update failed (see its output above). Database migrations were NOT run."
     fi
 
-    after_hash="$(sudo -u "${OWNER}" git -C "${APP_DIR}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    after_hash="$(sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${APP_DIR}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
     if [[ "${before_hash}" == "${after_hash}" ]]; then
         info "Code unchanged (still at ${after_hash})."
     else
@@ -213,7 +213,7 @@ ensure_settings_key() {
 
 run_db_migrations() {
     announce "Running scripts/update_cli.php --update_db as ${OWNER}."
-    if ! sudo -u "${OWNER}" php "${APP_DIR}/scripts/update_cli.php" --update_db; then
+    if ! sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" php "${APP_DIR}/scripts/update_cli.php" --update_db; then
         die "scripts/update_cli.php --update_db failed (see its output above). Code was already updated by the previous step — the database schema may now be behind the code. Investigate before running the app."
     fi
 }
@@ -229,7 +229,7 @@ run_composer_install() {
     fi
 
     announce "Running composer install as ${OWNER}."
-    if ! sudo -u "${OWNER}" bash -c "cd '${APP_DIR}' && composer install --no-dev --optimize-autoloader --no-interaction"; then
+    if ! sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" bash -c "cd '${APP_DIR}' && composer install --no-dev --optimize-autoloader --no-interaction"; then
         die "composer install failed (see its output above). Code and database are already updated — PHP dependencies may now be out of sync with the code. Investigate before running the app."
     fi
     success "composer dependencies refreshed."
@@ -250,7 +250,7 @@ sync_rmm_postgres_cli_scripts() {
         return 0   # an older checkout, or an edition without this script: nothing to do
     fi
     announce "Restoring the RMM PostgreSQL operator scripts rivet-core's dist install strips (github.com/TheTractorHacker/rivet-core#90)."
-    if sudo -u "${OWNER}" bash "${sync_script}"; then
+    if sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" bash "${sync_script}"; then
         success "RMM PostgreSQL operator scripts restored."
     else
         warn "scripts/vendor-fixups/sync-rmm-postgres-cli-scripts.sh failed (see its output above). If this install uses the PostgreSQL RMM data store, run it by hand before relying on Administration > RMM > Data store > Migrate data."

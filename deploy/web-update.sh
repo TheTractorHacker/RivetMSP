@@ -42,13 +42,13 @@ REMOTE="$(cfg RELEASE_REMOTE)"; REMOTE="${REMOTE:-fork}"
 [[ "${APP_DIR}" == /* && -f "${APP_DIR}/scripts/update_cli.php" ]] || die "APP_DIR in ${CONF} is not an installed instance."
 
 OWNER="$(stat -c '%U' "${APP_DIR}/scripts/update_cli.php")"
-g() { sudo -u "${OWNER}" git -C "${APP_DIR}" "$@"; }
+g() { sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${APP_DIR}" "$@"; }
 
 if [[ -n "${BRANCH}" ]]; then
     current="$(g rev-parse --abbrev-ref HEAD)"
     if [[ "${current}" != "${BRANCH}" ]]; then
         announce "Release channel change: ${current} -> ${BRANCH}"
-        timeout 60 sudo -u "${OWNER}" git -C "${APP_DIR}" fetch "${REMOTE}" || die "git fetch ${REMOTE} failed."
+        timeout 60 sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${APP_DIR}" fetch "${REMOTE}" || die "git fetch ${REMOTE} failed."
         g rev-parse --verify --quiet "refs/remotes/${REMOTE}/${BRANCH}" >/dev/null || die "${REMOTE}/${BRANCH} does not exist."
         # forward only: never install older code
         g merge-base --is-ancestor HEAD "refs/remotes/${REMOTE}/${BRANCH}" || die "${REMOTE}/${BRANCH} does not contain the code this server runs; refusing to move to older code."

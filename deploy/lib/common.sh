@@ -497,6 +497,12 @@ _cleanup_tmpfiles() {
     done
 }
 
+# RIVETMSP_GIT_SAFE_ENV: MSP-DS-34 (review R12). Every git run as the checkout owner (directly, or through update_cli.php / composer / the
+# vendor-fixup script) must not execute anything configured inside the repository, which the web user may be able to write: hooks
+# (post-merge, reference-transaction, ...) and core.fsmonitor run arbitrary commands. GIT_CONFIG_COUNT/KEY/VALUE is "command" scope, wins over
+# .git/config, and is inherited by every git the child starts. Use as: sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git ...
+RIVETMSP_GIT_SAFE_ENV=(GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false)
+
 # ensure_updater_remote APP_DIR [OWNER]: RivetMSP's updater (includes/release_channel.php RELEASE_REMOTE) pulls from a git
 # remote named "fork", but an install cloned or copied from a checkout only has "origin". Without it `git pull fork ...`
 # fails and update_cli.php still prints "Update successful", so nothing ever updates. Add it as an alias of origin when
@@ -508,7 +514,7 @@ ensure_updater_remote() {
     name="$(sed -n "s/.*define('RELEASE_REMOTE', *'\([^']*\)').*/\1/p" "${rf}" | head -1)"
     [[ -n "${name}" && "${name}" != "origin" ]] || return 0
     local -a g=(git -C "${app}")
-    [[ -n "${owner}" ]] && g=(sudo -u "${owner}" git -C "${app}")
+    [[ -n "${owner}" ]] && g=(sudo -u "${owner}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${app}")
     if "${g[@]}" remote get-url "${name}" >/dev/null 2>&1; then
         return 0
     fi
@@ -531,7 +537,7 @@ ignore_git_filemode() {
     local app="${1:?app dir}" owner="${2:-}"
     [[ -d "${app}/.git" ]] || return 0
     local -a g=(git -C "${app}")
-    [[ -n "${owner}" ]] && g=(sudo -u "${owner}" git -C "${app}")
+    [[ -n "${owner}" ]] && g=(sudo -u "${owner}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${app}")
     [[ "$("${g[@]}" config --get core.fileMode 2>/dev/null || true)" == "false" ]] && return 0
     "${g[@]}" config core.fileMode false || warn "Could not set core.fileMode=false in ${app}; a later update may be blocked by file-mode differences."
 }

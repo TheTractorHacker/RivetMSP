@@ -19,7 +19,7 @@ touch /tmp/ds34_marker_should_not_exist; rm -f /tmp/ds34_marker_should_not_exist
 ( parse_rmm_pg_env "export PATH='/tmp/evil'" 2>/dev/null ); r=$?; [[ $r != 0 ]]; ok $? "variable names outside the allow-list are refused"
 ! grep -nE '^\s*eval ' deploy/backup.sh deploy/restore.sh | grep -q rmm_pg; ok $? "no eval of rmm_postgres_backup_env output"
 ! grep -nE '(^|[^_a-z])php "\$\{(APP_DIR|SCRIPT_DIR)\}' deploy/backup.sh deploy/restore.sh deploy/lib/backup_extras.sh deploy/restore_drill.sh | grep -v run_app_php | grep -q .; ok $? "no direct php of app files left in the root scripts"
-grep -q 'core.hooksPath=/dev/null' deploy/update.sh; ok $? "update.sh git checkout runs with hooks and fsmonitor disabled"
+grep -qF 'env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${APP_DIR}" checkout' deploy/update.sh; ok $? "update.sh git checkout runs with hooks and fsmonitor disabled"
 # MSP-DS-19: intermediates are staged in a root-only dir, not in the web-writable backups/ directory
 grep -q 'local stage' deploy/backup.sh && grep -q 'local sql_file="${stage}/' deploy/backup.sh && grep -q 'local manifest_file="${stage}/' deploy/backup.sh && grep -q 'local rmm_pg_dump="${stage}/' deploy/backup.sh; ok $? "backup.sh stages dump, manifest, snapshot and RMM dump outside DEST"
 grep -q 'mv -fT "${encrypted}" "${final_encrypted}"' deploy/backup.sh; ok $? "finished archive is renamed into DEST (a planted symlink is replaced, not followed)"
