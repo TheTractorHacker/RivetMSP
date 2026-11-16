@@ -5201,6 +5201,25 @@ function sanitize_filename($filename, $strict = false) {
     return $filename;
 }
 
+// MSP-DS-151: TCPDF fetches every http(s) <img src> and reads local paths while rendering. Document HTML that a portal
+// contact (or anyone else) wrote may only embed inline data: images or images this app stores under /uploads.
+function rivetPdfSafeHtml(string $html): string {
+    return preg_replace_callback('/<img\b[^>]*>/i', function ($m) {
+        if (!preg_match('/\bsrc\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $m[0], $s)) {
+            return '';
+        }
+        $src = trim(html_entity_decode($s[1] !== '' ? $s[1] : (($s[2] ?? '') !== '' ? $s[2] : ($s[3] ?? '')), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $src = preg_replace('/[\x00-\x20]+/', '', $src);
+        if (preg_match('#^data:image/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$#i', $src)) {
+            return $m[0];
+        }
+        if (preg_match('#^/?uploads/[A-Za-z0-9_./-]+$#', $src) && strpos($src, '..') === false) {
+            return $m[0];
+        }
+        return '';
+    }, $html) ?? '';
+}
+
 function saveBase64Images(string $html, string $baseFsPath, string $baseWebPath, int $ownerId): string {
     // Normalize paths
     $baseFsPath  = rtrim($baseFsPath, '/\\') . '/';

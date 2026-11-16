@@ -1428,12 +1428,12 @@ if (isset($_POST['client_add_document'])) {
 
     $processed_content = mysqli_escape_string(
         $mysqli,
-        saveBase64Images(
+        rivetPdfSafeHtml(saveBase64Images(
             $_POST['document_content'],
             $_SERVER['DOCUMENT_ROOT'] . "/uploads/documents/",
             "uploads/documents/",
             $document_id
-        )
+        ))
     );
 
     // Document update content
@@ -1542,8 +1542,12 @@ if (isset($_GET['client_serve_contract_doc'])) {
     $doc = mysqli_fetch_assoc(mysqli_query($mysqli,
         "SELECT d.*, c.contract_client_id FROM contract_documents d
          JOIN contracts c ON d.doc_contract_id = c.contract_id
-         WHERE d.doc_id = $doc_id LIMIT 1"
+         WHERE d.doc_id = $doc_id AND c.contract_archived_at IS NULL LIMIT 1"
     ));
+    // MSP-DS-152: same gate as the contracts page (primary or technical contact), no archived contracts
+    if ($session_contact_primary == 0 && !$session_contact_is_technical_contact) {
+        http_response_code(403); exit('Access denied');
+    }
     if (!$doc || intval($doc['contract_client_id']) !== intval($session_client_id)) {
         http_response_code(403); exit('Access denied');
     }
