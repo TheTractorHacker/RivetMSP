@@ -29,6 +29,27 @@ if (isset($_POST['edit_your_user_details'])) {
         redirect();
     }
 
+    // MSP-DS-141 / review R18+R19: a real email, and a CHANGED name or email may not equal another staff member's name or email (the mobile API
+    // login looks users up by either). An unchanged name that another agent happens to share must not block a save, and this validation runs
+    // BEFORE any side effect (email-change notice, avatar replacement).
+    $email_plain = trim((string) $_POST['email']);
+    $name_plain = trim((string) $_POST['name']);
+    if (!filter_var($email_plain, FILTER_VALIDATE_EMAIL)) {
+        flash_alert('Enter a valid email address.', 'error');
+        redirect();
+    }
+    $name_before = (string) (mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_name FROM users WHERE user_id = $session_user_id"))['user_name'] ?? '');
+    $name_changed = ($name_plain !== trim($name_before)) ? 1 : 0;
+    $email_changed = ($email_plain !== trim($email_before)) ? 1 : 0;
+    if ($name_changed || $email_changed) {
+        $taken = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM users WHERE user_id != $session_user_id AND user_type = 1 AND user_archived_at IS NULL
+            AND (($email_changed AND (user_email = '$email' OR user_name = '$email')) OR ($name_changed AND (user_email = '$name' OR user_name = '$name')))"));
+        if ($taken && intval($taken[0]) > 0) {
+            flash_alert('That name or email is already used by another user.', 'error');
+            redirect();
+        }
+    }
+
     $logout = false;
     $extended_log_description = '';
 
@@ -87,20 +108,6 @@ if (isset($_POST['edit_your_user_details'])) {
             $extended_log_description .= ", avatar updated";
 
         }
-    }
-
-    // MSP-DS-141: a real email, and neither name nor email may equal another staff member's name or email (the mobile API login looks users up by either)
-    $email_plain = trim((string) $_POST['email']);
-    $name_plain = trim((string) $_POST['name']);
-    if (!filter_var($email_plain, FILTER_VALIDATE_EMAIL)) {
-        flash_alert('Enter a valid email address.', 'error');
-        redirect();
-    }
-    $taken = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM users WHERE user_id != $session_user_id AND user_type = 1 AND user_archived_at IS NULL
-        AND (user_email IN ('$email', '$name') OR user_name IN ('$email', '$name'))"));
-    if ($taken && intval($taken[0]) > 0) {
-        flash_alert('That name or email is already used by another user.', 'error');
-        redirect();
     }
 
     mysqli_query($mysqli,"UPDATE users SET user_name = '$name', user_email = '$email', user_title = '$title', user_phone = '$phone' WHERE user_id = $session_user_id");
