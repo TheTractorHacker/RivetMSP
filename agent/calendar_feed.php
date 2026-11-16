@@ -1,8 +1,7 @@
 <?php
 /**
  * iCal subscription feed for Outlook / Apple Calendar / Google Calendar.
- * URL: /agent/calendar_feed.php?token=HMAC_TOKEN
- * Token = hash_hmac('sha256', user_id, installation_id)
+ * URL: /agent/calendar_feed.php?token=TOKEN (per-user random token, see includes/calendar_feed_token.php)
  */
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/config.php';
@@ -19,22 +18,11 @@ if (!$token || strlen($token) < 32) {
     exit('Unauthorized');
 }
 
-// Verify HMAC token against all active users
-$users_result = mysqli_query($mysqli,
-    "SELECT user_id, user_name FROM users
-     WHERE user_status = 1 AND user_archived_at IS NULL AND user_type = 1"
-);
-
-$user_id   = 0;
-$user_name = '';
-while ($u = mysqli_fetch_assoc($users_result)) {
-    $expected = hash_hmac('sha256', intval($u['user_id']), $installation_id);
-    if (hash_equals($expected, $token)) {
-        $user_id   = intval($u['user_id']);
-        $user_name = $u['user_name'];
-        break;
-    }
-}
+// MSP-DS-49: per-user random token (hashed in the database); the old HMAC links work only inside their grace period
+require_once dirname(__DIR__) . '/includes/calendar_feed_token.php';
+$resolved  = calendarFeedTokenResolve($mysqli, $token, (string) $installation_id);
+$user_id   = $resolved ? $resolved['user_id'] : 0;
+$user_name = $resolved ? $resolved['user_name'] : '';
 
 if (!$user_id) {
     http_response_code(401);

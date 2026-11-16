@@ -116,10 +116,14 @@ if (isset($_GET['calendar_id'])) {
 
         <!-- Outlook / Calendar Sync -->
         <?php
-        // Stable per-user calendar token — HMAC of user_id with installation_id as key
-        $cal_token  = hash_hmac('sha256', $session_user_id, $installation_id);
-        $feed_url   = "https://$config_base_url/agent/calendar_feed.php?token=$cal_token";
-        $webcal_url = "webcal://$config_base_url/agent/calendar_feed.php?token=$cal_token";
+        // MSP-DS-49: a per-user random token, shown once right after it is generated (only its hash is stored)
+        $cal_token = $_SESSION['calendar_feed_new_token'] ?? '';
+        unset($_SESSION['calendar_feed_new_token']);
+        $cal_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_calendar_token_hash, user_calendar_legacy_until FROM users WHERE user_id = " . intval($session_user_id)));
+        $cal_has_token = !empty($cal_row['user_calendar_token_hash']);
+        $cal_legacy_until = (!$cal_has_token && !empty($cal_row['user_calendar_legacy_until']) && strtotime($cal_row['user_calendar_legacy_until']) > time()) ? $cal_row['user_calendar_legacy_until'] : '';
+        $feed_url   = $cal_token ? "https://$config_base_url/agent/calendar_feed.php?token=$cal_token" : '';
+        $webcal_url = $cal_token ? "webcal://$config_base_url/agent/calendar_feed.php?token=$cal_token" : '';
         ?>
         <div class="card">
             <div class="card-header">
@@ -128,6 +132,8 @@ if (isset($_GET['calendar_id'])) {
             <div class="card-body p-3">
                 <p class="text-muted mb-3" style="font-size:.85rem;">Subscribe to your scheduled tickets in any calendar app. Refreshes automatically.</p>
 
+                <?php if ($cal_token) { ?>
+                <div class="alert alert-warning py-2" style="font-size:.85rem;">Copy your link now. For security it is shown only once.</div>
                 <!-- Outlook Classic -->
                 <p class="mb-1"><strong><i class="fas fa-envelope me-1"></i>Outlook (Classic)</strong></p>
                 <div class="input-group input-group-sm mb-1">
@@ -153,6 +159,19 @@ if (isset($_GET['calendar_id'])) {
                     </div>
                 </div>
                 <p class="text-muted mb-0" style="font-size:.8rem;">Settings &rarr; Add calendar &rarr; From URL &rarr; paste above</p>
+                <?php } else { ?>
+                <p class="text-muted mb-2" style="font-size:.85rem;">
+                    <?php if ($cal_has_token) { ?>You have a personal feed link. It cannot be shown again; generate a new one to replace it.
+                    <?php } elseif ($cal_legacy_until) { ?>Your existing link keeps working until <strong><?= htmlspecialchars($cal_legacy_until, ENT_QUOTES) ?></strong>. Generate a new personal link before then.
+                    <?php } else { ?>You do not have a feed link yet.<?php } ?>
+                </p>
+                <?php } ?>
+                <form action="post.php" method="post" class="mt-2">
+                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                    <button type="submit" name="regenerate_calendar_feed_token" value="1" class="btn btn-sm btn-outline-secondary btn-block">
+                        <i class="fas fa-sync-alt me-1"></i><?= $cal_has_token || $cal_legacy_until ? 'Generate a new link' : 'Generate my link' ?>
+                    </button>
+                </form>
             </div>
         </div>
     </div>
