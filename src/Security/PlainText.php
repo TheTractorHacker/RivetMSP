@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace ITFlow\Security;
+namespace RivetMSP\Security;
 
 /**
  * Normalises text that comes from an external directory (Entra, Google, Odoo, Intune) into a plain display string

@@ -7,7 +7,7 @@ if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
  */
 $root = dirname(__DIR__);
 // PSR-4 for src/ only (no vendor needed)
-spl_autoload_register(function ($c) use ($root) { if (str_starts_with($c, 'ITFlow\\')) { $f = $root . '/src/' . str_replace('\\', '/', substr($c, 7)) . '.php'; if (is_file($f)) require $f; } });
+require_once $root . "/vendor/autoload.php"; // the REAL autoloader: a namespace the app does not map must fail this test (review R5)
 require_once $root . '/plugins/htmlpurifier/HTMLPurifier.standalone.php';
 $pass = 0; $fail = 0;
 $ok = function (bool $c, string $l, string $d = '') use (&$pass, &$fail) { if ($c) { $pass++; echo "  ok   $l\n"; } else { $fail++; echo "  FAIL $l" . ($d !== '' ? " -- $d" : '') . "\n"; } };
@@ -70,7 +70,7 @@ $first = strpos($aj, "header('Content-Type: application/json; charset=utf-8');")
 $ok($first !== false && $first < 2500 && str_contains(substr($aj, $first, 200), 'nosniff'), 'agent/ajax.php sends application/json + nosniff before any branch');
 
 echo "\n== IT-WEB-2 PlainText\n";
-use ITFlow\Security\PlainText;
+use RivetMSP\Security\PlainText;
 foreach ([['<img src=x onerror=alert(1)>Bob', 'Bob'], ['<script src=//evil/p.js></script>Sales', 'Sales'], ['Ann <b>Lee</b>', 'Ann Lee'], ['  R&D  ', 'R&D'], ['x<img src=x onerror=1', 'x'], [null, ''], [['a'], '']] as [$in, $exp]) {
     $ok(PlainText::clean($in) === $exp, 'PlainText::clean(' . json_encode($in) . ')', PlainText::clean($in));
 }

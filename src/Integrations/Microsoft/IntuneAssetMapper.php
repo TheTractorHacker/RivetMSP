@@ -63,7 +63,7 @@ class IntuneAssetMapper
         $client_id = $this->clientId;
 
         $intune_device_id = trim((string) ($device['id'] ?? ''));
-        $device_name = \ITFlow\Security\PlainText::clean($device['deviceName'] ?? '');
+        $device_name = \RivetMSP\Security\PlainText::clean($device['deviceName'] ?? '');
 
         if ($intune_device_id === '' || $device_name === '' || $client_id < 1) {
             return 'skipped';
@@ -73,17 +73,17 @@ class IntuneAssetMapper
         $azure_ad_device_id = trim((string) ($device['azureADDeviceId'] ?? ''));
         $azure_ad_device_id_esc = mysqli_real_escape_string($m, $azure_ad_device_id);
         $hostname_esc = mysqli_real_escape_string($m, $device_name);
-        $serial = \ITFlow\Security\PlainText::clean($device['serialNumber'] ?? '');
+        $serial = \RivetMSP\Security\PlainText::clean($device['serialNumber'] ?? '');
         $serial_esc = mysqli_real_escape_string($m, $serial);
-        $os_name = \ITFlow\Security\PlainText::clean($device['operatingSystem'] ?? '');
+        $os_name = \RivetMSP\Security\PlainText::clean($device['operatingSystem'] ?? '');
         $os_name_esc = mysqli_real_escape_string($m, $os_name);
-        $os_version = \ITFlow\Security\PlainText::clean($device['osVersion'] ?? '');
-        $manufacturer = \ITFlow\Security\PlainText::clean($device['manufacturer'] ?? '');
+        $os_version = \RivetMSP\Security\PlainText::clean($device['osVersion'] ?? '');
+        $manufacturer = \RivetMSP\Security\PlainText::clean($device['manufacturer'] ?? '');
         $manufacturer_esc = mysqli_real_escape_string($m, $manufacturer);
-        $model = \ITFlow\Security\PlainText::clean($device['model'] ?? '');
+        $model = \RivetMSP\Security\PlainText::clean($device['model'] ?? '');
         $model_esc = mysqli_real_escape_string($m, $model);
-        $management_agent_esc = mysqli_real_escape_string($m, \ITFlow\Security\PlainText::clean($device['managementAgent'] ?? ''));
-        $compliance_state_esc = mysqli_real_escape_string($m, \ITFlow\Security\PlainText::clean($device['complianceState'] ?? ''));
+        $management_agent_esc = mysqli_real_escape_string($m, \RivetMSP\Security\PlainText::clean($device['managementAgent'] ?? ''));
+        $compliance_state_esc = mysqli_real_escape_string($m, \RivetMSP\Security\PlainText::clean($device['complianceState'] ?? ''));
         $is_encrypted = !empty($device['isEncrypted']) ? 1 : 0;
         $primary_user_upn = trim((string) ($device['userPrincipalName'] ?? ''));
         $primary_user_upn_esc = mysqli_real_escape_string($m, $primary_user_upn);
