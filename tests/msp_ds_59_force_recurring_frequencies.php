@@ -1,7 +1,7 @@
 <?php
 // MSP-DS-59: every frequency the UI offers has an interval for the manual force paths; unknown ones are refused before anything is created.
 require __DIR__ . '/lib/ds_src.php';
-$f = ds_src('functions.php'); $i = strpos($f, 'function recurringTicketIntervalSpec'); eval(substr($f, $i, strpos($f, "\n}\n", $i) + 2));
+$f = ds_src('functions.php'); $i = strpos($f, 'function recurringTicketIntervalSpec'); eval(substr($f, $i, strpos($f, "\n}\n", $i) + 2 - $i));
 foreach (['three days' => '3 days', 'weekly' => '1 week', 'biweekly' => '2 weeks', 'monthly' => '1 month', 'quarterly' => '3 months', 'biannually' => '6 months', 'annually' => '12 months', 'Biweekly' => '2 weeks'] as $k => $v) {
     ds_t("$k -> $v", recurringTicketIntervalSpec($k) === $v);
     $d = date_add(new DateTime('2026-01-31'), date_interval_create_from_date_string(recurringTicketIntervalSpec($k)));

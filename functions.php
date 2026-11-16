@@ -2697,7 +2697,8 @@ function checkFileUpload($file, $allowed_extensions)
     $hashedContent = hash('md5', $fileContent);
 
     // Generate a secure filename using the hashed content
-    $secureFilename = $hashedContent . randomString(2) . '.' . $extension;
+    // MSP-DS-71: an alphanumeric suffix (randomString() is base64url and added '-'/'_' to ~6% of names, which every caller then rejected)
+    $secureFilename = $hashedContent . bin2hex(random_bytes(1)) . '.' . $extension;
 
     return $secureFilename;
 }

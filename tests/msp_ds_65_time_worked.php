@@ -1,7 +1,7 @@
 <?php
 // MSP-DS-65: ticket reply time worked is clamped / strictly validated on add, edit, bulk reply and bulk resolve.
 require __DIR__ . '/lib/ds_src.php';
-$f = ds_src('functions.php'); $i = strpos($f, 'function parseTimeWorked'); eval(substr($f, $i, strpos($f, "\n}\n", $i) + 2));
+$f = ds_src('functions.php'); $i = strpos($f, 'function parseTimeWorked'); eval(substr($f, $i, strpos($f, "\n}\n", $i) + 2 - $i));
 foreach (['00:01:00' => '00:01:00', '1:05:09' => '01:05:09', '838:59:59' => '838:59:59', ' 02:00:00 ' => '02:00:00'] as $in => $out) ds_t("accepts $in", parseTimeWorked($in) === $out);
 foreach (['-40:00:00', '-838:59:59', '839:00:00', '9999:00:00', '01:60:00', '01:00:60', '1:2:3', 'abc', '', '01:00', "01:00:00\n; DROP", '00:00:00 ', null, ['x']] as $bad) ds_t('rejects ' . json_encode($bad), $bad === '00:00:00 ' ? parseTimeWorked($bad) === '00:00:00' : parseTimeWorked($bad) === null);
 $s = ds_src('agent/post/ticket.php');

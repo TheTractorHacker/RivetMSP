@@ -18,7 +18,7 @@ if (getenv('RIVETMSP_TEST_DB') === '1' && preg_match('/scratch/i', (string) gete
     mysqli_report(MYSQLI_REPORT_OFF);
     $mysqli = new mysqli('localhost', getenv('RIVETMSP_TEST_DB_USER'), getenv('RIVETMSP_TEST_DB_PASS'), getenv('RIVETMSP_TEST_DB_NAME'));
     $mysqli->query("SET SESSION sql_mode=''"); $mysqli->query("SET FOREIGN_KEY_CHECKS=0");
-    $f = ds_src('functions.php'); $i = strpos($f, 'function taskApprovalBlocksCompletion'); eval(substr($f, $i, strpos($f, "\n}\n", $i) + 2));
+    $f = ds_src('functions.php'); $i = strpos($f, 'function taskApprovalBlocksCompletion'); eval(substr($f, $i, strpos($f, "\n}\n", $i) + 2 - $i));
     $mysqli->query("INSERT INTO tasks (task_id, task_name, task_ticket_id) VALUES (1,'a',9),(2,'b',9),(3,'c',9),(4,'d',9)");
     $mysqli->query("INSERT INTO task_approvals (approval_scope, approval_type, approval_status, approval_created_by, approval_url_key, approval_task_id) VALUES ('internal','any','pending',1,'k1',1),('internal','any','declined',1,'k2',2),('internal','any','approved',1,'k3',3)");
     ds_t('pending blocks', taskApprovalBlocksCompletion(1)); ds_t('declined blocks', taskApprovalBlocksCompletion(2));
