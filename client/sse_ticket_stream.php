@@ -27,4 +27,7 @@ if (!$ticket_id || !$row || !($session_contact_id == $row['ticket_contact_id'] |
 // on session_start() for up to $max_runtime seconds while this connection is open.
 session_write_close();
 
+$sse_stream_owner = 'portal:' . intval($session_contact_id);   // MSP-DS-138
+$sse_stream_cap = 3;
+
 require '../includes/sse_ticket_stream.php';

@@ -24,6 +24,37 @@ if (!$redis) {
     exit;
 }
 
+// MSP-DS-138: each stream pins a PHP-FPM worker for up to 45 s, so one person may only hold a few at once. The slot counter lives in Redis
+// (expires on its own if a worker dies); over the cap the answer is a 429, which makes EventSource stop instead of reconnecting in a loop.
+$sse_owner = (string) ($sse_stream_owner ?? '');
+$sse_cap = max(1, (int) ($sse_stream_cap ?? 5));
+if ($sse_owner !== '') {
+    $sse_slot_key = 'sse_streams:' . $sse_owner;
+    try {
+        $sse_open = (int) $redis->incr($sse_slot_key);
+        $redis->expire($sse_slot_key, 90);
+    } catch (\Throwable $e) {
+        $sse_open = 0;   // Redis trouble: the stream itself will fail below
+    }
+    if ($sse_open > $sse_cap) {
+        try {
+            $redis->decr($sse_slot_key);
+        } catch (\Throwable $e) {
+        }
+        http_response_code(429);
+        header('Retry-After: 60');
+        exit;
+    }
+    register_shutdown_function(static function () use ($redis, $sse_slot_key) {
+        try {
+            if ((int) $redis->decr($sse_slot_key) < 0) {
+                $redis->set($sse_slot_key, 0);
+            }
+        } catch (\Throwable $e) {
+        }
+    });
+}
+
 $channel = "ticket.$ticket_id";
 
 $pubsub = $redis->pubSubLoop();
