@@ -1139,7 +1139,7 @@ function report_send_csv(string $filename, array $header, array $rows)
             return $v;
         }
         $v = (string) ($v ?? '');
-        if ($v !== '' && !is_numeric($v) && in_array($v[0], ['=', '+', '-', '@'], true)) {
+        if ($v !== '' && !is_numeric($v) && in_array($v[0], ['=', '+', '-', '@', "\t", "\r", '|'], true)) {
             $v = "'" . $v;
         }
         return $v;
@@ -1149,10 +1149,11 @@ function report_send_csv(string $filename, array $header, array $rows)
     // UTF-8 BOM so Excel opens accented characters correctly.
     fwrite($out, "\xEF\xBB\xBF");
     if (!empty($header)) {
-        fputcsv($out, array_map($sanitize, $header));
+        fputcsv($out, array_map($sanitize, $header), ',', '"', '');
     }
     foreach ($rows as $row) {
-        fputcsv($out, array_map($sanitize, (array) $row));
+        // MSP-DS-99: empty escape character = plain RFC 4180 quoting; PHP's default '\\' leaves a quote after a backslash undoubled, which ends the cell early
+        fputcsv($out, array_map($sanitize, (array) $row), ',', '"', '');
     }
     fclose($out);
     exit;
