@@ -523,6 +523,7 @@ function handleInboundNdr(array $raw_parts, string $subject, string $message_bod
     $diagnostic_code   = null;
     $status_code       = null;
     $original_subject  = null;
+    $original_message_id = '';
 
     // DSN info shows up as regular attachment/part entries, not the visible body
     foreach ($raw_parts as $attachment) {
@@ -552,6 +553,9 @@ function handleInboundNdr(array $raw_parts, string $subject, string $message_bod
             if (preg_match('/^Subject:\s*(.+)$/mi', $body, $m)) {
                 $original_subject = sanitizeInput(trim($m[1]));
             }
+            if ($original_message_id === '' && preg_match('/^Message-ID:\s*(.+)$/mi', $body, $m)) {
+                $original_message_id = MessageId::normalize(trim($m[1]));
+            }
         }
     }
 
@@ -576,10 +580,13 @@ function handleInboundNdr(array $raw_parts, string $subject, string $message_bod
         0
     );
 
-    // If the original subject has a ticket, leave a system note there (not a client reply: the sender is a mail server)
-    if (preg_match("/\[$config_ticket_prefix_re(\d+)\]/", $original_subject, $ticket_number_matches)) {
-        $ticket_number = intval($ticket_number_matches[1]);
-        $t = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_id FROM tickets WHERE ticket_number = $ticket_number LIMIT 1"));
+    // MSP-DS-94: a bounce is written onto a ticket only when it quotes the Message-ID of a mail THIS server queued for that ticket
+    // (email_queue.email_message_id / email_ticket_id). A '[PREFIX123]' in an attacker-supplied subject proves nothing.
+    // The sender is a mail server, so it is a System note, not a client reply.
+    if ($original_message_id !== '') {
+        $mid_esc = mysqli_real_escape_string($mysqli, $original_message_id);
+        $q = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT email_ticket_id FROM email_queue WHERE email_message_id = '$mid_esc' AND email_ticket_id IS NOT NULL LIMIT 1"));
+        $t = $q ? mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_id FROM tickets WHERE ticket_id = " . intval($q['email_ticket_id']) . " LIMIT 1")) : null;
         if ($t) {
             $note = mysqli_real_escape_string($mysqli, "Email delivery failed.<br>Recipient: $failed_recipient<br>Status: $status_code<br>Diagnostic: $diagnostic_code");
             mysqli_query($mysqli, "INSERT INTO ticket_replies SET ticket_reply = '$note', ticket_reply_type = 'System', ticket_reply_time_worked = '00:00:00', ticket_reply_by = 0, ticket_reply_ticket_id = " . intval($t['ticket_id']));
