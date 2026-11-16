@@ -66,7 +66,21 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
         $sql = mysqli_query($mysqli, "SELECT contact_id, contact_name, user_email, contact_client_id, user_id FROM users LEFT JOIN contacts ON user_id = contact_user_id WHERE user_email = '$email' AND user_auth_method = 'local' AND user_type = 2 AND user_status = 1 AND user_archived_at IS NULL LIMIT 1");
         $row = mysqli_fetch_assoc($sql);
 
-        if ($row['user_email'] == $email) {
+        // MSP-DS-148: at most 10 requests per address per hour (Redis, when it is configured) and 3 reset e-mails per account per hour (logs).
+        // Over the limit nothing is sent and the answer is the same as for an unknown address.
+        $reset_throttled = false;
+        require_once __DIR__ . '/../includes/redis_guards.php';
+        if (!rivetRateLimit('portal-reset:ip:' . (string) getIP(), 10, 3600)['allowed']) {
+            $reset_throttled = true;
+        }
+        if (!$reset_throttled && $row && $row['user_email'] == $email) {
+            $recent = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM logs WHERE log_type = 'Contact' AND log_description = 'Sent a portal password reset e-mail for $email.' AND log_created_at > (NOW() - INTERVAL 1 HOUR)"));
+            if ($recent && intval($recent[0]) >= 3) {
+                $reset_throttled = true;
+            }
+        }
+
+        if (!$reset_throttled && $row && $row['user_email'] == $email) {
             $id = intval($row['contact_id']);
             $user_id = intval($row['user_id']);
             $name = sanitizeInput($row['contact_name']);
