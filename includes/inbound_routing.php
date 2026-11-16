@@ -73,6 +73,7 @@ function inboundTrustedContact(mysqli $mysqli, string $email): ?array
 /**
  * Portal contacts may not claim an address that already belongs to a contact of another client (archived ones count), nor an address
  * whose domain another client lists. Returns the reason, or '' when the address is free for this client.
+ * $email must be the RAW address (not already SQL-escaped): this function escapes it itself (MSP-DS-16, review R33).
  */
 function portalContactEmailConflict(mysqli $mysqli, string $email, int $clientId, int $exceptContactId = 0): string
 {

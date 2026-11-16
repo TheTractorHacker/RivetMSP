@@ -541,6 +541,7 @@ if (isset($_POST['add_contact'])) {
 
     $contact_name = sanitizeInput($_POST['contact_name']);
     $contact_email = sanitizeInput($_POST['contact_email']);
+    $contact_email_raw = trim(strip_tags((string) ($_POST['contact_email'] ?? '')));   // unescaped, for helpers that escape for themselves (review R33)
     $contact_technical = intval($_POST['contact_technical'] ?? 0);
     $contact_billing = intval($_POST['contact_billing'] ?? 0);
     $contact_auth_method = sanitizeInput($_POST['contact_auth_method']);
@@ -558,15 +559,16 @@ if (isset($_POST['add_contact'])) {
     // Check the email isn't already in use
     $sql = mysqli_query($mysqli, "SELECT user_id FROM users WHERE user_email = '$contact_email'");
     if ($sql && mysqli_num_rows($sql) > 0) {
-        flash_alert("Cannot add contact as that email address is already in use", 'danger');
+        flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');   // MSP-DS-16/91 (review R32): one answer for every refusal reason, so this form is no existence oracle
         redirect('contact_add.php');
     }
 
     // An address that belongs to another client (a contact of theirs, or on a domain they list) cannot be claimed here: inbound
     // support mail from it would be filed under this client (MSP-DS-16)
     require_once dirname(__DIR__) . '/includes/inbound_routing.php';
-    if ($contact_email !== '' && portalContactEmailConflict($mysqli, $contact_email, $session_client_id) !== '') {
-        flash_alert("Cannot add contact as that email address is already in use", 'danger');
+    if ($contact_email !== '' && portalContactEmailConflict($mysqli, $contact_email_raw, $session_client_id) !== '') {
+        logAction('Client Portal', 'Contact Address Refused', 'A portal contact tried to add an address that belongs to another client', $session_client_id, 0);
+        flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');   // MSP-DS-16/91 (review R32): one answer for every refusal reason, so this form is no existence oracle
         redirect('contact_add.php');
     }
 
@@ -609,6 +611,7 @@ if (isset($_POST['edit_contact'])) {
     $contact_id = intval($_POST['contact_id']);
     $contact_name = sanitizeInput($_POST['contact_name']);
     $contact_email = sanitizeInput($_POST['contact_email']);
+    $contact_email_raw = trim(strip_tags((string) ($_POST['contact_email'] ?? '')));   // unescaped, for helpers that escape for themselves (review R33)
     $contact_technical = intval($_POST['contact_technical'] ?? 0);
     $contact_billing = intval($_POST['contact_billing'] ?? 0);
     $contact_auth_method = sanitizeInput($_POST['contact_auth_method']);
@@ -652,14 +655,15 @@ if (isset($_POST['edit_contact'])) {
     // Check the email isn't already in use
     $sql = mysqli_query($mysqli, "SELECT user_id FROM users WHERE user_email = '$contact_email' AND user_id != $contact_user_id");
     if ($sql && mysqli_num_rows($sql) > 0) {
-        flash_alert("Cannot update contact as that email address is already in use", 'danger');
+        flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');   // MSP-DS-16/91 (review R32): one answer for every refusal reason
         redirect('contact_edit.php?id=' . $contact_id);
     }
 
     // Same claim check as add_contact (MSP-DS-16)
     require_once dirname(__DIR__) . '/includes/inbound_routing.php';
-    if ($contact_email !== '' && portalContactEmailConflict($mysqli, $contact_email, $session_client_id, $contact_id) !== '') {
-        flash_alert("Cannot update contact as that email address is already in use", 'danger');
+    if ($contact_email !== '' && portalContactEmailConflict($mysqli, $contact_email_raw, $session_client_id, $contact_id) !== '') {
+        logAction('Client Portal', 'Contact Address Refused', 'A portal contact tried to set an address that belongs to another client', $session_client_id, 0);
+        flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');   // MSP-DS-16/91 (review R32): one answer for every refusal reason
         redirect('contact_edit.php?id=' . $contact_id);
     }
 
