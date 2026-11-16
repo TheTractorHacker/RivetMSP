@@ -465,28 +465,7 @@ if (isset($_POST['save_user_color'])) {
     redirect();
 }
 
-if (isset($_GET['delete_passkey'])) {
-
-    validateCSRFToken($_GET['csrf_token']);
-
-    $passkey_id = intval($_GET['delete_passkey']);
-
-    // Ensure the passkey belongs to the logged-in user
-    $pk = mysqli_fetch_assoc(mysqli_query($mysqli,
-        "SELECT passkey_name FROM user_passkeys WHERE passkey_id = $passkey_id AND passkey_user_id = $session_user_id LIMIT 1"
-    ));
-
-    if ($pk) {
-        $pk_name = sanitizeInput($pk['passkey_name']);
-        mysqli_query($mysqli, "DELETE FROM user_passkeys WHERE passkey_id = $passkey_id AND passkey_user_id = $session_user_id");
-        logAction("Passkey", "Delete", "$session_name removed passkey '$pk_name'");
-        flash_alert("Passkey <strong>$pk_name</strong> removed", 'error');
-    }
-
-    redirect();
-
-}
-
+// MSP-DS-75: the GET delete_passkey handler was removed; passkeys are removed through agent/user/passkey_delete.php, which re-checks the password.
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/firebase.php';
 
