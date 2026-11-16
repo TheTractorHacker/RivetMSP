@@ -133,6 +133,12 @@ if (isset($_POST['set_change_status'])) {
         enforceClientAccess($change_client_id);
     }
 
+    // MSP-DS-67: a change that needs the client's approval cannot be moved past 'awaiting_approval' by a technician until the client has approved it (a rejection stands too)
+    if (in_array($status, ['approved', 'scheduled', 'in_progress'], true) && !changeClientApprovalSatisfied($change_id)) {
+        flash_alert('This change requires the client\'s approval first. It has not been approved by the client.', 'error');
+        redirect("change_details.php?id=$change_id");
+    }
+
     try {
         rivetItsmChanges()->setStatus($change_id, $status, $scheduled_at);
     } catch (\InvalidArgumentException $e) {

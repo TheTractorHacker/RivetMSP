@@ -994,7 +994,8 @@ if (isset($_POST['update_task_templates_order'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
-    enforceUserPermission('module_support', 2);
+    // MSP-DS-67: ticket template tasks are admin-managed
+    enforceAdminPermission();
 
     $positions = $_POST['positions'];
     $ticket_template_id = intval($_POST['ticket_template_id']);
@@ -1106,9 +1107,11 @@ if (isset($_GET['client_duplicate_check'])) {
     $response['message'] = ""; // default
 
     if (strlen($name) >= 5) {
+        // MSP-DS-67: only clients this user may access take part (a client-restricted technician must not enumerate the others)
         $sql_clients = mysqli_query($mysqli, "SELECT client_name FROM clients
         WHERE client_archived_at IS NULL
         AND client_name LIKE '%$name%'
+        $access_permission_query
         ORDER BY client_id DESC LIMIT 1"
         );
 
@@ -1133,7 +1136,8 @@ if (isset($_GET['contact_email_check'])) {
     if (strlen($email) >= 3) {
 
         // 1. Duplicate check
-        $sql_contacts = mysqli_query($mysqli, "SELECT contact_email FROM contacts WHERE contact_email = '$email' LIMIT 1");
+        // MSP-DS-67: only contacts of clients this user may access count (no cross-client existence oracle)
+        $sql_contacts = mysqli_query($mysqli, "SELECT contact_email FROM contacts LEFT JOIN clients ON clients.client_id = contact_client_id WHERE contact_email = '$email' $access_permission_query LIMIT 1");
         if (mysqli_num_rows($sql_contacts) > 0) {
             while ($row = mysqli_fetch_assoc($sql_contacts)) {
                 $response['message'] = "<i class='fas fa-fw fa-copy me-2'></i> Potential duplicate: <i>" . nullable_htmlentities($row['contact_email']) . "</i> already exists.";

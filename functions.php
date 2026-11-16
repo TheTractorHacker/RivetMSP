@@ -3021,6 +3021,21 @@ function ticketCloseBlockReason($ticket_id, bool $with_tasks = false): ?string {
     return null;
 }
 
+/**
+ * MSP-DS-67: true when the change does not need the client's approval or the client has approved it.
+ * The agent-side status buttons must not push a change that requires client approval past 'awaiting_approval' otherwise.
+ */
+function changeClientApprovalSatisfied($change_id): bool {
+    global $mysqli;
+    $change_id = intval($change_id);
+    $r = mysqli_query($mysqli, "SELECT requires_client_approval, client_decision FROM changes WHERE change_id = $change_id");
+    $row = $r ? mysqli_fetch_assoc($r) : null;
+    if (!$row) {
+        return true; // not found: let setStatus() report it
+    }
+    return !intval($row['requires_client_approval']) || $row['client_decision'] === 'approved';
+}
+
 function generateReadablePassword($security_level)
 {
     // Cap security level at 5

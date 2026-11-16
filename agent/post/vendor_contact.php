@@ -243,13 +243,19 @@ if (isset($_GET['download_vendor_contacts_csv_template'])) {
 
     validateCSRFToken($_GET['csrf_token']);
 
+    // MSP-DS-67: the template echoes a client name, so it needs the import's permission and the caller's access to that client
+    enforceUserPermission('module_client', 2);
+
     $client_id = intval($_GET['download_client_contacts_csv_template']);
+    if ($client_id) {
+        enforceClientAccess($client_id);
+    }
 
     //get records from database
     $sql = mysqli_query($mysqli,"SELECT client_name FROM clients WHERE client_id = $client_id");
     $row = mysqli_fetch_assoc($sql);
 
-    $client_name = $row['client_name'];
+    $client_name = $row['client_name'] ?? '';
 
     $delimiter = ",";
     $filename = strtoAZaz09($client_name) . "-Contacts-Template.csv";

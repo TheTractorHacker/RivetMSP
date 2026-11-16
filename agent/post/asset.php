@@ -1191,7 +1191,11 @@ if (isset($_POST["import_assets_csv"])) {
 
 if (isset($_GET['download_assets_csv_template'])) {
 
+    // MSP-DS-67: same permission and client access as the import this template belongs to (the file name carries the client name)
+    enforceUserPermission('module_support', 2);
+
     $client_id = intval($_GET['download_assets_csv_template']);
+    enforceClientAccess($client_id);
 
     //get records from database
     $sql = mysqli_query($mysqli,"SELECT client_name FROM clients WHERE client_id = $client_id");
@@ -1836,11 +1840,15 @@ if (isset($_POST["import_client_asset_interfaces_csv"])) {
 }
 
 if (isset($_GET['download_client_asset_interfaces_csv_template'])) {
+    // MSP-DS-67: same permission and client access as the import this template belongs to (the file name carries the asset name)
+    enforceUserPermission('module_support', 2);
+
     $asset_id = intval($_GET['download_client_asset_interfaces_csv_template']);
 
     //get records from database
     $sql = mysqli_query($mysqli,"SELECT asset_name, asset_client_id FROM assets WHERE asset_id = $asset_id");
     $row = mysqli_fetch_assoc($sql);
+    enforceClientAccess(intval($row['asset_client_id'] ?? 0));
 
     $asset_name = $row['asset_name'];
 

@@ -157,7 +157,8 @@ if (isset($_POST['edit_ticket_template_task'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
-    enforceUserPermission('module_support', 2);
+    // MSP-DS-67: template tasks are admin-managed (created, deleted and normally edited in Admin > Ticket Templates), so a support-level technician may not edit them here
+    enforceAdminPermission();
 
     $task_template_id = intval($_POST['task_template_id']);
     $task_name = sanitizeInput($_POST['name']);
