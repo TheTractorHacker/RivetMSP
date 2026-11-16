@@ -13,16 +13,19 @@ BACKUP_RESULT_FILE=""
 BACKUP_STATUS_SENT=0
 BACKUP_OFFSITE_RESULT=""
 
-# backup_make_snapshot <dest-file>: table snapshot (names + counts, no data) for the restore drill; silently absent on failure.
+# backup_make_snapshot <dest-file>: table snapshot (names + counts, no data) for the restore drill. <dest-file> is in a root-only staging
+# directory the web user cannot reach, so the snapshot script (app code, run as the web user) writes JSON to STDOUT and root redirects it
+# into the file. Returns non-zero (with a visible warning) when no snapshot could be made; the backup itself still proceeds.
 backup_make_snapshot() {
-    local out="$1"
+    local out="$1" rc=0
     : > "${out}"; chmod 600 "${out}"
-    # MSP-DS-34: the snapshot script loads the app's config.php, so it runs as the web user (which gets the file for the run).
-    local snap_owner; snap_owner="$(app_owner_user "${APP_DIR}")"
-    [[ -n "${snap_owner}" ]] && chown "${snap_owner}" "${out}"
-    run_app_php "${APP_DIR}" "${SCRIPT_DIR}/lib/table_snapshot.php" "${APP_DIR}" "${out}" || true
-    [[ -n "${snap_owner}" ]] && chown root:root "${out}"
-    [[ -s "${out}" ]]
+    run_app_php "${APP_DIR}" "${SCRIPT_DIR}/lib/table_snapshot.php" "${APP_DIR}" - > "${out}" || rc=$?
+    if [[ "${rc}" -ne 0 || ! -s "${out}" ]]; then
+        warn "No table snapshot was produced (table_snapshot.php exit ${rc}, see above): this archive will carry no table-snapshot.json, so the restore drill cannot compare row counts for it."
+        : > "${out}"
+        return 1
+    fi
+    return 0
 }
 
 # backup_write_checksum <encrypted-file>: writes <file>.sha256 ("<hash>  <name>", readable by sha256sum -c) and prints the hash.
