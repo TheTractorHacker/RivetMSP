@@ -573,24 +573,42 @@ function handleInboundNdr(array $raw_parts, string $subject, string $message_bod
     $status_code      = $status_code ?: 'unknown status code';
     $original_subject = $original_subject ?: $subject;
 
-    appNotify(
-        "Ticket",
-        "Email parser NDR: Message to $failed_recipient bounced. Subject: $original_subject Diagnostics: $status_code / $diagnostic_code - check the mailbox's processed folder to see the email",
-        "",
-        0
-    );
-
-    // MSP-DS-94: a bounce is written onto a ticket only when it quotes the Message-ID of a mail THIS server queued for that ticket
+    // MSP-DS-94: a bounce is tied to a ticket only when it quotes the Message-ID of a mail THIS server queued for that ticket
     // (email_queue.email_message_id / email_ticket_id). A '[PREFIX123]' in an attacker-supplied subject proves nothing.
-    // The sender is a mail server, so it is a System note, not a client reply.
+    $ndr_ticket_id = 0;
+    $ndr_client_id = 0;
     if ($original_message_id !== '') {
         $mid_esc = mysqli_real_escape_string($mysqli, $original_message_id);
         $q = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT email_ticket_id FROM email_queue WHERE email_message_id = '$mid_esc' AND email_ticket_id IS NOT NULL LIMIT 1"));
-        $t = $q ? mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_id FROM tickets WHERE ticket_id = " . intval($q['email_ticket_id']) . " LIMIT 1")) : null;
+        $t = $q ? mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_id, ticket_client_id FROM tickets WHERE ticket_id = " . intval($q['email_ticket_id']) . " LIMIT 1")) : null;
         if ($t) {
-            $note = mysqli_real_escape_string($mysqli, "Email delivery failed.<br>Recipient: $failed_recipient<br>Status: $status_code<br>Diagnostic: $diagnostic_code");
-            mysqli_query($mysqli, "INSERT INTO ticket_replies SET ticket_reply = '$note', ticket_reply_type = 'System', ticket_reply_time_worked = '00:00:00', ticket_reply_by = 0, ticket_reply_ticket_id = " . intval($t['ticket_id']));
+            $ndr_ticket_id = intval($t['ticket_id']);
+            $ndr_client_id = intval($t['ticket_client_id']);
         }
+    }
+
+    // MSP-DS-105: the recipient address and subject belong to a client. With a matched ticket the alert goes only to agents who may see that client;
+    // without one it carries no recipient or subject (they stay in the mail log) instead of being broadcast to every agent.
+    if ($ndr_client_id > 0) {
+        appNotify(
+            "Ticket",
+            "Email parser NDR: Message to $failed_recipient bounced. Subject: $original_subject Diagnostics: $status_code / $diagnostic_code - check the mailbox's processed folder to see the email",
+            "",
+            $ndr_client_id
+        );
+    } else {
+        appNotify(
+            "Ticket",
+            "Email parser NDR: a message bounced (status $status_code) - see the mail log and the mailbox's processed folder for the recipient and subject",
+            "",
+            0
+        );
+    }
+
+    // The sender is a mail server, so a matched bounce is a System note on the ticket, not a client reply.
+    if ($ndr_ticket_id > 0) {
+        $note = mysqli_real_escape_string($mysqli, "Email delivery failed.<br>Recipient: $failed_recipient<br>Status: $status_code<br>Diagnostic: $diagnostic_code");
+        mysqli_query($mysqli, "INSERT INTO ticket_replies SET ticket_reply = '$note', ticket_reply_type = 'System', ticket_reply_time_worked = '00:00:00', ticket_reply_by = 0, ticket_reply_ticket_id = $ndr_ticket_id");
     }
 
     return "Bounce for $failed_recipient - $status_code / $diagnostic_code";

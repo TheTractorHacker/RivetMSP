@@ -430,7 +430,7 @@ function comet_process_job(array $job): array {
         ");
 
         $client_suffix = $client_id ? "&client_id=$client_id" : '';
-        appNotify('Comet Backup', "Backup failed — $dev_name. Ticket #$ticket_id created.", "/agent/ticket.php?ticket_id=$ticket_id$client_suffix");
+        appNotify('Comet Backup', "Backup failed — $dev_name. Ticket #$ticket_id created.", "/agent/ticket.php?ticket_id=$ticket_id$client_suffix", (int) $client_id);   // MSP-DS-105: only agents who may see this client
 
         return ['action' => 'ticket_created', 'ticket_id' => $ticket_id, 'device_name' => $dev_name];
 
@@ -574,7 +574,7 @@ function comet_check_missed_backups(int $threshold_hours = 48): array {
             ");
 
             $client_suffix = $client_id ? "&client_id=$client_id" : '';
-            appNotify('Comet Backup', "Backup missed — $dev_name. Ticket #$ticket_id created.", "/agent/ticket.php?ticket_id=$ticket_id$client_suffix");
+            appNotify('Comet Backup', "Backup missed — $dev_name. Ticket #$ticket_id created.", "/agent/ticket.php?ticket_id=$ticket_id$client_suffix", (int) $client_id);   // MSP-DS-105
             $stats['flagged']++;
         }
     }

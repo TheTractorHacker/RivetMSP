@@ -273,7 +273,8 @@ function rivetAutomationActionHandlers($mysqli, string $ruleName): array
             return "webhook sent (HTTP $code)";
         },
         'notify_user' => static function (array $cfg, array $ctx) use ($mysqli, $ruleName) {
-            appNotify('Automation', mb_substr((string) $cfg['message'], 0, 900), null, 0, 0, true);
+            // MSP-DS-105: a rule fired by a client-bound event (ticket.*) tells only the agents who may see that client
+            appNotify('Automation', mb_substr((string) $cfg['message'], 0, 900), null, (int) ($ctx['client_id'] ?? 0), 0, true);
 
             return 'notification created';
         },

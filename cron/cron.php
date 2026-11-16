@@ -822,7 +822,7 @@ if ($config_send_invoice_reminders == 1) {
             } else {
                 mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Sent', history_description = 'Cron Failed to send Overdue Invoice', history_invoice_id = $invoice_id");
 
-                appNotify("Mail", "Failed to send email to $contact_email");
+                appNotify("Mail", "Failed to send email to $contact_email", null, (int) $client_id);   // MSP-DS-105
 
                 // Logging
                 logApp("Mail", "error", "Failed to send email to $contact_email regarding $subject. $mail");
@@ -961,7 +961,7 @@ while ($row = mysqli_fetch_assoc($sql_recurring_invoices)) {
         } else {
             mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Draft', history_description = 'Cron Failed to send Invoice!', history_invoice_id = $new_invoice_id");
 
-            appNotify("Mail", "Failed to send email to $contact_email");
+            appNotify("Mail", "Failed to send email to $contact_email", null, (int) $client_id);   // MSP-DS-105
 
             // Logging
             logApp("Mail", "error", "Failed to send email to $contact_email regarding $subject. $mail");

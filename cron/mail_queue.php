@@ -369,6 +369,15 @@ function deliverQueueRow(array $row): bool {
     $email_attempts       = (int)$row['email_attempts'] + 1;
     $email_subject_logging = sanitizeInput($row['email_subject']);
     $email_to_logging      = sanitizeInput($email_recipient);
+    // MSP-DS-105: the failure alerts name the recipient and the subject, which belong to a client. Resolve that client from the ticket the mail was queued for;
+    // with none, the alert carries no recipient or subject (the full line is in the log the alert links to) instead of being broadcast to every agent.
+    $mail_client_id = 0;
+    if (!empty($row['email_ticket_id'])) {
+        $mc = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_client_id FROM tickets WHERE ticket_id = " . intval($row['email_ticket_id']) . " LIMIT 1"));
+        $mail_client_id = intval($mc['ticket_client_id'] ?? 0);
+    }
+    $mail_alert_detail = $mail_client_id > 0 ? " to $email_to_logging" : '';
+    $mail_alert_subject = $mail_client_id > 0 ? ": Email subject was: $email_subject_logging" : '';
 
     // Check sender
     if (!filter_var($email_from, FILTER_VALIDATE_EMAIL)) {
@@ -385,7 +394,7 @@ function deliverQueueRow(array $row): bool {
     if (!filter_var($email_recipient, FILTER_VALIDATE_EMAIL)) {
         mysqli_query($mysqli, "UPDATE email_queue SET email_status = 2, email_attempts = " . MailQueuePolicy::PERMANENT . " WHERE email_id = $email_id");
         logApp("Cron-Mail-Queue", "Error", "Failed to send email: $email_id to $email_to_logging due to invalid recipient address. Email subject was: $email_subject_logging");
-        appNotify("Mail", "Failed to send email #$email_id to $email_to_logging due to invalid recipient address: Email subject was: $email_subject_logging", "/admin/logs.php");
+        appNotify("Mail", "Failed to send email #$email_id{$mail_alert_detail} due to invalid recipient address{$mail_alert_subject}", "/admin/logs.php", $mail_client_id);
         return false;
     }
 
@@ -394,7 +403,7 @@ function deliverQueueRow(array $row): bool {
     if (!in_array('--no-mx-validation', $argv ?? []) && !checkdnsrr($domain, 'MX')) {
         mysqli_query($mysqli, "UPDATE email_queue SET email_status = 2, email_attempts = " . MailQueuePolicy::PERMANENT . " WHERE email_id = $email_id");
         logApp("Cron-Mail-Queue", "Error", "Failed to send email: $email_id to $email_to_logging due to invalid recipient domain (no MX). Email subject was: $email_subject_logging");
-        appNotify("Mail", "Failed to send email #$email_id to $email_to_logging due to invalid recipient domain (no MX): Email subject was: $email_subject_logging", "/admin/logs.php");
+        appNotify("Mail", "Failed to send email #$email_id{$mail_alert_detail} due to invalid recipient domain (no MX){$mail_alert_subject}", "/admin/logs.php", $mail_client_id);
         return false;
     }
 
@@ -449,7 +458,7 @@ function deliverQueueRow(array $row): bool {
         $outcome = $next === null ? "no retries left (see the Outbound email gave up alert)" : "retry in $next min";
         logApp("Cron-Mail-Queue", "Error", "Failed to send email #$email_id (attempt $email_attempts) to $email_to_logging regarding $email_subject_logging. $err $outcome");
         if ($email_attempts === 1) { // one notification per message; later attempts and the final give-up are covered by MailHealth
-            appNotify("Mail", "Failed to send email #$email_id to $email_to_logging", "/admin/logs.php");
+            appNotify("Mail", "Failed to send email #$email_id{$mail_alert_detail}", "/admin/logs.php", $mail_client_id);
         }
     }
     return true;
