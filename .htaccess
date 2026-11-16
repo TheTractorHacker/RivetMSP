@@ -1,2 +1,3 @@
 # Prevent access to .git, .github, and config.php
-RedirectMatch 404 ^/(\.git|\.github|config\.php)
+# MSP-DS-4/20: also config/ (Firebase service account), deploy/, docker/, scripts/, tests/ and any dotfile (.env, .env.example)
+RedirectMatch 404 ^/(\.git|\.github|config\.php|config/|deploy/|docker/|scripts/|tests/|\.env)
