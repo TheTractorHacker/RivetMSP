@@ -328,6 +328,10 @@ if ($method === 'POST' && $id !== null && $sub === 'reply') {
         }
     }
 
+    // MSP-DS-14: the web app stores an agent's reply as 'Public'; the portal and guest views list only 'Public' and 'Client' rows, so a
+    // literal 'reply' row was never shown to the customer. $type stays 'reply' for the status logic and the unchanged API response.
+    $stored_reply_type = $type === 'reply' ? 'Public' : $type;
+
     // Prepared statement: $reply is user-supplied free text. Bind the raw
     // (unescaped) values so the stored bytes match the previous escaped-then-
     // interpolated INSERT exactly. Empty time_worked binds as SQL NULL.
@@ -336,7 +340,7 @@ if ($method === 'POST' && $id !== null && $sub === 'reply') {
         "INSERT INTO ticket_replies (ticket_reply, ticket_reply_type, ticket_reply_time_worked, ticket_reply_onsite, ticket_reply_by, ticket_reply_ticket_id, ticket_reply_created_at)
          VALUES (?, ?, ?, ?, ?, ?, NOW())",
         'sssiii',
-        [$reply_raw, $type, $time_param, $onsite, $reply_by, $id]
+        [$reply_raw, $stored_reply_type, $time_param, $onsite, $reply_by, $id]
     );
     mysqli_query($mysqli, "UPDATE tickets SET ticket_updated_at = NOW() WHERE ticket_id = $id");
 

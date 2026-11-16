@@ -137,7 +137,7 @@ if ($resource === 'outtakes' && $id !== null && $sub === 'sign' && $method === '
         $msg = mysqli_real_escape_string($mysqli, "Outtake form signed by $signed_name");
         mysqli_query($mysqli,
             "INSERT INTO ticket_replies (ticket_reply, ticket_reply_type, ticket_reply_by, ticket_reply_ticket_id)
-             VALUES ('$msg', 'note', $uid, $ticket_id)"
+             VALUES ('$msg', 'Internal', $uid, $ticket_id)"
         );
     }
 
