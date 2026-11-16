@@ -60,3 +60,26 @@ function reportScheduleStaffEmails($mysqli): array
     }
     return $out;
 }
+
+/**
+ * MSP-DS-156: staff emails that may actually READ this report: admins, or a role with the report's module at level 1+,
+ * and never an account restricted to a subset of clients (the headline figures are company-wide).
+ * Applied at send time on top of reportScheduleStaffEmails(), so a role change takes effect on the next send.
+ */
+function reportScheduleEligibleEmails($mysqli, $report_key): array
+{
+    $module = $mysqli->real_escape_string(reportScheduleRequiredModule($report_key));
+    $out = [];
+    $res = mysqli_query($mysqli,
+        "SELECT u.user_email FROM users u
+         JOIN user_roles r ON r.role_id = u.user_role_id
+         WHERE u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL AND u.user_email != ''
+           AND NOT EXISTS (SELECT 1 FROM user_client_permissions p WHERE p.user_id = u.user_id)
+           AND (r.role_is_admin = 1 OR EXISTS (
+                SELECT 1 FROM user_role_permissions rp JOIN modules m ON m.module_id = rp.module_id
+                WHERE rp.user_role_id = u.user_role_id AND m.module_name = '$module' AND rp.user_role_permission_level >= 1))");
+    while ($res && ($row = mysqli_fetch_assoc($res))) {
+        $out[] = $row['user_email'];
+    }
+    return $out;
+}

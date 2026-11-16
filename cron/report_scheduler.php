@@ -96,7 +96,7 @@ while ($sched = mysqli_fetch_assoc($res)) {
     }
 
     // Recipients may be comma/semicolon/whitespace separated.
-    $emails = reportScheduleFilterRecipients($recipients, $scheduler_staff_emails)['allowed'];
+    $emails = reportScheduleFilterRecipients($recipients, array_intersect($scheduler_staff_emails, reportScheduleEligibleEmails($mysqli, $report_key)))['allowed'];   // MSP-DS-156
     $mail = [];
     foreach ($emails as $to) {
         $mail[] = [
