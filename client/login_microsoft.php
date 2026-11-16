@@ -35,29 +35,54 @@ $redirect_uri = "https://$config_base_url/client/login_microsoft.php";
 $auth_code_url = "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize";
 $token_grant_url = "https://login.microsoftonline.com/organizations/oauth2/v2.0/token";
 
+// MSP-DS-146/147: the portal can be switched off, and every failure goes back to the portal login page at the site root
+$portal_on = intval(mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT config_client_portal_enable FROM settings WHERE company_id = 1"))['config_client_portal_enable'] ?? 0) === 1;
+if (!$portal_on) {
+    header('Location: /login.php');
+    exit;
+}
+
+// Microsoft returned an error (user cancelled, consent refused): back to the login page
+if (isset($_GET['error'])) {
+    unset($_SESSION['portal_ms_state']);
+    header('Location: /login.php');
+    exit;
+}
+
 // Initial Login Request, via Microsoft
 // Returns an authorization code if login was successful
-if ($_SERVER['REQUEST_METHOD'] == "GET") {
+// MSP-DS-147: response_mode=query, so the return is a GET that carries the (SameSite=Lax) session cookie; state is a random value, not the session id
+if ($_SERVER['REQUEST_METHOD'] == "GET" && !isset($_GET['code'])) {
+
+    $_SESSION['portal_ms_state'] = bin2hex(random_bytes(32));
 
     $params = array (
         'client_id' => $client_id,
         'redirect_uri' => $redirect_uri,
         'response_type' => 'code',
-        'response_mode' =>'form_post',
+        'response_mode' =>'query',
         'scope' => 'https://graph.microsoft.com/User.Read',
-        'state' => session_id());
+        'state' => $_SESSION['portal_ms_state']);
 
     header('Location: '.$auth_code_url.'?'.http_build_query($params));
+    exit;
 
 }
 
-// Login was successful, Microsoft has returned us an authorization code via POST
+// Login was successful, Microsoft has returned us an authorization code
 // Request an access token using authorization code (& client secret) (server side)
-if (isset($_POST['code']) && $_POST['state'] == session_id()) {
+$ms_state_ok = isset($_GET['code'], $_GET['state'], $_SESSION['portal_ms_state'])
+    && is_string($_GET['state']) && hash_equals((string) $_SESSION['portal_ms_state'], $_GET['state']);
+unset($_SESSION['portal_ms_state']);   // one use
+if (isset($_GET['code']) && !$ms_state_ok) {
+    header('Location: /login.php');
+    exit;
+}
+if ($ms_state_ok) {
 
     $params = array (
         'client_id' =>$client_id,
-        'code' => $_POST['code'],
+        'code' => $_GET['code'],
         'redirect_uri' => $redirect_uri,
         'grant_type' => 'authorization_code',
         'client_secret' => $client_secret
@@ -145,16 +170,17 @@ if (isset($_POST['code']) && $_POST['state'] == session_id()) {
         }
 
         header('Location: index.php');
+        exit;
 
     } else {
 
         echo "Error getting access_token";
+        exit;
 
     }
 
 }
 
-// If the user is just sat on the page, redirect them to log in to try again
-if (empty($_GET)) {
-    echo "<script> setTimeout(function() { window.location = \"login.php\"; },1000);</script>";
-}
+// Anything that did not complete a sign-in: back to the portal login page (it lives at the site root, not under /client/)
+header('Location: /login.php');
+exit;
