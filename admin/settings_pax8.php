@@ -147,8 +147,12 @@ if (isset($_POST['save_pax8_client_mapping'])) {
     // next sync then creates a fresh one. MySQL evaluates SET left to right, so this must come before client_id.
     // MSP-INJ-22 (a)(c): re-mapping or un-mapping must also stop billing the OLD client for this company: archive this company's lines on the old client's recurring
     // invoice (and recalculate it) and point the company's subscriptions at the new client (NULL when un-mapped), so the old invoice no longer carries them.
-    $old_map = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT pax8_company_id, client_id, recurring_invoice_id FROM pax8_client_map WHERE map_id = $map_id"));
-    if ($old_map && (int) ($old_map['client_id'] ?? 0) !== $client_id) {
+    $old_map = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT pax8_company_id, client_id, recurring_invoice_id, billing_sync_enabled FROM pax8_client_map WHERE map_id = $map_id"));
+    // MSP-DS-36: turning billing OFF for a company with the client unchanged must stop billing its licences too (archive its lines on the
+    // client's recurring invoice), not only a re-map; the subscriptions keep their client in that case.
+    $client_changed = $old_map && (int) ($old_map['client_id'] ?? 0) !== $client_id;
+    $billing_turned_off = $old_map && (int) ($old_map['billing_sync_enabled'] ?? 0) === 1 && $billing_sync_enabled === 0;
+    if ($old_map && ($client_changed || $billing_turned_off)) {
         $old_ri = (int) ($old_map['recurring_invoice_id'] ?? 0);
         $company_esc = mysqli_real_escape_string($mysqli, (string) $old_map['pax8_company_id']);
         if ($old_ri > 0) {
@@ -158,7 +162,9 @@ if (isset($_POST['save_pax8_client_mapping'])) {
                 pax8RecalcRecurringInvoiceAmount($mysqli, $old_ri);
             }
         }
-        mysqli_query($mysqli, "UPDATE pax8_subscriptions SET client_id = $client_sql WHERE pax8_company_id = '$company_esc'");
+        if ($client_changed) {
+            mysqli_query($mysqli, "UPDATE pax8_subscriptions SET client_id = $client_sql WHERE pax8_company_id = '$company_esc'");
+        }
     }
     mysqli_query($mysqli, "UPDATE pax8_client_map SET recurring_invoice_id = IF(client_id <=> $client_sql, recurring_invoice_id, NULL), client_id = $client_sql, billing_sync_enabled = $billing_sync_enabled WHERE map_id = $map_id");
     logAction("Pax8", "Edit", "$session_name updated a Pax8 company -> client mapping" . ($billing_sync_enabled ? " (automated billing enabled)" : ""), $client_id);
