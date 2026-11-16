@@ -3208,6 +3208,14 @@ if (isset($_POST['add_invoice_from_ticket'])) {
     $category = intval($_POST['category']);
     $scope = sanitizeInput($_POST['scope']);
 
+    // MSP-DS-68: same line validation as the invoice/quote line-item handlers - no negative or non-finite amounts
+    $line_qty_check = floatval($_POST['qty'] ?? 0);
+    $line_price_check = floatval($_POST['price'] ?? 0);
+    if ($line_qty_check < 0 || !is_finite($line_qty_check * $line_price_check) || abs($line_qty_check * $line_price_check) > 99999999) {
+        flash_alert("Quantity can not be negative and the line amount must be a reasonable number", 'error');
+        redirect();
+    }
+
     $sql = mysqli_query(
         $mysqli,
         "SELECT * FROM tickets
@@ -3314,7 +3322,10 @@ if (isset($_POST['add_invoice_from_ticket'])) {
     $sql = mysqli_query($mysqli, "SELECT * FROM invoices WHERE invoice_id = $invoice_id");
     $row = mysqli_fetch_assoc($sql);
 
-    $new_invoice_amount = floatval($row['invoice_amount']) + $total;
+    // MSP-DS-68: recomputed from the lines minus the discount (never below zero), like the line-item handlers - not old amount + line
+    $invoice_discount_from_row = floatval($row['invoice_discount_amount']);
+    $row_total = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT SUM(item_total) AS invoice_total FROM invoice_items WHERE item_invoice_id = $invoice_id"));
+    $new_invoice_amount = max(0, floatval($row_total['invoice_total']) - $invoice_discount_from_row);
 
     mysqli_query($mysqli, "UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
 
@@ -3346,6 +3357,14 @@ if (isset($_POST['add_quote_from_ticket'])) {
 
     $ticket_id = intval($_POST['ticket_id']);
     $scope = sanitizeInput($_POST['scope']);
+
+    // MSP-DS-68: same line validation as the invoice/quote line-item handlers - no negative or non-finite amounts
+    $line_qty_check = floatval($_POST['qty'] ?? 0);
+    $line_price_check = floatval($_POST['price'] ?? 0);
+    if ($line_qty_check < 0 || !is_finite($line_qty_check * $line_price_check) || abs($line_qty_check * $line_price_check) > 99999999) {
+        flash_alert("Quantity can not be negative and the line amount must be a reasonable number", 'error');
+        redirect();
+    }
     $date = sanitizeInput($_POST['date']);
     $expire = sanitizeInput($_POST['expire']);
     $category = intval($_POST['category']);
