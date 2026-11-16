@@ -26,6 +26,6 @@ $ok((int) $t['ticket_client_id'] === 10 && (int) $t['ticket_contact_id'] === 4, 
 $s = file_get_contents(__DIR__ . '/../agent/post/ticket.php');
 $ok(strpos($s, 'ticketRotateGuestKey($mysqli, $ticket_id)') !== false && substr_count($s, 'ticketRotateGuestKey(') >= 2, '134: watcher removal and contact change rotate the key');
 $ok(strpos($s, "ticket_reply_type IN ('Public', 'Client'), 'Internal'") !== false && strpos($s, '$source_client_id !== $client_id') !== false, '135: cross-client merge turns moved Public/Client replies Internal');
-$ok(strpos($s, 'ticketDetachFromOldClient($mysqli, $ticket_id)') !== false && strpos($s, "assertSameClient('contact', $contact_id, $client_id)") !== false, '136: change_client_ticket detaches and validates the contact');
+$ok(strpos($s, 'ticketDetachFromOldClient($mysqli, $ticket_id)') !== false && strpos($s, 'ticketDetachFromOldClient') !== false && substr_count($s, "assertSameClient('contact', \$contact_id, \$client_id)") >= 2, '136: change_client_ticket detaches and validates the contact');
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);
