@@ -3939,8 +3939,8 @@ function appNotify($type, $details, $action = null, $client_id = 0, $entity_id =
 
     $push_action = $action;
 
-    $type    = substr($type, 0, 200);
-    $details = substr($details, 0, 1000);
+    $type    = mb_substr($type, 0, 200, 'UTF-8');
+    $details = mb_substr($details, 0, 1000, 'UTF-8');
     $type_esc    = mysqli_real_escape_string($mysqli, $type);
     $details_esc = mysqli_real_escape_string($mysqli, $details);
     $client_id = intval($client_id);
@@ -3948,7 +3948,7 @@ function appNotify($type, $details, $action = null, $client_id = 0, $entity_id =
 
     $action_sql = is_null($action)
         ? "NULL"
-        : "'" . mysqli_real_escape_string($mysqli, substr($action, 0, 250)) . "'";
+        : "'" . mysqli_real_escape_string($mysqli, mb_substr($action, 0, 250, 'UTF-8')) . "'";
 
     // MSP-INJ-11: a notification about one client goes only to the agents who may see that client: administrators, users with no client
     // restriction, and users whose restriction list includes it. Notifications that are not about a client (client_id 0) still go to every agent.
@@ -4002,16 +4002,16 @@ function notifyUser($user_id, $type, $details, $action = null, $client_id = 0, $
     }
 
     // This user muted the category (Preferences > In-app notifications): nothing is created, published or pushed.
-    if (!inapp_notification_allowed_for_user($user_id, substr((string) $type, 0, 200))) {
+    if (!inapp_notification_allowed_for_user($user_id, mb_substr((string) $type, 0, 200, 'UTF-8'))) {
         return;
     }
 
     $client_id = intval($client_id);
     $entity_id = intval($entity_id);
 
-    $action_sql = is_null($action) ? "NULL" : "'" . mysqli_real_escape_string($mysqli, substr($action, 0, 250)) . "'";
-    $type_esc = mysqli_real_escape_string($mysqli, substr($type, 0, 200));
-    $details_esc = mysqli_real_escape_string($mysqli, substr($details, 0, 1000));
+    $action_sql = is_null($action) ? "NULL" : "'" . mysqli_real_escape_string($mysqli, mb_substr($action, 0, 250, 'UTF-8')) . "'";
+    $type_esc = mysqli_real_escape_string($mysqli, mb_substr($type, 0, 200, 'UTF-8'));
+    $details_esc = mysqli_real_escape_string($mysqli, mb_substr($details, 0, 1000, 'UTF-8'));
 
     mysqli_query($mysqli, "INSERT INTO notifications SET notification_type = '$type_esc', notification = '$details_esc', notification_action = $action_sql, notification_client_id = $client_id, notification_entity_id = $entity_id, notification_user_id = $user_id");
 
