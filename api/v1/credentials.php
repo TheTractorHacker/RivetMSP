@@ -13,10 +13,8 @@ api_require_module_permission($mysqli, $api_user_id, 'module_credential');
 // _api_decrypt() lives in includes/api_permissions.php (MSP-DS-180: shared with the client credentials tab)
 
 // Extract raw token from Authorization header for decryption
-$raw_token = '';
-if (preg_match('/^Bearer\s+(\S+)$/i', $_SERVER['HTTP_AUTHORIZATION'] ?? '', $bm)) {
-    $raw_token = $bm[1];
-}
+// MSP-DS-80: index.php already resolved the bearer token from HTTP_AUTHORIZATION, REDIRECT_HTTP_AUTHORIZATION or getallheaders().
+$raw_token = (string) ($raw_token ?? '');
 
 if ($id === null) {
     $page      = max(1, intval($_GET['page'] ?? 1));
@@ -153,7 +151,7 @@ api_response(200, [
     'password'   => _api_decrypt($row['credential_password'], $raw_token, $api_token_row, $id, 'password'),
     'uri'        => $row['credential_uri'],
     'uri_2'      => $row['credential_uri_2'] ?? '',
-    'otp_secret' => $row['credential_otp_secret'] ?? '',
+    'otp_secret' => _api_decrypt((string) ($row['credential_otp_secret'] ?? ''), $raw_token, $api_token_row, $id, 'otp'),
     'note'       => $row['credential_note'] ?? '',
     'client'     => $row['client_name'],
 ]);

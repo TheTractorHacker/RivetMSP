@@ -89,6 +89,11 @@ function _api_decrypt(string $ciphertext, string $raw_token, array $token_row, $
         $plain = \RivetMSP\Crypto\VaultV3::openField($ciphertext, $dek, $credential_id, $field);
         return $plain === false ? '' : $plain;
     }
+    // MSP-DS-80: legacy OTP seeds are stored as 'enc:' . iv . ciphertext; an unprefixed value is a legacy plaintext seed.
+    if ($field === 'otp') {
+        if (!str_starts_with($ciphertext, 'enc:')) return $ciphertext;
+        $ciphertext = substr($ciphertext, 4);
+    }
     if (empty($token_row['token_enc_master_key'])) return '';
     $enc_key    = substr(hash('sha256', $raw_token . 'itflow_enc', true), 0, 16);
     $enc_iv     = hex2bin($token_row['token_enc_master_iv']);
