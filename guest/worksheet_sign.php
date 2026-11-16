@@ -1,5 +1,10 @@
 <?php
 
+// MSP-DS-88: these public pages send the guest security headers (CSP with a script nonce, X-Frame-Options, nosniff, Referrer-Policy).
+require_once __DIR__ . '/../includes/csp_policies.php';
+$csp_nonce = base64_encode(random_bytes(16));
+sendGuestSigningHeaders($csp_nonce);
+
 require_once "../config.php";
 require_once "../functions.php";
 require_once "../includes/load_global_settings.php";
