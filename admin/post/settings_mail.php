@@ -448,10 +448,12 @@ if (isset($_POST['test_email_imap'])) {
     // Stream context (you can tighten these if you want strict validation)
     $context_options = [];
     if (in_array($encryption, ['ssl', 'tls'], true)) {
+        // MSP-DS-119: verify the certificate and the host name, like the poller does; credentials never go to an unverified peer.
         $context_options['ssl'] = [
-            'verify_peer' => false,
-            'verify_peer_name' => false,
-            'allow_self_signed' => true,
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+            'allow_self_signed' => false,
+            'peer_name' => $host,
         ];
     }
 
@@ -483,8 +485,9 @@ if (isset($_POST['test_email_imap'])) {
             fclose($fp);
             throw new Exception("Invalid IMAP greeting: " . trim((string) $greeting));
         }
-        // If you really want STARTTLS for "tls" (port 143), you can do it here
-        if ($encryption === 'tls' && stripos($greeting, 'STARTTLS') !== false) {
+        // MSP-DS-119: for "tls" (port 143) STARTTLS is mandatory. It is not conditional on the greeting text, and when it fails the test
+        // stops before any credential is written to the socket.
+        if ($encryption === 'tls') {
             fwrite($fp, "A0001 STARTTLS\r\n");
             $line = fgets($fp, 1024);
             if ($line === false || stripos($line, 'A0001 OK') !== 0) {
