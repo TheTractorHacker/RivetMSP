@@ -347,12 +347,18 @@ if (isset($_POST['edit_ticket'])) {
     // Per-category SLA-exempt / Non-billable (DB 2.6.126): snapshot the OLD category/billable/override state before
     // the UPDATE below, so ticketCategoryApplyOnCategoryChange() can detect an actual category change afterward.
     require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/ticket_category_rules.php';
-    $old_ticket_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_category, ticket_billable, ticket_billable_overridden FROM tickets WHERE ticket_id = $ticket_id LIMIT 1"));
+    $old_ticket_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_category, ticket_billable, ticket_billable_overridden, ticket_contact_id FROM tickets WHERE ticket_id = $ticket_id LIMIT 1"));
+    $old_contact_id = intval($old_ticket_row['ticket_contact_id'] ?? 0);
     $old_category_id = intval($old_ticket_row['ticket_category'] ?? 0);
     $old_billable = intval($old_ticket_row['ticket_billable'] ?? 0);
     $old_billable_overridden = intval($old_ticket_row['ticket_billable_overridden'] ?? 0);
 
     mysqli_query($mysqli, "UPDATE tickets SET ticket_category = $category_id, ticket_subject = '$ticket_subject', ticket_priority = '$ticket_priority', ticket_billable = $billable, ticket_details = '$details', ticket_due_at = $due, ticket_vendor_ticket_number = '$vendor_ticket_number', ticket_contact_id = $contact_id, ticket_assigned_to = $assigned_to, ticket_vendor_id = $vendor_id, ticket_location_id = $location_id, ticket_asset_id = $asset_id, ticket_project_id = $project_id$delivery_method_sql_fragment WHERE ticket_id = $ticket_id");
+
+    // MSP-DS-134 (review R14): swapping the contact here must also invalidate the previous contact's emailed guest link; the notification below reads the rotated key
+    if ($contact_id !== $old_contact_id) {
+        ticketRotateGuestKey($mysqli, $ticket_id);
+    }
 
     $billable_kept_override_notice = '';
     if ($category_id !== $old_category_id) {
