@@ -25,7 +25,7 @@ if (!$redis) {
     exit;
 }
 
-$channel = "user.$api_user_id.notifications";
+$channel = redisUserNotificationChannel((int) $api_user_id);   // MSP-DS-108: per-install prefix
 
 $pubsub = $redis->pubSubLoop();
 $pubsub->subscribe($channel);

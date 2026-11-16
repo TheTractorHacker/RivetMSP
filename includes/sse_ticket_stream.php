@@ -68,7 +68,7 @@ if ($sse_owner !== '') {
     });
 }
 
-$channel = "ticket.$ticket_id";
+$channel = redisTicketChannel((int) $ticket_id);   // MSP-DS-108: per-install prefix
 
 $pubsub = $redis->pubSubLoop();
 $pubsub->subscribe($channel);
