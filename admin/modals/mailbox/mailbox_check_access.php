@@ -93,7 +93,7 @@ function mailboxCheckAccessRun(){
         btn.innerHTML = '<i class="fas fa-satellite-dish me-1"></i>Check Access';
 
         if (!d.success) {
-            resultsEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + d.error + '</div>';
+            resultsEl.innerHTML = '<div class="alert alert-danger py-2 mb-0">' + escapeHtml(d.error) + '</div>';   // MSP-DS-185
             return;
         }
 

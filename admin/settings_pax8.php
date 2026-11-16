@@ -334,9 +334,11 @@ $reconciliation = pax8ReconciliationRows($mysqli);
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: 'test_pax8_connection=1&csrf_token=<?= urlencode($_SESSION['csrf_token']) ?>'
                 }).then(function (r) { return r.json(); }).then(function (data) {
-                    result.innerHTML = data.success
-                        ? '<div class="alert alert-success mb-0">Connection OK.</div>'
-                        : '<div class="alert alert-danger mb-0">' + (data.error || 'Connection failed.') + '</div>';
+                    // MSP-DS-185: the error text comes from the remote API; write it as text, never as markup
+                    var box = document.createElement('div');
+                    box.className = data.success ? 'alert alert-success mb-0' : 'alert alert-danger mb-0';
+                    box.textContent = data.success ? 'Connection OK.' : (data.error || 'Connection failed.');
+                    result.replaceChildren(box);
                     btn.disabled = false;
                 }).catch(function () {
                     result.innerHTML = '<div class="alert alert-danger mb-0">Request failed.</div>';
