@@ -17,9 +17,15 @@ require_once __DIR__ . '/billing_guards.php';
 const CHARGE_ATTEMPT_STALE_SECONDS = 900;
 const CHARGE_ATTEMPT_PENDING_DAYS = 10;
 
+/**
+ * MSP-DS-166 (re-review MRR-5): the key carries this install's marker (a hash of the per-install random value stored in config.php, see
+ * stripeInstallMarker()), so two installs sharing one Stripe account cannot reuse each other's key with different parameters. Deterministic
+ * across retries. Without a marker (not configured) the key keeps its earlier shape.
+ */
 function stripeChargeAttemptKey($invoice_id, int $balance_cents, $method_id, int $seq): string
 {
-    return 'rivetmsp-inv' . intval($invoice_id) . '-' . $balance_cents . '-pm' . intval($method_id) . '-a' . $seq;
+    $marker = preg_replace('/[^a-z0-9]/', '', strtolower(stripeInstallMarker()));
+    return 'rivetmsp-' . ($marker !== '' ? substr($marker, 0, 12) . '-' : '') . 'inv' . intval($invoice_id) . '-' . $balance_cents . '-pm' . intval($method_id) . '-a' . $seq;
 }
 
 function chargeAttemptRefusal(string $reason): array
