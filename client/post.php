@@ -27,6 +27,10 @@ if (isset($_POST['add_ticket'])) {
         $category = getDefaultClientTicketCategoryId($mysqli);
     }
     $asset = intval($_POST['asset'] ?? 0);
+    // MSP-DS-90: only an active asset of this portal user's own client can be attached to the ticket (anything else is dropped, as for 'no asset')
+    if ($asset > 0 && !mysqli_fetch_row(mysqli_query($mysqli, "SELECT 1 FROM assets WHERE asset_id = $asset AND asset_client_id = " . intval($session_client_id) . " AND asset_archived_at IS NULL LIMIT 1"))) {
+        $asset = 0;
+    }
     // Roadmap #6 (Service Catalog): re-read the active item server-side - only its own requires_approval flag at
     // the moment of submission decides whether to hold the ticket, never anything the client posted about it.
     $catalog_item_id = intval($_POST['catalog_item_id'] ?? 0);
