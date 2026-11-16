@@ -12,6 +12,12 @@ if (!defined("LATEST_DATABASE_VERSION") || !defined("CURRENT_DATABASE_VERSION") 
     exit();
 }
 
+// Raised when a migration step refuses to run because continuing would destroy or hide data the admin has to decide about
+// (MSP-DS-39 re-review MRR7). Nothing of that step has been applied; admin/post/update.php shows the message and releases its lock.
+if (!class_exists('DbUpdateRefusedException', false)) {
+    class DbUpdateRefusedException extends RuntimeException {}
+}
+
 // A migration step ends by writing the next version into settings. CURRENT_DATABASE_VERSION is fixed when the
 // page loads, so testing it let a run apply exactly one step (and made a long upgrade need the button pressed once
 // per version). Each step below tests the version the database holds right now instead, so a single run applies
@@ -8559,6 +8565,34 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             return $r && mysqli_num_rows($r) > 0;
         };
 
+        // MSP-DS-39 (re-review MRR7) PRE-FLIGHT, before anything in this step changes: payroll pay records are never archived or hidden by a migration.
+        // If a period has more than one live FINALIZED run, or two live periods with the same dates both carry live runs, the unique keys cannot be created
+        // without hiding finalized pay records, so the update REFUSES (version stays 2.6.138, nothing of this step applied) and says exactly what to fix.
+        // Fix by archiving/merging the extra runs or periods from Payroll, then run the update again.
+        if (!$ds_has_index('payroll_runs', 'uniq_payroll_run_live_period') || !$ds_has_index('payroll_periods', 'uniq_payroll_period_live_key')) {
+            $ds39_problems = [];
+            $ds39_r = mysqli_query($mysqli, "SELECT payroll_run_period_id AS pid, GROUP_CONCAT(payroll_run_id ORDER BY payroll_run_id) AS ids FROM payroll_runs
+                WHERE payroll_run_archived_at IS NULL AND payroll_run_status = 'finalized' GROUP BY payroll_run_period_id HAVING COUNT(*) > 1");
+            while ($ds39_r && ($ds39_x = mysqli_fetch_assoc($ds39_r))) {
+                $ds39_problems[] = "payroll period {$ds39_x['pid']} has several finalized runs (run ids {$ds39_x['ids']})";
+            }
+            $ds39_r = mysqli_query($mysqli, "SELECT p.payroll_period_start_date AS sd, p.payroll_period_end_date AS ed, GROUP_CONCAT(p.payroll_period_id ORDER BY p.payroll_period_id) AS ids
+                FROM payroll_periods p
+                WHERE p.payroll_period_archived_at IS NULL
+                  AND EXISTS (SELECT 1 FROM payroll_runs x WHERE x.payroll_run_period_id = p.payroll_period_id AND x.payroll_run_archived_at IS NULL)
+                GROUP BY p.payroll_period_start_date, p.payroll_period_end_date HAVING COUNT(*) > 1");
+            while ($ds39_r && ($ds39_x = mysqli_fetch_assoc($ds39_r))) {
+                $ds39_problems[] = "payroll periods {$ds39_x['ids']} have the same dates {$ds39_x['sd']} to {$ds39_x['ed']} and each has live runs";
+            }
+            if ($ds39_problems) {
+                $ds39_msg = 'Database update 2.6.139 was NOT applied: payroll data needs a decision first. ' . implode('; ', $ds39_problems)
+                    . '. Archive or merge the extra runs/periods in Payroll (nothing was changed or archived by the update), then run the update again.';
+                $db_refuse_log = mysqli_real_escape_string($mysqli, substr('MSP-DS-39: ' . $ds39_msg, 0, 1000));
+                mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Update', log_description = '$db_refuse_log'");
+                throw new DbUpdateRefusedException($ds39_msg);
+            }
+        }
+
         // MSP-DS-166 / MSP-DS-32: one row per card/bank charge attempt, claimed before Stripe is called (includes/charge_attempts.php)
         mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `invoice_charge_attempts` (
           `attempt_id` int(11) NOT NULL AUTO_INCREMENT,
@@ -8599,37 +8633,56 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 
         // MSP-DS-39 payroll: a fixed company workweek (default 'period' = the legacy behaviour), and the DB-level one-live-run-per-period / one-live-period-per-dates
-        // keys (generated columns that are NULL once archived, so archived rows never collide). Duplicates that already exist are archived first (the finalized or
-        // oldest run / the oldest period is kept) - a unique index could not be created over them.
+        // keys (generated columns that are NULL once archived, so archived rows never collide). Duplicate DRAFT runs / EMPTY periods are archived first and logged; finalized
+        // duplicates are never archived (the update refuses, see the preflight above).
         mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_payroll_workweek_start` varchar(10) NOT NULL DEFAULT 'period'");
+        $ds39_log = static function (string $description) use ($mysqli): void {
+            $d = mysqli_real_escape_string($mysqli, substr($description, 0, 1000));
+            mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Update', log_description = '$d'");
+        };
         if (!$ds_has_col('payroll_runs', 'payroll_run_live_period_id')) {
-            mysqli_query($mysqli, "UPDATE payroll_runs r JOIN (
+            // Only non-finalized duplicates can be left here (several finalized runs were refused above): the finalized run, else the oldest, stays live; each archived draft is logged.
+            $ds39_r = mysqli_query($mysqli, "SELECT r.payroll_run_id, r.payroll_run_period_id, r.payroll_run_status FROM payroll_runs r JOIN (
                     SELECT payroll_run_period_id AS pid, MIN(CASE WHEN payroll_run_status = 'finalized' THEN payroll_run_id END) AS keep_final, MIN(payroll_run_id) AS keep_first
                     FROM payroll_runs WHERE payroll_run_archived_at IS NULL GROUP BY payroll_run_period_id HAVING COUNT(*) > 1
                 ) d ON d.pid = r.payroll_run_period_id
-                SET r.payroll_run_archived_at = NOW()
-                WHERE r.payroll_run_archived_at IS NULL AND r.payroll_run_id <> COALESCE(d.keep_final, d.keep_first)");
+                WHERE r.payroll_run_archived_at IS NULL AND r.payroll_run_id <> COALESCE(d.keep_final, d.keep_first) AND r.payroll_run_status <> 'finalized'");
+            while ($ds39_r && ($ds39_x = mysqli_fetch_assoc($ds39_r))) {
+                mysqli_query($mysqli, "UPDATE payroll_runs SET payroll_run_archived_at = NOW() WHERE payroll_run_id = " . (int) $ds39_x['payroll_run_id'] . " AND payroll_run_status <> 'finalized'");
+                $ds39_log("MSP-DS-39: duplicate {$ds39_x['payroll_run_status']} payroll run {$ds39_x['payroll_run_id']} for period {$ds39_x['payroll_run_period_id']} was archived (not deleted) so one live run per period can be enforced");
+            }
             mysqli_query($mysqli, "ALTER TABLE `payroll_runs` ADD COLUMN `payroll_run_live_period_id` int(11) GENERATED ALWAYS AS (if(`payroll_run_archived_at` is null,`payroll_run_period_id`,NULL)) STORED");
         }
         if (!$ds_has_index('payroll_runs', 'uniq_payroll_run_live_period')) {
             mysqli_query($mysqli, "ALTER TABLE `payroll_runs` ADD UNIQUE KEY `uniq_payroll_run_live_period` (`payroll_run_live_period_id`)");
         }
         if (!$ds_has_col('payroll_periods', 'payroll_period_live_key')) {
-            // a duplicate period with no live run is archived (the oldest is kept); two duplicates that both carry runs are left alone and the index below is skipped
-            mysqli_query($mysqli, "UPDATE payroll_periods p JOIN (
-                    SELECT payroll_period_start_date AS sd, payroll_period_end_date AS ed, MIN(payroll_period_id) AS keep_id
-                    FROM payroll_periods WHERE payroll_period_archived_at IS NULL GROUP BY payroll_period_start_date, payroll_period_end_date HAVING COUNT(*) > 1
-                ) d ON d.sd = p.payroll_period_start_date AND d.ed = p.payroll_period_end_date
-                SET p.payroll_period_archived_at = NOW()
-                WHERE p.payroll_period_archived_at IS NULL AND p.payroll_period_id <> d.keep_id
-                  AND NOT EXISTS (SELECT 1 FROM payroll_runs x WHERE x.payroll_run_period_id = p.payroll_period_id AND x.payroll_run_archived_at IS NULL)");
+            // Duplicate live periods (same dates): the one that carries live runs is kept (the preflight guarantees at most one does), else the oldest. The others carry no live run
+            // and are archived (not deleted), each one logged.
+            $ds39_r = mysqli_query($mysqli, "SELECT p.payroll_period_id, p.payroll_period_start_date AS sd, p.payroll_period_end_date AS ed,
+                    EXISTS (SELECT 1 FROM payroll_runs x WHERE x.payroll_run_period_id = p.payroll_period_id AND x.payroll_run_archived_at IS NULL) AS has_run
+                FROM payroll_periods p WHERE p.payroll_period_archived_at IS NULL ORDER BY p.payroll_period_start_date, p.payroll_period_end_date, has_run DESC, p.payroll_period_id");
+            $ds39_seen = [];
+            while ($ds39_r && ($ds39_x = mysqli_fetch_assoc($ds39_r))) {
+                $ds39_k = $ds39_x['sd'] . '|' . $ds39_x['ed'];
+                if (!isset($ds39_seen[$ds39_k])) {
+                    $ds39_seen[$ds39_k] = (int) $ds39_x['payroll_period_id'];
+                    continue;
+                }
+                if ((int) $ds39_x['has_run'] === 1) {
+                    continue; // cannot happen after the preflight; never archive a period that carries a live run
+                }
+                mysqli_query($mysqli, "UPDATE payroll_periods SET payroll_period_archived_at = NOW() WHERE payroll_period_id = " . (int) $ds39_x['payroll_period_id']);
+                $ds39_log("MSP-DS-39: duplicate payroll period {$ds39_x['payroll_period_id']} ({$ds39_k}) had no live run and was archived (not deleted); period {$ds39_seen[$ds39_k]} stays live");
+            }
             mysqli_query($mysqli, "ALTER TABLE `payroll_periods` ADD COLUMN `payroll_period_live_key` varchar(21) GENERATED ALWAYS AS (if(`payroll_period_archived_at` is null,concat(`payroll_period_start_date`,'|',`payroll_period_end_date`),NULL)) STORED");
         }
         if (!$ds_has_index('payroll_periods', 'uniq_payroll_period_live_key')) {
+            // No silent skip any more: the preflight removed the only known cause, so a failure here stops the update with a message instead of leaving the key missing for good.
             try {
                 mysqli_query($mysqli, "ALTER TABLE `payroll_periods` ADD UNIQUE KEY `uniq_payroll_period_live_key` (`payroll_period_live_key`)");
             } catch (\Throwable $e) {
-                error_log('DB 2.6.139: payroll period unique key skipped (duplicate live periods that both have runs): ' . $e->getMessage());
+                throw new DbUpdateRefusedException('Database update 2.6.139 stopped: the unique key on payroll periods could not be created (' . $e->getMessage() . '). Resolve duplicate payroll periods in Payroll and run the update again.');
             }
         }
 
