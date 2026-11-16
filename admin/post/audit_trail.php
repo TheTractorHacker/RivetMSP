@@ -20,6 +20,27 @@ if (isset($_POST['verify_audit_chain'])) {
     redirect();
 }
 
+if (isset($_POST['reanchor_audit_chain'])) {
+    validateCSRFToken($_POST['csrf_token']);
+
+    // MRR-21: accepting the current rows as the new baseline hides a cut if misused, so it needs the administrator's password again
+    if (!secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert('Your current password is required (and must be correct) to re-anchor the audit trail.', 'error');
+        redirect();
+    }
+    $re = (new \RivetMSP\Audit\AuditChain($mysqli))->reanchor();
+    logAction('Settings', 'Edit', "$session_name re-anchored the audit trail hash chain (previous: " . $re['previous'] . '; new head ' . ($re['head_id'] !== null ? '#' . $re['head_id'] : 'none') . ', ' . $re['checked'] . ' entries' . ($re['upgraded'] ? ', plain chain upgraded to keyed' : '') . ')' . ($re['ok'] ? '' : ': refused, ' . $re['reason']));
+    if ($re['ok']) {
+        \RivetMSP\Recovery\RecoveryAlerts::clear($mysqli, 'audit_chain.broken');
+        \RivetMSP\Recovery\RecoveryAlerts::clear($mysqli, 'audit_chain.key');
+        flash_alert('Audit trail re-anchored: ' . number_format($re['checked']) . ' entries accepted as the new baseline. Who, when and the previous head are in the audit log.');
+    } else {
+        flash_alert('The audit trail was not re-anchored: ' . htmlspecialchars((string) $re['reason'], ENT_QUOTES, 'UTF-8'), 'error');
+    }
+
+    redirect();
+}
+
 if (isset($_POST['save_audit_sink'])) {
     validateCSRFToken($_POST['csrf_token']);
 

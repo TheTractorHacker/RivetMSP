@@ -140,6 +140,17 @@ if ($chain_cols) {
                     <input type="hidden" name="csrf_token" value="<?= $h($_SESSION['csrf_token']) ?>">
                     <button type="submit" name="verify_audit_chain" class="btn btn-outline-primary btn-sm"><i class="fas fa-check-double me-1"></i>Verify now</button>
                 </form>
+                <details class="mt-3">
+                    <summary class="small text-muted">Re-anchor after a restore or an upgrade</summary>
+                    <form action="post.php" method="post" class="mt-2" data-confirm="Accept the entries as they are now as the new baseline?">
+                        <input type="hidden" name="csrf_token" value="<?= $h($_SESSION['csrf_token']) ?>">
+                        <p class="small text-muted mb-2">Use this after restoring a database backup, when the anchor file was lost, or to move a chain sealed before the install had a settings key onto the keyed chain. Every entry is checked first; an edited or reordered entry is refused. Do not use it to silence an alert you have not explained. It is logged with your name and the previous head. See docs/AUDIT_CHAIN.md.</p>
+                        <div class="input-group input-group-sm">
+                            <input type="password" class="form-control" name="admin_current_password" placeholder="Your current password" autocomplete="current-password" required>
+                            <button type="submit" name="reanchor_audit_chain" class="btn btn-outline-danger">Re-anchor</button>
+                        </div>
+                    </form>
+                </details>
             </div>
             <div class="col-lg-6">
                 <h6 class="text-muted text-uppercase small">Copy to a file or syslog</h6>
