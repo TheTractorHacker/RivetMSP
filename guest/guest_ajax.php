@@ -63,8 +63,12 @@ if (isset($_GET['stripe_create_pi'])) {
     }
 
     // MSP-DS-166 / MSP-DS-32: a saved-card/autopay charge in flight, or a bank debit still processing, means this invoice is being paid already
+    // MSP-DS-166 (re-review MRR-2): ... except the guest page's own open PaymentIntent, which is reused below (one open intent per invoice)
     $live_attempt = chargeAttemptLive($mysqli, $invoice_id);
-    if ($live_attempt) {
+    $reuse_attempt = null;
+    if ($live_attempt && $live_attempt['attempt_source'] === 'guest' && $live_attempt['attempt_status'] === 'processing' && $live_attempt['attempt_pi_id'] !== '') {
+        $reuse_attempt = $live_attempt;
+    } elseif ($live_attempt) {
         exit($live_attempt['attempt_status'] === 'pending' ? "A bank payment for this invoice is still processing" : "A payment for this invoice is in progress");
     }
 
@@ -82,6 +86,40 @@ if (isset($_GET['stripe_create_pi'])) {
 
     require_once '../includes/payment_provider_factory.php';
     $provider = getPaymentProvider($provider_id);
+
+    if ($reuse_attempt) {
+        try {
+            $open_pi = $provider->verifyCheckoutResult($reuse_attempt['attempt_pi_id']);
+            $open_states = ['requires_payment_method', 'requires_confirmation', 'requires_action'];
+            $open_ok = in_array($open_pi->status, $open_states, true)
+                && intval($open_pi->amount) === stripeAmountToMinor($balance_to_pay, $invoice_currency_code)
+                && strtoupper((string) $open_pi->currency) === strtoupper($invoice_currency_code);
+            if ($open_ok) {
+                chargeAttemptStoreIntent($mysqli, $reuse_attempt['attempt_id'], $open_pi->id);   // keeps the attempt live while the customer is still on the page
+                echo json_encode(['clientSecret' => $open_pi->client_secret]);
+                exit;
+            }
+            if (in_array($open_pi->status, ['processing', 'succeeded'], true)) {
+                exit("A payment for this invoice is in progress");
+            }
+            if (in_array($open_pi->status, $open_states, true)) {
+                try { $open_pi->cancel(); } catch (Exception $eCancel) { }   // the balance moved since: that intent must not be confirmable any more
+            }
+            chargeAttemptFinish($mysqli, $reuse_attempt['attempt_id'], 'failed', 'guest intent replaced (' . $open_pi->status . ')');
+        } catch (Exception $e) {
+            http_response_code(500);
+            exit(json_encode(['error' => $e->getMessage()]));
+        }
+    }
+
+    // Claim the charge (invoice row lock, balance read under it, ONE deterministic idempotency key) BEFORE the PaymentIntent is created, so cron autopay,
+    // an agent's saved-card charge and the portal see this guest payment and wait.
+    $claim = chargeAttemptClaim($mysqli, $invoice_id, 'guest', 0);
+    if (!$claim['ok']) {
+        exit($claim['message']);
+    }
+    $balance_to_pay = $claim['balance'];
+    $attempt_id = $claim['attempt_id'];
 
     $pi_description = "RivetMSP: $client_name payment of $invoice_currency_code $balance_to_pay for $invoice_prefix$invoice_number";
 
@@ -103,14 +141,17 @@ if (isset($_GET['stripe_create_pi'])) {
     try {
         // A3 (Stripe ACH): offer bank/ACH alongside cards when the account
         // supports it. Only an intent is created here (no charge yet), so if the
-        // Stripe account has not enabled us_bank_account we safely retry card-only.
+        // Stripe account has not enabled us_bank_account we safely retry card-only
+        // (under its own key: the two requests have different parameters).
         try {
             $ach_args = $pi_args;
             $ach_args['payment_method_types'] = ['card', 'us_bank_account'];
-            $paymentIntent = $provider->createCheckout($ach_args);
+            $paymentIntent = $provider->createCheckout($ach_args, ['idempotency_key' => $claim['key']]);
         } catch (Exception $eAch) {
-            $paymentIntent = $provider->createCheckout($pi_args);
+            $paymentIntent = $provider->createCheckout($pi_args, ['idempotency_key' => $claim['key'] . '-card']);
         }
+
+        chargeAttemptStoreIntent($mysqli, $attempt_id, $paymentIntent->id);
 
         $output = [
             'clientSecret' => $paymentIntent->client_secret,
@@ -119,6 +160,7 @@ if (isset($_GET['stripe_create_pi'])) {
         echo json_encode($output);
 
     } catch (Exception $e) {
+        chargeAttemptStoreException($mysqli, $attempt_id, $e);
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
     }

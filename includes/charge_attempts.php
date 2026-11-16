@@ -16,6 +16,7 @@ require_once __DIR__ . '/billing_guards.php';
 
 const CHARGE_ATTEMPT_STALE_SECONDS = 900;
 const CHARGE_ATTEMPT_PENDING_DAYS = 10;
+const CHARGE_ATTEMPT_GUEST_INTENT_SECONDS = 3600;   // a guest-page PaymentIntent the customer may still confirm keeps its attempt live this long
 const CHARGE_ATTEMPT_KEY_MAX_AGE = 82800;           // Stripe forgets an idempotency key after 24h: a key older than 23h is never replayed
 
 /**
@@ -65,7 +66,8 @@ function chargeAttemptLive($mysqli, $invoice_id, bool $lock = false): ?array
     $invoice_id = intval($invoice_id);
     $r = mysqli_query($mysqli, "SELECT * FROM invoice_charge_attempts WHERE attempt_invoice_id = $invoice_id AND (
             (attempt_status = 'pending' AND attempt_updated_at >= NOW() - INTERVAL " . CHARGE_ATTEMPT_PENDING_DAYS . " DAY)
-         OR (attempt_status = 'processing' AND attempt_updated_at >= NOW() - INTERVAL " . CHARGE_ATTEMPT_STALE_SECONDS . " SECOND))
+         OR (attempt_status = 'processing' AND attempt_updated_at >= NOW() - INTERVAL " . CHARGE_ATTEMPT_STALE_SECONDS . " SECOND)
+         OR (attempt_status = 'processing' AND attempt_source = 'guest' AND attempt_pi_id <> '' AND attempt_updated_at >= NOW() - INTERVAL " . CHARGE_ATTEMPT_GUEST_INTENT_SECONDS . " SECOND))
         ORDER BY attempt_id LIMIT 1" . ($lock ? ' FOR UPDATE' : ''));
     $row = $r ? mysqli_fetch_assoc($r) : null;
     return $row ?: null;
@@ -177,6 +179,17 @@ function chargeAttemptStoreException($mysqli, $attempt_id, \Throwable $e): strin
     $status = $definite ? 'failed' : 'processing';
     mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = '$status', attempt_error = '$err' WHERE attempt_id = $attempt_id");
     return $status;
+}
+
+/**
+ * MSP-DS-166 (re-review MRR-2): the guest page created a PaymentIntent the customer will confirm later. Record its id on the attempt and keep the
+ * attempt 'processing' (live for CHARGE_ATTEMPT_GUEST_INTENT_SECONDS, see chargeAttemptLive) so cron autopay / agent / portal charges see it and wait.
+ * The return page and the webhook settle it by PaymentIntent id.
+ */
+function chargeAttemptStoreIntent($mysqli, $attempt_id, $pi_id): void
+{
+    $pi_id = mysqli_real_escape_string($mysqli, (string) $pi_id);
+    mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_pi_id = '$pi_id', attempt_updated_at = NOW() WHERE attempt_id = " . intval($attempt_id));
 }
 
 function chargeAttemptFinish($mysqli, $attempt_id, string $status, string $error = ''): void

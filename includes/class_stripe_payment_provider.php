@@ -73,9 +73,9 @@ class StripePaymentProvider implements PaymentProviderInterface
      * Mirrors guest/guest_ajax.php (stripe_create_pi). Exceptions propagate so
      * the caller's try/catch handles them exactly as before.
      */
-    public function createCheckout(array $params)
+    public function createCheckout(array $params, array $options = [])
     {
-        return $this->client()->paymentIntents->create($params);
+        return $this->client()->paymentIntents->create($params, $options);
     }
 
     /*
