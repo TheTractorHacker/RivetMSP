@@ -115,7 +115,7 @@ if (isset($_POST['export_vendor_contacts_csv'])) {
         //output each row of the data, format line as csv and write to file pointer
         while($row = $sql->fetch_assoc()) {
             $lineData = array($row['contact_name'], $row['contact_title'], $row['contact_department'], $row['contact_email'], formatPhoneNumber($row['contact_phone']), $row['contact_extension'], formatPhoneNumber($row['contact_mobile']), $row['location_name']);
-            fputcsv($f, $lineData, $delimiter);
+            fputcsv($f, csvSafeRow($lineData), $delimiter);
         }
 
         //move back to beginning of file

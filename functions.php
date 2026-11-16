@@ -3011,6 +3011,23 @@ function ticketCloseBlockReason($ticket_id): ?string {
     return null;
 }
 
+/**
+ * MSP-DS-69: neutralise spreadsheet formula injection in one CSV data row. Text cells that begin with = + - @ TAB or CR get a
+ * leading apostrophe; numbers (including genuine negatives) are written as they are. Use it on every row handed to fputcsv().
+ */
+function csvSafeRow($row): array {
+    return array_map(static function ($v) {
+        if (is_int($v) || is_float($v) || $v === null) {
+            return $v;
+        }
+        $v = (string) $v;
+        if ($v !== '' && !is_numeric($v) && in_array($v[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+            return "'" . $v;
+        }
+        return $v;
+    }, (array) $row);
+}
+
 function generateReadablePassword($security_level)
 {
     // Cap security level at 5

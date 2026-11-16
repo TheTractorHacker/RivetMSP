@@ -592,7 +592,7 @@ if (isset($_POST['export_credentials_csv'])) {
             $credential_username = decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username');
             $credential_password = decryptCredentialEntry($row['credential_password'], $row['credential_id'] ?? null, 'password');
             $lineData = array($row['credential_name'], $row['credential_description'], $credential_username, $credential_password, decryptOtpSecret($row['credential_otp_secret'] ?? '', $row['credential_id'] ?? null), $row['credential_uri']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file
