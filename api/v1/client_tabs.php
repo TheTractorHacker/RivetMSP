@@ -67,8 +67,8 @@ switch ($sub) {
         if ($legacy_api_key_auth) { api_error(403, 'Credentials endpoint requires a user API token'); }
         api_require_module_permission($mysqli, $uid, 'module_credential');
         // MSP-DS-180: usernames are encrypted at rest; open them with this token's own key (as /credentials/{id} does), never return ciphertext
-        $cred_raw_token = '';
-        if (preg_match('/^Bearer\s+(\S+)$/i', $_SERVER['HTTP_AUTHORIZATION'] ?? '', $bm)) { $cred_raw_token = $bm[1]; }
+        // MSP-DS-180 (review R24): the token index.php already resolved (HTTP_AUTHORIZATION, REDIRECT_HTTP_AUTHORIZATION or getallheaders()), as credentials.php does
+        $cred_raw_token = (string) ($raw_token ?? '');
         $rows = []; $sql = mysqli_query($mysqli,
             "SELECT credential_id, credential_name, credential_username, credential_uri
              FROM credentials WHERE credential_client_id = $id AND credential_archived_at IS NULL ORDER BY credential_name ASC");
