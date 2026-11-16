@@ -66,6 +66,8 @@ function ical_dt($sql_dt) {
 }
 
 function ical_escape($str) {
+    // MSP-DS-176: a bare CR would split the content line; CRLF/CR become one newline before escaping
+    $str = str_replace(["\r\n", "\r"], "\n", (string) $str);
     $str = str_replace('\\', '\\\\', $str);
     $str = str_replace(',',  '\,',   $str);
     $str = str_replace(';',  '\;',   $str);
@@ -76,8 +78,13 @@ function ical_escape($str) {
 function ical_fold($line) {
     $out = '';
     while (strlen($line) > 75) {
-        $out .= substr($line, 0, 75) . "\r\n ";
-        $line = substr($line, 75);
+        // MSP-DS-176: fold on character boundaries (RFC 5545 3.1), never inside a multi-byte sequence
+        $chunk = mb_strcut($line, 0, 75, 'UTF-8');
+        if ($chunk === '') {
+            $chunk = substr($line, 0, 75);
+        }
+        $out .= $chunk . "\r\n ";
+        $line = substr($line, strlen($chunk));
     }
     return $out . $line . "\r\n";
 }
@@ -103,7 +110,7 @@ while ($row = mysqli_fetch_assoc($result)) {
     if ($row['client_name']) $summary .= ' - ' . $row['client_name'];
 
     $url  = 'https://' . $config_base_url . '/agent/ticket.php?ticket_id=' . $tid;
-    $desc = ($row['ticket_appointment_notes'] ? $row['ticket_appointment_notes'] . '\n' : '') . $url;
+    $desc = ($row['ticket_appointment_notes'] ? $row['ticket_appointment_notes'] . "\n" : '') . $url;
     $loc  = $row['location_address'] ?: ($row['ticket_onsite'] ? 'Onsite' : 'Remote');
 
     $ical .= "BEGIN:VEVENT\r\n";
@@ -151,7 +158,7 @@ while ($row = mysqli_fetch_assoc($result_ts)) {
     if ($row['client_name']) $summary .= ' - ' . $row['client_name'];
 
     $url  = 'https://' . $config_base_url . '/agent/ticket.php?ticket_id=' . $tid;
-    $desc = ($row['schedule_notes'] ? $row['schedule_notes'] . '\n' : '') . $url;
+    $desc = ($row['schedule_notes'] ? $row['schedule_notes'] . "\n" : '') . $url;
     $loc  = $row['location_address'] ?: ($row['schedule_onsite'] ? 'Onsite' : 'Remote');
 
     $ical .= "BEGIN:VEVENT\r\n";
