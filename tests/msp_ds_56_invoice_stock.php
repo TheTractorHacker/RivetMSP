@@ -4,7 +4,7 @@ require __DIR__ . '/lib/ds_src.php';
 $s = ds_src('agent/post/invoice.php');
 $edit = substr($s, strpos($s, "isset(\$_POST['edit_invoice_item'])"), 5000);
 ds_t('edit reads stored quantity and product', strpos($edit, 'item_quantity, item_product_id FROM invoice_items') !== false);
-ds_t('edit checks availability for an increase', strpos($edit, 'available_stock') !== false && strpos($edit, 'Not Enough') !== false);
+ds_t('edit checks availability for an increase', strpos($edit, 'productStockMove(') !== false && strpos($edit, 'Not Enough') !== false);
 ds_t('edit stock change precedes the line UPDATE', strpos($edit, '$stock_delta') < strpos($edit, 'UPDATE invoice_items SET'));
 ds_t('edit uses the stored product, not posted product_id', strpos($edit, 'getFieldById(\'products\', $old_item_product_id') !== false);
 $del = substr($s, strpos($s, "isset(\$_GET['delete_invoice_item'])"), 3500);

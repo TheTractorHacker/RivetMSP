@@ -335,4 +335,28 @@ function cardPaymentAllowedForInvoice($mysqli, $invoice_amount): bool
     return $threshold == 0 || $threshold > floatval($invoice_amount);
 }
 
+/**
+ * MSP-DS-56: move stock for a stocked product ATOMICALLY. Call inside a transaction (mysqli_begin_transaction): the product row is locked
+ * (SELECT ... FOR UPDATE) so two concurrent invoice edits serialise on it, the available quantity is summed under that lock, and a decrement is
+ * refused (false, nothing written) when it would take the stock below zero. $delta > 0 puts stock back, < 0 takes it. The lock is released by the
+ * caller's commit/rollback, so the stock row and the invoice line it belongs to are written (or undone) together.
+ */
+function productStockMove($mysqli, $product_id, float $delta, string $note): bool
+{
+    $product_id = intval($product_id);
+    if ($delta == 0.0) {
+        return true;
+    }
+    mysqli_query($mysqli, "SELECT product_id FROM products WHERE product_id = $product_id FOR UPDATE");
+    if ($delta < 0) {
+        $available = floatval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COALESCE(SUM(stock_qty), 0) FROM product_stock WHERE stock_product_id = $product_id"))[0] ?? 0);
+        if ($available + $delta < 0) {
+            return false;
+        }
+    }
+    $note = mysqli_real_escape_string($mysqli, $note);
+    mysqli_query($mysqli, "INSERT INTO product_stock SET stock_qty = $delta, stock_note = '$note', stock_product_id = $product_id");
+    return mysqli_affected_rows($mysqli) === 1;
+}
+
 require_once __DIR__ . '/charge_attempts.php';   // MSP-DS-166 / MSP-DS-32: the shared charge-attempt scheme
