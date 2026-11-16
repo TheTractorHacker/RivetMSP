@@ -1700,6 +1700,9 @@ if (isset($_GET['project_gantt'])) {
 
     $gantt = [];
 
+    // MSP-DS-70: a client-restricted user does not get tasks of tickets of clients they may not access
+    $gantt_task_scope = $access_permission_query !== '' ? "AND (tickets.ticket_id IS NULL OR tickets.ticket_client_id = 0 OR tickets.ticket_client_id IN ($client_access_string))" : '';
+
     // Dated tasks belonging to this project (directly, or via a project ticket).
     // LEFT JOIN mirrors project_details.php so project-only tasks are included.
     $sql_tasks = mysqli_query($mysqli,
@@ -1707,6 +1710,7 @@ if (isset($_GET['project_gantt'])) {
          FROM tasks
          LEFT JOIN tickets ON tickets.ticket_id = tasks.task_ticket_id
          WHERE (tasks.task_project_id = $project_id OR tickets.ticket_project_id = $project_id)
+         $gantt_task_scope
          AND tasks.task_start IS NOT NULL AND tasks.task_due IS NOT NULL
          ORDER BY tasks.task_start ASC, tasks.task_order ASC, tasks.task_id ASC");
 

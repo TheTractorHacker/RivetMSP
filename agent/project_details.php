@@ -95,6 +95,9 @@ if (isset($_GET['project_id'])) {
     // MSP-INJ-6: a client-restricted user sees only the project's tickets of clients they may access (plus client-0 internal tickets)
     $project_ticket_scope = $access_permission_query !== '' ? "AND (ticket_client_id = 0 OR ticket_client_id IN ($client_access_string))" : '';
 
+    // MSP-DS-70: the same restriction for every rollup that touches tickets (counts, tasks, time, collaborators, budget)
+    $project_task_scope = $access_permission_query !== '' ? "AND (tickets.ticket_id IS NULL OR tickets.ticket_client_id = 0 OR tickets.ticket_client_id IN ($client_access_string))" : '';
+
     // Get Tickets
     $sql_tickets = mysqli_query($mysqli, "SELECT * FROM tickets
         LEFT JOIN ticket_statuses ON ticket_status = ticket_status_id
@@ -107,11 +110,11 @@ if (isset($_GET['project_id'])) {
     $ticket_count = mysqli_num_rows($sql_tickets);
 
     // Get Closed Ticket Count
-    $sql_closed_tickets = mysqli_query($mysqli, "SELECT * FROM tickets WHERE ticket_project_id = $project_id AND ticket_closed_at IS NOT NULL");
+    $sql_closed_tickets = mysqli_query($mysqli, "SELECT * FROM tickets WHERE ticket_project_id = $project_id $project_ticket_scope AND ticket_closed_at IS NOT NULL");
     $closed_ticket_count = mysqli_num_rows($sql_closed_tickets);
 
     // Get Resolved Ticket Count
-    $sql_resolved_tickets = mysqli_query($mysqli, "SELECT * FROM tickets WHERE ticket_project_id = $project_id AND ticket_resolved_at IS NOT NULL");
+    $sql_resolved_tickets = mysqli_query($mysqli, "SELECT * FROM tickets WHERE ticket_project_id = $project_id $project_ticket_scope AND ticket_resolved_at IS NOT NULL");
 
     $resolved_ticket_count = mysqli_num_rows($sql_resolved_tickets);
 
@@ -132,8 +135,9 @@ if (isset($_GET['project_id'])) {
         "SELECT tasks.*, tickets.ticket_prefix, tickets.ticket_number, tickets.ticket_project_id
         FROM tasks
         LEFT JOIN tickets ON tickets.ticket_id = tasks.task_ticket_id
-        WHERE tickets.ticket_project_id = $project_id
-        OR tasks.task_project_id = $project_id
+        WHERE (tickets.ticket_project_id = $project_id
+        OR tasks.task_project_id = $project_id)
+        $project_task_scope
         ORDER BY task_order ASC, task_created_at ASC"
     );
     $project_tasks = [];
@@ -167,7 +171,7 @@ if (isset($_GET['project_id'])) {
     //Get Total Ticket Time
     $sql_ticket_total_reply_time = mysqli_query($mysqli, "SELECT SEC_TO_TIME(SUM(TIME_TO_SEC(ticket_reply_time_worked))) AS ticket_total_reply_time FROM ticket_replies
         LEFT JOIN tickets ON ticket_id = ticket_reply_ticket_id
-        WHERE ticket_reply_archived_at IS NULL AND ticket_project_id = $project_id");
+        WHERE ticket_reply_archived_at IS NULL AND ticket_project_id = $project_id $project_ticket_scope");
     $row = mysqli_fetch_assoc($sql_ticket_total_reply_time);
     $ticket_total_reply_time = nullable_htmlentities($row['ticket_total_reply_time']);
 
@@ -177,7 +181,7 @@ if (isset($_GET['project_id'])) {
         FROM users
         LEFT JOIN ticket_replies ON user_id = ticket_reply_by
         LEFT JOIN tickets ON ticket_id = ticket_reply_ticket_id
-        WHERE ticket_reply_archived_at IS NULL AND ticket_project_id = $project_id
+        WHERE ticket_reply_archived_at IS NULL AND ticket_project_id = $project_id $project_ticket_scope
     ");
 
     // Fetch the result
@@ -191,7 +195,7 @@ if (isset($_GET['project_id'])) {
     $bud_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COALESCE(SUM(TIME_TO_SEC(ticket_reply_time_worked)), 0) AS s
         FROM ticket_replies
         LEFT JOIN tickets ON ticket_id = ticket_reply_ticket_id
-        WHERE ticket_reply_archived_at IS NULL AND ticket_project_id = $project_id"));
+        WHERE ticket_reply_archived_at IS NULL AND ticket_project_id = $project_id $project_ticket_scope"));
     $actual_seconds = intval($bud_row['s']);
 
     // Add completed project-only task estimates - these never create ticket_replies (guarded),
