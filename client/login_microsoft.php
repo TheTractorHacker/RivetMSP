@@ -33,8 +33,11 @@ $client_secret = decryptSetting((string) ($settings['config_azure_client_secret'
 $redirect_uri = "https://$config_base_url/client/login_microsoft.php";
 
 # https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-auth-code-flow
-$auth_code_url = "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize";
-$token_grant_url = "https://login.microsoftonline.com/organizations/oauth2/v2.0/token";
+// MSP-DS-146: pinned to the tenant set under Admin > Identity Provider ("organizations", any work/school tenant, only while no tenant is set)
+require_once '../includes/security_policy.php';
+$entra_authority = secPortalEntraAuthority($mysqli);
+$auth_code_url = "https://login.microsoftonline.com/$entra_authority/oauth2/v2.0/authorize";
+$token_grant_url = "https://login.microsoftonline.com/$entra_authority/oauth2/v2.0/token";
 
 // MSP-DS-146/147: the portal can be switched off, and every failure goes back to the portal login page at the site root
 $portal_on = intval(mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT config_client_portal_enable FROM settings WHERE company_id = 1"))['config_client_portal_enable'] ?? 0) === 1;

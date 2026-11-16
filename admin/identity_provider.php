@@ -48,6 +48,17 @@ require_once "includes/inc_all_admin.php";
                 <?php if ($config_azure_client_secret !== '') { ?><div class="form-text">A secret is saved. It is never shown again here; enter a new one only to replace it.</div><?php } ?>
             </div>
 
+            <div class="form-group">
+                <label>Entra tenant (ID or domain) for the client portal sign-in</label>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text"><i class="fa fa-fw fa-building"></i></span>
+                    </div>
+                    <input type="text" class="form-control" name="portal_entra_tenant" placeholder="contoso.onmicrosoft.com or a tenant GUID (blank = any work or school tenant)" value="<?php echo nullable_htmlentities(secSetting('portal_entra_tenant')); ?>">
+                </div>
+                <div class="form-text">Strongly recommended: with this blank any Entra tenant can reach the portal sign-in, and a contact is matched on the account's sign-in name alone. A single-tenant app registration needs its tenant here.</div>
+            </div>
+
             <hr>
 
             <button type="submit" name="edit_identity_provider" class="btn btn-primary text-bold"><i class="fa fa-check me-2"></i>Save</button>

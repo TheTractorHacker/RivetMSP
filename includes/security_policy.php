@@ -32,6 +32,7 @@ if (!function_exists('secSetting')) {
             'remember_me_skips_mfa' => '0',
             'vault_stepup_minutes'  => '15',
             'vault_reveal_limit'    => '30',
+            'portal_entra_tenant'   => '',
         ];
     }
 
@@ -86,9 +87,32 @@ if (!function_exists('secSetting')) {
             case 'vault_stepup_minutes':  return (string) max(0, min(1440, (int) $value));
             case 'vault_reveal_limit':    return (string) max(1, min(1000, (int) $value));
             case 'mfa_policy_since':      return (string) $value;
+            case 'portal_entra_tenant':   return secPortalEntraTenantNormalize((string) $value);
         }
 
         return (string) $value;
+    }
+
+    /**
+     * MSP-DS-146: the Microsoft Entra tenant the client portal's Microsoft sign-in is pinned to: a tenant id (GUID) or a verified domain name.
+     * Empty (the default) keeps the multi-tenant 'organizations' authority. 'common', 'organizations' and 'consumers' are not tenants and read as empty.
+     */
+    function secPortalEntraTenantNormalize(string $value): string
+    {
+        $v = strtolower(trim($value));
+        if (in_array($v, ['', 'common', 'organizations', 'consumers'], true)) {
+            return '';
+        }
+
+        return preg_match('/^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+)$/D', $v) === 1 ? $v : '';
+    }
+
+    /** The path segment of the Entra authority the portal's Microsoft sign-in uses: the pinned tenant, or 'organizations' when none is set. */
+    function secPortalEntraAuthority(?mysqli $mysqli = null): string
+    {
+        $t = secPortalEntraTenantNormalize(secSetting('portal_entra_tenant', $mysqli));
+
+        return $t !== '' ? $t : 'organizations';
     }
 
     /** Store one setting. Unknown keys are ignored (returns false). */
