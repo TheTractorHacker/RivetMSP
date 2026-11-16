@@ -59,7 +59,7 @@ if (isset($_GET['calendar_id'])) {
                                 data-modal-url="modals/calendar/calendar_edit.php?id=<?= $calendar_id ?>">
                                 <i class="fas fa-fw fa-pencil-alt me-2"></i>Rename
                             </a>
-                            <?php if ($session_user_role == 3) { ?>
+                            <?php if ($session_is_admin) { ?>
                                 <div class="dropdown-divider"></div>
                                 <a class="dropdown-item text-danger text-bold confirm-link" href="post.php?delete_calendar=<?= $calendar_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                     <i class="fas fa-fw fa-trash me-2"></i>Delete

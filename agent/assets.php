@@ -801,7 +801,7 @@ $can_rmm_remote_connect = lookupUserPermission('module_rmm_remote_connect') >= 1
                                             <a class="dropdown-item ajax-modal" href="#" data-modal-url="modals/asset/asset_copy.php?id=<?= $asset_id ?>">
                                                 <i class="fas fa-fw fa-copy me-2"></i>Copy
                                             </a>
-                                            <?php if ($session_user_role > 2) { ?>
+                                            <?php if ($session_is_admin) { ?>
                                                 <?php if ($asset_archived_at) { ?>
                                                 <a class="dropdown-item text-info" href="post.php?restore_asset=<?php echo $asset_id; ?>&csrf_token=<?php echo $_SESSION['csrf_token'] ?>">
                                                     <i class="fas fa-fw fa-redo me-2"></i>Restore

@@ -1186,7 +1186,7 @@ if (isset($_GET['asset_id'])) {
                                                         data-modal-url="modals/asset/asset_interface_edit.php?id=<?= $interface_id ?>">
                                                         <i class="fas fa-fw fa-edit me-2"></i>Edit
                                                     </a>
-                                                    <?php if ($session_user_role == 3 && $interface_primary == 0): ?>
+                                                    <?php if ($session_is_admin && $interface_primary == 0): ?>
                                                         <div class="dropdown-divider"></div>
                                                         <a class="dropdown-item text-danger text-bold" href="post.php?delete_asset_interface=<?= $interface_id; ?>&csrf_token=<?= $_SESSION['csrf_token']; ?>">
                                                             <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -1311,7 +1311,7 @@ if (isset($_GET['asset_id'])) {
                                                     <a class="dropdown-item" href="post.php?unlink_credential_from_asset&asset_id=<?= $asset_id; ?>&credential_id=<?= $credential_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                         <i class="fas fa-fw fa-unlink me-2"></i>Unlink
                                                     </a>
-                                                    <?php if ($session_user_role == 3) { ?>
+                                                    <?php if ($session_is_admin) { ?>
                                                         <div class="dropdown-divider"></div>
                                                         <a class="dropdown-item text-danger text-bold" href="post.php?delete_credential=<?= $credential_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                             <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -1637,7 +1637,7 @@ if (isset($_GET['asset_id'])) {
                                                         <i class="fa fa-fw fa-paper-plane text-secondary me-2"></i>Force Reoccur
                                                     </a>
                                                     <?php
-                                                    if ($session_user_role == 3) { ?>
+                                                    if ($session_is_admin) { ?>
                                                     <div class="dropdown-divider"></div>
                                                     <a class="dropdown-item text-danger text-bold confirm-link" href="post.php?delete_recurring_ticket=<?= $recurring_ticket_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                         <i class="fas fa-fw fa-trash me-2"></i>Delete

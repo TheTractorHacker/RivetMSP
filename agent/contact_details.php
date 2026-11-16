@@ -562,7 +562,7 @@ if (isset($_GET['contact_id'])) {
                                                     class="btn btn-secondary btn-sm" title="Unlink">
                                                     <i class="fas fa-fw fa-unlink me-2"></i>Unlink
                                                 </a>
-                                                <?php if ($session_user_role == 3) { ?>
+                                                <?php if ($session_is_admin) { ?>
                                                     <div class="dropdown-divider"></div>
                                                     <a class="dropdown-item text-danger" href="post.php?archive_asset=<?= $asset_id ?>&csrf_token=<?php echo $_SESSION['csrf_token'] ?>">
                                                         <i class="fas fa-fw fa-archive me-2"></i>Archive
@@ -705,7 +705,7 @@ if (isset($_GET['contact_id'])) {
                                                     class="btn btn-secondary btn-sm" title="Unlink">
                                                     <i class="fas fa-fw fa-unlink me-2"></i>Unlink
                                                 </a>
-                                                <?php if ($session_user_role == 3) { ?>
+                                                <?php if ($session_is_admin) { ?>
                                                     <div class="dropdown-divider"></div>
                                                     <a class="dropdown-item text-danger text-bold" href="post.php?delete_credential=<?php echo $credential_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                         <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -863,7 +863,7 @@ if (isset($_GET['contact_id'])) {
                                                     <i class="fa fa-fw fa-paper-plane text-secondary me-2"></i>Force Reoccur
                                                 </a>
                                                 <?php
-                                                if ($session_user_role == 3) { ?>
+                                                if ($session_is_admin) { ?>
                                                 <div class="dropdown-divider"></div>
                                                 <a class="dropdown-item text-danger text-bold confirm-link" href="post.php?delete_recurring_ticket=<?php echo $recurring_ticket_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                     <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -1222,7 +1222,7 @@ if (isset($_GET['contact_id'])) {
                                                 <a class="dropdown-item text-danger" href="post.php?archive_contact_note=<?php echo $contact_note_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                     <i class="fas fa-fw fa-archive me-2"></i>Archive
                                                 </a>
-                                                <?php if ($session_user_role == 3) { ?>
+                                                <?php if ($session_is_admin) { ?>
                                                     <div class="dropdown-divider"></div>
                                                     <a class="dropdown-item text-danger text-bold" href="post.php?delete_contact_note=<?php echo $contact_note_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                         <i class="fas fa-fw fa-trash me-2"></i>Delete

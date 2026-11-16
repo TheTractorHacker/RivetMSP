@@ -290,7 +290,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                                 data-modal-url="modals/product/product_edit.php?id=<?= $product_id ?>">
                                                 <i class="fas fa-fw fa-edit me-2"></i>Edit
                                             </a>
-                                            <?php if ($session_user_role == 3) { ?>
+                                            <?php if ($session_is_admin) { ?>
                                                 <?php if ($product_archived_at) { ?>
                                                 <div class="dropdown-divider"></div>
                                                 <a class="dropdown-item text-info" href="post.php?restore_product=<?= $product_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
