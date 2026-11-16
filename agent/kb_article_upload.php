@@ -21,6 +21,7 @@ if (!requestIsSameOrigin($_SERVER)) {
 }
 
 enforceUserPermission('module_kb', 2);
+validateCSRFToken($_POST['csrf_token'] ?? null);   // MSP-DS-50: the editor sends it (js/app.js)
 
 header('Content-Type: application/json');
 
@@ -35,6 +36,14 @@ if (empty($_FILES['file'])) {
 $ref_name = checkFileUpload($_FILES['file'], $allowed);
 
 if (!is_string($ref_name) || !preg_match('/^[a-zA-Z0-9]+\.[a-zA-Z0-9]+$/', $ref_name)) {
+    http_response_code(400);
+    echo json_encode(['error' => ['message' => 'Invalid or disallowed file']]);
+    exit;
+}
+
+// The bytes must really be an image, not just carry an image extension
+$image_info = @getimagesize($_FILES['file']['tmp_name']);
+if ($image_info === false || !in_array($image_info[2] ?? 0, [IMAGETYPE_JPEG, IMAGETYPE_GIF, IMAGETYPE_PNG, IMAGETYPE_WEBP], true)) {
     http_response_code(400);
     echo json_encode(['error' => ['message' => 'Invalid or disallowed file']]);
     exit;

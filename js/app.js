@@ -298,8 +298,22 @@ function initTinyMCEEditors() {
         },
         convert_urls: false,
         plugins: 'link image lists table code codesample fullscreen autoresize',
-        images_upload_url: '/agent/kb_article_upload.php',
         images_upload_credentials: true,
+        // MSP-DS-50: the upload endpoint requires the CSRF token
+        images_upload_handler: function (blobInfo) {
+            return new Promise(function (resolve, reject) {
+                var formData = new FormData();
+                formData.append('file', blobInfo.blob(), blobInfo.filename());
+                formData.append('csrf_token', window.csrfToken || '');
+                fetch('/agent/kb_article_upload.php', { method: 'POST', credentials: 'same-origin', body: formData })
+                    .then(function (response) { return response.json(); })
+                    .then(function (data) {
+                        if (data && data.location) { resolve(data.location); }
+                        else { reject((data && data.error && data.error.message) || 'Upload failed'); }
+                    })
+                    .catch(function () { reject('Upload failed'); });
+            });
+        },
         license_key: 'gpl',
         setup: function(editor) {
             editor.on('init', function() {
