@@ -18,6 +18,6 @@ $root = dirname(__DIR__);
 $k = file_get_contents("$root/agent/kb_articles.php");
 $ok('kb_articles applies the scope to the list query', strpos($k, "searchClientScope((string) \$client_access_string, (bool) \$session_is_admin, 'kb_article_client_id', true)") !== false && strpos($k, '$kb_scope_query .=') < strpos($k, 'SELECT SQL_CALC_FOUND_ROWS'));
 $u = file_get_contents("$root/agent/kb_article_upload.php");
-$ok('upload needs module_kb Write', strpos($u, "enforceUserPermission('module_kb', 2)") !== false);
+$ok('upload needs a Write level on an editor module (review R20)', strpos($u, 'enforceEditorImageUploadPermission()') !== false);
 $ok('upload checks same origin before anything is written', strpos($u, 'requestIsSameOrigin($_SERVER)') < strpos($u, 'move_uploaded_file'));
 exit($fail ? 1 : 0);

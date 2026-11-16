@@ -2,7 +2,7 @@
 // MSP-DS-50: KB image upload needs module_kb write, a CSRF token and real image bytes; the editor sends the token.
 require __DIR__ . '/lib/ds_src.php';
 $s = ds_src('agent/kb_article_upload.php');
-ds_t('write level', strpos($s, "enforceUserPermission('module_kb', 2)") !== false);
+ds_t('write level', strpos($s, 'enforceEditorImageUploadPermission()') !== false); // review R20: KB, support or client Write
 ds_t('csrf checked before the file is touched', strpos($s, 'validateCSRFToken($_POST') !== false && strpos($s, 'validateCSRFToken') < strpos($s, '$_FILES'));
 ds_t('getimagesize check before move_uploaded_file', strpos($s, 'getimagesize') < strpos($s, 'move_uploaded_file'));
 $js = ds_src('js/app.js');
