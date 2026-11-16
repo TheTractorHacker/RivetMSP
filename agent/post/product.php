@@ -263,7 +263,7 @@ if (isset($_POST['export_products_csv'])) {
     if ($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename("$session_company_name-Products-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer

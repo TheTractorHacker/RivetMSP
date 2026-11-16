@@ -464,7 +464,7 @@ if (isset($_POST['export_users_csv'])) {
     if ($count > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = "Users-" . date('Y-m-d') . ".csv";
 
         //create a file pointer

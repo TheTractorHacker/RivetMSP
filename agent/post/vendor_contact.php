@@ -110,12 +110,12 @@ if (isset($_POST['export_vendor_contacts_csv'])) {
 
         //set column headers
         $fields = array('Name', 'Title', 'Department', 'Email', 'Phone', 'Ext', 'Mobile', 'Location');
-        fputcsv($f, $fields, $delimiter);
+        fputcsv($f, $fields, $delimiter, '"', '');
 
         //output each row of the data, format line as csv and write to file pointer
         while($row = $sql->fetch_assoc()) {
             $lineData = array($row['contact_name'], $row['contact_title'], $row['contact_department'], $row['contact_email'], formatPhoneNumber($row['contact_phone']), $row['contact_extension'], formatPhoneNumber($row['contact_mobile']), $row['location_name']);
-            fputcsv($f, csvSafeRow($lineData), $delimiter);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, '"', '');
         }
 
         //move back to beginning of file
@@ -169,7 +169,7 @@ if (isset($_POST["import_vendor_contacts_csv"])) {
 
     //(Else)Check column count
     $f = fopen($file_name, "r");
-    $f_columns = fgetcsv($f, 1000, ",");
+    $f_columns = fgetcsv($f, 1000, ",", '"', '');
     if (!$error & count($f_columns) != 8) {
         $error = true;
         flash_alert("Bad column count.", 'error');
@@ -178,10 +178,10 @@ if (isset($_POST["import_vendor_contacts_csv"])) {
     //Else, parse the file
     if (!$error) {
         $file = fopen($file_name, "r");
-        fgetcsv($file, 1000, ","); // Skip first line
+        fgetcsv($file, 1000, ",", '"', ''); // Skip first line
         $row_count = 0;
         $duplicate_count = 0;
-        while(($column = fgetcsv($file, 1000, ",")) !== false) {
+        while(($column = fgetcsv($file, 1000, ",", '"', '')) !== false) {
             $duplicate_detect = 0;
             if (isset($column[0])) {
                 $name = sanitizeInput($column[0]);
@@ -268,7 +268,7 @@ if (isset($_GET['download_vendor_contacts_csv_template'])) {
         'Mobile Phone        ',
         'Office Location     '
     );
-    fputcsv($f, $fields, $delimiter);
+    fputcsv($f, $fields, $delimiter, '"', '');
 
     //move back to beginning of file
     fseek($f, 0);

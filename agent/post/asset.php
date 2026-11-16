@@ -1058,7 +1058,7 @@ if (isset($_POST["import_assets_csv"])) {
 
     //(Else)Check column count (name, desc, type, make, model, serial, os, purchase date, assigned to, location, notes)
     $f = fopen($file_name, "r");
-    $f_columns = fgetcsv($f, 1000, ",");
+    $f_columns = fgetcsv($f, 1000, ",", '"', '');
     if (!$error & count($f_columns) != 12) {
         $error = true;
         flash_alert("Invalid column count.", 'error');
@@ -1067,10 +1067,10 @@ if (isset($_POST["import_assets_csv"])) {
     //Else, parse the file
     if (!$error) {
         $file = fopen($file_name, "r");
-        fgetcsv($file, 1000, ","); // Skip first line
+        fgetcsv($file, 1000, ",", '"', ''); // Skip first line
         $row_count = 0;
         $duplicate_count = 0;
-        while(($column = fgetcsv($file, 1000, ",")) !== false) {
+        while(($column = fgetcsv($file, 1000, ",", '"', '')) !== false) {
 
             // Default variables (if undefined)
             $description = $type = $make = $model = $serial = $os = '';
@@ -1201,7 +1201,7 @@ if (isset($_GET['download_assets_csv_template'])) {
 
     $delimiter = ",";
     $enclosure = '"';
-    $escape    = '\\';
+    $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
     $filename = strtoAZaz09($client_name) . "-Assets-Template.csv";
 
     //create a file pointer
@@ -1250,7 +1250,7 @@ if (isset($_POST['export_assets_csv'])) {
     if ($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Assets-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -1756,7 +1756,7 @@ if (isset($_POST["import_client_asset_interfaces_csv"])) {
 
     //(Else)Check column count (Name, Description, Type, MAC, IP, NAT IP, IPv6, Network)
     $f = fopen($file_name, "r");
-    $f_columns = fgetcsv($f, 1000, ",");
+    $f_columns = fgetcsv($f, 1000, ",", '"', '');
     if (!$error & count($f_columns) != 8) {
         $error = true;
         flash_alert("Bad column count.", 'error');
@@ -1765,10 +1765,10 @@ if (isset($_POST["import_client_asset_interfaces_csv"])) {
     //Else, parse the file
     if (!$error) {
         $file = fopen($file_name, "r");
-        fgetcsv($file, 1000, ","); // Skip first line
+        fgetcsv($file, 1000, ",", '"', ''); // Skip first line
         $row_count = 0;
         $duplicate_count = 0;
-        while(($column = fgetcsv($file, 1000, ",")) !== false) {
+        while(($column = fgetcsv($file, 1000, ",", '"', '')) !== false) {
 
             // Default variables (if undefined)
             $description = $type = $mac = $ip = $nat_ip = $ipv6 = $network = '';
@@ -1846,7 +1846,7 @@ if (isset($_GET['download_client_asset_interfaces_csv_template'])) {
 
     $delimiter = ",";
     $enclosure = '"';
-    $escape    = '\\';
+    $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
     $filename = strtoAZaz09($asset_name) . "-Asset-Interfaces-Template.csv";
 
     //create a file pointer
@@ -1892,7 +1892,7 @@ if (isset($_POST['export_client_asset_interfaces_csv'])) {
 
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = strtoAZaz09($asset_name) . "-Interfaces-" . date('Y-m-d') . ".csv";
 
         //create a file pointer

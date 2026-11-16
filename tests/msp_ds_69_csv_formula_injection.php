@@ -12,5 +12,5 @@ foreach (array_merge(glob(__DIR__ . '/../agent/post/*.php'), [__DIR__ . '/../adm
     foreach (preg_split('/\R/', file_get_contents($p)) as $ln => $l) { if (preg_match('/fputcsv\(\$f, \$lineData/', $l)) { $bad[] = basename($p) . ':' . ($ln + 1); } }
 }
 ds_t('no raw $lineData export row left: ' . implode(',', $bad), $bad === []);
-ds_t('21 export loops use the helper', array_sum(array_map(fn($p) => substr_count(file_get_contents($p), 'csvSafeRow($lineData)'), array_merge(glob(__DIR__ . '/../agent/post/*.php'), [__DIR__ . '/../admin/post/users.php']))) === 21);
+ds_t('21 export loops use the helper', array_sum(array_map(fn($p) => substr_count(file_get_contents($p), 'csvSafeRow($lineData'), array_merge(glob(__DIR__ . '/../agent/post/*.php'), [__DIR__ . '/../admin/post/users.php']))) === 21);
 ds_done();

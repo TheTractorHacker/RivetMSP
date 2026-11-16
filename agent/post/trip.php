@@ -128,7 +128,7 @@ if (isset($_POST['export_trips_csv'])) {
     if ($count > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Trips-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer

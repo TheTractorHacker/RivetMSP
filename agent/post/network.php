@@ -195,7 +195,7 @@ if (isset($_POST['export_networks_csv'])) {
     if ($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Networks-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -241,7 +241,7 @@ if (isset($_GET['download_networks_csv_template'])) {
 
     $delimiter = ",";
     $enclosure = '"';
-    $escape    = '\\';
+    $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
     $filename  = "Networks-Template.csv";
 
     $f = fopen('php://memory', 'w');
@@ -303,7 +303,7 @@ if (isset($_POST['import_networks_csv'])) {
     // Check column count matches the 8-column export/template format
     else {
         $f = fopen($file_name, 'r');
-        $f_columns = fgetcsv($f, 1000, ',');
+        $f_columns = fgetcsv($f, 1000, ',', '"', '');
         fclose($f);
 
         if (count($f_columns) !== 8) {
@@ -315,12 +315,12 @@ if (isset($_POST['import_networks_csv'])) {
     // Parse and insert
     if (!$error) {
         $file = fopen($file_name, 'r');
-        fgetcsv($file, 1000, ','); // Skip header row
+        fgetcsv($file, 1000, ',', '"', ''); // Skip header row
 
         $row_count       = 0;
         $duplicate_count = 0;
 
-        while (($column = fgetcsv($file, 1000, ',')) !== false) {
+        while (($column = fgetcsv($file, 1000, ',', '"', '')) !== false) {
 
             $duplicate_detect = 0;
 

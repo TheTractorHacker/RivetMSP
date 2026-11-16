@@ -576,7 +576,7 @@ if (isset($_POST['export_credentials_csv'])) {
     if ($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Credentials-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -592,7 +592,8 @@ if (isset($_POST['export_credentials_csv'])) {
             $credential_username = decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username');
             $credential_password = decryptCredentialEntry($row['credential_password'], $row['credential_id'] ?? null, 'password');
             $lineData = array($row['credential_name'], $row['credential_description'], $credential_username, $credential_password, decryptOtpSecret($row['credential_otp_secret'] ?? '', $row['credential_id'] ?? null), $row['credential_uri']);
-            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
+            // Username (2), password (3) and TOTP (4) stay raw so export -> import is lossless; name, description and URI are formula-guarded (review R7)
+            fputcsv($f, csvSafeRow($lineData, [2, 3, 4]), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file
@@ -647,7 +648,7 @@ if (isset($_POST["import_credentials_csv"])) {
 
     //(Else)Check column count
     $f = fopen($file_name, "r");
-    $f_columns = fgetcsv($f, 1000, ",");
+    $f_columns = fgetcsv($f, 1000, ",", '"', '');
     if (!$error & count($f_columns) != 6) {
         $error = true;
         flash_alert("Bad column count.", 'error');
@@ -656,10 +657,10 @@ if (isset($_POST["import_credentials_csv"])) {
     //Else, parse the file
     if (!$error){
         $file = fopen($file_name, "r");
-        fgetcsv($file, 1000, ","); // Skip first line
+        fgetcsv($file, 1000, ",", '"', ''); // Skip first line
         $row_count = 0;
         $duplicate_count = 0;
-        while(($column = fgetcsv($file, 1000, ",")) !== false){
+        while(($column = fgetcsv($file, 1000, ",", '"', '')) !== false){
             $duplicate_detect = 0;
             // Name
             if (isset($column[0])) {
@@ -718,7 +719,7 @@ if (isset($_GET['download_credentials_csv_template'])) {
 
     $delimiter = ",";
     $enclosure = '"';
-    $escape    = '\\';
+    $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
     $filename = "Credentials-Template.csv";
 
     //create a file pointer

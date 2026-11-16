@@ -53,7 +53,7 @@ if ($ready) {
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="audit-trail-' . date('Ymd-His') . '.csv"');
         $out = fopen('php://output', 'w');
-        fputcsv($out, ['id', 'time', 'event', 'actor_id', 'actor', 'entity_type', 'entity_id', 'action', 'summary', 'ip', 'request_id', 'metadata']);
+        fputcsv($out, ['id', 'time', 'event', 'actor_id', 'actor', 'entity_type', 'entity_id', 'action', 'summary', 'ip', 'request_id', 'metadata'], ',', '"', '');
         $exported = 0;
         $names = [];
         foreach ($reader->iterate($filters, 50000) as $r) {
@@ -63,7 +63,7 @@ if ($ready) {
             }
             $line = [$r['audit_id'], $r['created_at'], $r['event_type'], $r['actor_user_id'], $names[$uid] ?? null, $r['entity_type'], $r['entity_id'], $r['action'], $r['summary'], $r['ip_address'], $r['request_id'], $r['metadata_json']];
             // Spreadsheet formula injection: neutralise cells that start with a formula character.
-            fputcsv($out, array_map(static fn ($v) => preg_match('/^[=+\-@\t\r]/', (string) $v) ? "'" . $v : $v, $line));
+            fputcsv($out, array_map(static fn ($v) => preg_match('/^[=+\-@\t\r|]/', (string) $v) ? "'" . $v : $v, $line), ',', '"', '');
             $exported++;
         }
         fclose($out);

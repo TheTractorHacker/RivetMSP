@@ -683,12 +683,12 @@ if (isset($_POST['export_client_recurring_invoice_csv'])) {
 
         //set column headers
         $fields = array('Recurring Number', 'Scope', 'Amount', 'Frequency', 'Date Created');
-        fputcsv($f, $fields, $delimiter);
+        fputcsv($f, $fields, $delimiter, '"', '');
 
         //output each row of the data, format line as csv and write to file pointer
         while($row = $sql->fetch_assoc()) {
             $lineData = array($row['recurring_invoice_prefix'] . $row['recurring_invoice_number'], $row['recurring_invoice_scope'], $row['recurring_invoice_amount'], ucwords($row['recurring_invoice_frequency'] . "ly"), $row['recurring_invoice_created_at']);
-            fputcsv($f, csvSafeRow($lineData), $delimiter);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, '"', '');
         }
 
         //move back to beginning of file

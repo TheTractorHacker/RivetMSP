@@ -3015,20 +3015,28 @@ function ticketCloseBlockReason($ticket_id): ?string {
 }
 
 /**
- * MSP-DS-69: neutralise spreadsheet formula injection in one CSV data row. Text cells that begin with = + - @ TAB or CR get a
- * leading apostrophe; numbers (including genuine negatives) are written as they are. Use it on every row handed to fputcsv().
+ * MSP-DS-69: neutralise spreadsheet formula injection in one CSV data row. Text cells that begin with = + - @ | TAB or CR get a
+ * leading apostrophe; numbers (including genuine negatives) are written as they are. Use it on every row handed to fputcsv(),
+ * and write with an EMPTY escape character (fputcsv($f, $row, ',', '"', '')): with PHP's default backslash escape a value such as
+ * x\",=2+5,y is split by RFC 4180 readers into a formula cell that this first-character check never saw (review R21).
+ * $rawColumns lists 0-based columns that are written untouched. Only the credential export uses it, for the username / password /
+ * TOTP columns: that export is a vault-gated secret dump whose format is also the import format (and what people copy from),
+ * so an apostrophe there silently corrupts every secret that starts with - + = @ (review R7).
  */
-function csvSafeRow($row): array {
-    return array_map(static function ($v) {
-        if (is_int($v) || is_float($v) || $v === null) {
-            return $v;
+function csvSafeRow($row, array $rawColumns = []): array {
+    $out = [];
+    foreach ((array) $row as $i => $v) {
+        if (in_array($i, $rawColumns, true) || is_int($v) || is_float($v) || $v === null) {
+            $out[$i] = $v;
+            continue;
         }
         $v = (string) $v;
-        if ($v !== '' && !is_numeric($v) && in_array($v[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
-            return "'" . $v;
+        if ($v !== '' && !is_numeric($v) && in_array($v[0], ['=', '+', '-', '@', '|', "\t", "\r"], true)) {
+            $v = "'" . $v;
         }
-        return $v;
-    }, (array) $row);
+        $out[$i] = $v;
+    }
+    return $out;
 }
 
 function generateReadablePassword($security_level)

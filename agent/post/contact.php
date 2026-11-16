@@ -1302,7 +1302,7 @@ if (isset($_POST['export_contacts_csv'])) {
     if ($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Contacts-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -1371,7 +1371,7 @@ if (isset($_POST["import_contacts_csv"])) {
 
     //(Else)Check column count
     $f = fopen($file_name, "r");
-    $f_columns = fgetcsv($f, 1000, ",");
+    $f_columns = fgetcsv($f, 1000, ",", '"', '');
     if (!$error & count($f_columns) != 8) {
         $error = true;
         flash_alert("Bad column count.", 'error');
@@ -1380,10 +1380,10 @@ if (isset($_POST["import_contacts_csv"])) {
     //Else, parse the file
     if (!$error) {
         $file = fopen($file_name, "r");
-        fgetcsv($file, 1000, ","); // Skip first line
+        fgetcsv($file, 1000, ",", '"', ''); // Skip first line
         $row_count = 0;
         $duplicate_count = 0;
-        while(($column = fgetcsv($file, 1000, ",")) !== false) {
+        while(($column = fgetcsv($file, 1000, ",", '"', '')) !== false) {
             $duplicate_detect = 0;
             if (isset($column[0])) {
                 $name = sanitizeInput($column[0]);
@@ -1447,7 +1447,7 @@ if (isset($_GET['download_contacts_csv_template'])) {
 
     $delimiter = ",";
     $enclosure = '"';
-    $escape    = '\\';
+    $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
     $filename = "Contacts-Template.csv";
 
     //create a file pointer
