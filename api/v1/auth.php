@@ -196,7 +196,8 @@ $sql      = mysqli_query($mysqli,
      AND user_type = 1
      AND user_status = 1
      AND user_archived_at IS NULL
-     LIMIT 1"
+     ORDER BY (user_email = '$esc_user') DESC, user_id ASC
+     LIMIT 1"   /* MSP-DS-141: a row whose email matches wins over one that merely carries the same display name */
 );
 $user = mysqli_fetch_assoc($sql);
 

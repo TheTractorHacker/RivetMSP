@@ -89,6 +89,20 @@ if (isset($_POST['edit_your_user_details'])) {
         }
     }
 
+    // MSP-DS-141: a real email, and neither name nor email may equal another staff member's name or email (the mobile API login looks users up by either)
+    $email_plain = trim((string) $_POST['email']);
+    $name_plain = trim((string) $_POST['name']);
+    if (!filter_var($email_plain, FILTER_VALIDATE_EMAIL)) {
+        flash_alert('Enter a valid email address.', 'error');
+        redirect();
+    }
+    $taken = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM users WHERE user_id != $session_user_id AND user_type = 1 AND user_archived_at IS NULL
+        AND (user_email IN ('$email', '$name') OR user_name IN ('$email', '$name'))"));
+    if ($taken && intval($taken[0]) > 0) {
+        flash_alert('That name or email is already used by another user.', 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"UPDATE users SET user_name = '$name', user_email = '$email', user_title = '$title', user_phone = '$phone' WHERE user_id = $session_user_id");
 
     mysqli_query($mysqli,"UPDATE user_settings SET user_config_signature = '$signature' WHERE user_id = $session_user_id");
