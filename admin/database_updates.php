@@ -8721,8 +8721,8 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         //  - MSP-DS-16/33: domains.domain_route_mail: inbound mail is auto-filed by sender DOMAIN only when an administrator switched this on for the
         //    domain. Existing domains that the earlier unambiguous-claim rule already routed (one client lists the name, not a public mailbox provider)
         //    keep routing (backfilled to 1, once, when the column is added); everything else, and every domain added later by a non-admin, is 0.
-        //  - MSP-DS-156: report_schedules.schedule_created_by: the schedule's creator is re-checked at send time. Existing rows stay NULL (creator
-        //    unknown: they keep sending to eligible recipients only).
+        //  - MSP-DS-156: report_schedules.schedule_created_by: the schedule's creator is re-checked at send time. Existing rows are attributed from the audit log
+        //    where unambiguous; the rest stay NULL and do not send until an admin takes ownership (Reports > Schedules).
         $col_exists = function ($table, $col) use ($mysqli) {
             $t = mysqli_real_escape_string($mysqli, $table);
             $c = mysqli_real_escape_string($mysqli, $col);
@@ -8743,13 +8743,25 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             }
             if ($grandfather) {
                 mysqli_query($mysqli, "UPDATE domains SET domain_route_mail = 1 WHERE domain_id IN (" . implode(',', $grandfather) . ")");
+                // MSP-DS-16/33 re-review MRR17: grandfathered claims may include a domain a restricted technician planted before the upgrade. They keep routing
+                // (compatibility), but every one is logged for audit and the admins get ONE notification pointing at Domains to review them
+                // (switch "Route inbound mail" off on any that should not file mail into its client).
+                foreach ($grandfather as $gid) {
+                    $gr = mysqli_query($mysqli, "SELECT domain_name, domain_client_id FROM domains WHERE domain_id = " . (int) $gid);
+                    $gd = $gr ? mysqli_fetch_assoc($gr) : null;
+                    if ($gd) {
+                        $gdesc = mysqli_real_escape_string($mysqli, substr("MSP-DS-16/33: domain {$gd['domain_name']} (id $gid) was grandfathered for inbound mail auto-routing into client {$gd['domain_client_id']} by the upgrade; an admin should confirm the claim is legitimate (edit the domain and review its Route inbound mail option)", 0, 1000));
+                        mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Review', log_description = '$gdesc', log_client_id = " . (int) $gd['domain_client_id'] . ", log_entity_id = " . (int) $gid);
+                    }
+                }
+                $gnote = mysqli_real_escape_string($mysqli, count($grandfather) . ' domain(s) were grandfathered for inbound mail auto-routing by the upgrade (DB 2.6.140). Review them: a domain added by a technician before the upgrade keeps filing new senders into that client until "Route inbound mail from this domain to this client" is switched off on the domain. Details are in the activity log (type Database, action Review).');
+                mysqli_query($mysqli, "INSERT INTO `notifications` SET notification_type = 'Domain', notification = '$gnote', notification_action = 'domains.php'");
             }
         }
 
         if (!$col_exists('report_schedules', 'schedule_created_by')) {
             mysqli_query($mysqli, "ALTER TABLE `report_schedules` ADD `schedule_created_by` INT(11) DEFAULT NULL AFTER `schedule_created_at`");
         }
-
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.140'");
     }
 
