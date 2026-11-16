@@ -10,6 +10,7 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/sla_functions.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/redis_functions.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/ai_functions.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/ticket_automation_dispatch.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/same_client.php';
 
 if (isset($_POST['add_ticket'])) {
 
@@ -63,6 +64,14 @@ if (isset($_POST['add_ticket'])) {
     }
 
     enforceClientAccess();
+
+    // Every linked object must belong to the ticket's client (MSP-DS-11)
+    assertSameClient('contact', $contact_id, $client_id);
+    assertSameClient('asset', $asset_id, $client_id);
+    assertSameClient('asset', $_POST['additional_assets'] ?? [], $client_id);
+    assertSameClient('vendor', $vendor_id, $client_id);
+    assertSameClient('location', $location_id, $client_id);
+    assertSameClient('project', $project_id, $client_id);
 
     // Add the primary contact as the ticket contact if "Use primary contact" is checked
     if ($use_primary_contact == 1) {
@@ -317,6 +326,14 @@ if (isset($_POST['edit_ticket'])) {
     if ($client_id) {
         enforceClientAccess();
     }
+
+    // Every linked object must belong to the ticket's client (MSP-DS-11)
+    assertSameClient('contact', $contact_id, $client_id);
+    assertSameClient('asset', $asset_id, $client_id);
+    assertSameClient('asset', $_POST['additional_assets'] ?? [], $client_id);
+    assertSameClient('vendor', $vendor_id, $client_id);
+    assertSameClient('location', $location_id, $client_id);
+    assertSameClient('project', $project_id, $client_id);
 
     // Category is the source of truth for delivery method when it maps to one;
     // leave ticket_delivery_method untouched for categories with no mapping.
@@ -635,6 +652,8 @@ if (isset($_POST['edit_ticket_contact'])) {
         enforceClientAccess();
     }
 
+    assertSameClient('contact', $contact_id, $client_id);
+
     // Update the contact
     mysqli_query($mysqli, "UPDATE tickets SET ticket_contact_id = $contact_id WHERE ticket_id = $ticket_id");
 
@@ -717,6 +736,8 @@ if (isset($_POST['edit_ticket_project'])) {
     if ($client_id) {
         enforceClientAccess();
     }
+
+    assertSameClient('project', $project_id, $client_id);
 
     mysqli_query($mysqli, "UPDATE tickets SET ticket_project_id = $project_id WHERE ticket_id = $ticket_id");
 
@@ -945,6 +966,9 @@ if (isset($_POST['edit_ticket_asset'])) {
         enforceClientAccess();
     }
 
+    assertSameClient('asset', $asset_id, $client_id);
+    assertSameClient('asset', $_POST['additional_assets'] ?? [], $client_id);
+
     mysqli_query($mysqli, "UPDATE tickets SET ticket_asset_id = $asset_id WHERE ticket_id = $ticket_id");
 
     // Add Additional Assets
@@ -997,6 +1021,8 @@ if (isset($_POST['edit_ticket_vendor'])) {
     if ($client_id) {
         enforceClientAccess();
     }
+
+    assertSameClient('vendor', $vendor_id, $client_id);
 
     mysqli_query($mysqli, "UPDATE tickets SET ticket_vendor_id = $vendor_id WHERE ticket_id = $ticket_id");
 
@@ -2135,6 +2161,9 @@ if (isset($_POST['bulk_add_ticket_project'])) {
                 enforceClientAccess();
             }
 
+            // The project must belong to this ticket's client (or be a shared project, MSP-DS-11)
+            assertSameClient('project', $project_id, $client_id);
+
             // Update ticket & insert reply
             mysqli_query($mysqli, "UPDATE tickets SET ticket_project_id = $project_id WHERE ticket_id = $ticket_id");
 
@@ -2208,6 +2237,8 @@ if (isset($_POST['bulk_add_asset_ticket'])) {
             if ($client_id) {
                 enforceClientAccess();
             }
+
+            assertSameClient('project', $project_id, $client_id);
 
             $subject_asset_prepended = "$asset_name - $subject";
 
@@ -2780,6 +2811,9 @@ if (isset($_POST['change_client_ticket'])) {
     if ($client_id) {
         enforceClientAccess();
     }
+
+    // The contact chosen for the new client must belong to it (MSP-DS-11)
+    assertSameClient('contact', $contact_id, $client_id);
 
     // Set any/all existing replies to internal
     mysqli_query($mysqli, "UPDATE ticket_replies SET ticket_reply_type = 'Internal' WHERE ticket_reply_ticket_id = $ticket_id");
