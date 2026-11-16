@@ -282,7 +282,10 @@ ob_start();
         </div>
 
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer flex-wrap">
+        <?php if ($user_id === intval($session_user_id)) { ?>
+            <input type="password" class="form-control mb-2" name="admin_current_password" placeholder="Your password (required to change your own email, role, password or 2FA)" autocomplete="current-password">
+        <?php } ?>
         <button type="submit" name="edit_user" class="btn btn-primary text-bold"><i class="fas fa-check me-2"></i>Save</button>
         <button type="button" class="btn btn-light" data-bs-dismiss="modal"><i class="fas fa-times me-2"></i>Cancel</button>
     </div>

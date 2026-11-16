@@ -42,6 +42,14 @@ if (isset($_POST['add_user'])) {
 
     require_once 'user_model.php';
 
+    // MSP-DS-121: creating another administrator needs the acting administrator's own password (a stolen session alone is not enough)
+    $new_role_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT role_is_admin FROM user_roles WHERE role_id = " . intval($role)));
+    if ($new_role_row && intval($new_role_row['role_is_admin']) === 1
+        && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert('Your current password is required (and must be correct) to create an administrator.', 'error');
+        redirect();
+    }
+
     // Reject a duplicate e-mail (logins look users up by e-mail) before inserting
     if (mysqli_num_rows(mysqli_query($mysqli, "SELECT user_id FROM users WHERE user_email = '$email' LIMIT 1")) > 0) {
         flash_alert("A user with the email <strong>$email</strong> already exists", 'error');
@@ -147,6 +155,19 @@ if (isset($_POST['edit_user'])) {
 
     $user_id = intval($_POST['user_id']);
     $new_password = trim($_POST['new_password']);
+
+    // MSP-DS-121: changing your own sign-in email, role, password or two-factor from here needs your current password, like the profile page.
+    if ($user_id === intval($session_user_id)) {
+        $self_now = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_email, user_role_id FROM users WHERE user_id = $user_id"));
+        $self_sensitive = $new_password !== ''
+            || (($_POST['2fa'] ?? '') === 'disable')
+            || ($self_now && (strcasecmp((string) $self_now['user_email'], trim((string) ($_POST['email'] ?? ''))) !== 0 || intval($self_now['user_role_id']) !== intval($_POST['role'] ?? 0)));
+        if ($self_sensitive && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+            flash_alert('Your current password is required (and must be correct) to change your own email, role, password or two-factor.', 'error');
+            redirect();
+        }
+    }
+
     if ($new_password !== '') {
         $policy_error = secPasswordPolicyError($new_password, ['name' => trim((string) ($_POST['name'] ?? '')), 'email' => trim((string) ($_POST['email'] ?? '')), 'username' => trim((string) ($_POST['email'] ?? ''))], $mysqli);
         if ($policy_error !== null) {
