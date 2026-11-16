@@ -98,7 +98,10 @@ if (isset($_POST['add_ticket'])) {
         $details = removeEmoji($details);
 
         $email_subject = "RivetMSP - New Ticket - $client_name: $subject";
-        $email_body = "Hello, <br><br>This is a notification that a new ticket has been raised in RivetMSP. <br>Client: $client_name<br>Priority: $priority<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$ticket_id&client_id=$session_client_id <br><br><b>$subject</b><br>$details";
+        // MSP-DS-149: the portal user's text is plain text in this email (no links, forms or images of their own)
+        $subject_safe = nullable_htmlentities(trim($_POST['subject'] ?? ''));
+        $details_safe = nl2br(nullable_htmlentities(removeEmoji(trim(strip_tags($_POST['details'] ?? '')))));
+        $email_body = "Hello, <br><br>This is a notification that a new ticket has been raised in RivetMSP. <br>Client: $client_name<br>Priority: $priority<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$ticket_id&client_id=$session_client_id <br><br><b>$subject_safe</b><br>$details_safe";
 
         // Queue Mail
         $data = [
@@ -505,6 +508,13 @@ if (isset($_POST['edit_profile'])) {
     $new_password = $_POST['new_password'];
 
     if (!empty($new_password)) {
+        // MSP-DS-150: a changed portal password needs the current one (same as the agent profile)
+        $cur_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $session_user_id LIMIT 1"));
+        if (!$cur_row || !password_verify((string) ($_POST['current_password'] ?? ''), $cur_row['user_password'])) {
+            logAction("Contact", "Edit", "Client contact $session_contact_name entered a wrong current password when changing their portal password", $session_client_id, $session_contact_id);
+            flash_alert("Current password is incorrect", 'danger');
+            redirect('profile.php');
+        }
         $password_hash = password_hash($new_password, PASSWORD_DEFAULT);
         mysqli_query($mysqli, "UPDATE users SET user_password = '$password_hash' WHERE user_id = $session_user_id");
         $_SESSION['portal_pw_fp'] = hash('sha256', (string) mysqli_fetch_row(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $session_user_id"))[0]);   // MSP-DS-145: this browser stays signed in, the others do not
