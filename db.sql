@@ -2969,6 +2969,7 @@ CREATE TABLE `mcp_pending_actions` (
   `action_id` int(11) NOT NULL AUTO_INCREMENT,
   `requested_by` int(11) NOT NULL,
   `oauth_client_id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+  `grant_id` int(11) NOT NULL DEFAULT 0,
   `tool` varchar(60) NOT NULL,
   `args_json` text NOT NULL,
   `args_hash` char(64) NOT NULL,

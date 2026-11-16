@@ -8690,6 +8690,23 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.140'");
     }
 
+    if ($rivetit_db_version() == '2.6.140') {
+        // DB 2.6.141 (deep-scan group D, all idempotent: every ADD COLUMN is guarded by information_schema).
+        $ds_add_column = function (string $table, string $column, string $definition) use ($mysqli) {
+            $t = mysqli_real_escape_string($mysqli, $table);
+            $c = mysqli_real_escape_string($mysqli, $column);
+            $r = mysqli_query($mysqli, "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '$t' AND column_name = '$c'");
+            if ($r && mysqli_num_rows($r) === 0) {
+                mysqli_query($mysqli, "ALTER TABLE `$table` ADD COLUMN `$column` $definition");
+            }
+        };
+
+        // MSP-DS-114: the OAuth consent (mcp_oauth_grants.grant_id) a queued MCP proposal was made under; approval checks THAT grant is still live. 0 = queued before this column existed.
+        $ds_add_column('mcp_pending_actions', 'grant_id', "int(11) NOT NULL DEFAULT 0 AFTER `oauth_client_id`");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.141'");
+    }
+
 // Core migrations catch-up, on EVERY Update Database run (idempotent: MigrationRunner keeps its own state in rivet_core_migrations). The version steps above run Core's
 // migrations only when their number is reached, so a database that was moved to a newer edition number while the files on disk still had an older RivetCore (an update
 // that stopped half way) would otherwise never get the Core migrations the newer package brings (for example 0048/0049 with RivetCore rc.60).
