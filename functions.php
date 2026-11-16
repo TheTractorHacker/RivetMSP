@@ -2952,6 +2952,22 @@ function getTotalTax($tax_name, $year, $mysqli)
     return $row['total_tax'] ?? 0;
 }
 
+/**
+ * MSP-DS-59: the one frequency -> interval map for recurring tickets (the forms offer every key). Returns null for anything else.
+ */
+function recurringTicketIntervalSpec($frequency): ?string {
+    $map = [
+        'three days' => '3 days',
+        'weekly'     => '1 week',
+        'biweekly'   => '2 weeks',
+        'monthly'    => '1 month',
+        'quarterly'  => '3 months',
+        'biannually' => '6 months',
+        'annually'   => '12 months',
+    ];
+    return $map[strtolower(trim((string) $frequency))] ?? null;
+}
+
 function generateReadablePassword($security_level)
 {
     // Cap security level at 5

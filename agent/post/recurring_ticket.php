@@ -94,6 +94,10 @@ if (isset($_POST['bulk_force_recurring_tickets'])) {
                 $details = mysqli_real_escape_string($mysqli, $row['recurring_ticket_details']);
                 $priority = sanitizeInput($row['recurring_ticket_priority']);
                 $frequency = sanitizeInput(strtolower($row['recurring_ticket_frequency']));
+                // MSP-DS-59: refuse a frequency with no interval before anything is created (the row is skipped)
+                if (recurringTicketIntervalSpec($frequency) === null) {
+                    continue;
+                }
                 $billable = intval($row['recurring_ticket_billable']);
                 $old_next_recurring_date = sanitizeInput($row['recurring_ticket_next_run']);
                 $created_id = intval($row['recurring_ticket_created_by']);
@@ -206,17 +210,7 @@ if (isset($_POST['bulk_force_recurring_tickets'])) {
 
                 // Set the next run date (based on the scheduled date, rather than now, so things keep their schedule)
                 $dt_old_next_recurring_date = new DateTime($old_next_recurring_date);
-                if ($frequency == "weekly") {
-                    $next_run = date_add($dt_old_next_recurring_date, date_interval_create_from_date_string('1 week'));
-                } elseif ($frequency == "monthly") {
-                    $next_run = date_add($dt_old_next_recurring_date, date_interval_create_from_date_string('1 month'));
-                } elseif ($frequency == "quarterly") {
-                    $next_run = date_add($dt_old_next_recurring_date, date_interval_create_from_date_string('3 months'));
-                } elseif ($frequency == "biannually") {
-                    $next_run = date_add($dt_old_next_recurring_date, date_interval_create_from_date_string('6 months'));
-                } elseif ($frequency == "annually") {
-                    $next_run = date_add($dt_old_next_recurring_date, date_interval_create_from_date_string('12 months'));
-                }
+                $next_run = date_add($dt_old_next_recurring_date, date_interval_create_from_date_string(recurringTicketIntervalSpec($frequency)));
 
                 // Update the run date
                 $next_run = $next_run->format('Y-m-d');
@@ -251,6 +245,11 @@ if (isset($_GET['force_recurring_ticket'])) {
         $details = mysqli_real_escape_string($mysqli, $row['recurring_ticket_details']);
         $priority = sanitizeInput($row['recurring_ticket_priority']);
         $frequency = sanitizeInput(strtolower($row['recurring_ticket_frequency']));
+        // MSP-DS-59: refuse a frequency with no interval before anything is created
+        if (recurringTicketIntervalSpec($frequency) === null) {
+            flash_alert("Recurring Ticket Force failed: unknown frequency", 'error');
+            redirect();
+        }
         $billable = intval($row['recurring_ticket_billable']);
         $old_next_recurring_date = sanitizeInput($row['recurring_ticket_next_run']);
         $created_id = intval($row['recurring_ticket_created_by']);
@@ -363,17 +362,7 @@ if (isset($_GET['force_recurring_ticket'])) {
 
         // Set the next run date (based on the scheduled date, rather than now, so things keep their schedule)
         $dt_old_next_recurring_date = new DateTime($old_next_recurring_date);
-        if ($frequency == "weekly") {
-            $next_run = date_add($dt_old_next_recurring_date, date_interval_create_from_date_string('1 week'));
-        } elseif ($frequency == "monthly") {
-            $next_run = date_add($dt_old_next_recurring_date, date_interval_create_from_date_string('1 month'));
-        } elseif ($frequency == "quarterly") {
-            $next_run = date_add($dt_old_next_recurring_date, date_interval_create_from_date_string('3 months'));
-        } elseif ($frequency == "biannually") {
-            $next_run = date_add($dt_old_next_recurring_date, date_interval_create_from_date_string('6 months'));
-        } elseif ($frequency == "annually") {
-            $next_run = date_add($dt_old_next_recurring_date, date_interval_create_from_date_string('12 months'));
-        }
+        $next_run = date_add($dt_old_next_recurring_date, date_interval_create_from_date_string(recurringTicketIntervalSpec($frequency)));
 
         // Update the run date
         $next_run = $next_run->format('Y-m-d');
