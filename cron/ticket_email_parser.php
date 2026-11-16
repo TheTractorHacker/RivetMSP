@@ -403,7 +403,7 @@ function processInboundMessage(
             $client_id  = intval($contact_row['contact_client_id']);
         } else {
             // Else: check if sender domain is registered to exactly one client
-            $client_id = inboundDomainOwnerClient($mysqli, $from_domain);
+            $client_id = inboundDomainOwnerClient($mysqli, $from_domain, true); // MSP-DS-16/33: only a domain an admin switched 'route inbound mail' on for
         }
 
         // If we found either a contact or a domain, check recent tickets for a matching subject
@@ -454,7 +454,7 @@ function processInboundMessage(
     if (!$email_processed) {
         // Only a domain that exactly one client lists, and that is not a public mailbox provider, files mail without review (MSP-DS-33);
         // everything else falls through to the unknown-sender review queue
-        $domain_owner_client_id = inboundDomainOwnerClient($mysqli, $from_domain);
+        $domain_owner_client_id = inboundDomainOwnerClient($mysqli, $from_domain, true); // MSP-DS-16/33: admin-set per-domain 'route inbound mail' flag
 
         if ($domain_owner_client_id > 0) {
             $client_id = $domain_owner_client_id;

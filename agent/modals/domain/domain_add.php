@@ -170,6 +170,15 @@ ob_start();
                 </div>
                 <?php } ?>
 
+
+                <div class="form-group">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="route_mail" value="1" id="routeMailAdd" <?php if (!$session_is_admin) { echo 'disabled'; } ?>>
+                        <label class="form-check-label" for="routeMailAdd">Route inbound mail from this domain to this client</label>
+                    </div>
+                    <small class="text-secondary">When on, a first-time sender at this domain who emails the support mailbox is filed straight into this client. When off, they wait in the mail request review queue. <?php if (!$session_is_admin) { ?>Only an administrator can change this.<?php } ?></small>
+                </div>
+
                 <div class="form-group">
                     <label>Expire Date</label>
                     <div class="input-group">

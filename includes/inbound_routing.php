@@ -29,20 +29,30 @@ function inboundIsFreemailDomain(string $domain): bool
     return in_array(inboundNormalizeDomain($domain), inboundFreemailDomains(), true);
 }
 
-/** The one client that lists this domain, or 0 when it is a public mailbox provider, unlisted, or listed by more than one client. */
-function inboundDomainOwnerClient(mysqli $mysqli, string $domain): int
+/**
+ * The one client that lists this domain, or 0 when it is a public mailbox provider, unlisted, or listed by more than one client.
+ * $routableOnly (MSP-DS-16/33): additionally require that an administrator switched 'route inbound mail' on for the listing
+ * (domains.domain_route_mail). Mail routing passes true; the ownership-conflict checks (contact claims, portal contacts) pass false,
+ * because a listed domain is somebody's even when it is not routable.
+ */
+function inboundDomainOwnerClient(mysqli $mysqli, string $domain, bool $routableOnly = false): int
 {
     $domain = inboundNormalizeDomain($domain);
     if ($domain === '' || inboundIsFreemailDomain($domain)) {
         return 0;
     }
     $esc = mysqli_real_escape_string($mysqli, $domain);
-    $res = mysqli_query($mysqli, "SELECT DISTINCT domain_client_id FROM domains WHERE domain_name = '$esc' AND domain_archived_at IS NULL AND domain_client_id > 0 LIMIT 2");
+    $res = mysqli_query($mysqli, "SELECT domain_client_id, MAX(domain_route_mail) AS route FROM domains WHERE domain_name = '$esc' AND domain_archived_at IS NULL AND domain_client_id > 0 GROUP BY domain_client_id LIMIT 2");
     $ids = [];
+    $route = 0;
     while ($res && ($r = mysqli_fetch_assoc($res))) {
         $ids[] = (int) $r['domain_client_id'];
+        $route = (int) $r['route'];
     }
-    return count($ids) === 1 ? $ids[0] : 0;
+    if (count($ids) !== 1 || ($routableOnly && $route !== 1)) {
+        return 0;
+    }
+    return $ids[0];
 }
 
 /**

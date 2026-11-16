@@ -46,8 +46,11 @@ if (isset($_POST['add_domain'])) {
     $txt = sanitizeInput($records['txt']);
     $whois = sanitizeInput($records['whois']);
 
+    // MSP-DS-16/33: only an administrator may switch on 'route inbound mail' for a domain (a Write-level tech could otherwise claim any sender domain)
+    $route_mail = ($session_is_admin && !empty($_POST['route_mail'])) ? 1 : 0;
+
     // Add domain record
-    mysqli_query($mysqli,"INSERT INTO domains SET domain_name = '$name', domain_description = '$description', domain_registrar = $registrar,  domain_webhost = $webhost, domain_dnshost = $dnshost, domain_mailhost = $mailhost, domain_expire = $expire, domain_ip = '$a', domain_name_servers = '$ns', domain_mail_servers = '$mx', domain_txt = '$txt', domain_raw_whois = '$whois', domain_notes = '$notes', domain_client_id = $client_id");
+    mysqli_query($mysqli,"INSERT INTO domains SET domain_route_mail = $route_mail, domain_name = '$name', domain_description = '$description', domain_registrar = $registrar,  domain_webhost = $webhost, domain_dnshost = $dnshost, domain_mailhost = $mailhost, domain_expire = $expire, domain_ip = '$a', domain_name_servers = '$ns', domain_mail_servers = '$mx', domain_txt = '$txt', domain_raw_whois = '$whois', domain_notes = '$notes', domain_client_id = $client_id");
 
     // Get inserted ID (for linking certificate, if exists)
     $domain_id = mysqli_insert_id($mysqli);
@@ -130,8 +133,16 @@ if (isset($_POST['edit_domain'])) {
         WHERE domain_id = $domain_id
     "));
 
+    // MSP-DS-16/33: the 'route inbound mail' flag is admin-only; a non-admin edit keeps it, except that renaming a domain clears it
+    // (the flag was granted to the old name, not to whatever name a technician types next)
+    if ($session_is_admin) {
+        $route_mail = !empty($_POST['route_mail']) ? 1 : 0;
+    } else {
+        $route_mail = strcasecmp((string) ($original_domain_info['domain_name'] ?? ''), $name) === 0 ? intval($original_domain_info['domain_route_mail'] ?? 0) : 0;
+    }
+
     // Update domain
-    mysqli_query($mysqli,"UPDATE domains SET domain_name = '$name', domain_description = '$description', domain_registrar = $registrar,  domain_webhost = $webhost, domain_dnshost = $dnshost, domain_mailhost = $mailhost, domain_expire = $expire, domain_ip = '$a', domain_name_servers = '$ns', domain_mail_servers = '$mx', domain_txt = '$txt', domain_raw_whois = '$whois', domain_notes = '$notes' WHERE domain_id = $domain_id");
+    mysqli_query($mysqli,"UPDATE domains SET domain_route_mail = $route_mail, domain_name = '$name', domain_description = '$description', domain_registrar = $registrar,  domain_webhost = $webhost, domain_dnshost = $dnshost, domain_mailhost = $mailhost, domain_expire = $expire, domain_ip = '$a', domain_name_servers = '$ns', domain_mail_servers = '$mx', domain_txt = '$txt', domain_raw_whois = '$whois', domain_notes = '$notes' WHERE domain_id = $domain_id");
 
     // Fetch updated info
     $new_domain_info = mysqli_fetch_assoc(mysqli_query($mysqli,"

@@ -202,6 +202,7 @@ if (isset($_POST['add_client'])) {
             $query = mysqli_prepare(
                 $mysqli,
                 "INSERT INTO domains SET
+                domain_route_mail = ?,
                 domain_name = ?,
                 domain_registrar = 0,
                 domain_webhost = 0,
@@ -212,7 +213,9 @@ if (isset($_POST['add_client'])) {
                 domain_raw_whois = ?,
                 domain_client_id = ?"
             );
-            mysqli_stmt_bind_param($query, "ssssssi", $website, $expire, $a, $ns, $mx, $whois, $client_id);
+            // MSP-DS-16/33: the website domain of a client created by an administrator keeps routing inbound mail; one created by anyone else does not until an admin switches it on
+            $route_mail = $session_is_admin ? 1 : 0;
+            mysqli_stmt_bind_param($query, "issssssi", $route_mail, $website, $expire, $a, $ns, $mx, $whois, $client_id);
             mysqli_stmt_execute($query);
             $extended_log_description .= ", domain $website added";
         } catch (Exception $e) {

@@ -22,6 +22,7 @@ $domain_mail_servers = nullable_htmlentities($row['domain_mail_servers']);
 $domain_txt = nullable_htmlentities($row['domain_txt']);
 $domain_raw_whois = nullable_htmlentities($row['domain_raw_whois']);
 $domain_notes = nullable_htmlentities($row['domain_notes']);
+$domain_route_mail = intval($row["domain_route_mail"] ?? 0);
 $domain_created_at = nullable_htmlentities($row['domain_created_at']);
 $domain_archived_at = nullable_htmlentities($row['domain_archived_at']);
 $client_id = intval($row['domain_client_id']);
@@ -237,6 +238,14 @@ ob_start();
                         </div>
                         <textarea class="form-control" rows="6" name="raw_whois" disabled><?php echo $domain_raw_whois; ?></textarea>
                     </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="route_mail" value="1" id="routeMailEdit<?php echo $domain_id; ?>" <?php if ($domain_route_mail) { echo 'checked'; } ?> <?php if (!$session_is_admin) { echo 'disabled'; } ?>>
+                        <label class="form-check-label" for="routeMailEdit<?php echo $domain_id; ?>">Route inbound mail from this domain to this client</label>
+                    </div>
+                    <small class="text-secondary">When on, a first-time sender at this domain who emails the support mailbox is filed straight into this client (contact created, ticket opened). When off, they wait in the mail request review queue. <?php if (!$session_is_admin) { ?>Only an administrator can change this.<?php } ?></small>
                 </div>
 
             </div>
