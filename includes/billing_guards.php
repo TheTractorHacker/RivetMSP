@@ -310,6 +310,21 @@ function stripeIntentMatchesInvoice($metadata, $pi_currency, $invoice_client_id,
 }
 
 /**
+ * MSP-DS-164 (review R29): whether a succeeded PaymentIntent that found no PAYABLE invoice is still this install's money, i.e. worth a
+ * "payment received but not recorded, refund needed" alert. $invoice is the unfiltered invoice row (needs invoice_client_id and
+ * invoice_currency_code) or null when the id is unknown here. Another install's intent (marker, client or currency mismatch) is not ours to report.
+ */
+function stripeUnrecordedIntentIsOurs($metadata, $pi_currency, ?array $invoice, string $our_marker): bool
+{
+    if ($invoice === null) {
+        // no invoice to compare client/currency against: only the install marker can say it is foreign
+        $theirs = (string) ($metadata->itflow_install ?? '');
+        return !($theirs !== '' && $our_marker !== '' && !hash_equals($our_marker, $theirs));
+    }
+    return stripeIntentMatchesInvoice($metadata, $pi_currency, intval($invoice['invoice_client_id']), (string) $invoice['invoice_currency_code'], $our_marker);
+}
+
+/**
  * MSP-DS-166: serialise every card charge for one invoice (portal, agent, cron autopay, guest page) with a named DB lock.
  * Take it BEFORE reading the balance; it is held until invoiceChargeUnlock(), the next invoice lock in this process, or the
  * end of the request, so a second path waits, re-reads the balance after the first payment was recorded, and finds nothing to charge.

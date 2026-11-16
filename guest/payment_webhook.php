@@ -137,7 +137,14 @@ if (!$inv) {
     // Invoice unknown or no longer payable. MSP-DS-35: the money HAS been received (this is payment_intent.succeeded and no payment row exists
     // for it), so never drop it silently: put a row on the invoice, tell billing once, and flag the event for review.
     require_once __DIR__ . '/../includes/billing_guards.php';
-    $unrecorded_invoice = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT invoice_id, invoice_prefix, invoice_number, invoice_status, invoice_client_id FROM invoices WHERE invoice_id = $pi_invoice_id LIMIT 1"));
+    $unrecorded_invoice = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT invoice_id, invoice_prefix, invoice_number, invoice_status, invoice_client_id, invoice_currency_code FROM invoices WHERE invoice_id = $pi_invoice_id LIMIT 1"));
+    // MSP-DS-164 (review R29): a PaymentIntent from another install (shared Stripe account) or for another client/currency is not ours to alert on
+    if (!stripeUnrecordedIntentIsOurs($pi->metadata, $pi_currency, $unrecorded_invoice ?: null, stripeInstallMarker())) {
+        mysqli_query($mysqli, "UPDATE payment_webhook_events SET event_status = 'ignored' WHERE event_id = $event_row_id");
+        logApp("Stripe", "warning", "Webhook ignored PaymentIntent $pi_id: not this install's payment for invoice $pi_invoice_id (install marker, client or currency)");
+        http_response_code(200);
+        exit('OK');
+    }
     if ($unrecorded_invoice) {
         $unrec_label = sanitizeInput($unrecorded_invoice['invoice_prefix']) . intval($unrecorded_invoice['invoice_number']);
         if (invoiceHistoryOnce($mysqli, $pi_invoice_id, 'Payment unrecorded', 'Stripe payment received but not recorded (invoice not payable; refund or credit needed). Stripe PaymentIntent', $pi_id)) {
