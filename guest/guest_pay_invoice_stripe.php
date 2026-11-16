@@ -191,6 +191,9 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
         // billing once, and let the webhook (payment_intent.succeeded) record the payment when it clears.
         require_once '../includes/billing_guards.php';
         $processing_invoice_id = intval($pi_obj->metadata->itflow_invoice_id ?? 0);
+        if ($processing_invoice_id > 0) {   // MSP-DS-166 / MSP-DS-32: other paths see the debit and do not charge this invoice again
+            chargeAttemptSettleIntent($mysqli, $pi_id, $processing_invoice_id, intval(moneyToCents(stripeAmountFromMinor($pi_obj->amount, $pi_obj->currency))), 'pending', 'guest');
+        }
         if ($processing_invoice_id > 0 && invoiceHistoryOnce($mysqli, $processing_invoice_id, 'Payment pending', 'Bank payment submitted and processing (not yet settled). Stripe PaymentIntent', $pi_id)) {
             $processing_client_id = intval($pi_obj->metadata->itflow_client_id ?? 0);
             appNotify("Invoice Payment Pending", "A bank payment for invoice ID $processing_invoice_id is processing at Stripe ($pi_id). It will be recorded when it clears; check that it settles.", "/agent/invoice.php?invoice_id=$processing_invoice_id", $processing_client_id);
@@ -273,7 +276,9 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
     }
 
     // Add Payment to History (exactly once per PaymentIntent; the webhook may have won the race)
-    if (!insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $stripe_account, 'Stripe', $pi_id, $invoice_id)) {
+    $guest_recorded = insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $stripe_account, 'Stripe', $pi_id, $invoice_id);
+    chargeAttemptSettleIntent($mysqli, $pi_id, $invoice_id, moneyToCents($pi_amount_paid), 'succeeded', 'guest');
+    if (!$guest_recorded) {
         exit(WORDING_PAYMENT_FAILED);
     }
 

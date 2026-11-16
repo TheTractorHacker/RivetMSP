@@ -91,6 +91,21 @@ if (in_array($event_type, ['charge.refunded', 'charge.dispute.created', 'charge.
         logApp("Stripe", "warning", "Stripe event $event_type for recorded PaymentIntent $charge_pi");
     }
 }
+if (in_array($event_type, ['payment_intent.processing', 'payment_intent.payment_failed', 'payment_intent.canceled'], true)) {
+    // MSP-DS-32 / MSP-DS-166: keep the charge attempt in step with Stripe. A bank debit that is processing keeps the invoice blocked for other paths
+    // (only when it is this install's intent), a failed or cancelled one frees it for the next attempt. Settled by PaymentIntent id.
+    $att_pi = $event->data->object;
+    $att_theirs = (string) ($att_pi->metadata->itflow_install ?? '');
+    $att_ours = $att_theirs === '' || stripeInstallMarker() === '' || hash_equals(stripeInstallMarker(), $att_theirs);
+    if ($att_ours) {
+        $att_invoice = intval($att_pi->metadata->itflow_invoice_id ?? 0);
+        chargeAttemptSettleIntent($mysqli, sanitizeInput($att_pi->id), $event_type === 'payment_intent.processing' ? $att_invoice : 0, moneyToCents(stripeAmountFromMinor($att_pi->amount, $att_pi->currency)),
+            $event_type === 'payment_intent.processing' ? 'pending' : 'failed');
+    }
+    mysqli_query($mysqli, "UPDATE payment_webhook_events SET event_status = 'processed' WHERE event_id = $event_row_id");
+    http_response_code(200);
+    exit('OK');
+}
 if ($event_type !== 'payment_intent.succeeded') {
     mysqli_query($mysqli, "UPDATE payment_webhook_events SET event_status = 'ignored' WHERE event_id = $event_row_id");
     http_response_code(200);
@@ -119,6 +134,7 @@ $existing = mysqli_fetch_assoc(mysqli_query($mysqli,
     "SELECT payment_id FROM payments WHERE payment_reference = 'Stripe - $pi_id' LIMIT 1"
 ));
 if ($existing) {
+    chargeAttemptSettleIntent($mysqli, $pi_id, 0, 0, 'succeeded');   // MSP-DS-32: the portal/agent/autopay/guest path recorded it; close its attempt by PaymentIntent id
     mysqli_query($mysqli, "UPDATE payment_webhook_events SET event_status = 'ignored' WHERE event_id = $event_row_id");
     http_response_code(200);
     exit('Already recorded');
@@ -172,6 +188,7 @@ if (!stripeIntentMatchesInvoice($pi->metadata, $pi_currency, $client_id, $invoic
     http_response_code(200);
     exit('OK');
 }
+chargeAttemptSettleIntent($mysqli, $pi_id, $invoice_id, moneyToCents($pi_amount_paid), 'succeeded');   // MSP-DS-32: the debit cleared (or a charge whose response was lost)
 $client_name           = sanitizeInput($inv['client_name']);
 $contact_name          = sanitizeInput($inv['contact_name']);
 $contact_email         = sanitizeInput($inv['contact_email']);

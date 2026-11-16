@@ -62,6 +62,12 @@ if (isset($_GET['stripe_create_pi'])) {
         exit("No balance outstanding");
     }
 
+    // MSP-DS-166 / MSP-DS-32: a saved-card/autopay charge in flight, or a bank debit still processing, means this invoice is being paid already
+    $live_attempt = chargeAttemptLive($mysqli, $invoice_id);
+    if ($live_attempt) {
+        exit($live_attempt['attempt_status'] === 'pending' ? "A bank payment for this invoice is still processing" : "A payment for this invoice is in progress");
+    }
+
     // MSP-DS-102: invoices at or above the provider's card threshold are not payable by card, whatever page the request came from
     if (!cardPaymentAllowedForInvoice($mysqli, $invoice_amount)) {
         exit("This invoice cannot be paid by card");

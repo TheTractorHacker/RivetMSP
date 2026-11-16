@@ -1080,36 +1080,24 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
         if ($provider->supports('charge_saved_method')) {
             if ($provider_private_key && $stripe_customer_id && $stripe_payment_method_id) {
 
-                // MSP-DS-166: one card charge per invoice at a time; skip this run if a portal/agent charge holds it
-                if (!invoiceChargeLock($mysqli, $invoice_id, 0)) {
+                // MSP-DS-32: this block is reached on every cron run of the due date. Autopay claims (invoice, day) ONCE before any Stripe call, whatever
+                // the outcome (a decline is not retried every 5 minutes); see autopayClaimToday().
+                if (!autopayClaimToday($mysqli, $invoice_id)) {
                     continue;
                 }
-                $balance_to_pay = invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount);   // MSP-INJ-26(a): the balance, not the invoice total
-                if ($balance_to_pay <= 0) {
+                // MSP-DS-166 / MSP-DS-32: then the shared charge claim (invoice row lock, balance read under it, ONE idempotency key for portal/agent/guest/cron).
+                // A live attempt - a portal/agent charge in flight, or a bank debit still 'processing' for days - means this run does not charge.
+                $charge_claim = chargeAttemptClaim($mysqli, $invoice_id, 'cron', $recurring_payment_saved_payment_id);
+                if (!$charge_claim['ok']) {
+                    if ($charge_claim['reason'] === 'in_progress') {
+                        mysqli_query($mysqli, "DELETE FROM history WHERE history_invoice_id = $invoice_id AND history_description = 'Cron autopay attempt on " . date('Y-m-d') . "'");   // not charged: leave today's claim for a later run
+                    }
                     continue;
                 }
+                $balance_to_pay = $charge_claim['balance'];   // MSP-INJ-26(a): the balance, not the invoice total
+                $charge_attempt_id = $charge_claim['attempt_id'];
+                $idempotency_key = $charge_claim['key'];
                 $pi_description = "RivetMSP: $client_name payment of $recurring_payment_currency_code $balance_to_pay for $invoice_prefix$invoice_number";
-
-                // MSP-DS-32: this block is reached on every cron run of the due date. Claim (invoice, day) with an atomic conditional insert
-                // into history BEFORE any Stripe call and skip when it was already claimed: one autopay attempt per invoice per day, whatever
-                // its outcome (a decline, an error, or a bank debit that stays 'processing' for days is not charged again every run).
-                // Serialised with a named lock so two overlapping runs cannot both pass the NOT EXISTS check (see MSP-DS-2).
-                $autopay_marker = 'Cron autopay attempt on ' . date('Y-m-d');
-                $got_autopay_lock = mysqli_fetch_row(mysqli_query($mysqli, "SELECT GET_LOCK('rivet_cron_autopay_claim', 10)"))[0] ?? 0;
-                if ((int) $got_autopay_lock !== 1) {
-                    continue;
-                }
-                mysqli_query($mysqli, "INSERT INTO history (history_status, history_description, history_invoice_id)
-                    SELECT 'Sent', '$autopay_marker', $invoice_id FROM DUAL
-                    WHERE NOT EXISTS (SELECT 1 FROM history WHERE history_invoice_id = $invoice_id AND history_description = '$autopay_marker')");
-                $autopay_claimed_now = mysqli_affected_rows($mysqli) >= 1;
-                mysqli_query($mysqli, "DO RELEASE_LOCK('rivet_cron_autopay_claim')");
-                if (!$autopay_claimed_now) {
-                    continue;
-                }
-
-                // One key per invoice, balance, saved method and day: even a repeat that got past the claim cannot create a second PaymentIntent.
-                $idempotency_key = md5("cron_autopay_stripe_{$invoice_id}_{$recurring_payment_saved_payment_id}_" . moneyToCents($balance_to_pay) . '_' . date('Y-m-d'));
 
                 try {
                     $payment_intent = $provider->chargeSavedMethod([
@@ -1134,8 +1122,10 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
                     $pi_amount_paid = stripeAmountFromMinor($payment_intent->amount_received, $payment_intent->currency);
                     $pi_currency = strtoupper(sanitizeInput($payment_intent->currency));
                     $pi_livemode = $payment_intent->livemode;
+                    chargeAttemptStoreResult($mysqli, $charge_attempt_id, $payment_intent->status, $pi_id);   // pending (ACH) / failed / succeeded-not-yet-recorded
 
                 } catch (Exception $e) {
+                    chargeAttemptStoreException($mysqli, $charge_attempt_id, $e);   // a timeout keeps the attempt (and its key) claimed
                     $error = $e->getMessage();
                     error_log("Stripe payment error - encountered exception during payment intent for invoice ID $invoice_id / $invoice_prefix$invoice_number: $error");
                     logApp("Stripe", "error", "Exception during PI for invoice ID $invoice_id: $error");
@@ -1147,7 +1137,9 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
                 if ($payment_intent->status == "succeeded" && moneyToCents($balance_to_pay) === moneyToCents($pi_amount_paid)) {
 
                     // Record the payment first, exactly once per PaymentIntent (the webhook may have recorded it already)
-                    if (!insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $account_id, 'Stripe', $pi_id, $invoice_id)) {
+                    $autopay_recorded = insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $account_id, 'Stripe', $pi_id, $invoice_id);
+                    chargeAttemptFinish($mysqli, $charge_attempt_id, 'succeeded');
+                    if (!$autopay_recorded) {
                         continue;
                     }
 
@@ -1200,7 +1192,15 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
                     logAction("Invoice", "Payment", "Auto Stripe payment amount of " . numfmt_format_currency($currency_format, $invoice_amount, $recurring_payment_currency_code) . " added to invoice $invoice_prefix$invoice_number - $pi_id $extended_log_desc", $client_id, $invoice_id);
                     customAction('invoice_pay', $invoice_id);
 
+                } elseif ($payment_intent->status == 'processing') {
+                    // MSP-DS-32: bank debit accepted, settles in days: the attempt is 'pending' (nothing charges again), the webhook records it
+                    mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Payment pending', history_description = 'Bank autopay submitted and processing (not yet settled). Stripe PaymentIntent $pi_id', history_invoice_id = $invoice_id");
+                    logAction("Invoice", "Payment", "Auto Payment for invoice $invoice_prefix$invoice_number submitted and processing at Stripe - $pi_id", $client_id, $invoice_id);
                 } else {
+                    if ($payment_intent->status == 'succeeded') {
+                        chargeAttemptFinish($mysqli, $charge_attempt_id, 'succeeded', 'amount received differs from the balance charged');
+                        appNotify("Invoice Payment Needs Review", "Stripe took an autopay payment for invoice $invoice_prefix$invoice_number ($pi_id) whose amount differs from the balance; it was not recorded. Check it in Stripe.", "/agent/invoice.php?invoice_id=$invoice_id", $client_id);
+                    }
                     mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Payment failed', history_description = 'Stripe autopay failed: Status {$payment_intent->status}', history_invoice_id = $invoice_id");
                     logAction("Invoice", "Payment", "Failed auto Payment for invoice $invoice_prefix$invoice_number. Stripe PI status: {$payment_intent->status}", $client_id, $invoice_id);
                 }
@@ -1217,7 +1217,6 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
         logAction("Invoice", "Payment", "Auto Payment amount of $recurring_payment_currency_code $invoice_amount added to invoice $invoice_prefix$invoice_number", $client_id, $invoice_id);
     }
 }
-invoiceChargeUnlock($mysqli);   // MSP-DS-166
 
 // Recurring Expenses
 // Loop through all recurring expenses that match today's date and is active
