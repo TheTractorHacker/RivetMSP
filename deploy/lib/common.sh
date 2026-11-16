@@ -299,6 +299,7 @@ refuse_untrusted_sidecar() {
 rmm_pg_prepare() {
     local app_dir="$1" owner scratch out rc=0 own_pass
     RMM_PG_READY=0
+    RMM_PG_USER_PASSFILE=""
     owner="$(app_owner_user "${app_dir}")"
     scratch="$(mktemp -d)"; register_tmpfile "${scratch}"; chmod 700 "${scratch}"
     [[ -n "${owner}" ]] && chown "${owner}" "${scratch}"
@@ -311,23 +312,54 @@ rmm_pg_prepare() {
         cat -- "${scratch}/pgpass" > "${own_pass}"
     fi
     export PGPASSFILE="${own_pass}"
+    # The web user's scratch copy (that user's own 0600 file in a directory only it can enter) is what run_rmm_pg_script hands to the
+    # vendor scripts, which run as that user; root never executes them.
+    [[ -f "${scratch}/pgpass" && ! -L "${scratch}/pgpass" ]] && RMM_PG_USER_PASSFILE="${scratch}/pgpass"
     RMM_PG_READY=1
     return 0
 }
 
-# run_app_php <app_dir> <php args...>: MSP-DS-34. Application PHP (config.php, scripts/*.php, the app's own bootstrap) is writable by the
-# web user, so root must never execute it. When running as root, drop to the account that owns config.php (the web user) first; as a
+# _app_exec_user <app_dir>: the account application code must run as ("" = no drop needed). When running as root it is the non-root owner
+# of config.php (the web user); as a normal user, or when config.php is root-owned, it is empty. (Tests override this function.)
+_app_exec_user() {
+    [[ "${EUID}" -eq 0 ]] && app_owner_user "$1"
+    return 0
+}
+
+# run_app_php <app_dir> <php args...>: MSP-DS-34. Application PHP (config.php, scripts/*.php, the app's own bootstrap, vendor/) is writable by
+# the web user, so root must never execute it. When running as root, drop to the account that owns config.php (the web user) first; as a
 # normal user (or when config.php is root-owned) it simply runs php. Callers get only the output, which they treat as data.
 run_app_php() {
     local app_dir="$1"; shift
-    local owner=""
-    if [[ "${EUID}" -eq 0 && -f "${app_dir}/config.php" ]]; then
-        owner="$(stat -c '%U' "${app_dir}/config.php" 2>/dev/null || true)"
-    fi
+    run_app_exec "${app_dir}" "${PHP_BIN:-php}" "$@"
+}
+
+# run_app_exec <app_dir> <command> [args...]: run any command that lives in, or loads code from, the application tree (php, or an
+# executable under vendor/) as the web user when this is root. Review R3: a root process must never execute a file the web user can write.
+run_app_exec() {
+    local app_dir="$1"; shift
+    local owner; owner="$(_app_exec_user "${app_dir}")"
     if [[ -n "${owner}" && "${owner}" != "root" ]]; then
-        ( cd / && runuser -u "${owner}" -- "${PHP_BIN:-php}" "$@" )
+        ( cd / && runuser -u "${owner}" -- "$@" )
     else
-        ( cd / && "${PHP_BIN:-php}" "$@" )
+        ( cd / && "$@" )
+    fi
+}
+
+# run_rmm_pg_script <app_dir> <script> [args...]: MSP-DS-34 (review R3). rivet-core's rmm-postgres-backup.sh / rmm-postgres-restore.sh live in
+# vendor/ (web-writable), so they are NOT executed by root: they run as the web user, which already holds the RMM PostgreSQL credentials,
+# with the RIVETCORE_PG_* values root validated and the password file the web user's own scratch copy (from rmm_pg_prepare). STDIN/STDOUT
+# are inherited, so root keeps opening the dump file (backup: `> dump`, restore: `< dump`) in its root-only staging directory. Nothing the
+# script prints is trusted, and the dump is only data. When no drop is needed (non-root caller, or a root-owned config.php) it runs directly
+# with root's own password file.
+run_rmm_pg_script() {
+    local app_dir="$1" script="$2"; shift 2
+    local owner; owner="$(_app_exec_user "${app_dir}")"
+    if [[ -n "${owner}" && "${owner}" != "root" ]]; then
+        [[ -n "${RMM_PG_USER_PASSFILE:-}" && -f "${RMM_PG_USER_PASSFILE}" && ! -L "${RMM_PG_USER_PASSFILE}" ]] || die "No password file prepared for the RMM PostgreSQL step."
+        ( cd / && PGPASSFILE="${RMM_PG_USER_PASSFILE}" runuser -u "${owner}" -- "${script}" "$@" )
+    else
+        ( cd / && "${script}" "$@" )
     fi
 }
 

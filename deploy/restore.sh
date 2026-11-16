@@ -309,7 +309,9 @@ install_key_file() {
     local src="$1" dest="$2"
     [[ -f "${src}" ]] || die "--key-file '${src}' does not exist."
     local kids
-    kids="$(php -r 'require $argv[1] . "/vendor/autoload.php"; try { $r = RivetCore\Crypto\KeyFile::ringFromJson((string) file_get_contents($argv[2])); echo implode(",", $r->kids()), " active=", $r->activeKid(); } catch (Throwable $e) { fwrite(STDERR, $e->getMessage()); exit(1); }' -- "${APP_DIR}" "${src}")" \
+    # MSP-DS-34 (review R3): vendor/autoload.php is web-writable, so the validation runs as the web user (run_app_php); the key file reaches it
+    # on STDIN, opened by root, so the web user needs no read access to --key-file.
+    kids="$(run_app_php "${APP_DIR}" -r 'require $argv[1] . "/vendor/autoload.php"; try { $r = RivetCore\Crypto\KeyFile::ringFromJson((string) stream_get_contents(STDIN)); echo implode(",", $r->kids()), " active=", $r->activeKid(); } catch (Throwable $e) { fwrite(STDERR, $e->getMessage()); exit(1); }' -- "${APP_DIR}" < "${src}")" \
         || die "${src} is not a usable key file."
     if [[ -f "${dest}" ]] && ! cmp -s "${src}" "${dest}"; then
         local keep="${dest}.pre-restore-$(date +%Y%m%d%H%M%S)"
@@ -480,7 +482,7 @@ restore_rmm_postgres() {
         die "Could not read the RMM PostgreSQL connection to restore into (scripts/rmm_postgres_backup_env.php exited ${pg_rc}). The control database and uploads/ are already restored; fix the connection in Administration > RMM > Data store, then restore ${dump} by hand with vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh."
     fi
     info "Restoring into PostgreSQL database '${RIVETCORE_PG_DATABASE}' (RMM_PG_RESTORE_CLEAN=1: an existing schema there is replaced)..."
-    if ! RMM_PG_RESTORE_CLEAN=1 "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh" < "${dump}"; then
+    if ! RMM_PG_RESTORE_CLEAN=1 run_rmm_pg_script "${APP_DIR}" "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh" < "${dump}"; then
         die "rmm-postgres-restore.sh failed. The control database and uploads/ are already restored; the PostgreSQL store may be partially restored — investigate before opening the site (docs/rmm/POSTGRES.md section 8.6)."
     fi
     success "RMM PostgreSQL store restored."

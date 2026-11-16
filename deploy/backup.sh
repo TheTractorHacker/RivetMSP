@@ -339,7 +339,8 @@ EOF
         : > "${rmm_pg_dump}"
         chmod 600 "${rmm_pg_dump}"
         register_tmpfile "${rmm_pg_dump}"
-        if ! "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-postgres-backup.sh" > "${rmm_pg_dump}"; then
+        # MSP-DS-34 (review R3): vendor/ is web-writable, so the dump helper runs as the web user, never as root.
+        if ! run_rmm_pg_script "${APP_DIR}" "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-postgres-backup.sh" > "${rmm_pg_dump}"; then
             die "rmm-postgres-backup.sh failed. No encrypted backup was produced this run."
         fi
         success "RMM PostgreSQL dump complete ($(du -h "${rmm_pg_dump}" | awk '{print $1}'))."
