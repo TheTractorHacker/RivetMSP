@@ -92,6 +92,11 @@ if (isset($_POST['edit_credential'])) {
             $h_old     = sanitizeInput((string)$old_val);
             $h_new     = sanitizeInput((string)$new_val);
             $h_user    = sanitizeInput($session_name);
+            if ($field === 'Username') {
+                // MSP-DS-54: the username is vault-encrypted; the history only records that it changed (like Password), never the plaintext
+                mysqli_query($mysqli, "INSERT INTO credential_history SET history_credential_id = $credential_id, history_user_id = $session_user_id, history_user_name = '$h_user', history_field = 'Username', history_old_value = NULL, history_new_value = NULL");
+                continue;
+            }
             mysqli_query($mysqli, "INSERT INTO credential_history SET history_credential_id = $credential_id, history_user_id = $session_user_id, history_user_name = '$h_user', history_field = '$h_field', history_old_value = '$h_old', history_new_value = '$h_new'");
         }
     }
