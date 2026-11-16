@@ -587,8 +587,10 @@ if (isset($_POST['export_credentials_csv'])) {
         fputcsv($f, $fields, $delimiter, $enclosure, $escape);
 
         //output each row of the data, format line as csv and write to file pointer
+        // ONE bulk gate per request, with the full row count, BEFORE any row is decrypted (review RR6): a gate per row
+        // re-counted the whole export every iteration and killed exports of 6+ credentials at the reveal limit.
+        vaultGate('credential export', max(1, $num_rows), true);
         while($row = mysqli_fetch_assoc($sql)){
-            vaultGate('credential export', max(1, mysqli_num_rows($sql)), true);
             $credential_username = decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username');
             $credential_password = decryptCredentialEntry($row['credential_password'], $row['credential_id'] ?? null, 'password');
             $lineData = array($row['credential_name'], $row['credential_description'], $credential_username, $credential_password, decryptOtpSecret($row['credential_otp_secret'] ?? '', $row['credential_id'] ?? null), $row['credential_uri']);

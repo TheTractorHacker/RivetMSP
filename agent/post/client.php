@@ -1691,10 +1691,11 @@ if (isset($_POST["export_client_pdf"])) {
             </tr>
           </thead>
           <tbody>";
+        // ONE bulk gate per request, with the full row count, before any row is decrypted (review RR6)
+        vaultGate('client pdf', max(1, mysqli_num_rows($sql_credentials)), true);
         while ($row = mysqli_fetch_assoc($sql_credentials)) {
             $credential_name = nullable_htmlentities($row["credential_name"]);
             $credential_description = getFallback(nullable_htmlentities($row["credential_description"]));
-            vaultGate('client pdf', max(1, mysqli_num_rows($sql_credentials)), true);
             $credential_username = nullable_htmlentities(decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username'));
             $credential_password = nullable_htmlentities(decryptCredentialEntry($row['credential_password'], $row['credential_id'] ?? null, 'password'));
             $credential_totp_secret = getFallback(nullable_htmlentities(decryptOtpSecret((string) ($row['credential_otp_secret'] ?? ''), $row['credential_id'] ?? null)));   // MSP-DS-127: the stored value is ciphertext
