@@ -26,3 +26,10 @@ git config --system --add safe.directory <app>
 ```
 
 Update App refuses to start (with the check's explanation) when `exec`, git, the repository, `.git` writability or the app files fail, instead of running half a pull.
+
+## Client IP behind a proxy (config.php)
+
+`CONST_GET_IP_METHOD` selects where the client address comes from. A proxy header is believed only when the immediate peer (`REMOTE_ADDR`) is a proxy you trust, otherwise any client could forge its address and dodge the login lockouts and rate limits.
+
+- `HTTP_X_FORWARDED_FOR`: honoured only with `CONST_TRUSTED_PROXIES` (array or comma list of addresses/CIDRs); read from the right, skipping trusted hops.
+- `HTTP_CF_CONNECTING_IP`: honoured when the peer is in `CONST_TRUSTED_PROXIES` or in `CONST_CLOUDFLARE_RANGES` (Cloudflare's published ranges, array or comma list). When neither is defined, the header is honoured only if the peer is a private or loopback address (a local reverse proxy such as nginx or Zoraxy in front of PHP). A direct connection from the internet, or Cloudflare reaching the origin directly with no ranges configured, gets the peer address, so define `CONST_CLOUDFLARE_RANGES` for a Cloudflare-to-origin setup.
