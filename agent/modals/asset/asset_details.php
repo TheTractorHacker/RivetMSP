@@ -530,7 +530,7 @@ ob_start();
                         } else {
                             $credential_uri_display = "$credential_uri";
                         }
-                        vaultGate('asset modal');
+                        if (!vaultGateRow('asset modal')) { echo vaultRowDeniedHtml($credential_name, 6); continue; }   // R9: mask the row, never die mid-table
                         $credential_username = nullable_htmlentities(decryptCredentialEntry($row['credential_username'], ($row['credentials_credential_id'] ?? $row['credential_id'] ?? null), 'username'));
                         if (empty($credential_username)) {
                             $credential_username_display = "-";

@@ -628,7 +628,7 @@ if (isset($_GET['contact_id'])) {
                                     $credential_uri_display = "$credential_uri<button class='btn btn-sm clipboardjs' data-clipboard-text='$credential_uri'><i class='far fa-copy text-secondary'></i></button><a href='" . sanitize_url($row['credential_uri']) . "' target='_blank'><i class='fa fa-external-link-alt text-secondary'></i></a>";
                                 }
                                 $credential_uri_2 = nullable_htmlentities($row['credential_uri_2']);
-                                vaultGate('contact page');
+                                if (!vaultGateRow('contact page')) { echo vaultRowDeniedHtml($credential_name, 6); continue; }   // R9: mask the row, never die mid-table
                                 $credential_username = nullable_htmlentities(decryptCredentialEntry($row['credential_username'], ($row['credentials_credential_id'] ?? $row['credential_id'] ?? null), 'username'));
                                 if (empty($credential_username)) {
                                     $credential_username_display = "-";

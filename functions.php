@@ -3882,6 +3882,25 @@ function vaultGate(string $path, int $values = 1, bool $bulk = false, bool $coun
     vaultDisclosureRequire($mysqli, $path, $values, $bulk, $countsAsReveal);
 }
 
+/**
+ * MSP-DS-26 (review R9): the soft variant of vaultGate() for LIST pages that decrypt one credential per row while already printing HTML.
+ * Still counted per credential against the reveal limit, but returns false (the caller renders that row masked) instead of denyAccess()+exit
+ * in the middle of a table. See vaultDisclosureRow() in includes/vault_reveal.php.
+ */
+function vaultGateRow(string $path, int $values = 1): bool {
+    global $mysqli;
+    require_once __DIR__ . '/includes/security_policy.php';
+    require_once __DIR__ . '/includes/vault_reveal.php';
+
+    return vaultDisclosureRow($mysqli, $path, $values);
+}
+
+/** The masked table row printed for a credential vaultGateRow() refused. $escapedName must already be HTML-escaped. */
+function vaultRowDeniedHtml(string $escapedName, int $colspan = 4): string {
+    return '<tr><td><i class="fa fa-fw fa-key text-secondary me-2"></i>' . $escapedName . '</td><td colspan="' . max(1, $colspan - 1)
+        . '" class="text-muted small"><i class="fas fa-lock me-1"></i>Hidden: you reached the credential reveal limit. Wait a few minutes and reload, or open the credential from the Credentials page.</td></tr>';
+}
+
 function enforceClientAccess($client_id = null) {
     global $mysqli, $session_user_id, $session_is_admin, $session_name;
 

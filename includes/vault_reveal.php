@@ -136,6 +136,26 @@ if (!function_exists('vaultReveal')) {
     }
 
     /**
+     * MSP-DS-26 (review R9): vaultDisclosureCheck() for ONE row of a list page that is already printing HTML. Same counting (one reveal per credential,
+     * one log line each), but a refusal returns false so the caller renders that row masked, instead of denyAccess()+exit mid-table. Only the FIRST
+     * refusal in a request logs "Reveal Limit" and notifies the administrators; later rows are refused without more log lines or notifications.
+     * $GLOBALS['vault_row_refused'] holds the per-request state.
+     */
+    function vaultDisclosureRow(mysqli $mysqli, string $path, int $values = 1): bool
+    {
+        if (!empty($GLOBALS['vault_row_refused'])) {
+            return false;
+        }
+        if (vaultDisclosureCheck($mysqli, $path, $values, false, true) !== null) {
+            $GLOBALS['vault_row_refused'] = true;
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Reveal or copy one field of one credential.
      *
      * @param array $session  the session array ($_SESSION); vault_stepup_at / vault_stepup_fail* are read and written here
