@@ -98,7 +98,7 @@ function comet_api(string $endpoint, array $extra = []): ?array {
         $auth = ['Username' => $config_comet_admin_user, 'AuthType' => 'SessionKey', 'SessionKey' => $session_key];
     } elseif (!empty($config_comet_totp_secret)) {
         // Authenticate with password + TOTP code, then get and cache a session key
-        require_once $_SERVER['DOCUMENT_ROOT'] . '/plugins/totp/totp.php';
+        require_once dirname(__DIR__) . '/plugins/totp/totp.php';
         $code = TokenAuth6238::getTokenCode($config_comet_totp_secret);
         $auth = ['Username' => $config_comet_admin_user, 'AuthType' => 'PasswordTOTP',
                  'Password' => $config_comet_admin_pass, 'TOTP' => $code];
@@ -150,7 +150,7 @@ function comet_start_session(): bool {
     }
 
     if (!empty($config_comet_totp_secret)) {
-        require_once $_SERVER['DOCUMENT_ROOT'] . '/plugins/totp/totp.php';
+        require_once dirname(__DIR__) . '/plugins/totp/totp.php';
         $code = TokenAuth6238::getTokenCode($config_comet_totp_secret);
         $auth = ['Username' => $config_comet_admin_user, 'AuthType' => 'PasswordTOTP',
                  'Password' => $config_comet_admin_pass, 'TOTP' => $code];

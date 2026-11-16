@@ -1419,12 +1419,12 @@ try {
 // it actually reaching us. Cron also refreshes the session key and polls
 // recent jobs as a fallback, so a failed backup always raises an alert even
 // if the webhook was never set up or didn't fire.
-$config_comet_enabled    = intval($row['config_comet_enabled'] ?? 0);
-$config_comet_totp_secret = decryptSetting($row['config_comet_totp_secret'] ?? '');
-$config_comet_server_url  = $row['config_comet_server_url'] ?? '';
-$config_comet_verify_ssl  = intval($row['config_comet_verify_ssl'] ?? 1);
-$config_comet_admin_user  = $row['config_comet_admin_user'] ?? '';
-$config_comet_admin_pass  = decryptSetting($row['config_comet_admin_pass'] ?? '');
+$config_comet_enabled    = intval($settings_row['config_comet_enabled'] ?? 0);
+$config_comet_totp_secret = decryptSetting($settings_row['config_comet_totp_secret'] ?? '');
+$config_comet_server_url  = $settings_row['config_comet_server_url'] ?? '';
+$config_comet_verify_ssl  = intval($settings_row['config_comet_verify_ssl'] ?? 1);
+$config_comet_admin_user  = $settings_row['config_comet_admin_user'] ?? '';
+$config_comet_admin_pass  = decryptSetting($settings_row['config_comet_admin_pass'] ?? '');
 
 if ($config_comet_enabled && !empty($config_comet_server_url)) {
     require_once dirname(__DIR__) . '/includes/comet.php';
@@ -1620,7 +1620,7 @@ if (!empty($automation_rules)) {
 
                 $summaries = [];
                 foreach (automationGetActions($rule) as $action) {
-                    if ($already_ran && in_array($action['action'] ?? '', ['add_note', 'ai_triage'], true)) {
+                    if ($already_ran && in_array($action['action'] ?? '', ['add_note', 'ai_triage', 'ai_sentiment', 'notify_assignee', 'escalate', 'dispatch_assign'], true)) {
                         continue;
                     }
                     $summary = automationExecuteAction($mysqli, $action, $context, $rule);
