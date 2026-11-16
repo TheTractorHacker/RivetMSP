@@ -1785,8 +1785,13 @@ if ($config_module_enable_rmm && !empty($config_rmm_auto_ticket_severities)) {
 
         $auto_ticket_count = 0;
         while ($alert = mysqli_fetch_assoc($sql_new_alerts)) {
-            createTicketFromRmmAlert($mysqli, $alert, 0, 'RMM Automation');
-            $auto_ticket_count++;
+            // MSP-DS-25: one alert that cannot be ticketed must not abort the rest of the cron run
+            try {
+                createTicketFromRmmAlert($mysqli, $alert, 0, 'RMM Automation');
+                $auto_ticket_count++;
+            } catch (\Throwable $e) {
+                logApp("Cron", "error", "RMM auto-ticketing failed for alert " . intval($alert['id']) . ": " . $e->getMessage());
+            }
         }
 
         if ($auto_ticket_count > 0) {
