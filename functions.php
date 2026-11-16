@@ -5357,23 +5357,94 @@ function sanitize_filename($filename, $strict = false) {
     return $filename;
 }
 
-// MSP-DS-151: TCPDF fetches every http(s) <img src> and reads local paths while rendering. Document HTML that a portal
-// contact (or anyone else) wrote may only embed inline data: images or images this app stores under /uploads.
+// MSP-DS-151 (review R8/R28): TCPDF fetches every http(s) <img src>, <link> stylesheet and url() it finds, and reads local paths. HTML that a
+// portal contact (or anyone else) wrote is therefore parsed and REBUILT from a strict tag/attribute allow-list: TCPDF only ever sees what this
+// function wrote (one validated src per image, no <link>/<style>/<svg>/<object>, no url() in style, hrefs limited to a few schemes).
 function rivetPdfSafeHtml(string $html): string {
-    return preg_replace_callback('/<img\b[^>]*>/i', function ($m) {
-        if (!preg_match('/\bsrc\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $m[0], $s)) {
+    if (trim($html) === '') {
+        return '';
+    }
+    static $tags = ['p' => 1, 'br' => 1, 'b' => 1, 'strong' => 1, 'i' => 1, 'em' => 1, 'u' => 1, 's' => 1, 'sub' => 1, 'sup' => 1, 'small' => 1, 'span' => 1, 'div' => 1,
+        'h1' => 1, 'h2' => 1, 'h3' => 1, 'h4' => 1, 'h5' => 1, 'h6' => 1, 'ul' => 1, 'ol' => 1, 'li' => 1, 'blockquote' => 1, 'pre' => 1, 'code' => 1, 'hr' => 1,
+        'table' => 1, 'thead' => 1, 'tbody' => 1, 'tfoot' => 1, 'tr' => 1, 'td' => 1, 'th' => 1, 'a' => 1, 'img' => 1, 'font' => 1];
+    static $drop = ['script' => 1, 'style' => 1, 'link' => 1, 'svg' => 1, 'object' => 1, 'embed' => 1, 'iframe' => 1, 'frame' => 1, 'frameset' => 1, 'form' => 1,
+        'input' => 1, 'button' => 1, 'textarea' => 1, 'select' => 1, 'head' => 1, 'title' => 1, 'meta' => 1, 'base' => 1, 'math' => 1, 'audio' => 1, 'video' => 1,
+        'source' => 1, 'track' => 1, 'canvas' => 1, 'template' => 1, 'noscript' => 1, 'applet' => 1];
+    static $attrs = ['colspan' => 1, 'rowspan' => 1, 'width' => 1, 'height' => 1, 'align' => 1, 'valign' => 1, 'border' => 1, 'cellpadding' => 1, 'cellspacing' => 1,
+        'color' => 1, 'size' => 1, 'face' => 1, 'alt' => 1, 'title' => 1];
+    $safeStyle = static function (string $style): string {
+        $style = trim($style);
+        if ($style === '' || preg_match('/url\s*\(|@import|expression\s*\(|\\\\|javascript:|behaviou?r\s*:|-moz-binding/i', $style)) {
             return '';
         }
-        $src = trim(html_entity_decode($s[1] !== '' ? $s[1] : (($s[2] ?? '') !== '' ? $s[2] : ($s[3] ?? '')), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-        $src = preg_replace('/[\x00-\x20]+/', '', $src);
-        if (preg_match('#^data:image/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$#i', $src)) {
-            return $m[0];
+        return $style;
+    };
+    $clean = static function (DOMNode $parent, DOMDocument $dom) use (&$clean, $tags, $drop, $attrs, $safeStyle): void {
+        foreach (iterator_to_array($parent->childNodes) as $node) {
+            if ($node->nodeType === XML_COMMENT_NODE || $node->nodeType === XML_PI_NODE || $node->nodeType === XML_CDATA_SECTION_NODE) {
+                $parent->removeChild($node);
+                continue;
+            }
+            if (!($node instanceof DOMElement)) {
+                continue;
+            }
+            $name = strtolower($node->nodeName);
+            if (isset($drop[$name])) {
+                $parent->removeChild($node);
+                continue;
+            }
+            $clean($node, $dom);
+            if (!isset($tags[$name])) {
+                // unknown tag: keep its (already cleaned) children, lose the tag
+                while ($node->firstChild) {
+                    $parent->insertBefore($node->firstChild, $node);
+                }
+                $parent->removeChild($node);
+                continue;
+            }
+            $keep = [];
+            foreach (iterator_to_array($node->attributes) as $at) {
+                $an = strtolower($at->nodeName);
+                $av = $at->nodeValue;
+                if ($an === 'style') {
+                    $v = $safeStyle($av);
+                    if ($v !== '') { $keep['style'] = $v; }
+                } elseif ($an === 'src' && $name === 'img' && !isset($keep['src'])) {
+                    $src = preg_replace('/[\x00-\x20]+/', '', trim($av));
+                    if (preg_match('#^data:image/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$#i', $src)
+                        || (preg_match('#^/?uploads/[A-Za-z0-9_./-]+$#', $src) && strpos($src, '..') === false)) {
+                        $keep['src'] = $src;
+                    }
+                } elseif ($an === 'href' && $name === 'a') {
+                    $h = preg_replace('/[\x00-\x20]+/', '', trim($av));
+                    if (preg_match('#^(https?://|mailto:|tel:|\#)#i', $h)) { $keep['href'] = $h; }
+                } elseif (isset($attrs[$an]) && !preg_match('/url\s*\(|javascript:|[<>]/i', $av)) {
+                    $keep[$an] = $av;
+                }
+            }
+            if ($name === 'img' && !isset($keep['src'])) {
+                $parent->removeChild($node);
+                continue;
+            }
+            foreach (iterator_to_array($node->attributes) as $at) { $node->removeAttributeNode($at); }
+            foreach ($keep as $k => $v) { $node->setAttribute($k, $v); }
         }
-        if (preg_match('#^/?uploads/[A-Za-z0-9_./-]+$#', $src) && strpos($src, '..') === false) {
-            return $m[0];
-        }
+    };
+    $prev = libxml_use_internal_errors(true);
+    $dom = new DOMDocument('1.0', 'UTF-8');
+    $dom->loadHTML('<?xml encoding="utf-8" ?><div id="rv-root">' . $html . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+    libxml_clear_errors();
+    libxml_use_internal_errors($prev);
+    $root = $dom->getElementById('rv-root') ?? $dom->documentElement;
+    if (!$root) {
         return '';
-    }, $html) ?? '';
+    }
+    $clean($root, $dom);
+    $out = '';
+    foreach ($root->childNodes as $child) {
+        $out .= $dom->saveHTML($child);
+    }
+    return $out;
 }
 
 function saveBase64Images(string $html, string $baseFsPath, string $baseWebPath, int $ownerId): string {
