@@ -7,6 +7,113 @@
 defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 
 /**
+ * MSP-DS-38: the uploaded db.sql is never executed as-is. An INSERT line is accepted only when, after the
+ * table name, it is "(`col`, ...) VALUES (literal, ...), (...);" where every literal is a quoted string, NULL,
+ * a number, a hex literal or _binary 'string'. Anything else (INSERT ... SELECT, functions, sub-queries) is dropped.
+ */
+function credentialRestoreSafeInsertTail(string $tail): bool {
+    $len = strlen($tail);
+    $i = 0;
+    if (preg_match('/\G\((?:`[A-Za-z0-9_]+`(?:, ?)?)+\) /', $tail, $m, 0, $i)) {
+        $i += strlen($m[0]);
+    }
+    if (substr($tail, $i, 7) !== 'VALUES ') {
+        return false;
+    }
+    $i += 7;
+    while (true) {
+        if (($tail[$i] ?? '') !== '(') {
+            return false;
+        }
+        $i++;
+        while (true) {
+            // one literal
+            $c = $tail[$i] ?? '';
+            if ($c === "'") {
+                $i++;
+                while (true) {
+                    if ($i >= $len) {
+                        return false;
+                    }
+                    $c = $tail[$i];
+                    if ($c === '\\') {
+                        $i += 2;
+                        continue;
+                    }
+                    if ($c === "'") {
+                        if (($tail[$i + 1] ?? '') === "'") {
+                            $i += 2;
+                            continue;
+                        }
+                        $i++;
+                        break;
+                    }
+                    $i++;
+                }
+            } elseif (preg_match('/\G(?:NULL|0x[0-9A-Fa-f]+|-?[0-9]+(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)/', $tail, $m, 0, $i)) {
+                $i += strlen($m[0]);
+            } elseif (substr($tail, $i, 8) === "_binary " && ($tail[$i + 8] ?? '') === "'") {
+                $i += 8;
+                continue;
+            } else {
+                return false;
+            }
+            $c = $tail[$i] ?? '';
+            if ($c === ',') {
+                $i++;
+                if (($tail[$i] ?? '') === ' ') {
+                    $i++;
+                }
+                continue;
+            }
+            if ($c === ')') {
+                $i++;
+                break;
+            }
+            return false;
+        }
+        $c = $tail[$i] ?? '';
+        if ($c === ',') {
+            $i++;
+            if (($tail[$i] ?? '') === ' ') {
+                $i++;
+            }
+            continue;
+        }
+        return substr($tail, $i) === ';';
+    }
+}
+
+/**
+ * MSP-DS-38: a CREATE TABLE body line is a column/key definition: no statement text outside quotes, balanced
+ * parentheses, no SELECT/UNION/INTO/FROM, and the closing line is only table options.
+ */
+function credentialRestoreSafeCreateLine(string $line, bool $last): bool {
+    if ($last) {
+        return (bool) preg_match('/^\) ENGINE=\w+(?: (?:AUTO_INCREMENT|DEFAULT CHARSET|CHARSET|COLLATE|ROW_FORMAT)=\w+| DEFAULT CHARSET=\w+)*;?$/', $line);
+    }
+    $stripped = preg_replace("/'(?:[^'\\\\]|\\\\.|'')*'/s", "''", $line);
+    if ($stripped === null || !preg_match('/^[\w\s`(),.\-:=\']*$/', $stripped)) {
+        return false;
+    }
+    if (preg_match('/\b(SELECT|UNION|INTO|FROM|INSERT|DELETE|DROP|GRANT)\b/i', $stripped)) {
+        return false;
+    }
+    $depth = 0;
+    foreach (str_split($stripped) as $ch) {
+        if ($ch === '(') {
+            $depth++;
+        } elseif ($ch === ')') {
+            $depth--;
+            if ($depth < 0) {
+                return false;
+            }
+        }
+    }
+    return $depth === 0;
+}
+
+/**
  * Pull the CREATE TABLE and INSERT INTO statements for $table out of a
  * mysqldump-style db.sql, split into lines.
  *
@@ -34,7 +141,8 @@ function credentialRestoreExtractTable(array $lines, string $table): array {
             continue;
         }
 
-        if (preg_match('/^INSERT INTO `' . preg_quote($table, '/') . '` /', $line)) {
+        $prefix = 'INSERT INTO `' . $table . '` ';
+        if (strncmp($line, $prefix, strlen($prefix)) === 0 && credentialRestoreSafeInsertTail(substr($line, strlen($prefix)))) {
             $inserts[] = $line;
         }
     }
@@ -48,6 +156,14 @@ function credentialRestoreExtractTable(array $lines, string $table): array {
  * in the staging area.
  */
 function credentialRestoreBuildStagingCreate(array $createLines, string $oldTable, string $stagingTable): string {
+    if (count($createLines) < 3 || $createLines[0] !== 'CREATE TABLE `' . $oldTable . '` (') {
+        return '';
+    }
+    foreach (array_slice($createLines, 1) as $idx => $l) {
+        if (!credentialRestoreSafeCreateLine($l, $idx === count($createLines) - 2)) {
+            return '';
+        }
+    }
     $first = preg_replace('/^CREATE TABLE `' . preg_quote($oldTable, '/') . '`/', "CREATE TABLE `$stagingTable`", $createLines[0], 1);
     $last = $createLines[count($createLines) - 1];
     $body = array_slice($createLines, 1, -1);
@@ -116,6 +232,11 @@ if (isset($_POST['upload_backup'])) {
         }
 
         $createSql = credentialRestoreBuildStagingCreate($create, $table, $staging);
+
+        if ($createSql === '') {
+            flash_alert("The `$table` table definition in the uploaded db.sql contains unexpected SQL and was refused", "error");
+            redirect();
+        }
 
         mysqli_query($mysqli, "DROP TABLE IF EXISTS `$staging`");
 
