@@ -324,11 +324,57 @@ if (!function_exists('secSessionLimits')) {
     }
 
     /** Start the portal clocks and forget any password fingerprint left by an earlier sign-in in this browser (MSP-DS-145, review R30/R31). */
-    function secPortalSessionBegin(array &$session, ?int $now = null): void
+    function secPortalSessionBegin(array &$session, ?int $now = null, ?mysqli $mysqli = null, int $userId = 0): void
     {
         $now ??= time();
         $session['portal_started_at']    = $now;
         $session['portal_last_activity'] = $now;
-        unset($session['portal_pw_fp']);
+        unset($session['portal_pw_fp'], $session['portal_sv']);
+        // MSP-DS-145: remember the account's session version (users.user_session_version) this sign-in belongs to; a later bump revokes it.
+        if ($mysqli !== null && $userId > 0) {
+            $session['portal_sv'] = secPortalSessionVersion($mysqli, $userId);
+        }
+    }
+
+    /** The account's current portal session version (0 when the column does not exist yet or the user is unknown). */
+    function secPortalSessionVersion(mysqli $mysqli, int $userId): int
+    {
+        try {
+            $r = mysqli_query($mysqli, "SELECT user_session_version FROM users WHERE user_id = $userId LIMIT 1");
+
+            return $r && ($x = mysqli_fetch_row($r)) ? (int) $x[0] : 0;
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * MSP-DS-145: sign every open portal session of this account out (password change or reset, an administrator setting a new password,
+     * login method change): their stored version no longer matches. Returns the new version. Silent when the column does not exist yet.
+     */
+    function secPortalSessionsRevoke(mysqli $mysqli, int $userId): int
+    {
+        try {
+            mysqli_query($mysqli, "UPDATE users SET user_session_version = user_session_version + 1 WHERE user_id = $userId AND user_type = 2");
+        } catch (\Throwable $e) {
+            return 0;
+        }
+
+        return secPortalSessionVersion($mysqli, $userId);
+    }
+
+    /**
+     * Is this portal session still valid for the account's current version? A session that has no version yet (it began before the column
+     * existed) adopts the current one; a stored version that differs from the account's means "revoked".
+     */
+    function secPortalSessionVersionOk(array &$session, int $currentVersion): bool
+    {
+        if (!isset($session['portal_sv'])) {
+            $session['portal_sv'] = $currentVersion;
+
+            return true;
+        }
+
+        return (int) $session['portal_sv'] === $currentVersion;
     }
 }

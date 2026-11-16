@@ -32,7 +32,7 @@ $ok('check_login treats SSE/_bg requests as background', str_contains($cl, 'text
 foreach (['login.php', 'client/login_microsoft.php', 'client/login_oidc.php'] as $f) {
     $src = file_get_contents("$root/$f");
     $i = strpos($src, "\$_SESSION['client_logged_in'] = true;"); $r = strrpos(substr($src, 0, $i), 'session_regenerate_id(true)');
-    $b = strpos($src, 'secPortalSessionBegin($_SESSION)');
+    $b = strpos($src, 'secPortalSessionBegin($_SESSION, null');
     $ok("$f: a portal sign-in begins the portal session after session_regenerate_id", $r !== false && $b !== false && $b > $r && str_contains($src, 'security_sessions.php'));
 }
 exit($fail ? 1 : 0);

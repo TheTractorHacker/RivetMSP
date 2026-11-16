@@ -108,7 +108,12 @@ if (isset($_POST['edit_contact'])) {
 
     // Update Existing User
     if ($contact_user_id > 0) {
+        $contact_before = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_email, user_auth_method FROM users WHERE user_id = $contact_user_id LIMIT 1"));
         mysqli_query($mysqli, "UPDATE users SET user_name = '$name', user_email = '$email', user_auth_method = '$auth_method' WHERE user_id = $contact_user_id");
+        // MSP-DS-145: a changed sign-in email, login method or password ends the contact's open portal sessions
+        if (!$contact_before || strcasecmp((string) $contact_before['user_email'], (string) $email) !== 0 || (string) $contact_before['user_auth_method'] !== (string) $auth_method || !empty($_POST['contact_password'])) {
+            secPortalSessionsRevoke($mysqli, $contact_user_id);
+        }
 
         // Set password
         if ($_POST['contact_password']) {

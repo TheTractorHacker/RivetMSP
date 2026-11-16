@@ -6868,6 +6868,7 @@ CREATE TABLE `users` (
   `user_token` text DEFAULT NULL,
   `user_password_reset_token` varchar(200) DEFAULT NULL,
   `user_password_reset_token_expire` datetime DEFAULT NULL,
+  `user_session_version` int(11) NOT NULL DEFAULT 0,
   `user_avatar` varchar(200) DEFAULT NULL,
   `user_specific_encryption_ciphertext` text DEFAULT NULL,
   `user_php_session` varchar(255) DEFAULT NULL,

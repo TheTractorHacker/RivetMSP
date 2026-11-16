@@ -8704,6 +8704,9 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         // MSP-DS-114: the OAuth consent (mcp_oauth_grants.grant_id) a queued MCP proposal was made under; approval checks THAT grant is still live. 0 = queued before this column existed.
         $ds_add_column('mcp_pending_actions', 'grant_id', "int(11) NOT NULL DEFAULT 0 AFTER `oauth_client_id`");
 
+        // MSP-DS-145: portal session revocation: users.user_session_version is stored in the portal session at sign-in and bumped on a password change/reset/set-by-staff, which ends every older portal session.
+        $ds_add_column('users', 'user_session_version', "int(11) NOT NULL DEFAULT 0 AFTER `user_password_reset_token_expire`");
+
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.141'");
     }
 

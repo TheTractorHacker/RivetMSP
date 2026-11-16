@@ -50,6 +50,7 @@ $sql = mysqli_query($mysqli, "SELECT * FROM users WHERE users.user_id = $session
 
 $row = mysqli_fetch_assoc($sql);
 
+$portal_session_version = (int) ($row['user_session_version'] ?? 0);   // MSP-DS-145 (0 before the column exists)
 $session_avatar = $row['user_avatar'];
 $session_user_type = intval($row['user_type']);
 $session_user_status = intval($row['user_status']);
@@ -87,7 +88,9 @@ if (!isset($_SESSION['portal_pw_fp'])) {
 if (!$portal_gate
     || intval($portal_gate['config_client_portal_enable']) !== 1
     || $portal_gate['client_archived_at'] !== null
-    || !hash_equals((string) $_SESSION['portal_pw_fp'], $portal_pw_fingerprint)) {
+    || !hash_equals((string) $_SESSION['portal_pw_fp'], $portal_pw_fingerprint)
+    // MSP-DS-145: revocation by version: a password change/reset/set by an administrator bumps users.user_session_version and every older session ends
+    || !secPortalSessionVersionOk($_SESSION, $portal_session_version)) {
     session_unset();
     session_destroy();
     redirect("/login.php");

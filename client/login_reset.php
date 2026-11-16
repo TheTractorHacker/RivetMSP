@@ -9,6 +9,7 @@ header("Content-Security-Policy: default-src 'self'");
 require_once '../config.php';
 require_once '../functions.php';
 require_once '../includes/load_global_settings.php';
+require_once '../includes/security_sessions.php';   // MSP-DS-145: secPortalSessionsRevoke()
 
 
 if (empty($config_smtp_host)) {
@@ -151,6 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
             // Set password, invalidate token, logging
             $password = password_hash($_POST['new_password'], PASSWORD_DEFAULT);
             mysqli_query($mysqli, "UPDATE users SET user_password = '$password', user_password_reset_token = NULL WHERE user_id = $user_id LIMIT 1");
+            secPortalSessionsRevoke($mysqli, $user_id);   // MSP-DS-145: a reset signs every open portal session of the account out
             mysqli_query($mysqli, "INSERT INTO logs SET log_type = 'Contact User', log_action = 'Modify', log_description = 'Reset portal password for $email.', log_ip = '$ip', log_user_agent = '$user_agent', log_client_id = $client, log_user_id = $user_id");
 
             // Send confirmation email: Admin > Settings > Email templates, "Client portal password reset confirmation" (null when switched off)

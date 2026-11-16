@@ -521,6 +521,7 @@ if (isset($_POST['edit_profile'])) {
         }
         $password_hash = password_hash($new_password, PASSWORD_DEFAULT);
         mysqli_query($mysqli, "UPDATE users SET user_password = '$password_hash' WHERE user_id = $session_user_id");
+        $_SESSION['portal_sv'] = secPortalSessionsRevoke($mysqli, (int) $session_user_id);   // MSP-DS-145: every other portal session of this account ends, this browser stays
         $_SESSION['portal_pw_fp'] = hash('sha256', (string) mysqli_fetch_row(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $session_user_id"))[0]);   // MSP-DS-145: this browser stays signed in, the others do not
 
         // Logging
