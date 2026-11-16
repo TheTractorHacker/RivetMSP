@@ -23,7 +23,8 @@ function structuredDocSaveValues(\mysqli $mysqli, int $docId, int $typeId, array
             if ($raw === null || $raw === '') {
                 continue;
             }
-            $enc = encryptSetting(sanitizeInput((string) $raw));
+            // MSP-DS-63: the secret itself is encrypted as typed - no tag stripping, trimming or SQL escaping inside the ciphertext's plaintext
+            $enc = encryptSetting((string) $raw);
             mysqli_query($mysqli, "INSERT INTO structured_document_values SET doc_id = $docId, field_id = $field_id, value_enc = '" . mysqli_real_escape_string($mysqli, $enc) . "', value_text = NULL, updated_by = $sessionUserId
                 ON DUPLICATE KEY UPDATE value_enc = '" . mysqli_real_escape_string($mysqli, $enc) . "', value_text = NULL, updated_by = $sessionUserId, updated_at = NOW()");
             continue;
@@ -32,7 +33,8 @@ function structuredDocSaveValues(\mysqli $mysqli, int $docId, int $typeId, array
         if ($kind === 'checkbox') {
             $value = !empty($raw) ? '1' : '0';
         } else {
-            $value = sanitizeInput((string) ($raw ?? ''));
+            // MSP-DS-63: escaped exactly once, below (sanitizeInput() already escapes, which doubled every quote and backslash)
+            $value = trim(strip_tags((string) ($raw ?? '')));
         }
         $value_sql = "'" . mysqli_real_escape_string($mysqli, $value) . "'";
         mysqli_query($mysqli, "INSERT INTO structured_document_values SET doc_id = $docId, field_id = $field_id, value_text = $value_sql, updated_by = $sessionUserId
