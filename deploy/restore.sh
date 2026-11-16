@@ -348,7 +348,8 @@ load_settings_key_file() {
     [[ "${key}" =~ ^[0-9a-fA-F]{32,128}$ ]] || die "${path} does not contain a hex settings-encryption key."
     if [[ -n "${want_fp}" ]]; then
         local got_fp
-        got_fp="$(php -r 'echo substr(hash("sha256", "rivetit-settings-key-fingerprint|v1|" . $argv[1]), 0, 16);' -- "${key}")"
+        # MSP-DS-95: the key goes in the environment, not on argv
+        got_fp="$(RIVETMSP_SK="${key}" php -r 'echo substr(hash("sha256", "rivetit-settings-key-fingerprint|v1|" . getenv("RIVETMSP_SK")), 0, 16);')"
         [[ "${got_fp}" == "${want_fp}" ]] || die "The key in ${path} (fingerprint ${got_fp}) does not match this backup (fingerprint ${want_fp}). Refusing to apply it."
     fi
     MANIFEST_SETTINGS_ENC_KEY="${key}"
@@ -449,9 +450,10 @@ apply_settings_enc_key() {
     # (run_app_php), writing a temp file in the same directory and rename()ing it over config.php (a rename replaces the name, it never
     # follows it). No root chown/chmod of a path is left.
     if [[ -L "${APP_DIR}/config.php" ]]; then die "${APP_DIR}/config.php is a symbolic link; refusing to rewrite it as root."; fi
-    if ! run_app_php "${APP_DIR}" -r '
+    # MSP-DS-95: the new key is passed in the environment (runuser keeps it), not on argv
+    if ! RIVETMSP_SK="${MANIFEST_SETTINGS_ENC_KEY}" run_app_php "${APP_DIR}" -r '
         $path = $argv[1];
-        $key  = $argv[2];
+        $key  = (string) getenv("RIVETMSP_SK");
         $lines = file($path, FILE_IGNORE_NEW_LINES);
         if ($lines === false) {
             exit(1);
@@ -473,7 +475,7 @@ apply_settings_enc_key() {
             if ($tmp !== false) { @unlink($tmp); }
             exit(1);
         }
-    ' -- "${APP_DIR}/config.php" "${MANIFEST_SETTINGS_ENC_KEY}"; then
+    ' -- "${APP_DIR}/config.php"; then
         die "Failed to update \$config_settings_enc_key in ${APP_DIR}/config.php. The database and uploads/ have already been restored — fix config.php by hand (see backup-manifest.json's settings_enc_key inside the extracted archive, already shredded now — re-run with the same --backup to recover it again if needed)."
     fi
     success "config_settings_enc_key updated."

@@ -793,6 +793,9 @@ verify_setup_completed() {
 
 run_fresh_setup() {
     if [[ -f "${APP_DIR}/config.php" ]]; then
+        # MSP-DS-172: an earlier run that died midway leaves a config.php without the closing "$config_enable_setup = 0;" line, and the public
+        # /setup wizard stays open on it. Never treat that as "already set up".
+        verify_setup_completed
         info "config.php already exists — skipping application setup (already set up)."
         return 0
     fi
@@ -820,7 +823,8 @@ run_fresh_setup() {
     )
     [[ "${NON_INTERACTIVE}" -eq 1 ]] && setup_args+=(--non-interactive)
 
-    ( cd "${APP_DIR}/scripts" && sudo -u www-data env RIVETMSP_SKIP_KEYFILE=1 ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${ADMIN_PASSWORD}" php setup_cli.php "${setup_args[@]}" < /dev/null )
+    # MSP-DS-95: the passwords travel in the environment (sudo --preserve-env), never on the argv of sudo/env where /proc/PID/cmdline shows them
+    ( cd "${APP_DIR}/scripts" && export ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${ADMIN_PASSWORD}" && sudo --preserve-env=ITFLOW_DB_PASSWORD,ITFLOW_ADMIN_PASSWORD -u www-data env RIVETMSP_SKIP_KEYFILE=1 php setup_cli.php "${setup_args[@]}" < /dev/null )
     verify_setup_completed
     success "Application setup complete."
     create_key_file
@@ -880,7 +884,8 @@ run_restore_setup() {
         --non-interactive
     )
 
-    ( cd "${APP_DIR}/scripts" && sudo -u www-data env RIVETMSP_SKIP_KEYFILE=1 ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${placeholder_password}" php setup_cli.php "${setup_args[@]}" < /dev/null )
+    # MSP-DS-95: environment, not argv
+    ( cd "${APP_DIR}/scripts" && export ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${placeholder_password}" && sudo --preserve-env=ITFLOW_DB_PASSWORD,ITFLOW_ADMIN_PASSWORD -u www-data env RIVETMSP_SKIP_KEYFILE=1 php setup_cli.php "${setup_args[@]}" < /dev/null )
     verify_setup_completed
     success "Placeholder setup complete."
 

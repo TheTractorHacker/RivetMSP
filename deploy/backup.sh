@@ -192,14 +192,16 @@ write_settings_key_file() {
     chmod 600 "${path}"
     # backup.sh itself always runs as root (require_root); the guard only lets tests source and exercise this function.
     if [[ "${EUID}" -eq 0 ]]; then chown root:root "${path}"; fi
-    php -r '
-        $fp = substr(hash("sha256", "rivetit-settings-key-fingerprint|v1|" . $argv[1]), 0, 16);
-        file_put_contents($argv[3],
-            "# RivetMSP settings-encryption key for " . $argv[2] . "\n" .
+    # MSP-DS-95: the key travels in the environment of this one command, never on argv (any local user can read /proc/PID/cmdline).
+    RIVETMSP_SK="${SETTINGS_ENC_KEY}" php -r '
+        $key = (string) getenv("RIVETMSP_SK");
+        $fp = substr(hash("sha256", "rivetit-settings-key-fingerprint|v1|" . $key), 0, 16);
+        file_put_contents($argv[2],
+            "# RivetMSP settings-encryption key for " . $argv[1] . "\n" .
             "# fingerprint: " . $fp . "\n" .
             "# Keep this file OFF the server, apart from the archive and from the backup passphrase.\n" .
-            $argv[1] . "\n");
-    ' -- "${SETTINGS_ENC_KEY}" "$(basename "${path}" .settings-key).tar.gz.enc" "${path}"
+            $key . "\n");
+    ' -- "$(basename "${path}" .settings-key).tar.gz.enc" "${path}"
     success "Settings-encryption key written to ${path} (0600). Move it off this server; it is deliberately NOT inside the archive."
 }
 
@@ -296,12 +298,14 @@ EOF
     chmod 600 "${manifest_file}"
     register_tmpfile "${manifest_file}"
     # MSP-DS-34: this snippet loads the app's vendor/autoload.php, so it runs as the web user and only prints; root writes the file.
-    run_app_php "${APP_DIR}" -r '
+    # MSP-DS-95: the settings key is read from the environment (runuser keeps it); argv[3] is an unused placeholder, so it is never on argv.
+    RIVETMSP_SK="${SETTINGS_ENC_KEY}" run_app_php "${APP_DIR}" -r '
+        $key = (string) getenv("RIVETMSP_SK");
         $data = [
             "schema_version"               => 2,
             "db_name"                      => $argv[1],
             "installation_id"              => $argv[2],
-            "settings_enc_key_fingerprint" => $argv[3] === "" ? "" : substr(hash("sha256", "rivetit-settings-key-fingerprint|v1|" . $argv[3]), 0, 16),
+            "settings_enc_key_fingerprint" => $key === "" ? "" : substr(hash("sha256", "rivetit-settings-key-fingerprint|v1|" . $key), 0, 16),
             "backup_timestamp"             => $argv[4],
         ];
         // The Core key file (docs/KEY_MANAGEMENT.md): its keys by kid and fingerprint, never the keys. A restore needs the matching offline copy.
@@ -318,7 +322,7 @@ EOF
             }
         }
         echo json_encode($data, JSON_PRETTY_PRINT);
-    ' -- "${DB_NAME}" "${INSTALLATION_ID}" "${SETTINGS_ENC_KEY}" "${timestamp}" "${manifest_file}" "${APP_DIR}" > "${manifest_file}"
+    ' -- "${DB_NAME}" "${INSTALLATION_ID}" "-" "${timestamp}" "${manifest_file}" "${APP_DIR}" > "${manifest_file}"
 
     # Table snapshot for the restore drill (names + counts only); the backup is complete without it.
     local snapshot_file="${stage}/table-snapshot.json"
