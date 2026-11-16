@@ -168,6 +168,8 @@ determine_owner() {
     OWNER="$(stat -c '%U' "${APP_DIR}/scripts/update_cli.php")"
     [[ -n "${OWNER}" ]] || die "Could not determine the owner of ${APP_DIR}/scripts/update_cli.php via stat."
     info "scripts/update_cli.php is owned by '${OWNER}'; running update_cli.php and composer as that user (sudo -u ${OWNER})."
+    # MSP-DS-34 (RR2): git, update_cli.php and composer run as OWNER; refuse unless the repository cannot have been written by anyone else.
+    require_git_tree_trusted "${APP_DIR}" "${OWNER}"
 }
 
 run_git_pull() {

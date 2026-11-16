@@ -42,6 +42,8 @@ REMOTE="$(cfg RELEASE_REMOTE)"; REMOTE="${REMOTE:-fork}"
 [[ "${APP_DIR}" == /* && -f "${APP_DIR}/scripts/update_cli.php" ]] || die "APP_DIR in ${CONF} is not an installed instance."
 
 OWNER="$(stat -c '%U' "${APP_DIR}/scripts/update_cli.php")"
+# MSP-DS-34 (RR2): the sudo rule lets the web user start this, and every git below runs as OWNER, so first refuse a repository the web user could have rigged.
+require_git_tree_trusted "${APP_DIR}" "${OWNER}"
 g() { sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${APP_DIR}" "$@"; }
 
 if [[ -n "${BRANCH}" ]]; then

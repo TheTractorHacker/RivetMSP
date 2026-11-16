@@ -554,6 +554,32 @@ _cleanup_tmpfiles() {
 # .git/config, and is inherited by every git the child starts. Use as: sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git ...
 RIVETMSP_GIT_SAFE_ENV=(GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false)
 
+# require_git_tree_trusted APP_DIR OWNER: MSP-DS-34 (re-review RR2). RIVETMSP_GIT_SAFE_ENV switches off hooks and fsmonitor, but a repository the web
+# user can write can run code as OWNER through many more keys (core.sshCommand, remote.*.uploadpack, filter.*.smudge + info/attributes,
+# credential.helper, include.path, protocol.ext.allow + an ext:: URL, or edited refs/index that make the pull check out attacker content).
+# Listing every such key cannot be complete, so the design is: git runs as OWNER only when nothing the web user could have written is in
+# the repository. APP_DIR/.git must be a real directory (not a symlink and not a `gitdir:` file) and EVERYTHING under it, plus APP_DIR itself
+# (whose owner could otherwise rename .git away and put its own in place), must be owned by OWNER or root and not group/other-writable.
+# A violation is a loud refusal (non-zero die, syslog) naming the first offending path and the fix. RIVETMSP_ALLOW_UNTRUSTED_GIT=1 overrides
+# for an operator who reviewed the tree. The safe env stays as defence in depth. Not a no-op for OWNER == web user (same account: nothing to
+# escalate to, and the check passes on a normally installed tree).
+require_git_tree_trusted() {
+    local app="${1:?app dir}" owner="${2:?owner}" g bad="" msg
+    g="${app}/.git"
+    [[ -e "${g}" || -L "${g}" ]] || return 0
+    if [[ -L "${g}" || ! -d "${g}" ]]; then
+        bad="${g} is not a plain directory (symlink or gitdir file)"
+    else
+        bad="$(find "${app}" -maxdepth 0 \( ! -user "${owner}" ! -user root -o -perm /022 \) -printf '%p (owner %u, mode %m)\n' 2>/dev/null | head -n 1)"
+        [[ -n "${bad}" ]] || bad="$(find "${g}" \( -type l -a ! -user "${owner}" -a ! -user root \) -o \( ! -type l -a \( \( ! -user "${owner}" -a ! -user root \) -o -perm /022 \) \) -printf '%p (owner %u, mode %m)\n' 2>/dev/null | head -n 1)"
+    fi
+    [[ -n "${bad}" ]] || return 0
+    msg="Refusing to run git/composer as ${owner}: ${bad} could be changed by another account, and a repository the web user can write can run code as ${owner} (core.sshCommand, remote.*.uploadpack, filter smudge, credential.helper, include.path). Fix: sudo chown -R ${owner} '${g}' && sudo chmod -R go-w '${g}' '${app}', then re-run. RIVETMSP_ALLOW_UNTRUSTED_GIT=1 overrides after you reviewed .git/config and .git/hooks."
+    if [[ "${RIVETMSP_ALLOW_UNTRUSTED_GIT:-}" == "1" ]]; then warn "${msg}"; return 0; fi
+    logger -t rivetmsp-deploy -p user.crit "${msg}" 2>/dev/null || true
+    die "${msg}"
+}
+
 # ensure_updater_remote APP_DIR [OWNER]: RivetMSP's updater (includes/release_channel.php RELEASE_REMOTE) pulls from a git
 # remote named "fork", but an install cloned or copied from a checkout only has "origin". Without it `git pull fork ...`
 # fails and update_cli.php still prints "Update successful", so nothing ever updates. Add it as an alias of origin when
@@ -562,6 +588,7 @@ ensure_updater_remote() {
     local app="${1:?app dir}" owner="${2:-}" rf name url
     rf="${app}/includes/release_channel.php"
     [[ -f "${rf}" && -d "${app}/.git" ]] || return 0
+    [[ -n "${owner}" ]] && require_git_tree_trusted "${app}" "${owner}"
     name="$(sed -n "s/.*define('RELEASE_REMOTE', *'\([^']*\)').*/\1/p" "${rf}" | head -1)"
     [[ -n "${name}" && "${name}" != "origin" ]] || return 0
     local -a g=(git -C "${app}")
@@ -587,6 +614,7 @@ ensure_updater_remote() {
 ignore_git_filemode() {
     local app="${1:?app dir}" owner="${2:-}"
     [[ -d "${app}/.git" ]] || return 0
+    [[ -n "${owner}" ]] && require_git_tree_trusted "${app}" "${owner}"
     local -a g=(git -C "${app}")
     [[ -n "${owner}" ]] && g=(sudo -u "${owner}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${app}")
     [[ "$("${g[@]}" config --get core.fileMode 2>/dev/null || true)" == "false" ]] && return 0
