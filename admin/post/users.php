@@ -321,6 +321,9 @@ if (isset($_GET['disable_user'])) {
     // Tokens must not come back to life when the account is re-activated (nightly MSP-4)
     mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
 
+    // MSP-DS-42: remember-me cookies and live sessions must not come back when the account is re-activated
+    secSessionsOnPasswordChange($mysqli, $user_id, null);
+
     // Un-assign tickets
     mysqli_query($mysqli, "UPDATE tickets SET ticket_assigned_to = 0 WHERE ticket_assigned_to = $user_id AND ticket_closed_at IS NULL");
     mysqli_query($mysqli, "UPDATE recurring_tickets SET recurring_ticket_assigned_to = 0 WHERE recurring_ticket_assigned_to = $user_id");
@@ -394,6 +397,9 @@ if (isset($_POST['archive_user'])) {
     // Revoke every API/mobile session for the archived user
     mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
 
+    // MSP-DS-42: remember-me cookies and live sessions of the archived user stop working for good
+    secSessionsOnPasswordChange($mysqli, $user_id, null);
+
     logAction("User", "Archive", "$session_name archived user $user_name", 0, $user_id);
 
     flash_alert("User <strong>$user_name</strong> archived", 'error');
@@ -413,15 +419,22 @@ if (isset($_POST['restore_user'])) {
     $user_name = getFieldById('users', $user_id, 'user_name');
     $user_name = sanitizeInput(str_replace(" (archived)", "", $user_name)); //Removed (archived) from user_name
 
-    // Restore user query
-    mysqli_query($mysqli, "UPDATE users SET user_name = '$user_name', user_status = 1, user_role_id = $role, user_archived_at = NULL WHERE user_id = $user_id");
-
+    // MSP-DS-42: the password policy is checked before the account is reactivated
     if (!empty($new_password)) {
         $policy_error = secPasswordPolicyError($new_password, ['name' => $user_name, 'username' => $user_name], $mysqli);
         if ($policy_error !== null) {
             flash_alert($policy_error, 'error');
             redirect();
         }
+    }
+
+    // Restore user query
+    mysqli_query($mysqli, "UPDATE users SET user_name = '$user_name', user_status = 1, user_role_id = $role, user_archived_at = NULL WHERE user_id = $user_id");
+
+    // Cookies issued before the archive/disable never come back to life
+    secSessionsOnPasswordChange($mysqli, $user_id, null);
+
+    if (!empty($new_password)) {
         $new_password = secPasswordHash($new_password);
         $user_specific_encryption_ciphertext = encryptUserSpecificKey(trim($_POST['new_password']), $user_id);
         mysqli_query($mysqli, "UPDATE users SET user_password = '$new_password', user_specific_encryption_ciphertext = '$user_specific_encryption_ciphertext' WHERE user_id = $user_id");
