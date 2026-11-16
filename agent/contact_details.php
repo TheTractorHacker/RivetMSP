@@ -625,7 +625,7 @@ if (isset($_GET['contact_id'])) {
                                 if (empty($credential_uri)) {
                                     $credential_uri_display = "-";
                                 } else {
-                                    $credential_uri_display = "$credential_uri<button class='btn btn-sm clipboardjs' data-clipboard-text='$credential_uri'><i class='far fa-copy text-secondary'></i></button><a href='$credential_uri' target='_blank'><i class='fa fa-external-link-alt text-secondary'></i></a>";
+                                    $credential_uri_display = "$credential_uri<button class='btn btn-sm clipboardjs' data-clipboard-text='$credential_uri'><i class='far fa-copy text-secondary'></i></button><a href='" . sanitize_url($row['credential_uri']) . "' target='_blank'><i class='fa fa-external-link-alt text-secondary'></i></a>";
                                 }
                                 $credential_uri_2 = nullable_htmlentities($row['credential_uri_2']);
                                 vaultGate('contact page');

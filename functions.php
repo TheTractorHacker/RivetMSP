@@ -5135,9 +5135,17 @@ function display_folder_options($parent_folder_id, $client_id, $indent = 0) {
 
 function sanitize_url($url) {
     $allowed = ['http', 'https', 'file', 'ftp', 'ftps', 'sftp', 'dav', 'webdav', 'caldav', 'carddav',  'ssh', 'telnet', 'smb', 'rdp', 'vnc', 'rustdesk', 'anydesk', 'connectwise', 'splashtop', 'sip', 'sips', 'ldap', 'ldaps'];
-    $parts = parse_url($url ?? '');
+    // MSP-DS-48: decide on a copy without control characters/spaces (browsers drop them inside and before a scheme, so
+    // " java\tscript:..." is javascript:); a URL parse_url() cannot read is treated as unsafe
+    $url = (string) ($url ?? '');
+    $probe = preg_replace('/[\x00-\x20\x7f]+/', '', $url);
+    $parts = parse_url($probe);
+    if ($parts === false) {
+        return htmlspecialchars('unsupported://' . ltrim(substr($probe, strpos($probe, ':') === false ? 0 : strpos($probe, ':') + 1), '/'), ENT_QUOTES, 'UTF-8');
+    }
     if (isset($parts['scheme']) && !in_array(strtolower($parts['scheme']), $allowed)) {
         // Remove the scheme and colon
+        $url = $probe;
         $pos = strpos($url, ':');
         $without_scheme = $url;
         if ($pos !== false) {
