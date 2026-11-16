@@ -289,7 +289,7 @@ function rivetCreateAutomationTicket($mysqli, string $subject, string $details, 
     $prefix = mysqli_real_escape_string($mysqli, (string) $settings['config_ticket_prefix']);
     mysqli_query($mysqli, "UPDATE settings SET config_ticket_next_number = LAST_INSERT_ID(config_ticket_next_number), config_ticket_next_number = config_ticket_next_number + 1 WHERE company_id = 1");
     $number = mysqli_insert_id($mysqli);
-    $assigned = resolveTicketAssignee(0);
+    $assigned = resolveTicketAssignee(0, $client_id);
     $status = $assigned > 0 ? 2 : 1;
     $subject_esc = mysqli_real_escape_string($mysqli, mb_substr($subject, 0, 500));
     $details_esc = mysqli_real_escape_string($mysqli, $details);

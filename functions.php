@@ -4292,12 +4292,21 @@ function getCompanyNameAndPhone(): array {
 // sites that have them wired up and can reassign from here - this is only
 // the fallback used at INSERT time, one tier below an explicit pick and one
 // tier above staying unassigned.
-function resolveTicketAssignee(int $explicit_assigned_to): int {
-    global $config_ticket_default_technician_id;
+function resolveTicketAssignee(int $explicit_assigned_to, int $client_id = 0): int {
+    global $config_ticket_default_technician_id, $mysqli;
     if ($explicit_assigned_to > 0) {
         return $explicit_assigned_to;
     }
-    return intval($config_ticket_default_technician_id ?? 0);
+    $default_tech = intval($config_ticket_default_technician_id ?? 0);
+    if ($default_tech > 0) {
+        // MSP-DS-167: the default technician is only used when they can actually work a ticket of this client
+        // (an unrestricted account, or one allowed this client). $client_id 0 means no/unknown client: unrestricted accounts only.
+        require_once __DIR__ . '/includes/dispatch_functions.php';
+        if (!ticketAssigneeEligible($mysqli, $default_tech, $client_id)) {
+            return 0;
+        }
+    }
+    return $default_tech;
 }
 
 // Resolves a ticket's category at creation time for every creation path
@@ -4571,7 +4580,7 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
 
     $url_key = randomString(32);
     $ticket_mailbox_id_sql = ($mailbox_id !== null && $mailbox_id !== '') ? intval($mailbox_id) : 'NULL';
-    $resolved_assigned_to = resolveTicketAssignee(0);
+    $resolved_assigned_to = resolveTicketAssignee(0, $client_id);
     $ticket_status = resolveTicketCreationStatus($resolved_assigned_to);
     $category_id = resolveTicketCategory(0);
 

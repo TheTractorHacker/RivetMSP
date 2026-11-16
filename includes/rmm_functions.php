@@ -113,7 +113,7 @@ function createTicketFromRmmAlert($mysqli, array $alert, int $created_by, string
     ");
     $number   = mysqli_insert_id($mysqli);
     $url_key  = randomString(32);
-    $resolved_assigned_to = resolveTicketAssignee(0);
+    $resolved_assigned_to = resolveTicketAssignee(0, intval($client_id));
     $ticket_status = $resolved_assigned_to > 0 ? 2 : 1;
 
     mysqli_query($mysqli,

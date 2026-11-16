@@ -21,7 +21,7 @@ if (isset($_POST['add_ticket'])) {
     enforceUserPermission('module_support', 2);
 
     $client_id = intval($_POST['client_id']);
-    $assigned_to = resolveTicketAssignee(intval($_POST['assigned_to']));
+    $assigned_to = resolveTicketAssignee(intval($_POST['assigned_to']), $client_id);
     $ticket_status = resolveTicketCreationStatus($assigned_to);
     $contact_id = intval($_POST['contact_id']);
     $category_id = resolveTicketCategory(intval($_POST['category_id']));

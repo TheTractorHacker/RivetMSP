@@ -117,6 +117,12 @@ function automationExecuteAction($mysqli, array $action, array &$context, array 
         case 'assign_to':
             if (!$tid) return null;
             $uid = intval($aval);
+            // MSP-DS-167: automation never hands a ticket to someone who cannot work it (inactive, no module_support write, or restricted away from the client)
+            require_once __DIR__ . '/dispatch_functions.php';
+            if (!ticketAssigneeEligible($mysqli, $uid, intval(getFieldById('tickets', $tid, 'ticket_client_id')))) {
+                logAction("Automation", "Skipped", "Rule '$rule_name': did not assign ticket $tid to user $uid (cannot work this ticket)", $client_id, $tid);
+                return null;
+            }
             mysqli_query($mysqli, "UPDATE tickets SET ticket_assigned_to = $uid WHERE ticket_id = $tid");
             logAction("Automation", "Update", "Rule '$rule_name': assigned ticket $tid to user $uid", $client_id, $tid);
             return "assigned ticket #$tid to user $uid";
@@ -142,6 +148,12 @@ function automationExecuteAction($mysqli, array $action, array &$context, array 
             $parts   = explode(':', $aval);
             $esc_uid = intval(trim($parts[0] ?? ''));
             $esc_pri = strtolower(trim($parts[1] ?? ''));
+            // MSP-DS-167: the assignee part is dropped (priority still applies) when that user cannot work this ticket
+            require_once __DIR__ . '/dispatch_functions.php';
+            if ($esc_uid > 0 && !ticketAssigneeEligible($mysqli, $esc_uid, intval(getFieldById('tickets', $tid, 'ticket_client_id')))) {
+                logAction("Automation", "Skipped", "Rule '$rule_name': did not escalate ticket $tid to user $esc_uid (cannot work this ticket)", $client_id, $tid);
+                $esc_uid = 0;
+            }
             $sets = [];
             $bits = [];
             if ($esc_uid > 0) {

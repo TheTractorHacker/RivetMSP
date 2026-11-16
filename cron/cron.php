@@ -415,7 +415,7 @@ if (mysqli_num_rows($sql_recurring_tickets) > 0) {
         }
         $billable = intval($row['recurring_ticket_billable']);
         $created_id = intval($row['recurring_ticket_created_by']);
-        $assigned_id = resolveTicketAssignee(intval($row['recurring_ticket_assigned_to']));
+        $assigned_id = resolveTicketAssignee(intval($row['recurring_ticket_assigned_to']), intval($row['recurring_ticket_client_id']));
         $client_id = intval($row['recurring_ticket_client_id']);
         $contact_id = intval($row['recurring_ticket_contact_id']);
         // MSP-DS-31: the template's contact must belong to the template's client, or the notification goes to someone else's contact.

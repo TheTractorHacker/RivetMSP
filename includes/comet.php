@@ -399,7 +399,7 @@ function comet_process_job(array $job): array {
         );
 
         $url_key = bin2hex(random_bytes(16));
-        $resolved_assigned_to = resolveTicketAssignee(0);
+        $resolved_assigned_to = resolveTicketAssignee(0, intval($client_id));
         $ticket_status = $resolved_assigned_to > 0 ? 2 : 1;
         mysqli_query($mysqli, "INSERT INTO tickets SET
             ticket_prefix = '$prefix',
@@ -544,7 +544,7 @@ function comet_check_missed_backups(int $threshold_hours = 48): array {
             );
 
             $url_key = bin2hex(random_bytes(16));
-            $resolved_assigned_to = resolveTicketAssignee(0);
+            $resolved_assigned_to = resolveTicketAssignee(0, intval($client_id));
             $ticket_status = $resolved_assigned_to > 0 ? 2 : 1;
             mysqli_query($mysqli, "INSERT INTO tickets SET
                 ticket_prefix = '$prefix',

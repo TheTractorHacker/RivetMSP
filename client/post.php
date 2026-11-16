@@ -68,7 +68,7 @@ if (isset($_POST['add_ticket'])) {
 
     $ticket_number = mysqli_insert_id($mysqli);
 
-    $resolved_assigned_to = resolveTicketAssignee(0);
+    $resolved_assigned_to = resolveTicketAssignee(0, intval($session_client_id));
     $ticket_status = $resolved_assigned_to > 0 ? 2 : 1;
 
     $delivery_method = getTicketDeliveryMethodForCategory($mysqli, $category);

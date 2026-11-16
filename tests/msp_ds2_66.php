@@ -30,7 +30,7 @@ if (getenv('RIVETMSP_TEST_DB') === '1' && preg_match('/scratch/i', (string) gete
     mysqli_report(MYSQLI_REPORT_OFF);
     $mysqli = new mysqli('localhost', getenv('RIVETMSP_TEST_DB_USER'), getenv('RIVETMSP_TEST_DB_PASS'), getenv('RIVETMSP_TEST_DB_NAME'));
     $mysqli->query("SET SESSION sql_mode=''"); $mysqli->query("SET FOREIGN_KEY_CHECKS=0");
-    $f = ds_src('functions.php'); $i = strpos($f, 'function ticketCloseBlockReason'); eval(substr($f, $i, strpos($f, "\n}\n", $i) + 2));
+    $f = ds_src('functions.php'); $i = strpos($f, 'function ticketCloseBlockReason'); eval(substr($f, $i, strpos($f, "\n}\n", $i) - $i + 2));
     ds_t('clean ticket may close', ticketCloseBlockReason(1) === null && ticketCloseBlockReason(1, true) === null);
     $mysqli->query("INSERT INTO ticket_outtake_forms (outtake_ticket_id) VALUES (2)");
     ds_t('unsigned outtake form blocks', is_string(ticketCloseBlockReason(2)));

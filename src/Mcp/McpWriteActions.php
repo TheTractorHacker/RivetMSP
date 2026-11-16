@@ -459,7 +459,7 @@ final class McpWriteActions
     private static function executeCreate(\mysqli $db, array $args, int $approverId, int $clientId, string $via): array
     {
         $s = McpAccess::rows($db, 'SELECT config_ticket_prefix FROM settings WHERE company_id = 1', '', [])[0] ?? [];
-        $assigned = resolveTicketAssignee(0);
+        $assigned = resolveTicketAssignee(0, $clientId);
         $status = resolveTicketCreationStatus($assigned);
         $category = resolveTicketCategory(0);
 

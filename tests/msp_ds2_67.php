@@ -25,7 +25,7 @@ if (getenv('RIVETMSP_TEST_DB') === '1' && preg_match('/scratch/i', (string) gete
     mysqli_report(MYSQLI_REPORT_OFF);
     $mysqli = new mysqli('localhost', getenv('RIVETMSP_TEST_DB_USER'), getenv('RIVETMSP_TEST_DB_PASS'), getenv('RIVETMSP_TEST_DB_NAME'));
     $mysqli->query("SET SESSION sql_mode=''");
-    $f = ds_src('functions.php'); $i = strpos($f, 'function changeClientApprovalSatisfied'); eval(substr($f, $i, strpos($f, "\n}\n", $i) + 2)); // the real helper, extracted from functions.php
+    $f = ds_src('functions.php'); $i = strpos($f, 'function changeClientApprovalSatisfied'); eval(substr($f, $i, strpos($f, "\n}\n", $i) - $i + 2)); // the real helper, extracted from functions.php
     $ins = function ($id, $req, $dec) use ($mysqli) { $mysqli->query("INSERT INTO changes (change_id, title, risk, client_id, requires_client_approval, client_decision) VALUES ($id, 'T', 'low', 1, $req, '$dec')"); };
     $ins(1, 0, 'pending'); $ins(2, 1, 'pending'); $ins(3, 1, 'approved'); $ins(4, 1, 'rejected');
     ds_t('no client approval required: satisfied', changeClientApprovalSatisfied(1) === true);
