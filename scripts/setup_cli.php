@@ -272,6 +272,18 @@ if (!file_exists('../config.php')) {
     die("config.php does not exist after write attempt.\n");
 }
 
+// MSP-DS-172: config.php exists from here on but its closing "$config_enable_setup = 0;" line is only appended at the very end. If anything dies
+// in between (a SQL error, a fatal, die()), leaving config.php behind would make a re-run skip setup while index.php/login.php send every
+// visitor to the public /setup wizard. So an unfinished run removes the config.php it wrote (db.sql drops and recreates its tables, so a retry is clean).
+$GLOBALS['setup_cli_finished'] = false;
+register_shutdown_function(function () {
+    if (empty($GLOBALS['setup_cli_finished']) && is_file(__DIR__ . '/../config.php')) {
+        @unlink(__DIR__ . '/../config.php');
+        fwrite(STDERR, "\nSetup did not finish: the partly written config.php was removed so setup can be run again.\n");
+        exit(1);
+    }
+});
+
 require "../config.php";
 
 // The key file (RivetCore\Crypto, docs/KEY_MANAGEMENT.md): a fresh install starts on it, with the config.php key as kid k1. A restore
@@ -439,6 +451,7 @@ $myfile = fopen("../config.php", "a");
 $txt = "\$config_enable_setup = 0;\n\n";
 fwrite($myfile, $txt);
 fclose($myfile);
+$GLOBALS['setup_cli_finished'] = true;   // MSP-DS-172: the shutdown handler above keeps config.php only from here
 
 echo "\nSetup complete!\n";
 echo "You can now log in with the user you created at: https://$base_url/login.php\n";
