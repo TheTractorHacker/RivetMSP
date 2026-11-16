@@ -31,11 +31,20 @@ if (!function_exists('dispatchAssignTicket')) {
         }
 
         $trow = mysqli_fetch_assoc(mysqli_query($mysqli,
-            "SELECT ticket_category FROM tickets WHERE ticket_id = $ticket_id LIMIT 1"));
+            "SELECT ticket_category, ticket_client_id FROM tickets WHERE ticket_id = $ticket_id LIMIT 1"));
         if (!$trow) {
             return null;
         }
         $category_id = intval($trow['ticket_category'] ?? 0);
+
+        // MSP-DS-167: only people who can actually work this ticket: an admin, or a role with module_support write access,
+        // and (when the account is restricted to certain clients) one of those clients must be the ticket's client.
+        $ticket_client_id = intval($trow['ticket_client_id'] ?? 0);
+        $eligible_sql = "AND EXISTS (SELECT 1 FROM user_roles r WHERE r.role_id = u.user_role_id AND (r.role_is_admin = 1 OR EXISTS (
+                SELECT 1 FROM user_role_permissions rp JOIN modules m ON m.module_id = rp.module_id
+                WHERE rp.user_role_id = u.user_role_id AND m.module_name = 'module_support' AND rp.user_role_permission_level >= 2)))
+            AND (NOT EXISTS (SELECT 1 FROM user_client_permissions p WHERE p.user_id = u.user_id)
+                 OR EXISTS (SELECT 1 FROM user_client_permissions p2 WHERE p2.user_id = u.user_id AND p2.client_id = $ticket_client_id))";
 
         $required_skill_tag_id = 0;
         if ($category_id > 0) {
@@ -50,7 +59,7 @@ if (!function_exists('dispatchAssignTicket')) {
             $res = mysqli_query($mysqli,
                 "SELECT DISTINCT u.user_id FROM users u
                  INNER JOIN user_tags ut ON ut.user_tag_user_id = u.user_id AND ut.user_tag_tag_id = $required_skill_tag_id
-                 WHERE u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL"
+                 WHERE u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL $eligible_sql"
             );
             while ($res && ($r = mysqli_fetch_assoc($res))) {
                 $candidates[] = intval($r['user_id']);
@@ -61,7 +70,7 @@ if (!function_exists('dispatchAssignTicket')) {
         // nobody currently holds it - an unmatched ticket must still get dispatched, not stranded.
         if (empty($candidates)) {
             $res = mysqli_query($mysqli,
-                "SELECT user_id FROM users WHERE user_type = 1 AND user_status = 1 AND user_archived_at IS NULL");
+                "SELECT u.user_id FROM users u WHERE u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL $eligible_sql");
             while ($res && ($r = mysqli_fetch_assoc($res))) {
                 $candidates[] = intval($r['user_id']);
             }
