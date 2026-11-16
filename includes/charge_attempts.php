@@ -16,6 +16,7 @@ require_once __DIR__ . '/billing_guards.php';
 
 const CHARGE_ATTEMPT_STALE_SECONDS = 900;
 const CHARGE_ATTEMPT_PENDING_DAYS = 10;
+const CHARGE_ATTEMPT_KEY_MAX_AGE = 82800;           // Stripe forgets an idempotency key after 24h: a key older than 23h is never replayed
 
 /**
  * MSP-DS-166 (re-review MRR-5): the key carries this install's marker (a hash of the per-install random value stored in config.php, see
@@ -28,6 +29,20 @@ function stripeChargeAttemptKey($invoice_id, int $balance_cents, $method_id, int
     return 'rivetmsp-' . ($marker !== '' ? substr($marker, 0, 12) . '-' : '') . 'inv' . intval($invoice_id) . '-' . $balance_cents . '-pm' . intval($method_id) . '-a' . $seq;
 }
 
+/**
+ * MSP-DS-166 (re-review MRR-6): a callable for chargeAttemptClaim() that asks Stripe for the status of an old attempt's PaymentIntent.
+ */
+function chargeAttemptStripeLookup($stripe): callable
+{
+    return function (string $pi_id) use ($stripe): ?string {
+        try {
+            return (string) $stripe->paymentIntents->retrieve($pi_id, [])->status;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    };
+}
+
 function chargeAttemptRefusal(string $reason): array
 {
     $messages = [
@@ -36,6 +51,7 @@ function chargeAttemptRefusal(string $reason): array
         'nothing_due' => 'Nothing left to charge on this invoice',
         'not_payable' => 'Invalid invoice state (draft/paid/cancelled/not billable)',
         'not_found' => 'Invoice not found',
+        'needs_review' => 'An earlier payment attempt for this invoice timed out and may have been charged; billing must check Stripe before it is charged again',
         'error' => 'The payment could not be started, please try again',
     ];
     return ['ok' => false, 'reason' => $reason, 'message' => $messages[$reason] ?? $messages['error']];
@@ -59,7 +75,7 @@ function chargeAttemptLive($mysqli, $invoice_id, bool $lock = false): ?array
  * Claim the right to charge this invoice. Returns ['ok'=>true, 'attempt_id', 'key', 'balance' (float), 'balance_cents', 'reused'] or chargeAttemptRefusal().
  * The balance returned is read under the invoice row lock; charge exactly that, with exactly that key. $source: portal|agent|cron|guest.
  */
-function chargeAttemptClaim($mysqli, $invoice_id, string $source, $method_id = 0): array
+function chargeAttemptClaim($mysqli, $invoice_id, string $source, $method_id = 0, ?callable $pi_lookup = null): array
 {
     $invoice_id = intval($invoice_id);
     $method_id = intval($method_id);
@@ -89,8 +105,22 @@ function chargeAttemptClaim($mysqli, $invoice_id, string $source, $method_id = 0
         // Whatever is left is not live any more: an abandoned 'processing' row (the request died after claiming) or an expired 'pending' one.
         // An abandoned row for the SAME balance and method is taken over with its own key, so if Stripe did get that charge, replaying the key
         // returns the original PaymentIntent instead of creating a second one.
-        $stale = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM invoice_charge_attempts WHERE attempt_invoice_id = $invoice_id AND attempt_status = 'processing'
+        $stale = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT *, TIMESTAMPDIFF(SECOND, attempt_created_at, NOW()) AS attempt_age FROM invoice_charge_attempts WHERE attempt_invoice_id = $invoice_id AND attempt_status = 'processing'
             AND attempt_balance_cents = $cents AND attempt_method_id = $method_id ORDER BY attempt_id LIMIT 1 FOR UPDATE"));
+        if ($stale && intval($stale['attempt_age']) >= CHARGE_ATTEMPT_KEY_MAX_AGE) {
+            // MSP-DS-166 (re-review MRR-6): Stripe no longer remembers this key, so replaying it could create a SECOND charge. Ask Stripe about the old
+            // PaymentIntent when we can; a charge that never happened (cancelled / never confirmed) is closed and a fresh sequence/key is used.
+            // In every other case the attempt stays 'processing' (blocking) and the invoice is flagged for billing.
+            $old_status = ($pi_lookup !== null && $stale['attempt_pi_id'] !== '') ? $pi_lookup((string) $stale['attempt_pi_id']) : null;
+            if (in_array($old_status, ['canceled', 'requires_payment_method'], true)) {
+                mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = 'stale; Stripe intent " . $old_status . "' WHERE attempt_id = " . intval($stale['attempt_id']));
+                $stale = null;
+            } else {
+                invoiceHistoryOnce($mysqli, $invoice_id, 'Payment needs review', 'A charge attempt timed out over 23 hours ago and may have been charged at Stripe; check Stripe before charging again. Attempt', (string) intval($stale['attempt_id']));
+                mysqli_commit($mysqli);
+                return chargeAttemptRefusal('needs_review');
+            }
+        }
         mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = 'abandoned' WHERE attempt_invoice_id = $invoice_id
             AND attempt_status IN ('processing','pending')" . ($stale ? ' AND attempt_id <> ' . intval($stale['attempt_id']) : ''));
         if ($stale) {

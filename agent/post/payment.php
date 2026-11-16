@@ -709,7 +709,7 @@ if (isset($_GET['add_payment_stripe'])) {
     $stripe = new \Stripe\StripeClient($config_stripe_secret);
 
     // MSP-DS-166 / MSP-DS-32: claim the charge (row-locked invoice, balance read under the lock, one shared idempotency key) BEFORE Stripe is called
-    $charge_claim = chargeAttemptClaim($mysqli, $invoice_id, 'agent', 0);
+    $charge_claim = chargeAttemptClaim($mysqli, $invoice_id, 'agent', 0, chargeAttemptStripeLookup($stripe));
     if (!$charge_claim['ok']) {
         flash_alert($charge_claim['message'], $charge_claim['reason'] === 'nothing_due' ? 'error' : 'warning');
         redirect();
