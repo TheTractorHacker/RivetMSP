@@ -777,6 +777,11 @@ if (isset($_GET['add_payment_by_provider'])) {
     require_once __DIR__ . '/../plugins/stripe-php/init.php';
     $stripe = new \Stripe\StripeClient($private_key);
 
+    // MSP-DS-166: one card charge per invoice at a time, across portal, agent and autopay; the balance is read after the lock
+    if (!invoiceChargeLock($mysqli, $invoice_id)) {
+        flash_alert('Another payment for this invoice is in progress, please try again in a moment', 'error');
+        redirect();
+    }
     $balance_to_pay = invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount);   // MSP-INJ-26(a): the balance, not the invoice total
     if ($balance_to_pay <= 0) {
         flash_alert('Nothing left to charge on this invoice', 'error');

@@ -1080,6 +1080,10 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
         if ($provider->supports('charge_saved_method')) {
             if ($provider_private_key && $stripe_customer_id && $stripe_payment_method_id) {
 
+                // MSP-DS-166: one card charge per invoice at a time; skip this run if a portal/agent charge holds it
+                if (!invoiceChargeLock($mysqli, $invoice_id, 0)) {
+                    continue;
+                }
                 $balance_to_pay = invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount);   // MSP-INJ-26(a): the balance, not the invoice total
                 if ($balance_to_pay <= 0) {
                     continue;
@@ -1213,6 +1217,7 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
         logAction("Invoice", "Payment", "Auto Payment amount of $recurring_payment_currency_code $invoice_amount added to invoice $invoice_prefix$invoice_number", $client_id, $invoice_id);
     }
 }
+invoiceChargeUnlock($mysqli);   // MSP-DS-166
 
 // Recurring Expenses
 // Loop through all recurring expenses that match today's date and is active

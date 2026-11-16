@@ -263,3 +263,30 @@ function stripeIntentMatchesInvoice($metadata, $pi_currency, $invoice_client_id,
     }
     return strtoupper((string) $pi_currency) === strtoupper((string) $invoice_currency_code);
 }
+
+/**
+ * MSP-DS-166: serialise every card charge for one invoice (portal, agent, cron autopay, guest page) with a named DB lock.
+ * Take it BEFORE reading the balance; it is held until invoiceChargeUnlock(), the next invoice lock in this process, or the
+ * end of the request, so a second path waits, re-reads the balance after the first payment was recorded, and finds nothing to charge.
+ * Returns false when another process still holds it after $wait seconds (do not charge).
+ */
+function invoiceChargeLock($mysqli, $invoice_id, int $wait = 10): bool
+{
+    invoiceChargeUnlock($mysqli);
+    $name = 'rivetmsp_charge_inv_' . intval($invoice_id);
+    $r = @mysqli_query($mysqli, "SELECT GET_LOCK('$name', " . max(0, $wait) . ")");
+    $row = $r ? mysqli_fetch_row($r) : null;
+    if ($row && intval($row[0]) === 1) {
+        $GLOBALS['rivet_charge_lock_held'] = $name;
+        return true;
+    }
+    return false;
+}
+
+function invoiceChargeUnlock($mysqli): void
+{
+    if (!empty($GLOBALS['rivet_charge_lock_held'])) {
+        @mysqli_query($mysqli, "SELECT RELEASE_LOCK('" . $GLOBALS['rivet_charge_lock_held'] . "')");
+        $GLOBALS['rivet_charge_lock_held'] = null;
+    }
+}
