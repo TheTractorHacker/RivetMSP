@@ -2501,7 +2501,8 @@ CREATE TABLE `invoices` (
   `invoice_category_id` int(11) NOT NULL,
   `invoice_recurring_invoice_id` int(11) NOT NULL DEFAULT 0,
   `invoice_client_id` int(11) NOT NULL,
-  PRIMARY KEY (`invoice_id`)
+  PRIMARY KEY (`invoice_id`),
+  UNIQUE KEY `uniq_invoices_prefix_number` (`invoice_prefix`,`invoice_number`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `kb_article_attachments`;
@@ -3507,7 +3508,8 @@ CREATE TABLE `quotes` (
   `quote_archived_at` datetime DEFAULT NULL,
   `quote_category_id` int(11) NOT NULL,
   `quote_client_id` int(11) NOT NULL,
-  PRIMARY KEY (`quote_id`)
+  PRIMARY KEY (`quote_id`),
+  UNIQUE KEY `uniq_quotes_prefix_number` (`quote_prefix`,`quote_number`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `rack_units`;
@@ -6459,6 +6461,7 @@ CREATE TABLE `tickets` (
   `ticket_sla_started_at` datetime DEFAULT NULL,
   `ticket_catalog_item_id` int(11) DEFAULT NULL,
   PRIMARY KEY (`ticket_id`),
+  UNIQUE KEY `uniq_tickets_prefix_number` (`ticket_prefix`,`ticket_number`),
   KEY `idx_tickets_client_archived_updated` (`ticket_client_id`,`ticket_archived_at`,`ticket_updated_at`),
   KEY `idx_tickets_problem` (`ticket_problem_id`),
   KEY `idx_ticket_mail_message_id` (`ticket_mail_message_id`),
@@ -6831,8 +6834,14 @@ CREATE TABLE `users` (
   `user_passkey_bootstrap_key` varchar(64) DEFAULT NULL,
   `user_oidc_issuer` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
   `user_oidc_subject` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `user_calendar_token_hash` char(64) DEFAULT NULL,
+  `user_calendar_token_rotated_at` datetime DEFAULT NULL,
+  `user_calendar_legacy_until` datetime DEFAULT NULL,
+  `user_staff_email_key` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci GENERATED ALWAYS AS (IF(`user_type` = 1 AND `user_email` <> '', `user_email`, NULL)) VIRTUAL,
   PRIMARY KEY (`user_id`),
-  UNIQUE KEY `uniq_user_oidc` (`user_oidc_issuer`, `user_oidc_subject`)
+  UNIQUE KEY `uniq_user_oidc` (`user_oidc_issuer`, `user_oidc_subject`),
+  UNIQUE KEY `uniq_users_staff_email` (`user_staff_email_key`),
+  KEY `idx_users_calendar_token` (`user_calendar_token_hash`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `vendor_credentials`;

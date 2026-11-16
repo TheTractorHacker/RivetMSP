@@ -8442,6 +8442,102 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.137'");
     }
 
+    if ($rivetit_db_version() == '2.6.137') {
+        // DB 2.6.138: deep-scan data integrity.
+        //   MSP-DS-14  old API/worksheet/outtake ticket_replies rows ('reply', 'note') become 'Public' / 'Internal' so the portal and guest views treat them like web rows.
+        //   MSP-DS-41  UNIQUE (prefix, number) on tickets, invoices and quotes; existing duplicates are renumbered first (oldest row keeps its number) and the live
+        //              counters are lifted above the highest number in use, so the next insert cannot collide.
+        //   MSP-DS-141 UNIQUE staff e-mail; later duplicates are renamed (never deleted) and logged.
+        //   MSP-DS-49  per-user calendar feed token (hash), plus a 30 day window in which the old installation-wide HMAC token still works.
+        $db_has_column = static function (string $table, string $column) use ($mysqli): bool {
+            $t = mysqli_real_escape_string($mysqli, $table); $c = mysqli_real_escape_string($mysqli, $column);
+            return mysqli_num_rows(mysqli_query($mysqli, "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$t' AND COLUMN_NAME = '$c' LIMIT 1")) > 0;
+        };
+        $db_has_index = static function (string $table, string $index) use ($mysqli): bool {
+            $t = mysqli_real_escape_string($mysqli, $table); $i = mysqli_real_escape_string($mysqli, $index);
+            return mysqli_num_rows(mysqli_query($mysqli, "SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$t' AND INDEX_NAME = '$i' LIMIT 1")) > 0;
+        };
+        $db_log = static function (string $description) use ($mysqli): void {
+            $d = mysqli_real_escape_string($mysqli, substr($description, 0, 1000));
+            mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Update', log_description = '$d'");
+        };
+
+        // --- MSP-DS-14
+        mysqli_query($mysqli, "UPDATE `ticket_replies` SET `ticket_reply_type` = 'Public' WHERE `ticket_reply_type` = 'reply'");
+        mysqli_query($mysqli, "UPDATE `ticket_replies` SET `ticket_reply_type` = 'Internal' WHERE `ticket_reply_type` = 'note'");
+
+        // --- MSP-DS-41: renumber duplicates, lift the counter, add the unique index
+        $db_unique_numbers = static function (string $table, string $id, string $prefix, string $number, string $counter, string $index) use ($mysqli, $db_has_index, $db_log): void {
+            if ($db_has_index($table, $index)) {
+                return;
+            }
+            // The counter must be above every number in use, otherwise the next insert would collide with an existing row.
+            mysqli_query($mysqli, "UPDATE `settings` SET `$counter` = GREATEST(COALESCE(`$counter`, 1), COALESCE((SELECT MAX(`$number`) + 1 FROM `$table`), 1)) WHERE company_id = 1");
+            $dups = mysqli_query($mysqli,
+                "SELECT t.`$id` AS id, t.`$prefix` AS prefix, t.`$number` AS num FROM `$table` t
+                 JOIN (SELECT `$prefix` AS p, `$number` AS n, MIN(`$id`) AS keep_id FROM `$table` WHERE `$prefix` IS NOT NULL GROUP BY `$prefix`, `$number` HAVING COUNT(*) > 1) d
+                   ON t.`$prefix` = d.p AND t.`$number` = d.n AND t.`$id` <> d.keep_id
+                 ORDER BY t.`$id`");
+            $rows = [];
+            while ($dups && ($r = mysqli_fetch_assoc($dups))) {
+                $rows[] = $r;
+            }
+            foreach ($rows as $r) {
+                mysqli_query($mysqli, "UPDATE `settings` SET `$counter` = LAST_INSERT_ID(`$counter`), `$counter` = `$counter` + 1 WHERE company_id = 1");
+                $new = (int) mysqli_insert_id($mysqli);
+                mysqli_query($mysqli, "UPDATE `$table` SET `$number` = $new WHERE `$id` = " . (int) $r['id']);
+                $db_log("MSP-DS-41: $table row " . (int) $r['id'] . " shared number " . $r['prefix'] . $r['num'] . " with an older row; renumbered to " . $r['prefix'] . $new);
+            }
+            mysqli_query($mysqli, "ALTER TABLE `$table` ADD UNIQUE KEY `$index` (`$prefix`, `$number`)");
+        };
+        $db_unique_numbers('tickets', 'ticket_id', 'ticket_prefix', 'ticket_number', 'config_ticket_next_number', 'uniq_tickets_prefix_number');
+        $db_unique_numbers('invoices', 'invoice_id', 'invoice_prefix', 'invoice_number', 'config_invoice_next_number', 'uniq_invoices_prefix_number');
+        $db_unique_numbers('quotes', 'quote_id', 'quote_prefix', 'quote_number', 'config_quote_next_number', 'uniq_quotes_prefix_number');
+
+        // --- MSP-DS-141: one staff account per e-mail. Client portal accounts (user_type 2) may share an address, so the index sits on a virtual column that is NULL for them.
+        if (!$db_has_index('users', 'uniq_users_staff_email')) {
+            $res = mysqli_query($mysqli,
+                "SELECT u.user_id, u.user_email FROM users u
+                 JOIN (SELECT user_email AS e FROM users WHERE user_type = 1 AND user_email <> '' GROUP BY user_email HAVING COUNT(*) > 1) d ON u.user_email = d.e
+                 WHERE u.user_type = 1
+                 ORDER BY u.user_email, (u.user_archived_at IS NULL) DESC, u.user_status DESC, u.user_id ASC");
+            $seen = [];
+            $renames = [];
+            while ($res && ($r = mysqli_fetch_assoc($res))) {
+                $key = strtolower(rtrim($r['user_email']));
+                if (!isset($seen[$key])) {
+                    $seen[$key] = true;   // the first row of each group (active, then lowest id) keeps the address
+                    continue;
+                }
+                $renames[] = $r;
+            }
+            foreach ($renames as $r) {
+                $id = (int) $r['user_id'];
+                $at = strrpos($r['user_email'], '@');
+                $new = $at === false ? substr($r['user_email'], 0, 150) . ".dup$id" : substr($r['user_email'], 0, min($at, 100)) . "+dup$id" . substr($r['user_email'], $at);
+                $new_esc = mysqli_real_escape_string($mysqli, substr($new, 0, 200));
+                mysqli_query($mysqli, "UPDATE users SET user_email = '$new_esc' WHERE user_id = $id");
+                $db_log("MSP-DS-141: staff user $id shared the e-mail " . $r['user_email'] . " with another staff account; e-mail renamed to $new (account kept, fix the address from Users)");
+            }
+            if (!$db_has_column('users', 'user_staff_email_key')) {
+                mysqli_query($mysqli, "ALTER TABLE `users` ADD COLUMN `user_staff_email_key` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci GENERATED ALWAYS AS (IF(`user_type` = 1 AND `user_email` <> '', `user_email`, NULL)) VIRTUAL");
+            }
+            mysqli_query($mysqli, "ALTER TABLE `users` ADD UNIQUE KEY `uniq_users_staff_email` (`user_staff_email_key`)");
+        }
+
+        // --- MSP-DS-49: per-user calendar feed token (sha256 of a random token; the token itself is shown once)
+        if (!$db_has_column('users', 'user_calendar_token_hash')) {
+            mysqli_query($mysqli, "ALTER TABLE `users` ADD COLUMN `user_calendar_token_hash` char(64) DEFAULT NULL, ADD COLUMN `user_calendar_token_rotated_at` datetime DEFAULT NULL, ADD COLUMN `user_calendar_legacy_until` datetime DEFAULT NULL");
+            // Feeds already subscribed keep working for 30 days, or until their owner generates a new link, whichever comes first.
+            mysqli_query($mysqli, "UPDATE `users` SET `user_calendar_legacy_until` = DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE `user_type` = 1");
+        }
+        if (!$db_has_index('users', 'idx_users_calendar_token')) {
+            mysqli_query($mysqli, "ALTER TABLE `users` ADD KEY `idx_users_calendar_token` (`user_calendar_token_hash`)");
+        }
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.138'");
+    }
+
 // Core migrations catch-up, on EVERY Update Database run (idempotent: MigrationRunner keeps its own state in rivet_core_migrations). The version steps above run Core's
 // migrations only when their number is reached, so a database that was moved to a newer edition number while the files on disk still had an older RivetCore (an update
 // that stopped half way) would otherwise never get the Core migrations the newer package brings (for example 0048/0049 with RivetCore rc.60).
