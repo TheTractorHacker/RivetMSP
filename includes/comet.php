@@ -335,7 +335,27 @@ function comet_process_job(array $job): array {
     ));
     $client_id = $map ? intval($map['map_client_id']) : 0;
 
+    // MSP-DS-23: get-jobs-recent returns every job of the last 24h on each poll, so a job this device's alerts have already moved past must
+    // not act again (a failed job followed by a success reopened and reclosed a ticket on every run). No schema change: the device's newest
+    // alert row (opened / resolved time) is the high-water mark, compared with the job's EndTime. A job without an EndTime (webhook) is unaffected.
+    // The alert row's opened/resolved times are set from the job's own EndTime (not the poll time) so they are comparable with later jobs.
+    $job_end = intval($job['EndTime'] ?? 0);
+    if ($job_end > time()) { $job_end = time(); }
+    $job_end_sql = $job_end > 0 ? "FROM_UNIXTIME($job_end)" : 'NOW()';
+    $last_alert = null;
+    if ($job_end > 0) {
+        $last_alert = mysqli_fetch_assoc(mysqli_query($mysqli,
+            "SELECT UNIX_TIMESTAMP(alert_created_at) AS created_ts, UNIX_TIMESTAMP(alert_resolved_at) AS resolved_ts, (alert_resolved_at IS NULL) AS is_open
+             FROM comet_backup_alerts
+             WHERE alert_comet_username = '$u_safe' AND alert_device_name = '$d_safe' AND alert_type = 'failed'
+             ORDER BY alert_id DESC LIMIT 1"
+        ));
+    }
+
     if (comet_is_failed($status)) {
+        if ($last_alert && $job_end <= max(intval($last_alert['created_ts']), intval($last_alert['resolved_ts']))) {
+            return ['action' => 'stale_job', 'device_name' => $dev_name];
+        }
         // Check for existing open alert for this device
         $existing = mysqli_fetch_assoc(mysqli_query($mysqli,
             "SELECT alert_id, alert_ticket_id FROM comet_backup_alerts
@@ -405,7 +425,8 @@ function comet_process_job(array $job): array {
             alert_message        = '$msg_esc',
             alert_client_id      = " . ($client_id ?: 'NULL') . ",
             alert_ticket_id      = $ticket_id,
-            alert_status         = 'new'
+            alert_status         = 'new',
+            alert_created_at     = $job_end_sql
         ");
 
         $client_suffix = $client_id ? "&client_id=$client_id" : '';
@@ -414,6 +435,9 @@ function comet_process_job(array $job): array {
         return ['action' => 'ticket_created', 'ticket_id' => $ticket_id, 'device_name' => $dev_name];
 
     } elseif (comet_is_success($status)) {
+        if ($last_alert && $last_alert['is_open'] && $job_end <= intval($last_alert['created_ts'])) {
+            return ['action' => 'stale_job', 'device_name' => $dev_name];
+        }
         $open = mysqli_fetch_assoc(mysqli_query($mysqli,
             "SELECT alert_id, alert_ticket_id FROM comet_backup_alerts
              WHERE alert_comet_username = '$u_safe'
@@ -427,7 +451,7 @@ function comet_process_job(array $job): array {
         }
 
         $tid = intval($open['alert_ticket_id']);
-        mysqli_query($mysqli, "UPDATE comet_backup_alerts SET alert_status = 'resolved', alert_resolved_at = NOW() WHERE alert_id = {$open['alert_id']}");
+        mysqli_query($mysqli, "UPDATE comet_backup_alerts SET alert_status = 'resolved', alert_resolved_at = $job_end_sql WHERE alert_id = {$open['alert_id']}");
         mysqli_query($mysqli, "INSERT INTO ticket_replies SET
             ticket_reply = 'Backup succeeded — device is healthy again. Ticket auto-resolved by Comet integration.',
             ticket_reply_type = 'Internal',

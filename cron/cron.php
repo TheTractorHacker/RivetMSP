@@ -1418,6 +1418,8 @@ if ($config_comet_enabled && !empty($config_comet_server_url)) {
 
     // Fallback failure/recovery detection via polling
     $recent_jobs = comet_get_jobs_recent() ?: [];
+    // MSP-DS-23: oldest job first, so a failure followed by a success (or the reverse) settles on the newest outcome
+    usort($recent_jobs, fn($a, $b) => intval($a['EndTime'] ?? $a['StartTime'] ?? 0) <=> intval($b['EndTime'] ?? $b['StartTime'] ?? 0));
     foreach ($recent_jobs as $job) {
         $result = comet_process_job($job);
         if ($result['action'] === 'ticket_created') {
