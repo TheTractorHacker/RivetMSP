@@ -124,7 +124,12 @@ fi
 drill_owner="$(app_owner_user "${APP_DIR}")"
 if [[ -n "${drill_owner}" ]]; then
     chown -R "${drill_owner}" "${WORK}" 2>/dev/null || true
-    [[ -n "${KEY_FILE}" ]] && { chmod o+r "${KEY_FILE}" 2>/dev/null || true; }
+    if [[ -n "${KEY_FILE}" ]]; then
+        # Hand the web user a private copy (0400, deleted on exit) instead of loosening the original key file's mode.
+        drill_key_copy="$(mktemp)"; register_tmpfile "${drill_key_copy}"
+        install -m 0400 -o "${drill_owner}" "${KEY_FILE}" "${drill_key_copy}"
+        KEY_ARGS=(--settings-key-file="${drill_key_copy}")
+    fi
 fi
 set +e
 run_app_php "${APP_DIR}" "${APP_DIR}/cron/restore_drill.php" --trigger=script --extracted-dir="${UNPACKED}" --source-name="${NAME}" --source-mtime="${MTIME}" "${KEY_ARGS[@]}"

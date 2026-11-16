@@ -29,8 +29,11 @@ backup_make_snapshot() {
 backup_write_checksum() {
     local enc="$1" hash
     hash="$(sha256sum "${enc}" | awk '{print $1}')"
-    printf '%s  %s\n' "${hash}" "$(basename "${enc}")" > "${enc}.sha256"
-    chmod 600 "${enc}.sha256"; chown root:root "${enc}.sha256" 2>/dev/null || true
+    # MSP-DS-19: write to a private temp file and rename it in, so a symlink the web user planted at <file>.sha256 is replaced, not followed.
+    local tmp_sum; tmp_sum="$(mktemp)"
+    printf '%s  %s\n' "${hash}" "$(basename "${enc}")" > "${tmp_sum}"
+    chmod 600 "${tmp_sum}"; chown root:root "${tmp_sum}" 2>/dev/null || true
+    mv -fT "${tmp_sum}" "${enc}.sha256"
     printf '%s' "${hash}"
 }
 

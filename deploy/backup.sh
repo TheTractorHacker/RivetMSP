@@ -225,12 +225,21 @@ do_backup() {
 
     mkdir -p "${DEST}"
 
+    # MSP-DS-19: DEST (usually APP_DIR/backups) is writable by the web user, who could plant symlinks at predictable names there; root
+    # would then truncate/chmod/shred whatever they point at. Every intermediate lives in a root-only staging directory instead, and only
+    # the finished files are moved into DEST, by rename (which replaces a symlink rather than following it).
+    local stage
+    stage="$(mktemp -d)"; chmod 700 "${stage}"; register_tmpfile "${stage}"
+
     local timestamp
     timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-    local sql_file="${DEST}/backup-${DB_NAME}-${timestamp}.sql"
-    local combined="${DEST}/backup-${DB_NAME}-${timestamp}.tar.gz"
-    local encrypted="${combined}.enc"
-    local keyfile="${DEST}/backup-${DB_NAME}-${timestamp}.settings-key"
+    local sql_file="${stage}/backup-${DB_NAME}-${timestamp}.sql"
+    local combined="${stage}/backup-${DB_NAME}-${timestamp}.tar.gz"
+    local encrypted_name="backup-${DB_NAME}-${timestamp}.tar.gz.enc"
+    local encrypted="${stage}/${encrypted_name}"
+    local keyfile="${stage}/backup-${DB_NAME}-${timestamp}.settings-key"
+    local final_encrypted="${DEST}/${encrypted_name}"
+    local final_keyfile="${DEST}/backup-${DB_NAME}-${timestamp}.settings-key"
 
     # Pre-create both intermediates chmod 600 BEFORE anything writes to
     # them. A plain `mysqldump > file` / `tar -czf file ...` creates the
@@ -277,11 +286,12 @@ EOF
     # file OFF this server, apart from the archive and from the passphrase.
     # deploy/restore.sh takes it back with --settings-key-file (or finds it
     # next to the archive) and checks it against the manifest fingerprint.
-    local manifest_file="${DEST}/backup-manifest.json"
+    local manifest_file="${stage}/backup-manifest.json"
     : > "${manifest_file}"
     chmod 600 "${manifest_file}"
     register_tmpfile "${manifest_file}"
-    php -r '
+    # MSP-DS-34: this snippet loads the app's vendor/autoload.php, so it runs as the web user and only prints; root writes the file.
+    run_app_php "${APP_DIR}" -r '
         $data = [
             "schema_version"               => 2,
             "db_name"                      => $argv[1],
@@ -302,11 +312,11 @@ EOF
                 fwrite(STDERR, "WARNING: the key file " . $kf . " could not be read; the manifest has no key ring.\n");
             }
         }
-        file_put_contents($argv[5], json_encode($data, JSON_PRETTY_PRINT));
-    ' -- "${DB_NAME}" "${INSTALLATION_ID}" "${SETTINGS_ENC_KEY}" "${timestamp}" "${manifest_file}" "${APP_DIR}"
+        echo json_encode($data, JSON_PRETTY_PRINT);
+    ' -- "${DB_NAME}" "${INSTALLATION_ID}" "${SETTINGS_ENC_KEY}" "${timestamp}" "${manifest_file}" "${APP_DIR}" > "${manifest_file}"
 
     # Table snapshot for the restore drill (names + counts only); the backup is complete without it.
-    local snapshot_file="${DEST}/table-snapshot.json"
+    local snapshot_file="${stage}/table-snapshot.json"
     register_tmpfile "${snapshot_file}"
     local -a snapshot_member=()
     if backup_make_snapshot "${snapshot_file}"; then snapshot_member=("$(basename "${snapshot_file}")"); fi
@@ -318,7 +328,7 @@ EOF
     # password is never an argument or printed. A non-empty, non-skip failure here is fatal (die), not a
     # warning: the whole point of this step is to never produce a backup that silently omits RMM history
     # just because the PostgreSQL connection briefly could not be read.
-    local rmm_pg_dump="${DEST}/rmm-postgres.dump"
+    local rmm_pg_dump="${stage}/rmm-postgres.dump"
     local rmm_pg_passfile
     rmm_pg_passfile="$(mktemp)"
     chmod 600 "${rmm_pg_passfile}"
@@ -375,6 +385,11 @@ EOF
     chown root:root "${encrypted}"
 
     write_settings_key_file "${keyfile}"
+
+    # Publish: rename into DEST (never write through a path the web user controls). -T so a directory or symlink at the name is replaced, not entered.
+    mv -fT "${encrypted}" "${final_encrypted}"
+    encrypted="${final_encrypted}"
+    [[ -f "${keyfile}" ]] && mv -fT "${keyfile}" "${final_keyfile}"
 
     end_ts="$(date +%s)"
     duration=$(( end_ts - start_ts ))
