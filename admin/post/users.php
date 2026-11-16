@@ -167,7 +167,11 @@ if (isset($_POST['edit_user'])) {
     $role_changed = $target_now && intval($target_now['user_role_id']) !== intval($role);
     $email_differs = $target_now && strcasecmp((string) $target_now['user_email'], trim((string) ($_POST['email'] ?? ''))) !== 0;
     $reauth_needed = ($new_role_is_admin && $role_changed)
-        || ($target_now && intval($target_now['cur_is_admin']) === 1 && ($new_password !== '' || $email_differs));
+        || ($target_now && intval($target_now['cur_is_admin']) === 1 && ($new_password !== '' || $email_differs))
+        // review RR12: removing ANYONE's second factor (TOTP seed, recovery codes, API tokens) or switching their Force MFA off is as sensitive as
+        // the separate disable_2fa form, which already asks for the password
+        || (($_POST['2fa'] ?? '') === 'disable')
+        || ($target_now && intval($target_now['cur_force_mfa']) === 1 && !$force_mfa);
     if ($user_id === intval($session_user_id)) {
         $reauth_needed = $reauth_needed
             || $new_password !== ''
@@ -176,7 +180,7 @@ if (isset($_POST['edit_user'])) {
             || ($target_now && intval($target_now['cur_force_mfa']) !== ($force_mfa ? 1 : 0));
     }
     if ($reauth_needed && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
-        flash_alert('Your current password is required (and must be correct) to make someone an administrator, change an administrator\'s email or password, or change your own email, role, password, two-factor or Force MFA.', 'error');
+        flash_alert('Your current password is required (and must be correct) to make someone an administrator, change an administrator\'s email or password, disable anyone\'s 2FA or Force MFA, or change your own email, role, password, two-factor or Force MFA.', 'error');
         redirect();
     }
 
