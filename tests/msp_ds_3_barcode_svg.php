@@ -12,7 +12,7 @@ foreach (['cm', 'cs', 'c2', 'bc'] as $k) {
         $ok(stripos($svg, '<script') === false, "$sym with hostile $k has no <script>");
     }
 }
-$good = $g->render_svg('qr', 'abc', ['cm' => '112233', 'bc' => 'white']);
-$ok(str_contains($good, 'fill="#112233"') && str_contains($good, 'fill="white"'), 'hex and named colours still work');
+$good = $g->render_svg('qr', 'abc', ['cm' => '112233', 'bc' => 'FFFFFF']);
+$ok(str_contains($good, 'fill="#112233"') && str_contains($good, 'fill="#FFFFFF"'), 'hex colours still work, named ones fall back');
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

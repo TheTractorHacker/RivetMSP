@@ -31,16 +31,26 @@ $testGD = get_extension_funcs("gd");
 if (!$testGD){ echo "The GD extension is not installed, please install using 'apt install php-gd', restart Apache, and try again"; exit; }
 
 if (realpath(__FILE__) == realpath($_SERVER['SCRIPT_FILENAME'])) {
+	// This script is reachable without a session: never let a response be
+	// interpreted as active content (IT-DS-1).
+	$bc_src = null;
 	if (isset($_POST['s']) && isset($_POST['d'])) {
-		$generator = new barcode_generator();
-		$format = (isset($_POST['f']) ? $_POST['f'] : 'png');
-		$generator->output_image($format, $_POST['s'], $_POST['d'], $_POST);
-		exit(0);
+		$bc_src = $_POST;
+	} elseif (isset($_GET['s']) && isset($_GET['d'])) {
+		$bc_src = $_GET;
 	}
-	if (isset($_GET['s']) && isset($_GET['d'])) {
+	if ($bc_src !== null) {
+		header('X-Content-Type-Options: nosniff');
+		header("Content-Security-Policy: default-src 'none'; style-src 'none'; sandbox");
+		header('Cache-Control: private, no-store');
+		if (!is_string($bc_src['s']) || !is_string($bc_src['d']) || strlen($bc_src['d']) > 2048
+			|| (isset($bc_src['f']) && !is_string($bc_src['f']))) {
+			http_response_code(400);
+			exit(0);
+		}
 		$generator = new barcode_generator();
-		$format = (isset($_GET['f']) ? $_GET['f'] : 'png');
-		$generator->output_image($format, $_GET['s'], $_GET['d'], $_GET);
+		$format = (isset($bc_src['f']) ? $bc_src['f'] : 'png');
+		$generator->output_image($format, $bc_src['s'], $bc_src['d'], $bc_src);
 		exit(0);
 	}
 }
@@ -69,9 +79,6 @@ class barcode_generator {
 				break;
 			case 'svg':
 				header('Content-Type: image/svg+xml');
-				// MSP-DS-3: this script runs unauthenticated on the app origin; never let an SVG it returns execute anything.
-				header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox");
-				header('X-Content-Type-Options: nosniff');
 				echo $this->render_svg($symbology, $data, $options);
 				break;
 		}
@@ -106,17 +113,6 @@ class barcode_generator {
 		return $image;
 	}
 
-	/** MSP-DS-3: a colour reaches fill=""/stroke="" attributes, so only a hex value or a plain colour name is accepted. */
-	private function svg_color($value, $fallback) {
-		$value = trim((string) $value);
-		if ($value === '') { return ''; }
-		if (preg_match('/^#?[0-9A-Fa-f]{3,8}$/', $value) === 1) {
-			return ($value[0] === '#') ? $value : '#' . $value;
-		}
-		if (preg_match('/^[A-Za-z]{1,20}$/', $value) === 1) { return $value; }
-		return $fallback;
-	}
-
 	public function render_svg($symbology, $data, $options) {
 		list($code, $widths, $width, $height, $x, $y, $w, $h) =
 			$this->encode_and_calculate_size($symbology, $data, $options);
@@ -124,24 +120,27 @@ class barcode_generator {
 		$svg .= '<svg xmlns="http://www.w3.org/2000/svg" version="1.1"';
 		$svg .= ' width="' . $width . '" height="' . $height . '"';
 		$svg .= ' viewBox="0 0 ' . $width . ' ' . $height . '"><g>';
-		$bgcolor = $this->svg_color(isset($options['bc']) ? $options['bc'] : 'white', 'white');
+		$bgcolor = (isset($options['bc']) ? $options['bc'] : 'white');
 		if ($bgcolor) {
 			$svg .= '<rect x="0" y="0"';
 			$svg .= ' width="' . $width . '" height="' . $height . '"';
-			$svg .= ' fill="' . htmlspecialchars($bgcolor) . '"/>';
+			$svg .= ' fill="' . htmlspecialchars(self::svg_color($bgcolor, 'white'), ENT_QUOTES) . '"/>';
 		}
 		$colors = array(
-			$this->svg_color(isset($options['cs']) ? $options['cs'] : '', ''),
-			$this->svg_color(isset($options['cm']) ? $options['cm'] : 'black', 'black'),
-			$this->svg_color(isset($options['c2']) ? $options['c2'] : '#FF0000', '#FF0000'),
-			$this->svg_color(isset($options['c3']) ? $options['c3'] : '#FFFF00', '#FFFF00'),
-			$this->svg_color(isset($options['c4']) ? $options['c4'] : '#00FF00', '#00FF00'),
-			$this->svg_color(isset($options['c5']) ? $options['c5'] : '#00FFFF', '#00FFFF'),
-			$this->svg_color(isset($options['c6']) ? $options['c6'] : '#0000FF', '#0000FF'),
-			$this->svg_color(isset($options['c7']) ? $options['c7'] : '#FF00FF', '#FF00FF'),
-			$this->svg_color(isset($options['c8']) ? $options['c8'] : 'white', 'white'),
-			$this->svg_color(isset($options['c9']) ? $options['c9'] : 'black', 'black'),
+			(isset($options['cs']) ? $options['cs'] : ''),
+			(isset($options['cm']) ? $options['cm'] : 'black'),
+			(isset($options['c2']) ? $options['c2'] : '#FF0000'),
+			(isset($options['c3']) ? $options['c3'] : '#FFFF00'),
+			(isset($options['c4']) ? $options['c4'] : '#00FF00'),
+			(isset($options['c5']) ? $options['c5'] : '#00FFFF'),
+			(isset($options['c6']) ? $options['c6'] : '#0000FF'),
+			(isset($options['c7']) ? $options['c7'] : '#FF00FF'),
+			(isset($options['c8']) ? $options['c8'] : 'white'),
+			(isset($options['c9']) ? $options['c9'] : 'black'),
 		);
+		foreach ($colors as $i => $c) {
+			$colors[$i] = self::svg_color($c, $i === 0 ? '' : 'black');
+		}
 		$svg .= $this->dispatch_render_svg(
 			$code, $x, $y, $w, $h, $colors, $widths, $options
 		);
@@ -150,6 +149,22 @@ class barcode_generator {
 	}
 
 	/* - - - - INTERNAL FUNCTIONS - - - - */
+
+	// Only a hex colour (with or without #) is ever written into the SVG;
+	// anything else falls back to the default (IT-DS-1).
+	private static function svg_color($c, $default) {
+		if (is_string($c) && preg_match('/^#?([0-9A-Fa-f]{3,8})$/', $c, $m) && in_array(strlen($m[1]), array(3, 4, 6, 8), true)) {
+			return '#' . $m[1];
+		}
+		if ($c === '' ) {
+			return '';
+		}
+		return $default;
+	}
+
+	private static function clamp_num($v, $min, $max) {
+		return max($min, min($max, $v));
+	}
 
 	private function encode_and_calculate_size($symbology, $data, $options) {
 		$code = $this->dispatch_encode($symbology, $data, $options);
@@ -167,21 +182,21 @@ class barcode_generator {
 		);
 		$size = $this->dispatch_calculate_size($code, $widths, $options);
 		$dscale = ($code && isset($code['g']) && $code['g'] == 'm') ? 4 : 1;
-		$scale = (isset($options['sf']) ? (float)$options['sf'] : $dscale);
-		$scalex = (isset($options['sx']) ? (float)$options['sx'] : $scale);
-		$scaley = (isset($options['sy']) ? (float)$options['sy'] : $scale);
+		$scale = (isset($options['sf']) ? self::clamp_num((float)$options['sf'], 0.1, 20) : $dscale);
+		$scalex = (isset($options['sx']) ? self::clamp_num((float)$options['sx'], 0.1, 20) : $scale);
+		$scaley = (isset($options['sy']) ? self::clamp_num((float)$options['sy'], 0.1, 20) : $scale);
 		$dpadding = ($code && isset($code['g']) && $code['g'] == 'm') ? 0 : 10;
-		$padding = (isset($options['p']) ? (int)$options['p'] : $dpadding);
-		$vert = (isset($options['pv']) ? (int)$options['pv'] : $padding);
-		$horiz = (isset($options['ph']) ? (int)$options['ph'] : $padding);
-		$top = (isset($options['pt']) ? (int)$options['pt'] : $vert);
-		$left = (isset($options['pl']) ? (int)$options['pl'] : $horiz);
-		$right = (isset($options['pr']) ? (int)$options['pr'] : $horiz);
-		$bottom = (isset($options['pb']) ? (int)$options['pb'] : $vert);
+		$padding = (isset($options['p']) ? self::clamp_num((int)$options['p'], 0, 100) : $dpadding);
+		$vert = (isset($options['pv']) ? self::clamp_num((int)$options['pv'], 0, 100) : $padding);
+		$horiz = (isset($options['ph']) ? self::clamp_num((int)$options['ph'], 0, 100) : $padding);
+		$top = (isset($options['pt']) ? self::clamp_num((int)$options['pt'], 0, 100) : $vert);
+		$left = (isset($options['pl']) ? self::clamp_num((int)$options['pl'], 0, 100) : $horiz);
+		$right = (isset($options['pr']) ? self::clamp_num((int)$options['pr'], 0, 100) : $horiz);
+		$bottom = (isset($options['pb']) ? self::clamp_num((int)$options['pb'], 0, 100) : $vert);
 		$dwidth = ceil($size[0] * $scalex) + $left + $right;
 		$dheight = ceil($size[1] * $scaley) + $top + $bottom;
-		$iwidth = (isset($options['w']) ? (int)$options['w'] : $dwidth);
-		$iheight = (isset($options['h']) ? (int)$options['h'] : $dheight);
+		$iwidth = (isset($options['w']) ? self::clamp_num((int)$options['w'], 1, 1024) : min($dwidth, 4096));
+		$iheight = (isset($options['h']) ? self::clamp_num((int)$options['h'], 1, 1024) : min($dheight, 4096));
 		$swidth = $iwidth - $left - $right;
 		$sheight = $iheight - $top - $bottom;
 		return array(
@@ -568,7 +583,6 @@ class barcode_generator {
 	}
 
 	private function matrix_dot_svg($x, $y, $w, $h, $mc, $ms, $md) {
-		$mc = htmlspecialchars((string) $mc, ENT_QUOTES);
 		switch ($ms) {
 			default:
 				$x += (1 - $md) * $w / 2;
