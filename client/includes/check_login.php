@@ -78,6 +78,13 @@ $session_company_logo = $row['company_logo'];
 $contact_sql = mysqli_query($mysqli, "SELECT * FROM contacts WHERE contact_id = $session_contact_id AND contact_client_id = $session_client_id");
 $contact = mysqli_fetch_assoc($contact_sql);
 
+// The contact behind this session must still exist and be active: a deleted or archived contact ends its open portal sessions (MSP-DS-15)
+if (!$contact || $contact['contact_archived_at'] !== null) {
+    session_unset();
+    session_destroy();
+    redirect("/login.php");
+}
+
 $session_contact_name = sanitizeInput($contact['contact_name']);
 $session_contact_initials = initials($session_contact_name);
 $session_contact_title = sanitizeInput($contact['contact_title']);
