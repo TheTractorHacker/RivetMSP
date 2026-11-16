@@ -325,33 +325,6 @@ function stripeUnrecordedIntentIsOurs($metadata, $pi_currency, ?array $invoice, 
 }
 
 /**
- * MSP-DS-166: serialise every card charge for one invoice (portal, agent, cron autopay, guest page) with a named DB lock.
- * Take it BEFORE reading the balance; it is held until invoiceChargeUnlock(), the next invoice lock in this process, or the
- * end of the request, so a second path waits, re-reads the balance after the first payment was recorded, and finds nothing to charge.
- * Returns false when another process still holds it after $wait seconds (do not charge).
- */
-function invoiceChargeLock($mysqli, $invoice_id, int $wait = 10): bool
-{
-    invoiceChargeUnlock($mysqli);
-    $name = 'rivetmsp_charge_inv_' . intval($invoice_id);
-    $r = @mysqli_query($mysqli, "SELECT GET_LOCK('$name', " . max(0, $wait) . ")");
-    $row = $r ? mysqli_fetch_row($r) : null;
-    if ($row && intval($row[0]) === 1) {
-        $GLOBALS['rivet_charge_lock_held'] = $name;
-        return true;
-    }
-    return false;
-}
-
-function invoiceChargeUnlock($mysqli): void
-{
-    if (!empty($GLOBALS['rivet_charge_lock_held'])) {
-        @mysqli_query($mysqli, "SELECT RELEASE_LOCK('" . $GLOBALS['rivet_charge_lock_held'] . "')");
-        $GLOBALS['rivet_charge_lock_held'] = null;
-    }
-}
-
-/**
  * MSP-DS-102: the active payment provider's card threshold (Admin > Payment Providers: invoices at or above it are not paid by card), enforced where the card
  * is charged, not only where the Pay button is shown. 0 means no limit. Same comparison as the button in guest_view_invoice.php / client/unpaid_invoices.php.
  */
@@ -361,3 +334,5 @@ function cardPaymentAllowedForInvoice($mysqli, $invoice_amount): bool
     $threshold = floatval($row['payment_provider_threshold'] ?? 0);
     return $threshold == 0 || $threshold > floatval($invoice_amount);
 }
+
+require_once __DIR__ . '/charge_attempts.php';   // MSP-DS-166 / MSP-DS-32: the shared charge-attempt scheme

@@ -8538,6 +8538,40 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.138'");
     }
 
+    if ($rivetit_db_version() == '2.6.138') {
+        // DB 2.6.139 (deep-scan round 2, group B). Every change is idempotent (information_schema / IF NOT EXISTS) and every backfill is safe to re-run.
+        $ds_has_col = function ($table, $col) use ($mysqli) {
+            $r = mysqli_query($mysqli, "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$table' AND COLUMN_NAME = '$col' LIMIT 1");
+            return $r && mysqli_num_rows($r) > 0;
+        };
+        $ds_has_index = function ($table, $index) use ($mysqli) {
+            $r = mysqli_query($mysqli, "SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$table' AND INDEX_NAME = '$index' LIMIT 1");
+            return $r && mysqli_num_rows($r) > 0;
+        };
+
+        // MSP-DS-166 / MSP-DS-32: one row per card/bank charge attempt, claimed before Stripe is called (includes/charge_attempts.php)
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `invoice_charge_attempts` (
+          `attempt_id` int(11) NOT NULL AUTO_INCREMENT,
+          `attempt_invoice_id` int(11) NOT NULL,
+          `attempt_key` varchar(120) NOT NULL,
+          `attempt_balance_cents` bigint(20) NOT NULL DEFAULT 0,
+          `attempt_method_id` int(11) NOT NULL DEFAULT 0,
+          `attempt_source` varchar(20) NOT NULL DEFAULT '',
+          `attempt_status` varchar(20) NOT NULL DEFAULT 'processing',
+          `attempt_pi_id` varchar(100) NOT NULL DEFAULT '',
+          `attempt_error` varchar(255) NOT NULL DEFAULT '',
+          `attempt_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `attempt_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`attempt_id`),
+          UNIQUE KEY `uniq_charge_attempt_key` (`attempt_key`),
+          KEY `idx_charge_attempt_invoice` (`attempt_invoice_id`,`attempt_status`),
+          KEY `idx_charge_attempt_pi` (`attempt_pi_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        // [group B additions are appended above this line]
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.139'");
+    }
+
 // Core migrations catch-up, on EVERY Update Database run (idempotent: MigrationRunner keeps its own state in rivet_core_migrations). The version steps above run Core's
 // migrations only when their number is reached, so a database that was moved to a newer edition number while the files on disk still had an older RivetCore (an update
 // that stopped half way) would otherwise never get the Core migrations the newer package brings (for example 0048/0049 with RivetCore rc.60).

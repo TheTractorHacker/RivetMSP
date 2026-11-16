@@ -2478,6 +2478,27 @@ CREATE TABLE `invoice_items` (
   PRIMARY KEY (`item_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `invoice_charge_attempts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `invoice_charge_attempts` (
+  `attempt_id` int(11) NOT NULL AUTO_INCREMENT,
+  `attempt_invoice_id` int(11) NOT NULL,
+  `attempt_key` varchar(120) NOT NULL,
+  `attempt_balance_cents` bigint(20) NOT NULL DEFAULT 0,
+  `attempt_method_id` int(11) NOT NULL DEFAULT 0,
+  `attempt_source` varchar(20) NOT NULL DEFAULT '',
+  `attempt_status` varchar(20) NOT NULL DEFAULT 'processing',
+  `attempt_pi_id` varchar(100) NOT NULL DEFAULT '',
+  `attempt_error` varchar(255) NOT NULL DEFAULT '',
+  `attempt_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `attempt_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`attempt_id`),
+  UNIQUE KEY `uniq_charge_attempt_key` (`attempt_key`),
+  KEY `idx_charge_attempt_invoice` (`attempt_invoice_id`,`attempt_status`),
+  KEY `idx_charge_attempt_pi` (`attempt_pi_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `invoices`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
