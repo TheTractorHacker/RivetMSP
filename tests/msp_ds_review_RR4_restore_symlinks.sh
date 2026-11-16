@@ -8,7 +8,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 fail=0; ok(){ echo "ok   $1"; }; bad(){ echo "FAIL $1"; fail=1; }
-ME="$(id -u)"; MEN="$(id -un)"
+ME="$(id -u)"; MEN="$(id -un)"; export RIVETMSP_TEST_PRIV_SKIP=1   # the test account may be sudo-capable: the privileged-account refusal has its own test (RR1)
 mkdir -p "$T/bin" "$T/etc"
 printf '#!/usr/bin/env bash\n[[ "$1" == -u && "$3" == -- ]] || exit 9\necho "RUNUSER $2" >> "%s/runuser.log"; shift 3; exec "$@"\n' "$T" > "$T/bin/runuser"; chmod +x "$T/bin/runuser"
 export RIVETMSP_TRUST_TEST_NONROOT=1 RIVETMSP_TEST_AS_ROOT=1 RIVETMSP_TRUST_UID="$ME" RIVETMSP_ETC_DIR="$T/etc" PATH="$T/bin:$PATH"
@@ -29,13 +29,13 @@ r="$(drive "$C/app" "$C/ex" k restore_uploads)"
 [[ ! -e "$C/app/uploads/archived-link" ]] && ok "a symlink inside the archive's uploads/ is not recreated (--no-links)" || bad "archive symlink was copied"
 [[ "$(grep -c 'RUNUSER' "$T/runuser.log")" -ge 2 && "$(stat -c %a "$C/app/uploads/sub")" == 770 && "$(stat -c %a "$C/app/uploads/sub/new.txt")" == 660 ]] && ok "mkdir and rsync ran through runuser as the web user; modes match install.sh (770/660)" || bad "runuser/mode: $(cat "$T/runuser.log") $(stat -c %a "$C/app/uploads/sub")"
 newcase u3; mkdir "$C/app/uploads"; echo "WEB_USER=nobody" > "$T/etc/web-user.conf"
-r="$(drive "$C/app" "$C/ex" k restore_uploads)"; echo "WEB_USER=$MEN" > "$T/etc/web-user.conf"
+r="$(drive "$C/app" "$C/ex" k restore_uploads)"; echo "WEB_USER=$MEN" > "$T/etc/web-user.conf"; chmod 644 "$T/etc/web-user.conf"
 [[ "$r" == *RC=1* && "$r" == *"not the web user"* ]] && ok "an uploads/ directory not owned by the web user is refused" || bad "uploads owner: $r"
 newcase u4; : > "$C/app/uploads"
 r="$(drive "$C/app" "$C/ex" k restore_uploads)"; [[ "$r" == *RC=1* && "$r" == *"not a directory"* ]] && ok "uploads that is a file is refused" || bad "uploads file: $r"
 newcase u5; rm -f "$T/etc/web-user.conf"; ln -s "$C/victim" "$C/app/uploads"
 grep -q -- '--no-same-owner' "$ROOT/deploy/restore.sh" && ok "tar extraction is --no-same-owner" || bad "tar keeps archived owners"
-echo "WEB_USER=$MEN" > "$T/etc/web-user.conf"
+echo "WEB_USER=$MEN" > "$T/etc/web-user.conf"; chmod 644 "$T/etc/web-user.conf"
 
 # --- config.php ---
 newcase c1; echo SHADOW > "$C/victim/shadow"; chmod 600 "$C/victim/shadow"; rm "$C/app/config.php"; ln -s "$C/victim/shadow" "$C/app/config.php"

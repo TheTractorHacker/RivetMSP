@@ -53,10 +53,30 @@ APP="$T/missing-dir"; reset; expect_refused "APP_DIR does not exist"
 ln -s /usr "$T/applink"; APP="$T/applink"; reset; expect_refused "APP_DIR is a symlink (owner fallback refused)"
 APP=/usr
 
-# 4. fallback for installs older than web-user.conf: owner of APP_DIR itself, when that is not root
+# 4. NO fallback to the owner of APP_DIR (live layout: APP_DIR is owned by a sudo-capable admin account): no conf = refused, nothing runs
 reset; APP="$T/app"
+expect_refused "no conf and APP_DIR owned by the (sudo-capable) calling account: no owner fallback"
+[[ ! -e "$T/runuser.log" ]] && ok "runuser was never invoked for the APP_DIR owner" || bad "APP_DIR owner was used: $(cat "$T/runuser.log")"
+
+# 4b. a configured web user that is root-equivalent is refused: sudoers rights (shimmed `sudo -n -l -U`) ...
+cat > "$T/bin/sudo" <<S
+#!/usr/bin/env bash
+if [[ "\$*" == *"-l -U nobody"* ]]; then echo "User nobody may run the following commands on host:"; echo "    (ALL) NOPASSWD: ALL"; else echo "User \${@: -1} is not allowed to run sudo on host."; fi
+S
+chmod +x "$T/bin/sudo"
+reset; echo 'WEB_USER=nobody' > "$T/etc/web-user.conf"; chmod 644 "$T/etc/web-user.conf"; APP="$T/app"
+expect_refused "web user listed in sudoers is refused (sudo -l -U)"
+rm -f "$T/bin/sudo"
+# ... or a privileged group (the calling test account, when it is in sudo/admin/wheel/docker)
+if id -nG | tr ' ' '\n' | grep -qxE 'sudo|admin|wheel|docker|lxd'; then
+    reset; echo "WEB_USER=$(id -un)" > "$T/etc/web-user.conf"; chmod 644 "$T/etc/web-user.conf"; APP="$T/app"
+    expect_refused "web user in a sudo/admin/wheel/docker group is refused"
+else
+    echo "skip web user in privileged group (the test account is in none)"
+fi
+reset; echo 'WEB_USER=nobody' > "$T/etc/web-user.conf"; chmod 644 "$T/etc/web-user.conf"; APP="$T/app"
 r="$(call run_app_exec "$APP" "$T/payload.sh")"
-[[ "$(cat "$T/runuser.log" 2>/dev/null)" == "RUNUSER $(id -un)" ]] && ok "no conf: falls back to the owner of APP_DIR (never root)" || bad "owner fallback: $r"
+[[ "$(cat "$T/runuser.log" 2>/dev/null)" == "RUNUSER nobody" ]] && ok "an unprivileged configured web user still works" || bad "nobody refused: $r"
 
 # 5. the other helpers share the rule
 reset; mkdir -p "$T/rmm"; cp "$T/payload.sh" "$T/rmm/s.sh"

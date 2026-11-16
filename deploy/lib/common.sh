@@ -353,8 +353,8 @@ _rivetmsp_root_mode() {
 # a ROOT-CONTROLLED source, never from a file the web user can rename or replace (config.php, anything inside APP_DIR):
 #   1. WEB_USER= in /etc/rivetmsp/web-user.conf, then in /etc/rivetmsp/web-update.conf (written at install time by install.sh,
 #      install-web-update.sh, install-trusted-tooling.sh); each must be a root-owned regular file, not a symlink, not group/other-writable;
-#   2. else (installs from before those files) the owner of APP_DIR itself: the web user cannot change it (chown needs root, and the
-#      parent directory is root's), provided it is not root and APP_DIR is a real directory, not a symlink.
+#   There is deliberately NO fallback to the owner of APP_DIR: that account is often a sudo-capable admin (root-equivalent), and the web
+#   user is exactly who must not influence the choice. The web user must also not be root-equivalent (sudo/admin/wheel/docker group or sudoers).
 # Prints the user name. Fails (non-zero, loud) when nothing yields a valid non-root account, so nothing ever falls through to running app
 # code as root. (Test hooks, only with RIVETMSP_TRUST_TEST_NONROOT=1 and a non-root caller: RIVETMSP_ETC_DIR, RIVETMSP_TRUST_UID.)
 # Call as: u="$(rivetmsp_web_user "${APP_DIR}")" || die ...   (a die inside $(...) ends only the subshell, so callers must check.)
@@ -372,24 +372,42 @@ rivetmsp_web_user() {
         u="$(sed -n -E 's/^WEB_USER=(.*)$/\1/p' "${f}" | head -n 1 | sed -E "s/^['\"]//; s/['\"]\$//")"
         if [[ -n "${u}" ]]; then src="${f}"; break; fi
     done
-    if [[ -z "${u}" && -n "${app_dir}" && -d "${app_dir}" && ! -L "${app_dir}" ]]; then
-        u="$(stat -c '%U' -- "${app_dir}" 2>/dev/null || true)"; src="the owner of ${app_dir}"
-    fi
     if ! [[ "${u}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
-        echo "ERROR: cannot determine the web user (no WEB_USER in ${etc}/web-user.conf and ${app_dir:-APP_DIR} is not owned by a normal account). Refusing to run application code as root. Run: sudo deploy/install-trusted-tooling.sh --web-user=www-data" >&2
+        echo "ERROR: cannot determine the web user (no WEB_USER in a root-owned ${etc}/web-user.conf; the owner of ${app_dir:-APP_DIR} is deliberately NOT used, it may be a sudo-capable admin account). Refusing to run application code as root. Run: sudo deploy/install-trusted-tooling.sh --web-user=www-data" >&2
         return 1
     fi
     if [[ "${u}" == "root" || "$(id -u "${u}" 2>/dev/null || echo 0)" == "0" ]]; then
         echo "ERROR: the web user from ${src} is root or does not exist. Refusing to run application code as root." >&2
         return 1
     fi
+    if _rivetmsp_user_privileged "${u}"; then
+        echo "ERROR: the web user '${u}' from ${src} is in a privileged group (sudo/admin/wheel/docker/root) or has sudo rights, so running application code as it would still be root. Refusing. Use a dedicated unprivileged web account (www-data): sudo deploy/install-trusted-tooling.sh --web-user=www-data" >&2
+        return 1
+    fi
     printf '%s' "${u}"
+}
+
+# _rivetmsp_user_privileged <user>: true when the account is root-equivalent: member of sudo/admin/wheel/docker/lxd/root, or listed in sudoers
+# (`sudo -n -l -U user` prints "may run the following commands"). Application code must never run as such an account.
+_rivetmsp_user_privileged() {
+    local u="$1" g out
+    # test hook (only with RIVETMSP_TRUST_TEST_NONROOT=1 and a non-root caller): lets a test use its own, possibly sudo-capable, account
+    if [[ "${RIVETMSP_TRUST_TEST_NONROOT:-}" == "1" && "${EUID}" -ne 0 && "${RIVETMSP_TEST_PRIV_SKIP:-}" == "1" ]]; then return 1; fi
+    for g in $(id -nG "${u}" 2>/dev/null); do
+        case "${g}" in sudo|admin|wheel|docker|lxd|root) return 0 ;; esac
+    done
+    if command -v sudo >/dev/null 2>&1; then
+        out="$(sudo -n -l -U "${u}" 2>&1 || true)"
+        [[ "${out}" == *"may run the following commands"* ]] && return 0
+    fi
+    return 1
 }
 
 # write_web_user_conf <user>: install-time half of rivetmsp_web_user (root only): /etc/rivetmsp/web-user.conf, root:root 0644.
 write_web_user_conf() {
     local u="$1"
     [[ "${u}" =~ ^[a-z_][a-z0-9_-]{0,31}$ && "${u}" != "root" ]] || die "Not a usable web user name: '${u}'."
+    ! _rivetmsp_user_privileged "${u}" || die "'${u}' is root-equivalent (privileged group or sudo rights); use a dedicated web account such as www-data."
     install -d -m 0755 -o root -g root /etc/rivetmsp
     printf 'WEB_USER=%s\n' "${u}" > /etc/rivetmsp/web-user.conf.new
     chown root:root /etc/rivetmsp/web-user.conf.new; chmod 0644 /etc/rivetmsp/web-user.conf.new
