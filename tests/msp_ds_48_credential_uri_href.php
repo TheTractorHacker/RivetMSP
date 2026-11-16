@@ -11,7 +11,7 @@ foreach (["https://example.com/a?b=1&c=2" => "https://example.com/a?b=1&amp;c=2"
     ds_t('kept: ' . $good, sanitize_url($good) === $exp);
 }
 ds_t('null ok', sanitize_url(null) === '');
-ds_t('unparseable URL treated as unsafe', strpos(sanitize_url('http:///x'), 'unsupported://') === 0);
+ds_t('unparseable URL treated as unsafe', strpos(sanitize_url('javascript:///alert(1)'), 'unsupported://') === 0);
 foreach (['agent/asset_details.php', 'agent/contact_details.php'] as $p) {
     ds_t("$p link uses sanitize_url", strpos(ds_src($p), "<a href='\" . sanitize_url(\$row['credential_uri']) . \"' target='_blank'>") !== false);
 }

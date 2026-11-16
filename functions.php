@@ -5211,17 +5211,21 @@ function display_folder_options($parent_folder_id, $client_id, $indent = 0) {
 
 function sanitize_url($url) {
     $allowed = ['http', 'https', 'file', 'ftp', 'ftps', 'sftp', 'dav', 'webdav', 'caldav', 'carddav',  'ssh', 'telnet', 'smb', 'rdp', 'vnc', 'rustdesk', 'anydesk', 'connectwise', 'splashtop', 'sip', 'sips', 'ldap', 'ldaps'];
-    // MSP-DS-48: decide on a copy without control characters/spaces (browsers drop them inside and before a scheme, so
-    // " java\tscript:..." is javascript:); a URL parse_url() cannot read is treated as unsafe
-    $url = (string) ($url ?? '');
-    $probe = preg_replace('/[\x00-\x20\x7f]+/', '', $url);
-    $parts = parse_url($probe);
-    if ($parts === false) {
-        return htmlspecialchars('unsupported://' . ltrim(substr($probe, strpos($probe, ':') === false ? 0 : strpos($probe, ':') + 1), '/'), ENT_QUOTES, 'UTF-8');
+    // MSP-DS-101: decide the scheme on what a browser will actually parse. Browsers drop tabs/newlines/C0 bytes inside a URL and trim leading
+    // control characters and spaces, so 'java\tscript:' and "\x01javascript:" must be judged as 'javascript:'. A URL parse_url() cannot parse is
+    // judged by its leading scheme token instead of being passed through.
+    $url = ltrim((string) preg_replace('/[\x00-\x1F\x7F]+/', '', (string) ($url ?? '')), " ");
+    $parts = parse_url($url);
+    $scheme = is_array($parts) && isset($parts['scheme']) ? $parts['scheme'] : null;
+    if ($scheme === null && preg_match('/^([A-Za-z][A-Za-z0-9+.\-]*):/', $url, $sm)) {
+        $scheme = $sm[1];
     }
-    if (isset($parts['scheme']) && !in_array(strtolower($parts['scheme']), $allowed)) {
+    if ($scheme === null && $parts === false) {
+        // unparseable and no recognisable scheme: never emit it as a link target
+        return htmlspecialchars('unsupported://' . ltrim($url, '/'), ENT_QUOTES, 'UTF-8');
+    }
+    if ($scheme !== null && !in_array(strtolower($scheme), $allowed)) {
         // Remove the scheme and colon
-        $url = $probe;
         $pos = strpos($url, ':');
         $without_scheme = $url;
         if ($pos !== false) {
@@ -5233,7 +5237,7 @@ function sanitize_url($url) {
     }
 
     // Safe schemes: return escaped original URL
-    return htmlspecialchars($url ?? '', ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
 }
 
 // Redirect Function
