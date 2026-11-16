@@ -15,7 +15,7 @@ $m->query("INSERT INTO users (user_id, user_name, user_email, user_type, user_st
   (1,'admin','admin@x.t',1,1,1,NULL),(2,'finrep','finrep@x.t',1,1,2,NULL),(3,'fin','fin@x.t',1,1,3,NULL),(4,'rep','rep@x.t',1,1,4,NULL),
   (5,'ro','ro@x.t',1,1,5,NULL),(6,'gone','gone@x.t',1,1,2,NOW()),(7,'off','off@x.t',1,0,2,NULL)");
 $may = function ($uid, $report) use ($m) { return reportScheduleCreatorMaySend($m, $uid, $report); };
-$ok('legacy schedule (no creator recorded) keeps sending', $may(null, 'mrr') === true);
+$ok('legacy schedule (no creator recorded) is NOT sent until an admin re-owns it (MRR16)', $may(null, 'mrr') === false && $may('', 'mrr') === false && $may(0, 'mrr') === false);
 $ok('admin creator may send', $may(1, 'mrr'));
 $ok('creator with reporting write + financial may send a financial report', $may(2, 'mrr'));
 $ok('creator who lost the financial module may NOT send a financial report', !$may(4, 'mrr'));

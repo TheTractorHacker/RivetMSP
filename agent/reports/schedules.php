@@ -121,6 +121,29 @@ if (isset($_GET['toggle'])) {
     exit;
 }
 
+// ---- Take ownership of a schedule that has no known creator (MSP-DS-156 re-review MRR16) ----------------
+// Schedules created before the creator was recorded, and not attributable from the audit log, do not send. Whoever may send the report
+// (reporting write + the report's module, enforced by requireScheduleWrite) can take them over; from then on the usual creator re-check applies to them.
+if (isset($_GET['claim'])) {
+    validateCSRFToken($_GET['csrf_token'] ?? '');
+    $schedule_id = intval($_GET['claim']);
+    $sched_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT schedule_report FROM report_schedules WHERE schedule_id = $schedule_id AND (schedule_created_by IS NULL OR schedule_created_by = 0)"));
+    if (!$sched_row) {
+        $_SESSION['alert_type'] = 'danger';
+        $_SESSION['alert_message'] = 'That schedule already has an owner.';
+    } else {
+        $requireScheduleWrite($sched_row['schedule_report']);
+        mysqli_query($mysqli, "UPDATE report_schedules SET schedule_created_by = " . intval($session_user_id) . " WHERE schedule_id = $schedule_id AND (schedule_created_by IS NULL OR schedule_created_by = 0)");
+        if (function_exists('logAction')) {
+            logAction("Report Schedule", "Update", "Took ownership of report schedule #$schedule_id (it had no known creator)");
+        }
+        $_SESSION['alert_type'] = 'success';
+        $_SESSION['alert_message'] = 'You now own this report schedule; it will send again at its next due time.';
+    }
+    header('Location: schedules.php');
+    exit;
+}
+
 // ---- Render (chrome + list) ----------------------------------------------
 require_once "includes/inc_all_reports.php";
 
@@ -207,7 +230,9 @@ $sql_schedules = mysqli_query($mysqli, "SELECT * FROM report_schedules ORDER BY 
                             <td><?php echo nullable_htmlentities($frequency); ?></td>
                             <td><?php echo nullable_htmlentities($row['schedule_recipients']); ?></td>
                             <td>
-                                <?php if ($active) { ?>
+                                <?php if (empty($row['schedule_created_by'])) { ?>
+                                    <span class="badge text-bg-warning" title="Created before the creator was recorded. It will not be emailed until someone takes ownership.">Needs an owner</span>
+                                <?php } elseif ($active) { ?>
                                     <span class="badge text-bg-success">Active</span>
                                 <?php } else { ?>
                                     <span class="badge text-bg-secondary">Paused</span>
@@ -216,6 +241,11 @@ $sql_schedules = mysqli_query($mysqli, "SELECT * FROM report_schedules ORDER BY 
                             <td><?php echo $last_sent; ?></td>
                             <td class="text-end">
                                 <?php if ($can_schedule) { ?>
+                                <?php if (empty($row['schedule_created_by'])) { ?>
+                                <a class="btn btn-sm btn-outline-warning" href="schedules.php?claim=<?php echo $schedule_id; ?>&csrf_token=<?php echo $_SESSION['csrf_token']; ?>">
+                                    <i class="fas fa-fw fa-user-check"></i> Take ownership
+                                </a>
+                                <?php } ?>
                                 <a class="btn btn-sm btn-outline-secondary" href="schedules.php?toggle=<?php echo $schedule_id; ?>&csrf_token=<?php echo $_SESSION['csrf_token']; ?>">
                                     <i class="fas fa-fw fa-<?php echo $active ? 'pause' : 'play'; ?>"></i><?php echo $active ? ' Pause' : ' Resume'; ?>
                                 </a>

@@ -8762,6 +8762,19 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         if (!$col_exists('report_schedules', 'schedule_created_by')) {
             mysqli_query($mysqli, "ALTER TABLE `report_schedules` ADD `schedule_created_by` INT(11) DEFAULT NULL AFTER `schedule_created_at`");
         }
+        // MSP-DS-156 re-review MRR16: attribute legacy schedules from their audit log row where that is unambiguous; the rest stay without an owner and
+        // DO NOT SEND until someone allowed to send the report takes them over (Reports > Schedules > Take ownership). Each outcome is logged.
+        require_once dirname(__DIR__) . '/includes/report_schedule_guards.php';
+        $bf = reportScheduleBackfillCreators($mysqli);
+        foreach ($bf['owned'] as $bid) {
+            mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Update', log_description = 'MSP-DS-156: report schedule #" . (int) $bid . " attributed to its creator from the audit log', log_entity_id = " . (int) $bid);
+        }
+        if ($bf['unowned']) {
+            mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Review', log_description = 'MSP-DS-156: report schedule(s) #" . implode(', #', array_map('intval', $bf['unowned'])) . " have no known creator and do not send until an admin takes ownership (Reports > Schedules)'");
+            $bnote = mysqli_real_escape_string($mysqli, count($bf['unowned']) . ' scheduled report(s) created before the upgrade have no known owner and will not be emailed until an admin takes ownership of each in Reports > Schedules.');
+            mysqli_query($mysqli, "INSERT INTO `notifications` SET notification_type = 'Report Schedule', notification = '$bnote', notification_action = 'reports/schedules.php'");
+        }
+
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.140'");
     }
 
