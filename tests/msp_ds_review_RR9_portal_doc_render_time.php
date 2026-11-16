@@ -5,7 +5,7 @@ $pass = $fail = 0;
 $ok = function (bool $c, string $l) use (&$pass, &$fail) { if ($c) { $pass++; echo "  ok   $l\n"; } else { $fail++; echo "  FAIL $l\n"; } };
 $root = dirname(__DIR__);
 $post = file_get_contents("$root/client/post.php");
-$i = strpos($post, "isset(\$_POST['client_add_document'])"); $blk = substr($post, $i, 2500);
+$i = strpos($post, "isset(\$_POST['client_add_document'])"); $blk = preg_replace('#^\s*//.*$#m', '', substr($post, $i, 2500));   // code only, not comments
 $ok(str_contains($blk, 'saveBase64Images(') && !str_contains($blk, 'rivetPdfSafeHtml('), 'portal save stores saveBase64Images() output without the PDF allow-list');
 $ok(str_contains(file_get_contents("$root/agent/post/document.php"), 'writeHTML(rivetPdfSafeHtml('), 'agent PDF export sanitises at render time');
 foreach (['client/document.php', 'guest/guest_view_item.php', 'agent/document_details.php', 'agent/modals/document/document_view.php'] as $f) {
