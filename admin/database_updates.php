@@ -8544,8 +8544,8 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         // --- MSP-DS-49: per-user calendar feed token (sha256 of a random token; the token itself is shown once)
         if (!$db_has_column('users', 'user_calendar_token_hash')) {
             mysqli_query($mysqli, "ALTER TABLE `users` ADD COLUMN `user_calendar_token_hash` char(64) DEFAULT NULL, ADD COLUMN `user_calendar_token_rotated_at` datetime DEFAULT NULL, ADD COLUMN `user_calendar_legacy_until` datetime DEFAULT NULL");
-            // Feeds already subscribed keep working for 30 days, or until their owner generates a new link, whichever comes first.
-            mysqli_query($mysqli, "UPDATE `users` SET `user_calendar_legacy_until` = DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE `user_type` = 1");
+            // Feeds already subscribed keep working for 7 days (calendar apps poll at least daily), or until their owner generates a new link or an admin ends legacy links (security_settings calendar_legacy_links), whichever comes first.
+            mysqli_query($mysqli, "UPDATE `users` SET `user_calendar_legacy_until` = DATE_ADD(NOW(), INTERVAL 7 DAY) WHERE `user_type` = 1");
         }
         if (!$db_has_index('users', 'idx_users_calendar_token')) {
             mysqli_query($mysqli, "ALTER TABLE `users` ADD KEY `idx_users_calendar_token` (`user_calendar_token_hash`)");

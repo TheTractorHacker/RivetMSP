@@ -39,7 +39,7 @@ require_once "../includes/load_global_settings.php";
 // System temp directory & lock
 require_once dirname(__DIR__) . '/includes/cron_lock.php';
 $temp_dir = rivetCronLockDir();
-$lock_file_path = "{$temp_dir}/itflow_outlook_schedule_sync_{$installation_id}.lock";
+$lock_file_path = $temp_dir . '/' . rivetCronLockName('outlook_schedule_sync', (string) $installation_id);
 
 if (file_exists($lock_file_path)) {
     if (!rivetCronLockIsLive($lock_file_path, 300)) {

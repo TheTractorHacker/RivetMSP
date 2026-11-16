@@ -15,6 +15,16 @@ function rivetCronLockDir(): string
     return sys_get_temp_dir();
 }
 
+/**
+ * Lock file name for a cron job. The installation id is a secret (the legacy calendar-feed token was derived from it), so it is never
+ * put in a file name: the name carries a one-way digest of it instead. MSP-DS-49 (re-review MRR-9).
+ */
+function rivetCronLockName(string $job, ?string $installation_id = null): string
+{
+    $id = $installation_id ?? (string) ($GLOBALS['installation_id'] ?? '');
+    return 'itflow_' . $job . '_' . substr(hash('sha256', 'cron-lock|' . $id), 0, 16) . '.lock';
+}
+
 /** True when an existing lock file still counts as held: it is ours, not in the future, and younger than $ttl seconds. */
 function rivetCronLockIsLive(string $path, int $ttl): bool
 {

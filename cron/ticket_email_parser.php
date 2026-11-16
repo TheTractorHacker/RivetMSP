@@ -66,7 +66,7 @@ if ($config_ticket_email_parse == 0) {
 // System temp directory & lock
 require_once dirname(__DIR__) . '/includes/cron_lock.php';
 $temp_dir = rivetCronLockDir();
-$lock_file_path = "{$temp_dir}/itflow_email_parser_{$installation_id}.lock";
+$lock_file_path = $temp_dir . '/' . rivetCronLockName('email_parser', (string) $installation_id);
 
 if (file_exists($lock_file_path)) {
     if (!rivetCronLockIsLive($lock_file_path, 300)) {

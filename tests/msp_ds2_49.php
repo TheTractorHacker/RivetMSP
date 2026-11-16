@@ -14,7 +14,7 @@ $inst = 'install-secret-123';
 $legacy = fn (int $id) => hash_hmac('sha256', (string) $id, $inst);
 $r = fn (string $tok) => calendarFeedTokenResolve($m, $tok, $inst);
 ds2_t('existing HMAC link still works after the upgrade (grace period)', ($r($legacy(1))['user_id'] ?? 0) === 1 && ($r($legacy(2))['user_id'] ?? 0) === 2);
-ds2_t('grace period is about 30 days', (int) ds2_one($m, "SELECT DATEDIFF(user_calendar_legacy_until, NOW()) FROM users WHERE user_id=1") >= 29);
+ds2_t('grace period is about 7 days', (int) ds2_one($m, "SELECT DATEDIFF(user_calendar_legacy_until, NOW()) FROM users WHERE user_id=1") >= 6);
 ds2_t('portal accounts get no grace', ds2_one($m, "SELECT user_calendar_legacy_until FROM users WHERE user_id=4") === null);
 ds2_t('inactive user link refused', $r($legacy(3)) === null);
 

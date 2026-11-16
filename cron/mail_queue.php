@@ -96,7 +96,7 @@ if (empty($config_smtp_provider)) {
  * ======================================================================= */
 require_once dirname(__DIR__) . '/includes/cron_lock.php';
 $temp_dir = rivetCronLockDir();
-$lock_file_path = "{$temp_dir}/itflow_mail_queue_{$installation_id}.lock";
+$lock_file_path = $temp_dir . '/' . rivetCronLockName('mail_queue', (string) $installation_id);
 
 if (file_exists($lock_file_path)) {
     if (!rivetCronLockIsLive($lock_file_path, 600)) {

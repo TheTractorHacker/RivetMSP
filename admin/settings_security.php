@@ -248,6 +248,29 @@ require_once "../includes/security_policy.php";
 $sp = secSettingsAll($mysqli, true);
 ?>
 
+<?php
+require_once __DIR__ . '/../includes/security_policy.php';
+$cal_legacy_on = secSetting('calendar_legacy_links') === '1';
+$cal_legacy_open = intval(mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COUNT(*) AS c FROM users WHERE user_calendar_legacy_until IS NOT NULL AND user_calendar_legacy_until > NOW() AND user_calendar_token_hash IS NULL"))['c'] ?? 0);
+?>
+<div class="card card-dark mb-3">
+    <div class="card-header py-3">
+        <h3 class="card-title"><i class="fas fa-fw fa-calendar-alt me-2"></i>Legacy calendar feed links</h3>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-2">Calendar feed links created before the per-user random token (derived from the installation id) keep working for a short window after the upgrade, or until their owner generates a new link.</p>
+        <?php if ($cal_legacy_on) { ?>
+        <p class="mb-2"><span class="badge bg-warning text-dark">Accepted</span> <?php echo $cal_legacy_open; ?> staff account(s) still on a legacy link inside the window.</p>
+        <form action="post.php" method="post" class="d-inline">
+            <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token'] ?>">
+            <button type="submit" name="end_calendar_legacy_links" class="btn btn-outline-danger confirm-link"><i class="fas fa-fw fa-ban me-1"></i>End legacy links now</button>
+        </form>
+        <?php } else { ?>
+        <p class="mb-0"><span class="badge bg-success">Ended</span> Only per-user tokens are accepted.</p>
+        <?php } ?>
+    </div>
+</div>
+
 <div class="card card-dark">
     <div class="card-header py-3">
         <h3 class="card-title"><i class="fas fa-fw fa-user-lock me-2"></i>Sign-in policy</h3>

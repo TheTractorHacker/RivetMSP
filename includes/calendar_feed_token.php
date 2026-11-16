@@ -27,7 +27,12 @@ function calendarFeedTokenResolve(mysqli $mysqli, string $token, string $install
         return ['user_id' => (int) $u['user_id'], 'user_name' => (string) $u['user_name']];
     }
 
-    // Legacy HMAC links, only for users who have not rotated and whose grace period has not passed.
+    // Legacy HMAC links, only for users who have not rotated and whose grace period has not passed, and only while an admin has not
+    // ended them (security_settings calendar_legacy_links = 0, MRR-9).
+    require_once __DIR__ . '/security_policy.php';
+    if (secSetting('calendar_legacy_links', $mysqli) !== '1') {
+        return null;
+    }
     $res = mysqli_query($mysqli, "SELECT user_id, user_name FROM users
         WHERE user_status = 1 AND user_archived_at IS NULL AND user_type = 1 AND user_calendar_legacy_until IS NOT NULL AND user_calendar_legacy_until > NOW()");
     while ($res && ($u = mysqli_fetch_assoc($res))) {

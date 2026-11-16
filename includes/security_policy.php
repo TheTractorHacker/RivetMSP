@@ -33,6 +33,7 @@ if (!function_exists('secSetting')) {
             'vault_stepup_minutes'  => '15',
             'vault_reveal_limit'    => '30',
             'portal_entra_tenant'   => '',
+            'calendar_legacy_links' => '1',
         ];
     }
 
@@ -80,6 +81,7 @@ if (!function_exists('secSetting')) {
         switch ($key) {
             case 'password_min_length':   return (string) max(8, min(128, (int) $value));
             case 'password_hibp_check':
+            case 'calendar_legacy_links':
             case 'remember_me_skips_mfa': return ((int) $value) === 1 ? '1' : '0';
             case 'mfa_policy':            return in_array((string) $value, ['off', 'admins', 'all'], true) ? (string) $value : 'off';
             case 'mfa_grace_days':        return (string) max(0, min(90, (int) $value));
