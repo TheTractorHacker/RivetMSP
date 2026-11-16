@@ -27,8 +27,19 @@ function updateHelperMode(string $dir): string
     $cli = rtrim($dir, '/') . '/scripts/update_cli.php';
     $owner = is_file($cli) ? fileowner($cli) : false;
     $me = function_exists('posix_geteuid') ? posix_geteuid() : null;
+    if ($owner !== false && $me !== null && $owner === $me) {
+        return 'legacy';
+    }
+    // The usual shared setup (the checkout belongs to the person who administers the server, the web user is in its group, core.sharedRepository=group, g+w and
+    // setgid folders) is a supported layout: the Checks panel already proves the web user can really write .git and the files a release replaces. Only when those
+    // checks fail is the page refused (and pointed at the helper); it never starts an update that would stop half way.
+    foreach (updateChecks(rtrim($dir, '/')) as $check) {
+        if ($check['status'] === 'fail' && in_array($check['id'], ['exec', 'git', 'repo', 'gitwrite', 'treewrite'], true)) {
+            return 'unsupported';
+        }
+    }
 
-    return $owner !== false && $me !== null && $owner === $me ? 'legacy' : 'unsupported';
+    return 'legacy';
 }
 
 /**

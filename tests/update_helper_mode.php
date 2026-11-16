@@ -9,7 +9,7 @@ $ok = function (string $n, bool $c) use (&$fail): void { echo ($c ? 'ok   ' : 'F
 $d = sys_get_temp_dir() . '/upd_' . bin2hex(random_bytes(4));
 mkdir($d . '/scripts', 0700, true);
 touch($d . '/scripts/update_cli.php');
-$ok('own checkout, no helper -> legacy (unless the helper is installed here)', updateHelperMode($d) === (updateHelperInstalled() ? 'helper' : 'legacy'));
+$ok('a checkout the web user can write, no helper -> legacy (unless the helper is installed here)', updateHelperMode($d) === (updateHelperInstalled() ? 'helper' : 'legacy'));
 $ok('missing update_cli.php -> not legacy', updateHelperMode($d . '/nope') !== 'legacy');
 $src = file_get_contents(__DIR__ . '/../admin/post/update.php');
 $ok('page asks the mode before any git command', strpos($src, 'updateHelperMode(') < strpos($src, 'git pull'));

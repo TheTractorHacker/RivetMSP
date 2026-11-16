@@ -8441,3 +8441,14 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.137'");
     }
+
+// Core migrations catch-up, on EVERY Update Database run (idempotent: MigrationRunner keeps its own state in rivet_core_migrations). The version steps above run Core's
+// migrations only when their number is reached, so a database that was moved to a newer edition number while the files on disk still had an older RivetCore (an update
+// that stopped half way) would otherwise never get the Core migrations the newer package brings (for example 0048/0049 with RivetCore rc.60).
+if (class_exists(\RivetCore\Migration\MigrationRunner::class) && class_exists(\RivetCore\Migration\CoreMigrations::class)) {
+    (new \RivetCore\Migration\MigrationRunner(
+        new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+        \RivetCore\Migration\CoreMigrations::all(),
+        new \RivetCore\Support\SystemClock()
+    ))->run();
+}

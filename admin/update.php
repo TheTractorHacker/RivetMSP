@@ -214,6 +214,21 @@ $render_check = static function (array $chk) use ($h, $pill, $check_kind, $check
                     </div>
                 </div>
 
+                <?php
+                $upd_last_backup = 0;
+                foreach (glob($_SERVER['DOCUMENT_ROOT'] . '/backups/*.zip') ?: [] as $upd_bf) {
+                    $upd_last_backup = max($upd_last_backup, (int) filemtime($upd_bf));
+                }
+                $upd_backup_stale = !$upd_last_backup || $upd_last_backup < time() - 86400;
+                ?>
+                <div class="d-flex flex-wrap align-items-center gap-3 mt-3 upd-backup-row">
+                    <a class="btn btn-outline-primary" href="backup.php"><i class="fas fa-fw fa-save me-2" aria-hidden="true"></i>Take a backup now</a>
+                    <span class="small <?= $upd_backup_stale ? 'text-warning' : 'text-muted' ?>">
+                        <?= $upd_last_backup ? 'Last backup saved on this server: ' . $h(date('Y-m-d H:i', $upd_last_backup)) . ($upd_backup_stale ? ' (more than a day ago)' : '') : 'No backup is saved on this server yet.' ?>
+                        Open Backups, make one, then come back and run the update.
+                    </span>
+                </div>
+
                 <div class="upd-actions mt-3">
                     <?php if ($db_update_pending) { ?>
                         <a class="btn btn-primary" href="post.php?update_db&csrf_token=<?php echo $csrf_url; ?>" data-upd-action="database"><i class="fas fa-fw fa-database me-2" aria-hidden="true"></i>Update Database</a>
