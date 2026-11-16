@@ -185,8 +185,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                 Your MFA session expired. Please sign in again.
               </div>";
         } else {
-            $email = sanitizeInput($sess['email'] ?? '');
-            $role_choice = 'agent';
+            // MSP-DS-37: the code step is limited per account (and per pending sign-in), not only per IP. An attempt is reserved
+            // atomically before the code is checked (5 per 5 minutes per account, shared with the mobile API sign-in); a correct code
+            // resets it. A pending sign-in also dies after 5 wrong codes and keeps its original expiry (it used to slide forward).
+            $mfa_uid = intval($sess['agent_user_id'] ?? 0);
+            $mfa_reserved = false;
+            if ($mfa_uid > 0 && intval($sess['mfa_attempts'] ?? 0) < 5) {
+                mysqli_query($mysqli,
+                    "UPDATE users SET
+                        user_failed_login_count = IF(user_failed_login_at IS NULL OR user_failed_login_at <= UTC_TIMESTAMP() - INTERVAL 300 SECOND, 1, user_failed_login_count + 1),
+                        user_failed_login_at = UTC_TIMESTAMP()
+                     WHERE user_id = $mfa_uid
+                       AND (user_failed_login_count < 5 OR user_failed_login_at IS NULL OR user_failed_login_at <= UTC_TIMESTAMP() - INTERVAL 300 SECOND)"
+                );
+                $mfa_reserved = mysqli_affected_rows($mysqli) >= 1;
+            }
+            if (!$mfa_reserved) {
+                unset($_SESSION['pending_mfa_login']);
+                header("HTTP/1.1 429 Too Many Requests");
+                $response = "
+                  <div class='alert alert-danger'>
+                    Too many two-factor attempts. Please wait a few minutes and sign in again.
+                  </div>";
+            } else {
+                $email = sanitizeInput($sess['email'] ?? '');
+                $role_choice = 'agent';
+            }
         }
     }
 
@@ -390,7 +414,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                     $mfa_is_complete = false;
                     $extended_log    = '';
 
-                    if (empty($token)) {
+                    // MSP-DS-143: a stored second-factor seed that cannot be decrypted must not read as "no MFA configured".
+                    $mfa_seed_unreadable = empty($token) && trim((string) ($selectedRow['user_token'] ?? '')) !== '';
+                    if (empty($token) && !$mfa_seed_unreadable) {
                         $mfa_is_complete = true; // no MFA configured
                     }
 
@@ -428,7 +454,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                         $extended_log       = 'with a MFA recovery code';
                     }
 
-                    if ($mfa_is_complete) {
+                    if ($mfa_seed_unreadable) {
+                        header("HTTP/1.1 403 Forbidden");
+                        logAction("Login", "Failed", "$user_name was refused: the stored two-factor seed could not be read (MFA Failed)", 0, $user_id);
+                        unset($_SESSION['pending_mfa_login']);
+                        $response = "<div class='alert alert-danger'>Your two-factor setup could not be read. Ask an administrator to reset it.</div>";
+                    } elseif ($mfa_is_complete) {
 
                         // Remember me token creation
                         if (isset($_POST['remember_me'])) {
@@ -520,6 +551,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
 
                         if ($is_mfa_step) {
                             // Step 3: MFA submit
+                            mysqli_query($mysqli, "UPDATE users SET user_failed_login_count = 0 WHERE user_id = " . intval($user_id));   // MSP-DS-37: correct code
                             $sess = $pending_mfa ?? ($_SESSION['pending_mfa_login'] ?? null);
                             if ($sess && !empty($sess['agent_master_key'])) {
                                 $site_encryption_master_key = $sess['agent_master_key'];
@@ -634,7 +666,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                             'agent_user_id'    => $user_id,
                             'agent_master_key' => $agent_master_key, // may be null
                             'token'            => $pending_mfa_token,
-                            'created'          => time()
+                            // MSP-DS-37: a wrong code must not renew the pending sign-in's lifetime or reset its attempt count
+                            'created'          => $is_mfa_step ? intval($pending_mfa['created'] ?? ($_SESSION['pending_mfa_login']['created'] ?? time())) : time(),
+                            'mfa_attempts'     => $is_mfa_step ? intval($pending_mfa['mfa_attempts'] ?? ($_SESSION['pending_mfa_login']['mfa_attempts'] ?? 0)) + 1 : 0
                         ];
 
                         // Now that we've transferred what we need, it's safe to clear the dual-role pending session.
