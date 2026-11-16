@@ -1009,7 +1009,7 @@ if (isset($_POST['link_contact_to_asset'])) {
 
 if (isset($_GET['unlink_asset_from_contact'])) {
 
-    validateCSRFToken($_POST['csrf_token']);
+    validateCSRFToken($_GET['csrf_token']); // MSP-DS-53: a GET link carries its token in the query string
 
     enforceUserPermission('module_client', 2);
 
@@ -1069,7 +1069,7 @@ if (isset($_POST['link_software_to_contact'])) {
 
 if (isset($_GET['unlink_software_from_contact'])) {
 
-    validateCSRFToken($_POST['csrf_token']);
+    validateCSRFToken($_GET['csrf_token']); // MSP-DS-53
 
     enforceUserPermission('module_client', 2);
 
