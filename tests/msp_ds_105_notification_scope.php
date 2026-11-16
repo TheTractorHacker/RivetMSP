@@ -8,6 +8,7 @@ $mysqli->query("SET SESSION sql_mode=''");
 require __DIR__ . '/../src/Mail/MessageId.php';
 class_alias('RivetMSP\Mail\MessageId', 'MessageId');
 function sanitizeInput($v) { global $mysqli; return mysqli_real_escape_string($mysqli, strip_tags(trim((string) $v))); }
+function sanitizeInputRaw($v) { return trim(strip_tags((string) $v)); }   // MSP-DS-159: handleInboundNdr uses the raw sanitiser
 $GLOBALS['calls'] = []; function appNotify($type, $details, $action = null, $client_id = 0) { $GLOBALS['calls'][] = [$details, (int) $client_id]; }
 $root = dirname(__DIR__);
 preg_match('/function handleInboundNdr\(.*?\n\}\n/s', file_get_contents("$root/cron/ticket_email_parser.php"), $m);

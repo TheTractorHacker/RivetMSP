@@ -52,8 +52,8 @@ use RivetMSP\Mail\RawHeaders;
 
 // MSP-DS-93: the prefix is put into a regex below, so keep the quoted raw value (the sanitizeInput() copy is SQL-escaped and would double-escape).
 $config_ticket_prefix_re = preg_quote((string) $config_ticket_prefix, '/');
-$config_ticket_prefix = sanitizeInput($config_ticket_prefix);
-$config_ticket_from_name = sanitizeInput($config_ticket_from_name);
+$config_ticket_prefix = sanitizeInputRaw($config_ticket_prefix);
+$config_ticket_from_name = sanitizeInputRaw($config_ticket_from_name);
 // NOTE: unknown-sender parsing is now a per-mailbox setting (mailbox_parse_unknown_senders),
 // not a global one - see pollMailbox() below.
 
@@ -308,7 +308,7 @@ function processInboundMessage(
     $mail_message_id = (string) ($norm['message_id'] ?? '');
 
     $from_domain = explode("@", $from_email);
-    $from_domain = sanitizeInput(end($from_domain));
+    $from_domain = sanitizeInputRaw(end($from_domain));
 
     // Body used when the message is a reply: quoted history removed (text part preferred), never emptied.
     $reply_body = $message_body;
@@ -436,9 +436,9 @@ function processInboundMessage(
         $rowc = inboundTrustedContact($mysqli, $from_email);
 
         if ($rowc) {
-            $contact_name  = sanitizeInput($rowc['contact_name']);
+            $contact_name  = (string) $rowc['contact_name'];   // raw DB values: addTicket() escapes once (MSP-DS-159)
             $contact_id    = intval($rowc['contact_id']);
-            $contact_email = sanitizeInput($rowc['contact_email']);
+            $contact_email = (string) $rowc['contact_email'];
             $client_id     = intval($rowc['contact_client_id']);
 
             $email_processed = addTicket($contact_id, $contact_name, $contact_email, $client_id, $date, $subject, $message_body, $attachments, $original_message_file, $ccs, $mailbox_id, $mail_message_id);
@@ -535,15 +535,15 @@ function handleInboundNdr(array $raw_parts, string $subject, string $message_bod
         if (strpos($ctype, 'delivery-status') !== false) {
 
             if (preg_match('/Final-Recipient:\s*rfc822;\s*(.+)/i', $body, $m)) {
-                $failed_recipient = sanitizeInput(trim($m[1]));
+                $failed_recipient = sanitizeInputRaw(trim($m[1]));
             }
 
             if (preg_match('/Diagnostic-Code:\s*(.+)/i', $body, $m)) {
-                $diagnostic_code = sanitizeInput(trim($m[1]));
+                $diagnostic_code = sanitizeInputRaw(trim($m[1]));
             }
 
             if (preg_match('/Status:\s*([0-9\.]+)/i', $body, $m)) {
-                $status_code = sanitizeInput(trim($m[1]));
+                $status_code = sanitizeInputRaw(trim($m[1]));
             }
         }
 
@@ -551,7 +551,7 @@ function handleInboundNdr(array $raw_parts, string $subject, string $message_bod
         if (strpos($ctype, 'message/rfc822') !== false || strpos($ctype, 'text/rfc822-headers') !== false) {
 
             if (preg_match('/^Subject:\s*(.+)$/mi', $body, $m)) {
-                $original_subject = sanitizeInput(trim($m[1]));
+                $original_subject = sanitizeInputRaw(trim($m[1]));
             }
             if ($original_message_id === '' && preg_match('/^Message-ID:\s*(.+)$/mi', $body, $m)) {
                 $original_message_id = MessageId::normalize(trim($m[1]));
@@ -563,7 +563,7 @@ function handleInboundNdr(array $raw_parts, string $subject, string $message_bod
     if (!$diagnostic_code) {
         // Exim puts diagnostics on an indented line
         if (preg_match('/\n\s{2,}(.+)/', $message_body_text, $m)) {
-            $diagnostic_code = sanitizeInput(trim($m[1]));
+            $diagnostic_code = sanitizeInputRaw(trim($m[1]));
         }
     }
 
@@ -646,10 +646,13 @@ function mailIntakeLimits(): array {
 // Normalise + prepare one fetched message, give it a stand-in Message-ID when it has none, and run processInboundMessage().
 // Returns whether it was handled. Throws on a genuine failure (the caller counts it toward quarantine).
 function intakeHandleNormalized(int $mailbox_id, int $default_client_id, int $parse_unknown, array $norm, string $original_message_file): bool {
-    $subject = sanitizeInput($norm['subject']);
-    $from_email = sanitizeInput($norm['from_email']);
-    $from_name = sanitizeInput($norm['from_name']);
-    $date = sanitizeInput($norm['date']);
+    // MSP-DS-159: RAW text (tags stripped, trimmed, not SQL-escaped). Every consumer below (inboundTrustedContact, logMailEvent,
+    // createMailRequestFromInbound, addTicket, addReply, the contact INSERT) escapes or binds exactly once itself; escaping here as well
+    // stored "Can\'t print" and made an address with an apostrophe unmatchable.
+    $subject = sanitizeInputRaw($norm['subject']);
+    $from_email = sanitizeInputRaw($norm['from_email']);
+    $from_name = sanitizeInputRaw($norm['from_name']);
+    $date = sanitizeInputRaw($norm['date']);
 
     $prep = InboundPreparer::prepare($norm, mailIntakeLimits());
     if ($norm['message_id'] === '') {

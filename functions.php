@@ -2728,6 +2728,15 @@ function sanitizeInput($input) {
     return $input;
 }
 
+// MSP-DS-159: sanitizeInput() without the SQL escape, for values that are handed to code which escapes or binds them itself
+// (the inbound mail pipeline: addTicket/addReply/createMailRequestFromInbound/logMailEvent). Escaping twice stored literal backslashes.
+function sanitizeInputRaw($input) {
+    if (!empty($input) && !mb_check_encoding($input, 'UTF-8')) {
+        $input = mb_convert_encoding($input, 'UTF-8', 'Windows-1252');
+    }
+    return trim(strip_tags((string) $input));
+}
+
 function cleanInput($input) {
     // Only process non-empty input
     if (!empty($input)) {
@@ -4570,7 +4579,7 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
     // Convert newlines to <br>
     $message = nl2br($message);
     // Wrap final formatted message
-    $message = "<i>Email from: <b>$contact_name</b> &lt;$contact_email&gt; at $date:-</i> <br><br><div style='line-height:1.5;'>$message</div>";
+    $message = "<i>Email from: <b>" . nullable_htmlentities($contact_name) . "</b> &lt;" . nullable_htmlentities($contact_email) . "&gt; at " . nullable_htmlentities($date) . ":-</i> <br><br><div style='line-height:1.5;'>$message</div>";
 
     $ticket_prefix_esc = mysqli_real_escape_string($mysqli, $config_ticket_prefix);
     $message_esc = mysqli_real_escape_string($mysqli, $message);
@@ -4601,13 +4610,13 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
     ticketCategoryApplyOnCreate($mysqli, $id, $category_id);
 
     // Logging
-    logAction("Ticket", "Create", "Email parser: Client contact $contact_email_esc created ticket $ticket_prefix_esc$ticket_number ($subject) ($id)", $client_id, $id);
+    logAction("Ticket", "Create", "Email parser: Client contact $contact_email created ticket $config_ticket_prefix$ticket_number ($subject) ($id)", $client_id, $id);
 
     // Broadcast to active agents so the mobile app gets a push for it too,
     // even when the default-technician setting (Admin > Settings > Tickets)
     // assigned it - that setting only sets the fallback assignee, it doesn't
     // change who gets notified about new tickets.
-    appNotify("Ticket", "Email parser: $contact_email_esc raised a new ticket $ticket_prefix_esc$ticket_number - $subject", "/agent/ticket.php?ticket_id=$id" . ($client_id ? "&client_id=$client_id" : ''), $client_id, $id);
+    appNotify("Ticket", "Email parser: $contact_email raised a new ticket $config_ticket_prefix$ticket_number - $subject", "/agent/ticket.php?ticket_id=$id" . ($client_id ? "&client_id=$client_id" : ''), $client_id, $id);
 
     mkdirMissing(__DIR__ . '/uploads/tickets/');
     $att_dir = __DIR__ . '/uploads/tickets/' . $id . '/';
@@ -4635,15 +4644,14 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
             $att_saved_path = $att_dir . $att_saved_filename;
             file_put_contents($att_saved_path, $attachment['content']);
 
-            $ticket_attachment_name = sanitizeInput($att_name);
-            $ticket_attachment_reference_name = sanitizeInput($att_saved_filename);
+            $ticket_attachment_name = sanitizeInputRaw($att_name);   // escaped once, below (MSP-DS-159)
+            $ticket_attachment_reference_name = sanitizeInputRaw($att_saved_filename);
 
             $ticket_attachment_name_esc = mysqli_real_escape_string($mysqli, $ticket_attachment_name);
             $ticket_attachment_reference_name_esc = mysqli_real_escape_string($mysqli, $ticket_attachment_reference_name);
             mysqli_query($mysqli, "INSERT INTO ticket_attachments SET ticket_attachment_name = '$ticket_attachment_name_esc', ticket_attachment_reference_name = '$ticket_attachment_reference_name_esc', ticket_attachment_ticket_id = $id");
         } else {
-            $ticket_attachment_name_esc = mysqli_real_escape_string($mysqli, $att_name);
-            logAction("Ticket", "Edit", "Email parser: Blocked attachment $ticket_attachment_name_esc from Client contact $contact_email_esc for ticket $ticket_prefix_esc$ticket_number", $client_id, $id);
+            logAction("Ticket", "Edit", "Email parser: Blocked attachment $att_name from Client contact $contact_email for ticket $config_ticket_prefix$ticket_number", $client_id, $id);
         }
     }
 
@@ -4698,9 +4706,9 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
             $client_name = sanitizeInput($client_row['client_name']);
             $client_uri = "&client_id=$client_id";
         }
-        $client_name_txt = rivetUnescapeSql($client_name);
-        $email_subject = "$config_app_name - New Ticket - $client_name_txt: " . rivetUnescapeSql($subject);
-        $email_body = "Hello, <br><br>This is a notification that a new ticket has been raised in RivetMSP. <br>Client: " . nullable_htmlentities($client_name_txt) . "<br>Priority: Low (email parsed)<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$id$client_uri <br><br>--------------------------------<br><br><b>" . nullable_htmlentities(rivetUnescapeSql($subject)) . "</b><br>$message_notify";
+        $client_name_txt = rivetUnescapeSql($client_name);   // $client_name came from sanitizeInput() above; $subject is raw
+        $email_subject = "$config_app_name - New Ticket - $client_name_txt: " . $subject;
+        $email_body = "Hello, <br><br>This is a notification that a new ticket has been raised in RivetMSP. <br>Client: " . nullable_htmlentities($client_name_txt) . "<br>Priority: Low (email parsed)<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$id$client_uri <br><br>--------------------------------<br><br><b>" . nullable_htmlentities($subject) . "</b><br>$message_notify";
 
         $data[] = [
             'from' => $from_email,
@@ -4775,7 +4783,7 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
     $message = nl2br($message);
 
     // 3) Final wrapper
-    $message = "<i>Email from: $from_email at $date:-</i><br><br><div style='line-height:1.5;'>$message</div>";
+    $message = "<i>Email from: " . nullable_htmlentities($from_email) . " at " . nullable_htmlentities($date) . ":-</i><br><br><div style='line-height:1.5;'>$message</div>";
 
     $ticket_number_esc = intval($ticket_number);
     $message_esc = mysqli_real_escape_string($mysqli, $message);
@@ -4792,7 +4800,7 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
         $ticket_subject = sanitizeInput($row['ticket_subject']);
         $ticket_status = sanitizeInput($row['ticket_status']);
         $ticket_reply_contact = intval($row['ticket_contact_id']);
-        $ticket_contact_email = sanitizeInput($row['contact_email']);
+        $ticket_contact_email = (string) $row['contact_email'];   // raw: compared with the raw $from_email below (MSP-DS-159)
         $client_id = intval($row['ticket_client_id']);
         if ($client_id) {
             $client_uri = "&client_id=$client_id";
@@ -4802,7 +4810,7 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
         $client_name = sanitizeInput($row['client_name']);
 
         if ($ticket_status == 5) {
-            $config_ticket_prefix_esc = mysqli_real_escape_string($mysqli, $config_ticket_prefix);
+            $config_ticket_prefix_esc = $config_ticket_prefix;   // appNotify() escapes once itself
             $ticket_number_esc2 = mysqli_real_escape_string($mysqli, $ticket_number);
 
             appNotify("Ticket", "Email parser: $from_email attempted to re-open ticket $config_ticket_prefix_esc$ticket_number_esc2 (ID $ticket_id) - check inbox manually to see email", "/agent/ticket.php?ticket_id=$ticket_id$client_uri", $client_id);
@@ -4889,15 +4897,14 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
                 $att_saved_path = $ticket_dir . $att_saved_filename;
                 file_put_contents($att_saved_path, $attachment['content']);
 
-                $ticket_attachment_name = sanitizeInput($att_name);
-                $ticket_attachment_reference_name = sanitizeInput($att_saved_filename);
+                $ticket_attachment_name = sanitizeInputRaw($att_name);   // escaped once, below (MSP-DS-159)
+                $ticket_attachment_reference_name = sanitizeInputRaw($att_saved_filename);
 
                 $ticket_attachment_name_esc = mysqli_real_escape_string($mysqli, $ticket_attachment_name);
                 $ticket_attachment_reference_name_esc = mysqli_real_escape_string($mysqli, $ticket_attachment_reference_name);
                 mysqli_query($mysqli, "INSERT INTO ticket_attachments SET ticket_attachment_name = '$ticket_attachment_name_esc', ticket_attachment_reference_name = '$ticket_attachment_reference_name_esc', ticket_attachment_reply_id = $reply_id, ticket_attachment_ticket_id = $ticket_id");
             } else {
-                $ticket_attachment_name_esc = mysqli_real_escape_string($mysqli, $att_name);
-                logAction("Ticket", "Edit", "Email parser: Blocked attachment $ticket_attachment_name_esc from Client contact $from_email_esc for ticket $config_ticket_prefix$ticket_number_esc", $client_id, $ticket_id);
+                logAction("Ticket", "Edit", "Email parser: Blocked attachment $att_name from Client contact $from_email for ticket $config_ticket_prefix$ticket_number_esc", $client_id, $ticket_id);
             }
         }
 
@@ -4932,7 +4939,7 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
 
         mysqli_query($mysqli, "UPDATE tickets SET " . ticketReopenSql() . "ticket_status = 2, ticket_resolved_at = NULL WHERE ticket_id = $ticket_id AND ticket_client_id = $client_id LIMIT 1");
 
-        logAction("Ticket", "Edit", "Email parser: Client contact $from_email_esc updated ticket $config_ticket_prefix$ticket_number_esc ($subject)", $client_id, $ticket_id);
+        logAction("Ticket", "Edit", "Email parser: Client contact $from_email updated ticket $config_ticket_prefix$ticket_number_esc ($subject)", $client_id, $ticket_id);
         customAction('ticket_reply_client', $ticket_id);
         $meta['outcome'] = 'reply_added';
         $meta['ticket_id'] = $ticket_id;
@@ -5008,7 +5015,7 @@ function createMailRequestFromInbound(int $mailbox_id, string $from_email, strin
         $att_saved_filename = md5(uniqid(rand(), true)) . '.bin';
         file_put_contents($holding_dir . $att_saved_filename, $attachment['content']);
 
-        $att_name_esc = mysqli_real_escape_string($mysqli, sanitizeInput($att_name));
+        $att_name_esc = mysqli_real_escape_string($mysqli, sanitizeInputRaw($att_name));   // one escape (MSP-DS-159)
         $att_saved_filename_esc = mysqli_real_escape_string($mysqli, $att_saved_filename);
         mysqli_query($mysqli, "INSERT INTO mail_request_attachments SET
             mail_request_attachment_name = '$att_name_esc',
@@ -5017,9 +5024,9 @@ function createMailRequestFromInbound(int $mailbox_id, string $from_email, strin
         ");
     }
 
-    logAction("Mail Request", "Create", "Email parser: " . ($reason === 'rate_limited' ? "sender $from_email_esc over the hourly message cap" : "unknown sender $from_email_esc") . " queued as a request ($subject_esc)", 0, $mail_request_id);
+    logAction("Mail Request", "Create", "Email parser: " . ($reason === 'rate_limited' ? "sender $from_email over the hourly message cap" : "unknown sender $from_email") . " queued as a request ($subject)", 0, $mail_request_id);
     if ($reason !== 'rate_limited') { // a flood is announced once, by the rate-limit alert, not once per message
-        appNotify("Ticket", "Email parser: " . ($reason === 'sender_mismatch' ? "$from_email_esc replied to a ticket they are not the contact of" : "unknown sender $from_email_esc sent an email") . " - review it on the Requests page", "/admin/mail_requests.php", 0);
+        appNotify("Ticket", "Email parser: " . ($reason === 'sender_mismatch' ? "$from_email replied to a ticket they are not the contact of" : "unknown sender $from_email sent an email") . " - review it on the Requests page", "/admin/mail_requests.php", 0);
     }
 
     return $mail_request_id;
@@ -5064,7 +5071,7 @@ function convertMailRequestToTicket(int $mail_request_id, int $client_id): ?int 
             mysqli_query($mysqli, "INSERT INTO contacts SET contact_name = '$contact_name_esc', contact_email = '$from_email_esc', contact_notes = 'Added automatically via email parsing.', contact_client_id = $client_id");
             $contact_id = mysqli_insert_id($mysqli);
 
-            logAction("Contact", "Create", "$session_name created contact $contact_name_esc", $client_id, $contact_id);
+            logAction("Contact", "Create", "$session_name created contact $contact_name", $client_id, $contact_id);
             customAction('contact_create', $contact_id);
         }
     }
