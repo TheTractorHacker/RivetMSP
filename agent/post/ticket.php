@@ -2288,6 +2288,8 @@ if (isset($_POST['bulk_add_asset_ticket'])) {
             // Add Tasks from Template if Template was selected
             if($ticket_template_id) {
                 if (mysqli_num_rows($sql_task_templates) > 0) {
+                    // MSP-DS-52: the result set is shared by every ticket of the bulk run - rewind it for each one
+                    mysqli_data_seek($sql_task_templates, 0);
                     while ($row = mysqli_fetch_assoc($sql_task_templates)) {
                         $task_order = intval($row['task_template_order']);
                         $task_name = sanitizeInput($row['task_template_name']);
