@@ -687,11 +687,8 @@ function storePasskeyEncKey($mysqli, int $user_id, string $master_key, bool $htt
     $esc_iv = mysqli_real_escape_string($mysqli, base64_encode($iv));
     mysqli_query($mysqli, "UPDATE users SET user_passkey_enc_ciphertext='$esc_ct', user_passkey_enc_iv='$esc_iv', user_passkey_bootstrap_key=NULL WHERE user_id=$user_id");
     $expires = time() + $lifetime;
-    if ($https_only) {
-        setcookie('user_passkey_enc_key', $enc_key, ['expires' => $expires, 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'None']);
-    } else {
-        setcookie('user_passkey_enc_key', $enc_key, $expires, '/');
-    }
+    // MSP-DS-97: HttpOnly and SameSite=Strict in both modes (the cookie is only ever read server-side on a same-site sign-in request); Secure when HTTPS is enforced.
+    setcookie('user_passkey_enc_key', $enc_key, ['expires' => $expires, 'path' => '/', 'secure' => (bool) $https_only, 'httponly' => true, 'samesite' => 'Strict']);
 }
 
 // Attempts to recover the real site master key from the passkey-wrapped copy
