@@ -116,15 +116,38 @@ if ($method === 'PUT' || $method === 'POST') {
 
     if (!$name || !$email) api_error(400, 'name and email required');
 
+    // MSP-DS-82: the sign-in email must be a valid address that no other account uses (login resolves 'user_name = X OR user_email = X LIMIT 1').
+    $me_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_email FROM users WHERE user_id = " . intval($api_user_id) . " LIMIT 1"));
+    $me_email_changed = strcasecmp(trim((string) ($body['email'] ?? '')), (string) ($me_row['user_email'] ?? '')) !== 0;
+    if ($me_email_changed) {
+        if (!filter_var(trim((string) ($body['email'] ?? '')), FILTER_VALIDATE_EMAIL)) {
+            api_error(400, 'A valid email address is required');
+        }
+        if (mysqli_fetch_row(mysqli_query($mysqli, "SELECT 1 FROM users WHERE (user_email = '$email' OR user_name = '$email') AND user_id <> " . intval($api_user_id) . " LIMIT 1"))) {
+            api_error(409, 'That email address is already in use');
+        }
+    }
+
     $updates = ["user_name = '$name'", "user_email = '$email'"];
 
     if ($new_pass) {
         require_once __DIR__ . '/../../includes/security_policy.php';
         require_once __DIR__ . '/../../includes/security_sessions.php';
+        // MSP-DS-82: a wrong current password is counted, audited and rate limited like the step-up key enrolment, so this endpoint is not a password oracle.
+        $pw_denied = mysqli_fetch_row(mysqli_query($mysqli,
+            "SELECT COUNT(*) FROM logs WHERE log_type = 'API' AND log_action = 'Password Change Denied' AND log_user_id = " . intval($api_user_id) . " AND log_created_at > (NOW() - INTERVAL 10 MINUTE)"));
+        if (!api_rate_limit('me_password:' . intval($api_user_id), 10, 600) || (int) ($pw_denied[0] ?? 0) >= 5) {
+            $GLOBALS['session_user_id'] = (int) $api_user_id;
+            logAction('API', 'Password Change Blocked', 'API password change rate limited');
+            header('Retry-After: 600');
+            api_error(429, 'Too many attempts. Try again later.');
+        }
         // Verify current password
         $user = mysqli_fetch_assoc(mysqli_query($mysqli,
             "SELECT user_password FROM users WHERE user_id = $api_user_id LIMIT 1"));
         if (!password_verify($cur_pass, $user['user_password'])) {
+            $GLOBALS['session_user_id'] = (int) $api_user_id;
+            logAction('API', 'Password Change Denied', 'API password change: current password wrong');
             api_error(401, 'Current password is incorrect');
         }
         // Staff password policy (length from Admin > Settings > Security, not the name or email, optional breach check)
@@ -142,6 +165,25 @@ if ($method === 'PUT' || $method === 'POST') {
 
     $set = implode(', ', $updates);
     mysqli_query($mysqli, "UPDATE users SET $set WHERE user_id = $api_user_id");
+    if ($me_email_changed) {
+        // MSP-DS-82: audited, and the old address is told (the web profile does the same).
+        $GLOBALS['session_user_id'] = (int) $api_user_id;
+        logAction('API', 'Email Change', 'API: sign-in email changed from ' . ($me_row['user_email'] ?? '') . ' to ' . trim((string) ($body['email'] ?? '')));
+        if (!empty($config_smtp_host) && !empty($me_row['user_email']) && function_exists('addToMailQueue')) {
+            try {
+                addToMailQueue([[
+                    'from' => $config_mail_from_email ?? '',
+                    'from_name' => $config_mail_from_name ?? '',
+                    'recipient' => $me_row['user_email'],
+                    'recipient_name' => trim((string) ($body['name'] ?? '')),
+                    'subject' => 'Your account email address was changed',
+                    'body' => 'Your account email address was changed through the mobile app. If you did not do this, contact your administrator immediately.',
+                ]]);
+            } catch (\Throwable $e) {
+                // the change is already applied and audited; a mail failure must not fail the request
+            }
+        }
+    }
     if ($new_pass) {
         // Password changed: drop every other session, keep the one making this call
         $cur_hash = '';
