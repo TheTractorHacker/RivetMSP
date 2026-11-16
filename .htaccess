@@ -1,3 +1,8 @@
 # Prevent access to .git, .github, and config.php
 # MSP-DS-4/20: also config/ (Firebase service account), deploy/, docker/, scripts/, tests/ and any dotfile (.env, .env.example)
 RedirectMatch 404 ^/(\.git|\.github|config\.php|config/|deploy/|docker/|scripts/|tests/|\.env)
+
+# MSP-DS-123: Remote MCP entry and OAuth protected-resource discovery (the settings page promises these rules).
+RewriteEngine On
+RewriteRule ^mcp$ mcp_server/index.php [END]
+RewriteRule ^\.well-known/oauth-protected-resource$ mcp_server/index.php [END]
