@@ -732,6 +732,19 @@ function storePasskeyEncKey($mysqli, int $user_id, string $master_key, bool $htt
     setcookie('user_passkey_enc_key', $enc_key, ['expires' => $expires, 'path' => '/', 'secure' => (bool) $https_only, 'httponly' => true, 'samesite' => 'Strict']);
 }
 
+/**
+ * MSP-DS-97: expire the passkey vault-key cookie in this browser (sign-out, sign-out-everywhere, idle/absolute expiry). A later passkey
+ * sign-in still opens the vault (it falls back to the canonical key and sets a fresh cookie); a shared browser just no longer keeps the unwrap key.
+ * Same attributes as storePasskeyEncKey() so every browser removes it.
+ */
+function clearPasskeyEncKeyCookie(): void {
+    if (!headers_sent()) {
+        $https = isset($GLOBALS['config_https_only']) ? (bool) $GLOBALS['config_https_only'] : !empty($_SERVER['HTTPS']);
+        setcookie('user_passkey_enc_key', '', ['expires' => time() - 3600, 'path' => '/', 'secure' => $https, 'httponly' => true, 'samesite' => 'Strict']);
+    }
+    unset($_COOKIE['user_passkey_enc_key']);
+}
+
 // Attempts to recover the real site master key from the passkey-wrapped copy
 // (user_passkey_enc_ciphertext), using the user_passkey_enc_key cookie or,
 // failing that, the server-side bootstrap key. Mirrors the recovery logic in

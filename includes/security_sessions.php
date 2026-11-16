@@ -219,6 +219,9 @@ if (!function_exists('secSessionLimits')) {
             setcookie('user_encryption_session_key', '', time() - 3600, '/');
         }
         unset($_COOKIE['user_encryption_session_key']);
+        if (function_exists('clearPasskeyEncKeyCookie')) {
+            clearPasskeyEncKeyCookie();   // MSP-DS-97
+        }
     }
 
     /** Revoke one of the user's own sessions. True if a live row was revoked. */
