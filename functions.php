@@ -2966,16 +2966,16 @@ function generateReadablePassword($security_level)
     $adverbs = ['Quickly', 'Slowly', 'Gracefully', 'Wildly', 'Loudly', 'Silently', 'Cheerfully', 'Eagerly', 'Gently', 'Happily', 'Jovially', 'Kindly', 'Lazily', 'Merrily', 'Neatly', 'Politely', 'Quietly', 'Rapidly', 'Smoothly', 'Tightly', 'Swiftly', 'Securely', 'Efficiently', 'Rapidly', 'Smoothly', 'Reliably', 'Safely', 'Wirelessly', 'Instantly', 'Silently', 'Automatically', 'Seamlessly', 'Digitally', 'Virtually', 'Continuously', 'Regularly', 'Intelligently', 'Logically'];
 
     // Randomly select words from arrays
-    $adj = $adjectives[array_rand($adjectives)];
-    $noun = $nouns[array_rand($nouns)];
-    $verb = $verbs[array_rand($verbs)];
-    $adv = $adverbs[array_rand($adverbs)];
+    $adj = $adjectives[random_int(0, count($adjectives) - 1)];
+    $noun = $nouns[random_int(0, count($nouns) - 1)];
+    $verb = $verbs[random_int(0, count($verbs) - 1)];
+    $adv = $adverbs[random_int(0, count($adverbs) - 1)];
 
     // Combine to create a base password
     $password = $adj . $noun . $verb . $adv;
 
     // Select an article randomly
-    $article = $articles[array_rand($articles)];
+    $article = $articles[random_int(0, count($articles) - 1)];
 
     // Determine if we should use 'An' instead of 'A'
     if ($article == 'A' && preg_match('/^[aeiouAEIOU]/', $adj)) {
@@ -2998,8 +2998,11 @@ function generateReadablePassword($security_level)
 
     // Generate an array of indices based on the password length
     $indices = range(0, strlen($password) - 1);
-    // Randomly shuffle the indices
-    shuffle($indices);
+    // Randomly shuffle the indices (MSP-DS-44: Fisher-Yates over random_int(), not the Mt19937 PHP built-in)
+    for ($k = count($indices) - 1; $k > 0; $k--) {
+        $swap = random_int(0, $k);
+        [$indices[$k], $indices[$swap]] = [$indices[$swap], $indices[$k]];
+    }
 
     // Iterate through the shuffled indices and replace characters based on the security level
     for ($i = 0; $i < min($security_level, strlen($password)); $i++) {
@@ -3011,8 +3014,9 @@ function generateReadablePassword($security_level)
         }
     }
 
-    // Add as many random numbers as the security level
-    $password .= rand(pow(10, $security_level - 1), pow(10, $security_level) - 1);
+    // Add random digits: as many as the security level, never fewer than six (MSP-DS-44: CSPRNG, longer suffix)
+    $digits = max(6, $security_level);
+    $password .= random_int(10 ** ($digits - 1), 10 ** $digits - 1);
 
     return $password;
 }
