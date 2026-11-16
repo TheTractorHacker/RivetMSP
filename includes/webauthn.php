@@ -268,9 +268,10 @@ function wa_verify_assertion(
         throw new RuntimeException('Signature verification failed');
     }
 
-    // 4. Sign count check (0,0 is allowed for platform authenticators that don't track)
+    // 4. Sign count check. (0,0) is allowed for authenticators that do not track a counter. Once a counter was seen (stored > 0) it
+    // must strictly increase: a reset to 0 is a clone signal too (WebAuthn L2 7.2 step 21), and storing it would switch the check off.
     $newCount = $ad['signCount'];
-    if ($storedSignCount !== 0 && $newCount !== 0 && $newCount <= $storedSignCount) {
+    if ($storedSignCount > 0 && $newCount <= $storedSignCount) {
         throw new RuntimeException('Sign count did not increase — possible cloned authenticator');
     }
 
