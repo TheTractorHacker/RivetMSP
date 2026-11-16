@@ -365,6 +365,31 @@ if (!function_exists('secSetting')) {
     }
 
     /**
+     * MSP-DS-121: tell the account's owner (at the address that was on file BEFORE the change) that an administrator changed their sign-in
+     * email, password, role or two-factor, like the profile page does for self-service changes. $changes = plain-text list. Returns true if queued.
+     */
+    function secNotifyAccountChange(string $oldEmail, string $userName, array $changes, string $actingAdmin): bool
+    {
+        global $config_smtp_host, $config_mail_from_email, $config_mail_from_name, $config_app_name;
+        if ($changes === [] || empty($config_smtp_host) || !filter_var($oldEmail, FILTER_VALIDATE_EMAIL) || !function_exists('addToMailQueue')) {
+            return false;
+        }
+        $e = fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+        $list = implode('', array_map(fn ($c) => '<li>' . $e((string) $c) . '</li>', $changes));
+        $app = $e((string) ($config_app_name ?? 'RivetMSP'));
+        addToMailQueue([[
+            'from'           => (string) $config_mail_from_email,
+            'from_name'      => (string) $config_mail_from_name,
+            'recipient'      => $oldEmail,
+            'recipient_name' => $userName,
+            'subject'        => (string) ($config_app_name ?? 'RivetMSP') . ' account update for ' . $userName,
+            'body'           => 'Hi ' . $e($userName) . ',<br><br>An administrator (' . $e($actingAdmin) . ') changed your ' . $app . ' account:<ul>' . $list . '</ul>If you did not expect this, contact your ' . $app . ' administrator immediately.<br><br>Thanks,<br>' . $app,
+        ]]);
+
+        return true;
+    }
+
+    /**
      * MSP-WEB-3: re-confirm the signed-in user's own password before a change that can take the account over (email, two-factor, passkeys).
      * A stolen session cookie alone must not be enough. Failures are audited and counted like a failed sign-in.
      */

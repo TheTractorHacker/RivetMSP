@@ -166,8 +166,11 @@ if (isset($_POST['edit_user'])) {
     $new_role_is_admin = intval(getFieldById('user_roles', intval($role), 'role_is_admin')) === 1;
     $role_changed = $target_now && intval($target_now['user_role_id']) !== intval($role);
     $email_differs = $target_now && strcasecmp((string) $target_now['user_email'], trim((string) ($_POST['email'] ?? ''))) !== 0;
+    // MSP-DS-121 (complete): the same applies to ANY target, not only administrators: a new password or sign-in email on a technician's account, or a
+    // role change, is an account takeover / privilege change a stolen admin session must not be able to make without the admin's password.
     $reauth_needed = ($new_role_is_admin && $role_changed)
-        || ($target_now && intval($target_now['cur_is_admin']) === 1 && ($new_password !== '' || $email_differs))
+        || $role_changed
+        || ($target_now && ($new_password !== '' || $email_differs))
         // review RR12: removing ANYONE's second factor (TOTP seed, recovery codes, API tokens) or switching their Force MFA off is as sensitive as
         // the separate disable_2fa form, which already asks for the password
         || (($_POST['2fa'] ?? '') === 'disable')
@@ -180,7 +183,7 @@ if (isset($_POST['edit_user'])) {
             || ($target_now && intval($target_now['cur_force_mfa']) !== ($force_mfa ? 1 : 0));
     }
     if ($reauth_needed && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
-        flash_alert('Your current password is required (and must be correct) to make someone an administrator, change an administrator\'s email or password, disable anyone\'s 2FA or Force MFA, or change your own email, role, password, two-factor or Force MFA.', 'error');
+        flash_alert('Your current password is required (and must be correct) to change a user\'s role, sign-in email or password, to disable anyone\'s 2FA or Force MFA, or to change your own two-factor or Force MFA.', 'error');
         redirect();
     }
 
@@ -258,6 +261,7 @@ if (isset($_POST['edit_user'])) {
         mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
     }
 
+    $new_password_was_set = !empty($new_password);
     if (!empty($new_password)) {
         $new_password = secPasswordHash($new_password);
         $user_specific_encryption_ciphertext = encryptUserSpecificKey(trim($_POST['new_password']), $user_id);
@@ -298,6 +302,16 @@ if (isset($_POST['edit_user'])) {
         }
     } catch (\Throwable $e) {
         // auditing never breaks the action
+    }
+
+    // MSP-DS-121: the account's owner is told, at the address that was on file before this change, when an administrator changed their sign-in email, password, role or two-factor.
+    $account_changes = [];
+    if ($email_differs) { $account_changes[] = 'Your sign-in email was changed.'; }
+    if ($new_password_was_set) { $account_changes[] = 'Your password was changed and all your sessions were signed out.'; }
+    if ($role_changed) { $account_changes[] = 'Your role was changed.'; }
+    if (($_POST['2fa'] ?? '') === 'disable') { $account_changes[] = 'Your two-factor authentication was removed.'; }
+    if ($target_now && $user_id !== intval($session_user_id)) {
+        secNotifyAccountChange((string) $target_now['user_email'], (string) $name, $account_changes, (string) $session_name);
     }
 
     flash_alert("User <strong>$name</strong> updated" . $extended_alert_description);
@@ -445,9 +459,9 @@ if (isset($_POST['restore_user'])) {
     $user_name = sanitizeInput(str_replace(" (archived)", "", $user_name)); //Removed (archived) from user_name
 
     // MSP-DS-121 (review R22): restoring an account into an administrator role needs the acting administrator's password
-    if (intval(getFieldById('user_roles', $role, 'role_is_admin')) === 1
+    if ((intval(getFieldById('user_roles', $role, 'role_is_admin')) === 1 || $new_password !== '')
         && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
-        flash_alert('Your current password is required (and must be correct) to restore a user as an administrator.', 'error');
+        flash_alert('Your current password is required (and must be correct) to restore a user as an administrator or with a new password.', 'error');
         redirect();
     }
 
