@@ -28,14 +28,14 @@ final class Nightly
                 $chain = new AuditChain($db);
                 $locked = $chain->lock(5);
                 try {
-                    $sealed = $chain->seal(5000);
+                    $sealed = $chain->sealForSink(5000);
                 } finally {
                     if ($locked) {
                         $chain->unlock();
                     }
                 }
                 AuditSink::write($db, $sealed, $appRoot);
-                $out['sealed'] = count($sealed);
+                $out['sealed'] = $chain->lastSealedCount();
                 if ($chain->sealBlockedReason() !== null) {
                     $out['seal_blocked'] = $chain->sealBlockedReason();   // M4-6: no signed anchor file, nothing was sealed
                 }

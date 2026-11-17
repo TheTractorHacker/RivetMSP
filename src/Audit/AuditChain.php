@@ -266,6 +266,49 @@ final class AuditChain
         return $sealed;
     }
 
+    private int $lastSealedCount = 0;
+
+    /** How many rows the last sealForSink() sealed (the rows it returns can include unsealed ones and exclude ones already forwarded). */
+    public function lastSealedCount(): int
+    {
+        return $this->lastSealedCount;
+    }
+
+    /**
+     * M5-6: what the audit copy (AuditSink: file / syslog) should receive after a seal attempt. Sealed rows, except those already forwarded
+     * unsealed. While sealing is blocked (no signed anchor: after an upgrade until the one-time step, after a restore, after a host move) the new
+     * unsealed rows are forwarded as they appear, each marked sealed:false (no prev_hash/row_hash yet), and remembered by audit id
+     * (platform setting audit_sink_forwarded_id) so they are not sent again when they are sealed later. Nothing is remembered while no sink is
+     * configured, so switching one on later does not skip anything.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function sealForSink(int $max = 2000): array
+    {
+        $sealed = $this->seal($max);
+        $this->lastSealedCount = count($sealed);
+        if (!AuditSink::enabled($this->db)) {
+            return $sealed;
+        }
+        $fwd = (int) PlatformSettings::get($this->db, 'audit_sink_forwarded_id', '0');
+        if ($sealed !== []) {
+            return array_values(array_filter($sealed, static fn (array $r): bool => (int) $r['audit_id'] > $fwd));
+        }
+        if ($this->sealBlocked === null) {
+            return [];
+        }
+        $res = $this->db->query('SELECT * FROM audit_events WHERE row_hash IS NULL AND audit_id > ' . $fwd . ' ORDER BY audit_id ASC LIMIT ' . max(1, $max));
+        $rows = [];
+        while ($res && ($row = $res->fetch_assoc())) {
+            $rows[] = $row;
+        }
+        if ($rows !== []) {
+            PlatformSettings::set($this->db, 'audit_sink_forwarded_id', (string) (int) end($rows)['audit_id']);
+        }
+
+        return $rows;
+    }
+
     /** Record how the chain is keyed the first time it is used (mirror only; M4-6: this NEVER writes an anchor, whatever the database says). */
     private function ensureMode(): void
     {

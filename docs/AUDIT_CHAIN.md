@@ -128,6 +128,14 @@ step trusts the chain as it is that day.
 * **Settings key changed or lost**: `key_changed` / `key_unavailable`, not tampering. Restore the old key; nothing else can verify the chain.
 * **Anchor file not writable**: re-anchor reports the path; fix the owner (the web server user) and mode of `config/` and try again.
 
+## Audit copy (syslog / file) while sealing is blocked (M5-6)
+
+While sealing is blocked (no signed anchor: every keyed install after an upgrade until the one-time step, after a restore, after a host move)
+new entries are forwarded to the audit copy as they are written, as JSON lines with `"sealed":false` and `prev_hash`/`row_hash` null.
+The last forwarded audit id is kept in the platform setting `audit_sink_forwarded_id`; once the entries are sealed (after Re-anchor) they are
+not sent a second time, and entries sealed later are sent as before with `"sealed":true`. Nothing is recorded while no sink is configured,
+so turning one on later forwards the entries that are still unsealed.
+
 ## Tests
 
 `tests/msp_ds2_173.php`, `tests/msp_mrr_18_21.php`, `tests/msp_m3_10.php` .. `tests/msp_m3_20.php`, `tests/msp_m4_6.php`, `tests/msp_m4_8.php` with `tests/lib/audit_chain_m3.php`

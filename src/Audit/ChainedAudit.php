@@ -48,7 +48,7 @@ final class ChainedAudit
             $this->core->log($eventType, $actorUserId, $entityType, $entityId, $action, $summary, $metadata);
             if ($chain !== null) {
                 try {
-                    AuditSink::write($this->db, $chain->seal(), dirname(__DIR__, 2));
+                    AuditSink::write($this->db, $chain->sealForSink(), dirname(__DIR__, 2));
                 } catch (\Throwable $e) {
                     self::$chainBroken = true;   // columns missing (database not updated yet) or similar: stop trying for this process; the cron seals later
                 }
