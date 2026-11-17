@@ -1099,7 +1099,7 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
                 $pi_description = "RivetMSP: $client_name payment of $recurring_payment_currency_code $balance_to_pay for $invoice_prefix$invoice_number";
 
                 try {
-                    $payment_intent = $provider->chargeSavedMethod([
+                    $payment_intent = chargeAttemptSend(fn (array $charge_params) => $provider->chargeSavedMethod($charge_params, $idempotency_key), [   // M5-7: one shared send (takeover idempotency conflicts)
                         'amount' => stripeAmountToMinor($balance_to_pay, $recurring_payment_currency_code), // round before truncating so float representation error can't undercharge by a cent
                         'currency' => $recurring_payment_currency_code,
                         'customer' => $stripe_customer_id,
@@ -1115,7 +1115,7 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
                             'itflow_install' => stripeInstallMarker(),
                             'rivet_attempt_key' => $idempotency_key,
                         ]
-                    ], $idempotency_key);
+                    ], !empty($charge_claim['reused']));
 
                     $pi_id = sanitizeInput($payment_intent->id);
                     $pi_date = date('Y-m-d', $payment_intent->created);

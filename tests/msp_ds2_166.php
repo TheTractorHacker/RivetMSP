@@ -39,7 +39,8 @@ $ok("Stripe 'processing' is stored as pending", chargeAttemptStoreResult($m, $c[
 foreach (['portal', 'agent', 'cron'] as $src) { $r = chargeAttemptClaim($m, 13, $src, 7); $ok("ACH pending: $src is refused with 'pending', not re-charged", !$r['ok'] && $r['reason'] === 'pending'); }
 $ok('the guest page sees the live attempt', chargeAttemptLive($m, 13)['attempt_pi_id'] === 'pi_ach');
 $m->query("UPDATE invoice_charge_attempts SET attempt_updated_at = NOW() - INTERVAL 11 DAY WHERE attempt_invoice_id = 13");
-$r = chargeAttemptClaim($m, 13, 'agent', 7); $ok('a pending debit older than 10 days no longer blocks (and is closed as abandoned)', $r['ok'] && $one("SELECT attempt_error FROM invoice_charge_attempts WHERE attempt_invoice_id = 13 AND attempt_pi_id = 'pi_ach'") === 'abandoned');
+$r = chargeAttemptClaim($m, 13, 'agent', 7); $ok('M5-2: a pending debit older than 10 days is NOT freed without Stripe (needs_review)', !$r['ok'] && $r['reason'] === 'needs_review');
+$r = chargeAttemptClaim($m, 13, 'agent', 7, fn (string $pi, bool $cancel = false, ?string $k = null, bool $bank = false) => $cancel && $bank ? 'canceled' : null); $ok('a pending debit older than 10 days that Stripe confirms canceled no longer blocks (closed as stale pending)', $r['ok'] && str_starts_with((string) $one("SELECT attempt_error FROM invoice_charge_attempts WHERE attempt_invoice_id = 13 AND attempt_pi_id = 'pi_ach'"), 'stale pending'));
 chargeAttemptFinish($m, $r['attempt_id'], 'failed');
 $m->query("UPDATE invoice_charge_attempts SET attempt_status='pending', attempt_error='', attempt_updated_at = NOW() WHERE attempt_pi_id = 'pi_ach'");
 chargeAttemptSettleIntent($m, 'pi_ach', 13, 8000, 'failed');

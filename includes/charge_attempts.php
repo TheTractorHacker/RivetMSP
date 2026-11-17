@@ -18,6 +18,7 @@ const CHARGE_ATTEMPT_STALE_SECONDS = 900;
 const CHARGE_ATTEMPT_PENDING_DAYS = 10;
 const CHARGE_ATTEMPT_GUEST_INTENT_SECONDS = 3600;   // a guest-page PaymentIntent the customer may still confirm keeps its attempt live this long
 const CHARGE_ATTEMPT_BANK_VERIFY_DAYS = 10;         // M4-5: a bank debit waiting for microdeposit verification keeps its attempt (and its PaymentIntent) this long
+const CHARGE_ATTEMPT_CONFLICT_MARK = 'idempotency conflict';   // M5-7: attempt_error prefix of a row whose key Stripe refused to replay (outcome unknown)
 const CHARGE_ATTEMPT_KEY_MAX_AGE = 82800;           // Stripe forgets an idempotency key after 24h: a key older than 23h is never replayed
 
 /**
@@ -63,23 +64,14 @@ function chargeAttemptPiIsBankDebit($pi): bool
  * 'requires_action_bank' for a bank debit waiting for verification, M4-5). Called as $lookup($pi_id, true) it first cancels a PaymentIntent that is
  * still confirmable and returns 'canceled' only when the cancel took effect, otherwise the status Stripe reports now; a bank debit waiting for
  * verification is not canceled unless $include_bank. Called as $lookup('', false, $attempt_key) (M4-3) it searches PaymentIntents by the attempt
- * key kept in their metadata and returns 'none' (nothing found), 'found' or null (the search failed / is not available).
+ * key kept in their metadata and returns 'none' (nothing found), 'found' or null (the search failed / is not available); with $cancel (M5-4) it
+ * resolves each found intent like a stored id (canceling it when possible) and returns the decisive status, its id in the 5th by-reference argument.
  * $retrieve($pi_id) returns the Stripe PaymentIntent object (it must have cancel()). $search($attempt_key) returns the list of matching intents.
  */
 function chargeAttemptPiOps(callable $retrieve, ?callable $search = null): callable
 {
-    return function (string $pi_id, bool $cancel = false, ?string $search_key = null, bool $include_bank = false) use ($retrieve, $search): ?string {
-        if ($search_key !== null) {
-            if ($search === null) {
-                return null;
-            }
-            try {
-                $found = $search($search_key);
-                return is_countable($found) ? (count($found) === 0 ? 'none' : 'found') : null;
-            } catch (\Throwable $e) {
-                return null;
-            }
-        }
+    // the status of one PaymentIntent by id, canceling it first when $cancel and it is still confirmable
+    $resolve = function (string $pi_id, bool $cancel, bool $include_bank) use ($retrieve): ?string {
         try {
             $pi = $retrieve($pi_id);
             $status = (string) $pi->status;
@@ -98,6 +90,46 @@ function chargeAttemptPiOps(callable $retrieve, ?callable $search = null): calla
         } catch (\Throwable $e) {
             return chargeAttemptIsMissing($e) ? 'missing' : null;
         }
+    };
+    return function (string $pi_id, bool $cancel = false, ?string $search_key = null, bool $include_bank = false, ?string &$hit_id = null) use ($resolve, $search): ?string {
+        if ($search_key !== null) {
+            if ($search === null) {
+                return null;
+            }
+            try {
+                $found = $search($search_key);
+                if (!is_countable($found)) {
+                    return null;
+                }
+                if (count($found) === 0) {
+                    return 'none';
+                }
+                if (!$cancel) {
+                    return 'found';
+                }
+                // M5-4: act on what the found intent(s) are, exactly as for a stored id (each is re-read, search results can lag)
+                $decisive = null;
+                foreach ($found as $hit) {
+                    $id = (string) ($hit->id ?? '');
+                    if ($id === '') {
+                        return null;
+                    }
+                    $st = $resolve($id, true, $include_bank);
+                    if ($hit_id === null) {
+                        $hit_id = $id;
+                    }
+                    if (!in_array($st, ['canceled', 'missing'], true)) {
+                        $hit_id = $id;
+                        return $st;
+                    }
+                    $decisive = $st;
+                }
+                return $decisive;
+            } catch (\Throwable $e) {
+                return null;
+            }
+        }
+        return $resolve($pi_id, $cancel, $include_bank);
     };
 }
 
@@ -132,15 +164,23 @@ function chargeAttemptRefusal(string $reason): array
 }
 
 /**
+ * M5-3: the SQL condition (on invoice_charge_attempts) for "this attempt is live", shared by chargeAttemptLive() and the invoice page.
+ */
+function chargeAttemptLiveCondition(): string
+{
+    return "(
+            (attempt_status = 'pending' AND attempt_updated_at >= NOW() - INTERVAL " . CHARGE_ATTEMPT_PENDING_DAYS . " DAY)
+         OR (attempt_status = 'processing' AND attempt_updated_at >= NOW() - INTERVAL " . CHARGE_ATTEMPT_STALE_SECONDS . " SECOND)
+         OR (attempt_status = 'processing' AND attempt_source = 'guest' AND attempt_pi_id <> '' AND attempt_updated_at >= NOW() - INTERVAL " . CHARGE_ATTEMPT_GUEST_INTENT_SECONDS . " SECOND))";
+}
+
+/**
  * The live attempt that blocks a new charge for this invoice, or null. Read-only unless $lock (the guest page uses it before creating an intent).
  */
 function chargeAttemptLive($mysqli, $invoice_id, bool $lock = false): ?array
 {
     $invoice_id = intval($invoice_id);
-    $r = mysqli_query($mysqli, "SELECT * FROM invoice_charge_attempts WHERE attempt_invoice_id = $invoice_id AND (
-            (attempt_status = 'pending' AND attempt_updated_at >= NOW() - INTERVAL " . CHARGE_ATTEMPT_PENDING_DAYS . " DAY)
-         OR (attempt_status = 'processing' AND attempt_updated_at >= NOW() - INTERVAL " . CHARGE_ATTEMPT_STALE_SECONDS . " SECOND)
-         OR (attempt_status = 'processing' AND attempt_source = 'guest' AND attempt_pi_id <> '' AND attempt_updated_at >= NOW() - INTERVAL " . CHARGE_ATTEMPT_GUEST_INTENT_SECONDS . " SECOND))
+    $r = mysqli_query($mysqli, "SELECT * FROM invoice_charge_attempts WHERE attempt_invoice_id = $invoice_id AND " . chargeAttemptLiveCondition() . "
         ORDER BY attempt_id LIMIT 1" . ($lock ? ' FOR UPDATE' : ''));
     $row = $r ? mysqli_fetch_assoc($r) : null;
     return $row ?: null;
@@ -206,6 +246,31 @@ function chargeAttemptClaim($mysqli, $invoice_id, string $source, $method_id = 0
         // M3-6) is taken over with its own key, so if Stripe did get that charge, replaying the key returns the original PaymentIntent.
         // MSP-DS-166 (re-review MRR-6 / M3-7): any other stale row cannot be replayed, so Stripe is asked about its PaymentIntent first (a charge
         // that never happened is closed; one that happened, or one past Stripe's 24h key window that cannot be checked, blocks and is flagged for billing).
+        // M5-2: a 'pending' bank debit past its window is NEVER abandoned blind (the ACH can still land days later: a second charge). Only a Stripe
+        // lookup that cancels it (or finds it canceled/missing) frees it; anything else refuses (needs_review when Stripe cannot say).
+        $pend = mysqli_query($mysqli, "SELECT * FROM invoice_charge_attempts WHERE attempt_invoice_id = $invoice_id AND attempt_status = 'pending' ORDER BY attempt_id FOR UPDATE");
+        $pend = $pend ? mysqli_fetch_all($pend, MYSQLI_ASSOC) : [];
+        foreach ($pend as $prow) {
+            $hit = null;
+            if ($pi_lookup === null) {
+                $p_status = null;
+            } elseif ($prow['attempt_pi_id'] !== '') {
+                $p_status = $pi_lookup((string) $prow['attempt_pi_id'], true, null, true);
+            } else {
+                $p_status = $pi_lookup('', true, (string) $prow['attempt_key'], true, $hit);
+            }
+            if (in_array($p_status, ['canceled', 'missing'], true)) {
+                mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = 'stale pending; Stripe intent " . $p_status . "' WHERE attempt_id = " . intval($prow['attempt_id']));
+                continue;
+            }
+            if (in_array($p_status, ['succeeded', 'processing', 'requires_capture'], true)) {
+                mysqli_commit($mysqli);
+                return chargeAttemptRefusal('pending');   // the money is moving or moved at Stripe: the webhook records it
+            }
+            invoiceHistoryOnce($mysqli, $invoice_id, 'Payment needs review', 'A bank payment has been pending past its window and Stripe could not confirm it is canceled; check Stripe before charging again. Attempt', (string) intval($prow['attempt_id']));
+            mysqli_commit($mysqli);
+            return chargeAttemptRefusal('needs_review');
+        }
         $stale = null;
         $rows = mysqli_query($mysqli, "SELECT *, TIMESTAMPDIFF(SECOND, attempt_created_at, NOW()) AS attempt_age FROM invoice_charge_attempts
             WHERE attempt_invoice_id = $invoice_id AND attempt_status = 'processing' ORDER BY attempt_id FOR UPDATE");
@@ -214,7 +279,9 @@ function chargeAttemptClaim($mysqli, $invoice_id, string $source, $method_id = 0
             $row_guest = $row['attempt_source'] === 'guest';
             $age = intval($row['attempt_age']);
             $same = intval($row['attempt_balance_cents']) === $cents && intval($row['attempt_method_id']) === $method_id && $row_guest === $is_guest_claim;
-            if ($same && $age < CHARGE_ATTEMPT_KEY_MAX_AGE && $stale === null) {
+            // M5-7: a row whose replay already hit an idempotency conflict is never replayed again (and never abandoned on an empty search either)
+            $conflict = strpos((string) $row['attempt_error'], CHARGE_ATTEMPT_CONFLICT_MARK) === 0;
+            if ($same && $age < CHARGE_ATTEMPT_KEY_MAX_AGE && $stale === null && !$conflict) {
                 $stale = $row;
                 continue;
             }
@@ -228,10 +295,35 @@ function chargeAttemptClaim($mysqli, $invoice_id, string $source, $method_id = 0
                     mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = 'stale; Stripe intent " . $old_status . "' WHERE attempt_id = " . intval($row['attempt_id']));
                     continue;
                 }
-            } elseif ($pi_lookup !== null && $pi_lookup('', false, (string) $row['attempt_key']) === 'none') {
-                continue;   // nothing at Stripe carries this attempt's key: it never reached Stripe, closed by the abandon below
+            } elseif ($pi_lookup !== null) {
+                // M5-4: when the search finds an intent, act on ITS status like a stored one: remember its id on the row (so the webhook can settle
+                // it), cancel it if still cancelable and free the row on canceled; succeeded/processing (or anything unknown) refuses.
+                $hit = null;
+                $s = $pi_lookup('', true, (string) $row['attempt_key'], false, $hit);
+                if ($s === 'none' && !$conflict) {
+                    continue;   // nothing at Stripe carries this attempt's key: it never reached Stripe, closed by the abandon below
+                }
+                if ($s === 'none') {
+                    $old_status = 'conflict';   // M5-7: the search cannot see a request that predates the metadata; the idempotency conflict says Stripe did see the key
+                } elseif ($s !== null) {
+                    if ($hit !== null && $hit !== '') {
+                        mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_pi_id = '" . mysqli_real_escape_string($mysqli, $hit) . "' WHERE attempt_id = " . intval($row['attempt_id']) . " AND attempt_pi_id = ''");
+                    }
+                    if (in_array($s, ['canceled', 'missing'], true)) {
+                        mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = 'stale; Stripe intent " . $s . "' WHERE attempt_id = " . intval($row['attempt_id']));
+                        continue;
+                    }
+                    if ($s === 'requires_action_bank') {
+                        mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'pending', attempt_updated_at = NOW() WHERE attempt_id = " . intval($row['attempt_id']));
+                        mysqli_commit($mysqli);
+                        return chargeAttemptRefusal('pending');
+                    }
+                    $old_status = $s;
+                }
+            } elseif ($conflict) {
+                $old_status = 'conflict';
             }
-            if ($old_status !== null || $age >= CHARGE_ATTEMPT_KEY_MAX_AGE) {
+            if ($old_status !== null || $age >= CHARGE_ATTEMPT_KEY_MAX_AGE || $conflict) {
                 invoiceHistoryOnce($mysqli, $invoice_id, 'Payment needs review', 'A charge attempt timed out and may have been charged at Stripe; check Stripe before charging again. Attempt', (string) intval($row['attempt_id']));
                 mysqli_commit($mysqli);
                 return chargeAttemptRefusal('needs_review');
@@ -240,7 +332,7 @@ function chargeAttemptClaim($mysqli, $invoice_id, string $source, $method_id = 0
             return chargeAttemptRefusal('in_progress');   // Stripe could not be asked (or the search found an intent): do not charge, retry later
         }
         mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = 'abandoned' WHERE attempt_invoice_id = $invoice_id
-            AND attempt_status IN ('processing','pending')" . ($stale ? ' AND attempt_id <> ' . intval($stale['attempt_id']) : ''));
+            AND attempt_status = 'processing'" . ($stale ? ' AND attempt_id <> ' . intval($stale['attempt_id']) : ''));
         if ($stale) {
             mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_updated_at = NOW(), attempt_source = '$source' WHERE attempt_id = " . intval($stale['attempt_id']));
             mysqli_commit($mysqli);
@@ -275,8 +367,37 @@ function chargeAttemptStoreResult($mysqli, $attempt_id, $pi_status, $pi_id): str
     $pi_id = mysqli_real_escape_string($mysqli, (string) $pi_id);
     $status = $pi_status === 'succeeded' ? 'processing' : ($pi_status === 'processing' ? 'pending' : 'failed');
     $err = $status === 'failed' ? ", attempt_error = '" . mysqli_real_escape_string($mysqli, 'Stripe status ' . $pi_status) . "'" : '';
-    mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = '$status', attempt_pi_id = '$pi_id'$err WHERE attempt_id = $attempt_id");
+    $bump = $status === 'pending' ? ', attempt_updated_at = NOW()' : '';   // M5-2: the 10-day pending window counts from here
+    mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = '$status', attempt_pi_id = '$pi_id'$err$bump WHERE attempt_id = $attempt_id");
     return $status;
+}
+
+/**
+ * M5-7: true for Stripe's idempotency_error (400: the key was used before with different parameters).
+ */
+function chargeAttemptIsIdempotencyConflict(\Throwable $e): bool
+{
+    return is_a($e, '\Stripe\Exception\IdempotencyException') || stripos($e->getMessage(), 'idempotent requests can only be used with the same parameters') !== false;
+}
+
+/**
+ * M5-7: the ONE place every saved-method charge sends its PaymentIntent create (agent, portal, cron). $send(array $params) performs the call with the
+ * claim's idempotency key. On a takeover ($reused: the old key is replayed) Stripe answers an idempotency_error when the new parameters differ from the
+ * original request's (rows created before 'rivet_attempt_key' metadata existed): then the SAME key is replayed once without that metadata (the original
+ * parameters), which Stripe answers with the original result and can never create a second charge. Still a conflict: the exception goes to
+ * chargeAttemptStoreException(), which treats it as unknown (never failed).
+ */
+function chargeAttemptSend(callable $send, array $params, bool $reused)
+{
+    try {
+        return $send($params);
+    } catch (\Throwable $e) {
+        if (!$reused || !chargeAttemptIsIdempotencyConflict($e) || !isset($params['metadata']['rivet_attempt_key'])) {
+            throw $e;
+        }
+        unset($params['metadata']['rivet_attempt_key']);
+        return $send($params);
+    }
 }
 
 /**
@@ -287,6 +408,13 @@ function chargeAttemptStoreException($mysqli, $attempt_id, \Throwable $e): strin
 {
     $attempt_id = intval($attempt_id);
     $definite = false;
+    if (chargeAttemptIsIdempotencyConflict($e)) {
+        // M5-7: Stripe refused to replay the key (a takeover with different parameters): the ORIGINAL request may well have charged, so this is
+        // UNKNOWN, not failed. The row stays 'processing' and the next claim looks the key up and then needs_review, never a fresh charge.
+        $err = mysqli_real_escape_string($mysqli, substr(CHARGE_ATTEMPT_CONFLICT_MARK . ': ' . $e->getMessage(), 0, 250));
+        mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'processing', attempt_error = '$err', attempt_updated_at = NOW() WHERE attempt_id = $attempt_id");
+        return 'processing';
+    }
     if (is_a($e, '\Stripe\Exception\ApiErrorException') && !is_a($e, '\Stripe\Exception\ApiConnectionException')) {
         $http = (int) $e->getHttpStatus();
         $definite = $http >= 400 && $http < 500 && $http !== 409;
@@ -341,7 +469,7 @@ function chargeAttemptExpireGuest($mysqli, callable $pi_lookup, int $limit = 50)
  * closed as failed with the admin's reason, and an invoice history row records who/why. $pi_lookup may be null only when no Stripe provider exists.
  * @return array{ok:bool, message:string}
  */
-function chargeAttemptClear($mysqli, int $attempt_id, string $reason, ?callable $pi_lookup, string $by = 'admin'): array
+function chargeAttemptClear($mysqli, int $attempt_id, string $reason, ?callable $pi_lookup, string $by = 'admin', bool $stripe_checked = false): array
 {
     $reason = trim($reason);
     if ($reason === '') {
@@ -351,28 +479,38 @@ function chargeAttemptClear($mysqli, int $attempt_id, string $reason, ?callable 
     if (!$row || !in_array($row['attempt_status'], ['processing', 'pending'], true)) {
         return ['ok' => false, 'message' => 'That charge attempt is not open'];
     }
+    $note = '';
     if ($pi_lookup !== null) {
+        // M5-3: the intent may still complete (bank microdeposits, an open guest page, 3DS): clearing CANCELS it (bank debits included) and frees the
+        // attempt only on a confirmed canceled / missing. M5-4: a no-id attempt searches Stripe and acts on the intent it finds.
+        $hit = null;
         if ($row['attempt_pi_id'] !== '') {
-            $st = $pi_lookup((string) $row['attempt_pi_id']);
+            $st = $pi_lookup((string) $row['attempt_pi_id'], true, null, true);
             if ($st === null) {
                 return ['ok' => false, 'message' => 'Stripe could not be asked about this payment right now; try again when it is reachable'];
             }
-            if (in_array($st, ['succeeded', 'processing', 'requires_capture'], true)) {
-                return ['ok' => false, 'message' => 'Stripe reports this payment as ' . $st . '; it is not cleared (the webhook records it)'];
-            }
         } else {
-            $st = $pi_lookup('', false, (string) $row['attempt_key']);
-            if ($st !== 'none') {
-                return ['ok' => false, 'message' => $st === 'found' ? 'Stripe has a PaymentIntent for this attempt; it is not cleared' : 'Stripe could not be searched for this attempt right now; try again when it is reachable'];
+            $st = $pi_lookup('', true, (string) $row['attempt_key'], true, $hit);
+            if ($hit !== null && $hit !== '') {
+                mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_pi_id = '" . mysqli_real_escape_string($mysqli, $hit) . "' WHERE attempt_id = " . intval($attempt_id) . " AND attempt_pi_id = ''");
+            }
+            if ($st === null) {
+                if (!$stripe_checked) {
+                    return ['ok' => false, 'message' => 'Stripe could not be searched for this attempt (the search is unavailable or failed). Check the Stripe dashboard for a payment with this attempt, then tick "I checked Stripe" to clear it'];
+                }
+                $note = ' (admin confirmed Stripe was checked by hand; Stripe search unavailable)';
             }
         }
+        if ($st !== null && !in_array($st, ['canceled', 'missing', 'none'], true)) {
+            return ['ok' => false, 'message' => 'Stripe reports this payment as ' . $st . '; it is not cleared' . (in_array($st, ['succeeded', 'processing', 'requires_capture'], true) ? ' (the webhook records it)' : '')];
+        }
     }
-    $err = mysqli_real_escape_string($mysqli, substr('cleared by ' . $by . ': ' . $reason, 0, 250));
+    $err = mysqli_real_escape_string($mysqli, substr('cleared by ' . $by . ': ' . $reason . $note, 0, 250));
     mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = '$err' WHERE attempt_id = " . intval($attempt_id) . " AND attempt_status IN ('processing','pending')");
     if (mysqli_affected_rows($mysqli) < 1) {
         return ['ok' => false, 'message' => 'That charge attempt was settled in the meantime'];
     }
-    $desc = mysqli_real_escape_string($mysqli, substr('Charge attempt ' . intval($attempt_id) . ' cleared by ' . $by . ': ' . $reason, 0, 250));
+    $desc = mysqli_real_escape_string($mysqli, substr('Charge attempt ' . intval($attempt_id) . ' cleared by ' . $by . ': ' . $reason . $note, 0, 250));
     mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Charge attempt cleared', history_description = '$desc', history_invoice_id = " . intval($row['attempt_invoice_id']));
     return ['ok' => true, 'message' => 'Charge attempt cleared'];
 }
@@ -396,7 +534,8 @@ function chargeAttemptSettleIntent($mysqli, string $pi_id, int $invoice_id, int 
     // MSP-DS-166 (re-review M3-1): payment_intent.payment_failed leaves a guest-page intent at requires_payment_method, still confirmable on the
     // open page. $keep_guest_open leaves such an attempt live (it is canceled at Stripe by the next claim or by chargeAttemptExpireGuest()).
     $keep = $keep_guest_open ? " AND NOT (attempt_source = 'guest' AND attempt_status = 'processing')" : '';
-    mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = '$status', attempt_pi_id = '$pi'
+    $bump = $status === 'pending' ? ', attempt_updated_at = NOW()' : '';   // M5-2: rewriting the same status/pi does not touch ON UPDATE; the pending window restarts here
+    mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = '$status', attempt_pi_id = '$pi'$bump
         WHERE attempt_status IN ('processing','pending')$keep AND (attempt_pi_id = '$pi'
            OR (attempt_pi_id = '' AND attempt_invoice_id = $invoice_id AND attempt_balance_cents = $cents AND attempt_status = 'processing'))");
     if (mysqli_affected_rows($mysqli) > 0 || $status !== 'pending' || $invoice_id <= 0) {

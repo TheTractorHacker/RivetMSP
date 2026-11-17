@@ -829,7 +829,7 @@ if (isset($_GET['add_payment_by_provider'])) {
 
     // Create a payment intent
     try {
-        $payment_intent = $stripe->paymentIntents->create([
+        $payment_intent = chargeAttemptSend(fn (array $charge_params) => $stripe->paymentIntents->create($charge_params, ['idempotency_key' => $charge_claim['key']]), [   // M5-7
             'amount' => stripeAmountToMinor($balance_to_pay, $invoice_currency_code), // MSP-DS-161: the currency's minor unit (JPY x1, KWD x1000), same helper as the agent/guest/cron sites
             'currency' => $invoice_currency_code,
             'customer' => $payment_provider_client,
@@ -845,7 +845,7 @@ if (isset($_GET['add_payment_by_provider'])) {
                 'itflow_install' => stripeInstallMarker(),
                 'rivet_attempt_key' => $charge_claim['key'],
             ]
-        ], ['idempotency_key' => $charge_claim['key']]);
+        ], !empty($charge_claim['reused']));
 
         // Get details from PI
         $pi_id = sanitizeInput($payment_intent->id);

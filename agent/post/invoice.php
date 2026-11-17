@@ -41,7 +41,7 @@ if (isset($_POST['clear_charge_attempt'])) {
         }
     }
 
-    $clear = chargeAttemptClear($mysqli, $attempt_id, (string) ($_POST['reason'] ?? ''), $pi_lookup, (string) ($session_name ?? 'admin'));
+    $clear = chargeAttemptClear($mysqli, $attempt_id, (string) ($_POST['reason'] ?? ''), $pi_lookup, (string) ($session_name ?? 'admin'), !empty($_POST['stripe_checked']));
     if ($clear['ok']) {
         logAction("Invoice", "Edit", "$session_name cleared stuck charge attempt $attempt_id on invoice ID $invoice_id: " . substr(trim((string) ($_POST['reason'] ?? '')), 0, 200), $client_id, $invoice_id);
     }
