@@ -494,6 +494,11 @@ function chargeAttemptClear($mysqli, int $attempt_id, string $reason, ?callable 
             if ($hit !== null && $hit !== '') {
                 mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_pi_id = '" . mysqli_real_escape_string($mysqli, $hit) . "' WHERE attempt_id = " . intval($attempt_id) . " AND attempt_pi_id = ''");
             }
+            if ($st === null && $hit !== null && $hit !== '') {
+                // MSP-DS-166 (re-review M6-1): the search WORKED and found an intent whose status could not be read (429/5xx/timeout on the retrieve). The tick
+                // only covers a search that itself failed; with a hit the intent may still settle (a processing ACH), so refuse.
+                return ['ok' => false, 'message' => 'Stripe found a payment for this attempt (' . $hit . ') but could not report its status right now; try again when it is reachable'];
+            }
             if ($st === null) {
                 if (!$stripe_checked) {
                     return ['ok' => false, 'message' => 'Stripe could not be searched for this attempt (the search is unavailable or failed). Check the Stripe dashboard for a payment with this attempt, then tick "I checked Stripe" to clear it'];
