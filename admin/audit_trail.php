@@ -140,6 +140,16 @@ if ($chain_cols) {
                     <input type="hidden" name="csrf_token" value="<?= $h($_SESSION['csrf_token']) ?>">
                     <button type="submit" name="verify_audit_chain" class="btn btn-outline-primary btn-sm"><i class="fas fa-check-double me-1"></i>Verify now</button>
                 </form>
+                <?php if ($chain_last && ($chain_last['cause'] ?? '') === 'anchor_missing') { ?>
+                <form action="post.php" method="post" class="mt-3 border rounded p-2" data-confirm="Verify the whole chain and write the anchor file now?">
+                    <input type="hidden" name="csrf_token" value="<?= $h($_SESSION['csrf_token']) ?>">
+                    <p class="small mb-2"><strong>One-time setup after upgrading.</strong> This install has a keyed audit chain but no anchor file yet. This step verifies every entry with the settings key and then writes the signed anchor file and head. If you did not just upgrade or restore, treat the missing file as a warning.</p>
+                    <div class="input-group input-group-sm">
+                        <input type="password" class="form-control" name="admin_current_password" placeholder="Your current password" autocomplete="current-password" required>
+                        <button type="submit" name="setup_audit_anchor" class="btn btn-outline-primary">Set up the anchor (one time)</button>
+                    </div>
+                </form>
+                <?php } ?>
                 <details class="mt-3">
                     <summary class="small text-muted">Re-anchor after a restore or an upgrade</summary>
                     <form action="post.php" method="post" class="mt-2" data-confirm="Accept the entries as they are now as the new baseline?">

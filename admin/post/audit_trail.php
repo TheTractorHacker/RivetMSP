@@ -20,7 +20,9 @@ if (isset($_POST['verify_audit_chain'])) {
     redirect();
 }
 
-if (isset($_POST['reanchor_audit_chain'])) {
+// M3-16: the one-time setup for an install upgraded from 26.10.12 (keyed chain, no anchor file yet) is the same step with a strict precondition
+$audit_anchor_legacy = isset($_POST['setup_audit_anchor']);
+if (isset($_POST['reanchor_audit_chain']) || $audit_anchor_legacy) {
     validateCSRFToken($_POST['csrf_token']);
 
     // MRR-21: accepting the current rows as the new baseline hides a cut if misused, so it needs the administrator's password again
@@ -28,8 +30,8 @@ if (isset($_POST['reanchor_audit_chain'])) {
         flash_alert('Your current password is required (and must be correct) to re-anchor the audit trail.', 'error');
         redirect();
     }
-    $re = (new \RivetMSP\Audit\AuditChain($mysqli))->reanchor();
-    logAction('Settings', 'Edit', "$session_name re-anchored the audit trail hash chain (previous: " . $re['previous'] . '; new head ' . ($re['head_id'] !== null ? '#' . $re['head_id'] : 'none') . ', ' . $re['checked'] . ' entries' . ($re['upgraded'] ? ', plain chain upgraded to keyed' : '') . ')' . ($re['ok'] ? '' : ': refused, ' . $re['reason']));
+    $re = (new \RivetMSP\Audit\AuditChain($mysqli))->reanchor($audit_anchor_legacy);
+    logAction('Settings', 'Edit', "$session_name " . ($audit_anchor_legacy ? 'ran the one-time audit trail anchor setup' : 're-anchored the audit trail hash chain') . " (previous: " . $re['previous'] . '; new head ' . ($re['head_id'] !== null ? '#' . $re['head_id'] : 'none') . ', ' . $re['checked'] . ' entries' . ($re['upgraded'] ? ', plain chain upgraded to keyed' : '') . ')' . ($re['ok'] ? '' : ': refused, ' . $re['reason']));
     if ($re['ok']) {
         \RivetMSP\Recovery\RecoveryAlerts::clear($mysqli, 'audit_chain.broken');
         \RivetMSP\Recovery\RecoveryAlerts::clear($mysqli, 'audit_chain.key');

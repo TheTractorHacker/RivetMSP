@@ -67,7 +67,10 @@ final class Nightly
         $chain = new AuditChain($db);
         $res = $chain->verify();
         $chain->record($res);
-        if ($res['status'] === 'broken') {
+        if ($res['status'] === 'broken' && ($res['cause'] ?? '') === 'anchor_missing') {
+            // M3-16: an install upgraded from 26.10.12 has no anchor file yet. Say what to do instead of crying tampering (which trains admins to press Re-anchor).
+            RecoveryAlerts::raise($db, 'audit_chain.broken', 'Audit trail anchor file missing', $res['reason'], 'audit.chain_broken', ['status' => 'broken', 'cause' => 'anchor_missing'], '/admin/audit_trail.php');
+        } elseif ($res['status'] === 'broken') {
             RecoveryAlerts::raise($db, 'audit_chain.broken', 'Audit trail tampering suspected', $res['reason'] . ' Review Administration > Audit trail and restore from a backup if the change was not yours.',
                 'audit.chain_broken', ['status' => 'broken', 'audit_id' => $res['broken_at']], '/admin/audit_trail.php');
         } elseif (in_array($res['status'], ['key_changed', 'key_unavailable'], true)) {
