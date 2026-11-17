@@ -3108,6 +3108,22 @@ function ticketCloseBlockReason($ticket_id, bool $with_tasks = false): ?string {
 }
 
 /**
+ * MSP-DS-67 (re-review M3-5): has a client approval ever been requested for / decided on this change? Derived from history, not from the
+ * current columns: the DS-51 reset puts client_decision back to 'pending' (and a draft is "not started"), which would otherwise make a
+ * rejected change look untouched. Reads the action log rows written when an approval request is sent and when the client decides via
+ * the guest link.
+ */
+function changeClientApprovalEverStarted($change_id): bool {
+    global $mysqli;
+    $change_id = intval($change_id);
+    $r = mysqli_query($mysqli, "SELECT 1 FROM logs WHERE log_entity_id = $change_id AND log_type = 'Support' AND (
+        log_description LIKE '% sent a client approval request for change %'
+        OR log_description LIKE '% approved change %via guest link'
+        OR log_description LIKE '% rejected change %via guest link') LIMIT 1");
+    return $r && mysqli_num_rows($r) > 0;
+}
+
+/**
  * MSP-DS-67: true when the change does not need the client's approval or the client has approved it.
  * The agent-side status buttons must not push a change that requires client approval past 'awaiting_approval' otherwise.
  */

@@ -54,7 +54,7 @@ ob_start();
                 <input type="checkbox" class="form-check-input" id="change_edit_requires_client_approval" name="requires_client_approval" value="1" <?= $change['requires_client_approval'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="change_edit_requires_client_approval">Requires the client's own sign-off before it can proceed</label>
             </div>
-            <?php if ($change['requires_client_approval'] && ($change['status'] !== 'draft' || $change['client_decision'] !== 'pending')) { ?>
+            <?php if ($change['requires_client_approval'] && ($change['status'] !== 'draft' || $change['client_decision'] !== 'pending' || changeClientApprovalEverStarted($change['change_id']))) { ?>
             <small class="form-text text-secondary">Approval has already started. Only an administrator can untick this, and must give a reason.</small>
             <input type="text" class="form-control mt-1" name="approval_override_reason" placeholder="Reason for removing the approval requirement (administrators only)">
             <?php } ?>

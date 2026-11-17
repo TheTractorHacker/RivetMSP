@@ -92,10 +92,11 @@ if (isset($_POST['edit_change'])) {
     $requires_client_approval = !empty($_POST['requires_client_approval']) && $change_client_id > 0 ? 1 : 0;
     // MSP-DS-67 (re-review MRR-14): once the approval has started (the change left 'draft', or the client already decided), a technician cannot switch
     // "requires client approval" off - that would also satisfy the status gate for a change the client rejected. Only an administrator can, and the
-    // reason is mandatory and goes to the audit log.
+    // reason is mandatory and goes to the audit log. (M3-5: "started" is judged from history too - an approval request or a client decision in the
+    // log - because sending the change back to draft and editing its content resets the decision to pending and would otherwise hide a rejection.)
     $approval_override_reason = '';
     if (!empty($existing['requires_client_approval']) && !$requires_client_approval
-        && ($existing['status'] !== 'draft' || $existing['client_decision'] !== 'pending')) {
+        && ($existing['status'] !== 'draft' || $existing['client_decision'] !== 'pending' || changeClientApprovalEverStarted($change_id))) {
         $approval_override_reason = trim(strip_tags((string) ($_POST['approval_override_reason'] ?? '')));
         if (empty($session_is_admin) || $approval_override_reason === '') {
             flash_alert('Client approval has already started for this change. Only an administrator can remove the requirement, and a reason is required.', 'error');
