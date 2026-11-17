@@ -78,8 +78,8 @@ $ok('A: the period\'s only (finalized) run can never be archived this way', !$ar
 $r = $runStep();
 $ok('A: after the admin resolved it the same step succeeds and creates both keys', $r === 'OK' && $ver() === '2.6.139' && $hasKeys() === 2);
 
-// B: two live periods with the same dates that both carry a draft run: archive one run, then the empty period (real handlers), retry succeeds
-$reset("(1,'2026-11-01','2026-11-15'),(2,'2026-11-01','2026-11-15'),(3,'2026-11-16','2026-11-30')", "(1,1,'draft',1),(2,2,'draft',1),(3,3,'draft',1)");
+// B: two live periods with the same dates that both carry a draft run: the admin handler archives the extra period with its run (M4-2), an empty duplicate period is archived separately, retry succeeds
+$reset("(1,'2026-11-01','2026-11-15'),(2,'2026-11-01','2026-11-15'),(3,'2026-11-16','2026-11-30'),(4,'2026-12-01','2026-12-15'),(5,'2026-12-01','2026-12-15')", "(1,1,'draft',1),(2,2,'draft',1),(3,3,'draft',1)");
 $r = $runStep();
 $ok('B: refused, nothing archived, version unchanged', str_starts_with($r, 'DbUpdateRefusedException') && $ver() === '2.6.138' && intval($one("SELECT COUNT(*) FROM payroll_periods WHERE payroll_period_archived_at IS NOT NULL")) === 0);
 $perPost = fn (int $user, int $period, array $extra = []) => $handler('payroll_period.php', $user, ['archive_duplicate_payroll_period' => 1, 'period_id' => $period] + $extra);
@@ -87,19 +87,18 @@ $o = $perPost(1, 2, ['archive_reason' => 'duplicate period']);
 $ok('B: a period that still has a live run cannot be archived', !$archived('payroll_periods', 'payroll_period_archived_at', 2));
 $o = $runPost(1, 1, ['archive_reason' => 'only run of period 1']);
 $ok('B: run 1 is the only run of period 1 -> not archivable (it is not a duplicate)', !$archived('payroll_runs', 'payroll_run_archived_at', 1));
-$mysqli->query("UPDATE payroll_runs SET payroll_run_period_id = 2 WHERE payroll_run_id = 1");   // admin moved nothing in the app; simulate a period carrying two runs to clear it up
-$o = $runPost(1, 2, ['archive_reason' => 'run of the duplicate period']);
-$mysqli->query("UPDATE payroll_runs SET payroll_run_period_id = 1 WHERE payroll_run_id = 1");
-$mysqli->query("UPDATE payroll_runs SET payroll_run_archived_at = NOW() WHERE payroll_run_id = 2");   // (the extra run of period 2 is gone; period 2 is now empty)
-$o = $perPost(2, 2, ['archive_reason' => 'duplicate period']);
-$ok('B: a technician cannot archive a period', !$archived('payroll_periods', 'payroll_period_archived_at', 2) && str_contains($o, 'Only an administrator'));
-$o = $perPost(1, 2, ['archive_reason' => 'x']);
-$ok('B: the period archive also needs a reason', !$archived('payroll_periods', 'payroll_period_archived_at', 2));
+// M4-2: the stuck pair (two same-date periods, one live run each) is resolved THROUGH THE HANDLER, no raw SQL (full coverage: tests/msp_m4_2.php)
+$o = $handler('payroll_period.php', 1, ['archive_duplicate_payroll_period_with_runs' => 1, 'period_id' => 2, 'archive_reason' => 'duplicate period with its run']);
+$ok('B: the extra period is archived together with its run by the admin handler (kept, not deleted)', $archived('payroll_periods', 'payroll_period_archived_at', 2) && $archived('payroll_runs', 'payroll_run_archived_at', 2) && !$archived('payroll_runs', 'payroll_run_archived_at', 1));
+$o = $perPost(2, 5, ['archive_reason' => 'duplicate period']);
+$ok('B: a technician cannot archive a period', !$archived('payroll_periods', 'payroll_period_archived_at', 5) && str_contains($o, 'Only an administrator'));
+$o = $perPost(1, 5, ['archive_reason' => 'x']);
+$ok('B: the period archive also needs a reason', !$archived('payroll_periods', 'payroll_period_archived_at', 5));
 $o = $perPost(1, 3, ['archive_reason' => 'not a duplicate at all']);
 $ok('B: a period with unique dates is never archivable here', !$archived('payroll_periods', 'payroll_period_archived_at', 3));
-$o = $perPost(1, 2, ['archive_reason' => 'empty duplicate period']);
-$ok('B: admin archives the EMPTY duplicate period (kept, logged with reason)', $archived('payroll_periods', 'payroll_period_archived_at', 2) && intval($one("SELECT COUNT(*) FROM payroll_periods")) === 3
-    && intval($one("SELECT COUNT(*) FROM logs WHERE log_type = 'Payroll' AND log_action = 'Archive' AND log_description LIKE '%pay period #2%Reason: empty duplicate period%'")) === 1);
+$o = $perPost(1, 5, ['archive_reason' => 'empty duplicate period']);
+$ok('B: admin archives the EMPTY duplicate period (kept, logged with reason)', $archived('payroll_periods', 'payroll_period_archived_at', 5) && intval($one("SELECT COUNT(*) FROM payroll_periods")) === 5
+    && intval($one("SELECT COUNT(*) FROM logs WHERE log_type = 'Payroll' AND log_action = 'Archive' AND log_description LIKE '%pay period #5%Reason: empty duplicate period%'")) === 1);
 $r = $runStep();
 $ok('B: the same step now succeeds and creates both keys', $r === 'OK' && $ver() === '2.6.139' && $hasKeys() === 2);
 

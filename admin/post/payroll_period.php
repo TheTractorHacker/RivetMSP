@@ -23,6 +23,40 @@ if (isset($_POST['archive_duplicate_payroll_period'])) {
     redirect('/admin/payroll_periods.php');
 }
 
+// M4-2 (MSP-DS-39): archive a duplicate pay period TOGETHER with its live run(s) - the way out when two same-date periods each hold one live run. Admin only; never deletes;
+// reason required and logged; a period holding a FINALIZED run also needs the admin's password and is allowed only while the kept period still holds a finalized run.
+if (isset($_POST['archive_duplicate_payroll_period_with_runs'])) {
+
+    validateCSRFToken($_POST['csrf_token'] ?? '');
+
+    $period_id = intval($_POST['period_id'] ?? 0);
+    if (empty($session_is_admin)) {
+        flash_alert("Only an administrator can archive a duplicate pay period.", 'error');
+        redirect("/admin/payroll_period.php?id=$period_id");
+    }
+    $chk = payrollPeriodWithRunsArchiveCheck($mysqli, $period_id);
+    if (!$chk['ok']) {
+        flash_alert($chk['reason'], 'error');
+        redirect('/admin/payroll_periods.php');
+    }
+    require_once __DIR__ . '/../../includes/security_policy.php';
+    $reauthed = false;
+    if ($chk['finalized']) {
+        $reauthed = secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''));
+        if (!$reauthed) {
+            flash_alert("Archiving a pay period with a finalized payroll run needs your current password.", 'error');
+            redirect("/admin/payroll_period.php?id=$period_id");
+        }
+    }
+    [$archived, $archive_msg] = payrollArchiveDuplicatePeriodWithRuns($mysqli, $period_id, (int) $session_user_id, (string) ($_POST['archive_reason'] ?? ''), $reauthed);
+    if (!$archived) {
+        flash_alert($archive_msg, 'error');
+        redirect("/admin/payroll_period.php?id=$period_id");
+    }
+    flash_alert($archive_msg);
+    redirect('/admin/payroll_periods.php');
+}
+
 if (isset($_POST['save_payroll_hours'])) {
 
     validateCSRFToken($_POST['csrf_token']);

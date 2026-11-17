@@ -373,15 +373,16 @@ function payrollFinalizeRun(mysqli $mysqli, int $run_id, int $finalized_by_user_
  * A run may be archived only while ANOTHER live run exists in the same period (a period's only run is never archived this way), and a FINALIZED run only
  * while another live FINALIZED run exists there, so a finalized pay record is never the one that disappears from view.
  */
-function payrollRunArchiveCheck(mysqli $mysqli, int $run_id): array {
-    $run = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payroll_run_id, payroll_run_period_id, payroll_run_status FROM payroll_runs WHERE payroll_run_id = $run_id AND payroll_run_archived_at IS NULL LIMIT 1"));
+function payrollRunArchiveCheck(mysqli $mysqli, int $run_id, bool $lock = false): array {
+    $lk = $lock ? ' FOR UPDATE' : '';   // M4-2: the archive itself re-checks INSIDE its transaction with the rows locked
+    $run = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payroll_run_id, payroll_run_period_id, payroll_run_status FROM payroll_runs WHERE payroll_run_id = $run_id AND payroll_run_archived_at IS NULL LIMIT 1$lk"));
     if (!$run) {
         return ['ok' => false, 'reason' => 'Payroll run not found.', 'finalized' => false, 'period_id' => 0];
     }
     $pid = (int) $run['payroll_run_period_id'];
     $fin = $run['payroll_run_status'] === 'finalized';
     $where = $fin ? " AND payroll_run_status = 'finalized'" : '';
-    $others = (int) mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM payroll_runs WHERE payroll_run_period_id = $pid AND payroll_run_id <> $run_id AND payroll_run_archived_at IS NULL$where"))[0];
+    $others = (int) mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM payroll_runs WHERE payroll_run_period_id = $pid AND payroll_run_id <> $run_id AND payroll_run_archived_at IS NULL$where$lk"))[0];
     if ($others < 1) {
         return ['ok' => false, 'finalized' => $fin, 'period_id' => $pid, 'reason' => $fin
             ? 'This is the only finalized run of its pay period, so it is not a duplicate and cannot be archived here.'
@@ -390,62 +391,207 @@ function payrollRunArchiveCheck(mysqli $mysqli, int $run_id): array {
     return ['ok' => true, 'reason' => '', 'finalized' => $fin, 'period_id' => $pid];
 }
 
-/** Archive one duplicate run (see payrollRunArchiveCheck). $reason is required. Returns [bool ok, string message]. Never deletes. */
-function payrollArchiveDuplicateRun(mysqli $mysqli, int $run_id, int $actor_user_id, string $reason): array {
+/**
+ * Archive one duplicate run (see payrollRunArchiveCheck). $reason is required. Returns [bool ok, string message]. Never deletes.
+ * M4-2: the check and the UPDATE run in ONE transaction with the period row and its runs locked (SELECT ... FOR UPDATE), so two concurrent archives of the two
+ * finalized copies serialize: the second sees the first one gone and is refused instead of both being hidden. $reauthed = the caller already verified the admin's password.
+ */
+function payrollArchiveDuplicateRun(mysqli $mysqli, int $run_id, int $actor_user_id, string $reason, bool $reauthed = true): array {
     $reason = trim($reason);
     if (mb_strlen($reason) < 5) {
         return [false, 'Enter a reason (at least 5 characters) - it is written to the audit log.'];
     }
-    $chk = payrollRunArchiveCheck($mysqli, $run_id);
-    if (!$chk['ok']) {
-        return [false, $chk['reason']];
-    }
-    mysqli_query($mysqli, "UPDATE payroll_runs SET payroll_run_archived_at = NOW() WHERE payroll_run_id = $run_id AND payroll_run_archived_at IS NULL");
-    if (mysqli_affected_rows($mysqli) < 1) {
+    $pre = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payroll_run_period_id FROM payroll_runs WHERE payroll_run_id = $run_id AND payroll_run_archived_at IS NULL LIMIT 1"));
+    if (!$pre) {
         return [false, 'Payroll run not found.'];
     }
-    $state = $chk['finalized'] ? 'finalized' : 'draft';
-    $desc = mb_substr("MSP-DS-39: user #$actor_user_id archived duplicate $state payroll run #$run_id of period #{$chk['period_id']} (not deleted). Reason: $reason", 0, 1000, 'UTF-8');
-    $d = mysqli_real_escape_string($mysqli, $desc);
-    mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Payroll', log_action = 'Archive', log_description = '$d', log_user_id = $actor_user_id, log_entity_id = $run_id");
+    $pid = (int) $pre['payroll_run_period_id'];
+    try {
+        $mysqli->begin_transaction();
+        // lock order everywhere: period rows (ascending id), then their runs (ascending id)
+        mysqli_query($mysqli, "SELECT payroll_period_id FROM payroll_periods WHERE payroll_period_id = $pid FOR UPDATE");
+        mysqli_query($mysqli, "SELECT payroll_run_id FROM payroll_runs WHERE payroll_run_period_id = $pid ORDER BY payroll_run_id FOR UPDATE");
+        $chk = payrollRunArchiveCheck($mysqli, $run_id, true);
+        if (!$chk['ok']) {
+            $mysqli->rollback();
+            return [false, $chk['reason']];
+        }
+        if ($chk['finalized'] && !$reauthed) {
+            $mysqli->rollback();
+            return [false, 'Archiving a finalized payroll run needs your current password.'];
+        }
+        mysqli_query($mysqli, "UPDATE payroll_runs SET payroll_run_archived_at = NOW() WHERE payroll_run_id = $run_id AND payroll_run_archived_at IS NULL");
+        if (mysqli_affected_rows($mysqli) < 1) {
+            $mysqli->rollback();
+            return [false, 'Payroll run not found.'];
+        }
+        $state = $chk['finalized'] ? 'finalized' : 'draft';
+        $desc = mb_substr("MSP-DS-39: user #$actor_user_id archived duplicate $state payroll run #$run_id of period #{$chk['period_id']} (not deleted). Reason: $reason", 0, 1000, 'UTF-8');
+        $d = mysqli_real_escape_string($mysqli, $desc);
+        mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Payroll', log_action = 'Archive', log_description = '$d', log_user_id = $actor_user_id, log_entity_id = $run_id");
+        $mysqli->commit();
+    } catch (Throwable $e) {
+        try { $mysqli->rollback(); } catch (Throwable $e2) { }
+        return [false, 'The archive could not be completed (the database was busy). Nothing was changed - try again.'];
+    }
     return [true, "Duplicate $state payroll run #$run_id archived (it is kept, not deleted)."];
 }
 
 /** May this pay period be archived as an empty duplicate? Needs: live, no live run, and another live period with the same dates. */
-function payrollPeriodArchiveCheck(mysqli $mysqli, int $period_id): array {
-    $p = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payroll_period_start_date AS sd, payroll_period_end_date AS ed FROM payroll_periods WHERE payroll_period_id = $period_id AND payroll_period_archived_at IS NULL LIMIT 1"));
+function payrollPeriodArchiveCheck(mysqli $mysqli, int $period_id, bool $lock = false): array {
+    $lk = $lock ? ' FOR UPDATE' : '';
+    $p = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payroll_period_start_date AS sd, payroll_period_end_date AS ed FROM payroll_periods WHERE payroll_period_id = $period_id AND payroll_period_archived_at IS NULL LIMIT 1$lk"));
     if (!$p) {
         return ['ok' => false, 'reason' => 'Pay period not found.'];
     }
-    $runs = (int) mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM payroll_runs WHERE payroll_run_period_id = $period_id AND payroll_run_archived_at IS NULL"))[0];
+    $runs = (int) mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM payroll_runs WHERE payroll_run_period_id = $period_id AND payroll_run_archived_at IS NULL$lk"))[0];
     if ($runs > 0) {
         return ['ok' => false, 'reason' => 'This pay period still has a payroll run. Archive its duplicate run first (open the run), then archive the empty period.'];
     }
     $sd = mysqli_real_escape_string($mysqli, $p['sd']);
     $ed = mysqli_real_escape_string($mysqli, $p['ed']);
-    $dups = (int) mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM payroll_periods WHERE payroll_period_id <> $period_id AND payroll_period_archived_at IS NULL AND payroll_period_start_date = '$sd' AND payroll_period_end_date = '$ed'"))[0];
+    $dups = (int) mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM payroll_periods WHERE payroll_period_id <> $period_id AND payroll_period_archived_at IS NULL AND payroll_period_start_date = '$sd' AND payroll_period_end_date = '$ed'$lk"))[0];
     if ($dups < 1) {
         return ['ok' => false, 'reason' => 'No other pay period has these dates, so this one is not a duplicate and cannot be archived here.'];
     }
     return ['ok' => true, 'reason' => ''];
 }
 
-/** Archive one empty duplicate pay period. $reason is required. Returns [bool ok, string message]. Never deletes. */
+/**
+ * M4-2: lock every live pay period with the same dates as $period_id (ascending id) and then all their runs (ascending id), inside the caller's transaction.
+ * Returns false when the period is not live. Same lock order as payrollArchiveDuplicateRun (periods, then runs), so the two cannot deadlock each other.
+ */
+function payrollLockPeriodGroup(mysqli $mysqli, int $period_id): bool {
+    $p = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payroll_period_start_date AS sd, payroll_period_end_date AS ed FROM payroll_periods WHERE payroll_period_id = $period_id AND payroll_period_archived_at IS NULL LIMIT 1"));
+    if (!$p) {
+        return false;
+    }
+    $sd = mysqli_real_escape_string($mysqli, $p['sd']);
+    $ed = mysqli_real_escape_string($mysqli, $p['ed']);
+    $ids = [];
+    $r = mysqli_query($mysqli, "SELECT payroll_period_id FROM payroll_periods WHERE payroll_period_start_date = '$sd' AND payroll_period_end_date = '$ed' ORDER BY payroll_period_id FOR UPDATE");
+    while ($r && ($x = mysqli_fetch_row($r))) {
+        $ids[] = (int) $x[0];
+    }
+    if ($ids) {
+        mysqli_query($mysqli, "SELECT payroll_run_id FROM payroll_runs WHERE payroll_run_period_id IN (" . implode(',', $ids) . ") ORDER BY payroll_run_id FOR UPDATE");
+    }
+    return true;
+}
+
+/** Archive one empty duplicate pay period. $reason is required. Returns [bool ok, string message]. Never deletes. Check + UPDATE are one locked transaction (M4-2). */
 function payrollArchiveDuplicatePeriod(mysqli $mysqli, int $period_id, int $actor_user_id, string $reason): array {
     $reason = trim($reason);
     if (mb_strlen($reason) < 5) {
         return [false, 'Enter a reason (at least 5 characters) - it is written to the audit log.'];
     }
-    $chk = payrollPeriodArchiveCheck($mysqli, $period_id);
-    if (!$chk['ok']) {
-        return [false, $chk['reason']];
+    try {
+        $mysqli->begin_transaction();
+        if (!payrollLockPeriodGroup($mysqli, $period_id)) {
+            $mysqli->rollback();
+            return [false, 'Pay period not found.'];
+        }
+        $chk = payrollPeriodArchiveCheck($mysqli, $period_id, true);
+        if (!$chk['ok']) {
+            $mysqli->rollback();
+            return [false, $chk['reason']];
+        }
+        mysqli_query($mysqli, "UPDATE payroll_periods SET payroll_period_archived_at = NOW() WHERE payroll_period_id = $period_id AND payroll_period_archived_at IS NULL");
+        if (mysqli_affected_rows($mysqli) < 1) {
+            $mysqli->rollback();
+            return [false, 'Pay period not found.'];
+        }
+        $desc = mb_substr("MSP-DS-39: user #$actor_user_id archived empty duplicate pay period #$period_id (not deleted). Reason: $reason", 0, 1000, 'UTF-8');
+        $d = mysqli_real_escape_string($mysqli, $desc);
+        mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Payroll', log_action = 'Archive', log_description = '$d', log_user_id = $actor_user_id, log_entity_id = $period_id");
+        $mysqli->commit();
+    } catch (Throwable $e) {
+        try { $mysqli->rollback(); } catch (Throwable $e2) { }
+        return [false, 'The archive could not be completed (the database was busy). Nothing was changed - try again.'];
     }
-    mysqli_query($mysqli, "UPDATE payroll_periods SET payroll_period_archived_at = NOW() WHERE payroll_period_id = $period_id AND payroll_period_archived_at IS NULL");
-    if (mysqli_affected_rows($mysqli) < 1) {
-        return [false, 'Pay period not found.'];
-    }
-    $desc = mb_substr("MSP-DS-39: user #$actor_user_id archived empty duplicate pay period #$period_id (not deleted). Reason: $reason", 0, 1000, 'UTF-8');
-    $d = mysqli_real_escape_string($mysqli, $desc);
-    mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Payroll', log_action = 'Archive', log_description = '$d', log_user_id = $actor_user_id, log_entity_id = $period_id");
     return [true, "Duplicate pay period #$period_id archived (it is kept, not deleted)."];
+}
+
+/**
+ * M4-2 (MSP-DS-39): may this pay period be archived TOGETHER with its live run(s)? This is the way out when two live periods have the same dates and each holds
+ * one live run (neither run is "a duplicate within its period" and neither period is empty). Needs: the period is live, ANOTHER live period has the same dates AND
+ * holds a live run, and - if this period holds a FINALIZED run - a kept same-date period still holds a finalized run (finalized pay is never the only record lost).
+ * Returns ['ok', 'reason', 'finalized' => bool, 'run_ids' => int[]].
+ */
+function payrollPeriodWithRunsArchiveCheck(mysqli $mysqli, int $period_id, bool $lock = false): array {
+    $lk = $lock ? ' FOR UPDATE' : '';
+    $no = fn (string $why, bool $fin = false, array $ids = []) => ['ok' => false, 'reason' => $why, 'finalized' => $fin, 'run_ids' => $ids];
+    $p = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payroll_period_start_date AS sd, payroll_period_end_date AS ed FROM payroll_periods WHERE payroll_period_id = $period_id AND payroll_period_archived_at IS NULL LIMIT 1$lk"));
+    if (!$p) {
+        return $no('Pay period not found.');
+    }
+    $ids = [];
+    $fin = false;
+    $r = mysqli_query($mysqli, "SELECT payroll_run_id, payroll_run_status FROM payroll_runs WHERE payroll_run_period_id = $period_id AND payroll_run_archived_at IS NULL ORDER BY payroll_run_id$lk");
+    while ($r && ($x = mysqli_fetch_assoc($r))) {
+        $ids[] = (int) $x['payroll_run_id'];
+        $fin = $fin || $x['payroll_run_status'] === 'finalized';
+    }
+    if (!$ids) {
+        return $no('This pay period has no payroll run - use "Archive this duplicate period" instead.');
+    }
+    $sd = mysqli_real_escape_string($mysqli, $p['sd']);
+    $ed = mysqli_real_escape_string($mysqli, $p['ed']);
+    $base = "FROM payroll_runs r JOIN payroll_periods q ON q.payroll_period_id = r.payroll_run_period_id
+        WHERE q.payroll_period_id <> $period_id AND q.payroll_period_archived_at IS NULL AND q.payroll_period_start_date = '$sd' AND q.payroll_period_end_date = '$ed' AND r.payroll_run_archived_at IS NULL";
+    $kept_runs = (int) mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) $base$lk"))[0];
+    if ($kept_runs < 1) {
+        return $no('No other pay period with these dates holds a payroll run, so this one is not a duplicate and cannot be archived here.', $fin, $ids);
+    }
+    if ($fin) {
+        $kept_fin = (int) mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) $base AND r.payroll_run_status = 'finalized'$lk"))[0];
+        if ($kept_fin < 1) {
+            return $no('This period holds a finalized payroll run and the other period with these dates has none, so archiving it would hide the only finalized pay record. Not allowed.', true, $ids);
+        }
+    }
+    return ['ok' => true, 'reason' => '', 'finalized' => $fin, 'run_ids' => $ids];
+}
+
+/**
+ * M4-2: archive a duplicate pay period TOGETHER with its live run(s), in one transaction (the runs get the archive stamp too). Never deletes; logged with reason.
+ * $reauthed = the caller verified the admin's password (required when the period holds a finalized run). Check + UPDATEs run with the same-date periods and their
+ * runs locked, so two concurrent archives cannot hide both finalized copies. Returns [bool ok, string message].
+ */
+function payrollArchiveDuplicatePeriodWithRuns(mysqli $mysqli, int $period_id, int $actor_user_id, string $reason, bool $reauthed = false): array {
+    $reason = trim($reason);
+    if (mb_strlen($reason) < 5) {
+        return [false, 'Enter a reason (at least 5 characters) - it is written to the audit log.'];
+    }
+    try {
+        $mysqli->begin_transaction();
+        if (!payrollLockPeriodGroup($mysqli, $period_id)) {
+            $mysqli->rollback();
+            return [false, 'Pay period not found.'];
+        }
+        $chk = payrollPeriodWithRunsArchiveCheck($mysqli, $period_id, true);
+        if (!$chk['ok']) {
+            $mysqli->rollback();
+            return [false, $chk['reason']];
+        }
+        if ($chk['finalized'] && !$reauthed) {
+            $mysqli->rollback();
+            return [false, 'Archiving a pay period with a finalized payroll run needs your current password.'];
+        }
+        mysqli_query($mysqli, "UPDATE payroll_runs SET payroll_run_archived_at = NOW() WHERE payroll_run_period_id = $period_id AND payroll_run_archived_at IS NULL");
+        $n_runs = mysqli_affected_rows($mysqli);
+        mysqli_query($mysqli, "UPDATE payroll_periods SET payroll_period_archived_at = NOW() WHERE payroll_period_id = $period_id AND payroll_period_archived_at IS NULL");
+        if ($n_runs < 1 || mysqli_affected_rows($mysqli) < 1) {
+            $mysqli->rollback();
+            return [false, 'Pay period not found.'];
+        }
+        $state = $chk['finalized'] ? 'finalized' : 'draft';
+        $desc = mb_substr("MSP-DS-39: user #$actor_user_id archived duplicate pay period #$period_id with its $state payroll run(s) #" . implode(', #', $chk['run_ids']) . " (not deleted). Reason: $reason", 0, 1000, 'UTF-8');
+        $d = mysqli_real_escape_string($mysqli, $desc);
+        mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Payroll', log_action = 'Archive', log_description = '$d', log_user_id = $actor_user_id, log_entity_id = $period_id");
+        $mysqli->commit();
+    } catch (Throwable $e) {
+        try { $mysqli->rollback(); } catch (Throwable $e2) { }
+        return [false, 'The archive could not be completed (the database was busy). Nothing was changed - try again.'];
+    }
+    return [true, "Duplicate pay period #$period_id archived together with its payroll run(s) (kept, not deleted)."];
 }
