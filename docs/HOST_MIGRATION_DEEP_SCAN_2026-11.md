@@ -52,7 +52,7 @@ override the gates for an operator who reviewed the tree; the shipped units neve
 - systemd units now run `/usr/local/lib/rivetmsp-deploy/backup.sh` and `restore_drill.sh` (re-render with `deploy/install.sh` or copy the templates) and carry `TimeoutStartSec` (6h backup, 2h drill).
 - Live nginx (`/etc/nginx/snippets/itflow-locations.conf`, shared by the ITFlow vhosts; not applied by this repo, a human applies it, then `nginx -t && systemctl reload nginx`).
   The authoritative text is `deploy/templates/itflow-locations.conf` (tested against a real nginx by `tests/msp_ds2_182.php` and `tests/msp_mrr_22|23|24.php`); `plugins/barcode/barcode.php` stays hardened and
-  included in-process by `includes/qr_data_uri.php`, a direct HTTP request to it returns 404. The corrected rule set, replacing the earlier snippet of this round, is these six edits:
+  included in-process by `includes/qr_data_uri.php`, a direct HTTP request to it returns 404. The corrected rule set, replacing the earlier snippet of this round, is these seven edits:
   1. Dotfiles and tooling trees (near the top): `location ~ /\.(?!well-known/) { return 404; }` and `location ~ ^/(config|deploy|docker|docs|scripts|backups)(/|$) { return 404; }`.
   2. Any-depth extension deny (after the `tests|vendor|src|...` deny): `location ~* \.(md|lock|sql|yml|yaml|sh|bak|dist)$ { deny all; }`.
   3. NEW (MRR-22), directly after edit 2: the app links the OpenAPI spec for download and an exact match beats every regex location, so add
@@ -71,6 +71,19 @@ override the gates for an operator who reviewed the tree; the shipped units neve
      }
      ```
   6. Add the same nested `location ~* \.(md|lock|sql|yml|yaml|sh|bak|dist)$ { deny all; }` as the first lines inside `location ^~ /fonts/`, `location ^~ /css/` and `location ^~ /js/` (MRR-24; nothing there uses those extensions today, defence in depth).
+  7. (M3-21) The live snippet's `location ^~ /.well-known/ { try_files $uri =404; }` is a ^~ prefix, so it skips every regex deny above and would serve `/.well-known/x.sh`, `/.well-known/.env` and `/.well-known/x.php` as plain files. Replace it with:
+     ```
+     location ^~ /.well-known/ {
+         location ~* \.(md|lock|sql|yml|yaml|sh|bak|dist|php|phtml|phar|phps)$ {
+             deny all;
+         }
+         location ~ /\.(?!well-known/) {
+             deny all;
+         }
+         try_files $uri =404;
+     }
+     ```
+     `/.well-known/acme-challenge/<token>` (extensionless) is still served. Tested by `tests/msp_m3_21.php`.
   Apache installs: the root `.htaccess` rule is now `RedirectMatch 403 ^/plugins/.*\.(php|phtml|phar|phps)(/|$)` (ships with the code, nothing to apply by hand).
 - Cron lock files and the TOTP replay store now live under `uploads/cron_locks` and `uploads/totp_replay` (the web user must be able to write `uploads/`).
 - Redis channel names are per-install: every PHP process of the install must run the new code at the same time, or live ticket updates are lost
