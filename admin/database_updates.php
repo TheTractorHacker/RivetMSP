@@ -8730,6 +8730,19 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             return $r && mysqli_num_rows($r) > 0;
         };
 
+        // re-review M3-8: an upgrade notice goes to every active ADMIN as one row each (notification_user_id = that admin), exactly like appNotify() does, so the
+        // web bell shows it and one admin dismissing it does not remove it for the others. (user_id 0 rows are shown by no web page and dismissable by any technician in the mobile API.)
+        $notify_admins = function (string $type, string $text, string $action) use ($mysqli) {
+            $t = mysqli_real_escape_string($mysqli, mb_substr($type, 0, 200, 'UTF-8'));
+            $n = mysqli_real_escape_string($mysqli, mb_substr($text, 0, 1000, 'UTF-8'));
+            $a = mysqli_real_escape_string($mysqli, mb_substr($action, 0, 250, 'UTF-8'));
+            $r = mysqli_query($mysqli, "SELECT u.user_id FROM users u JOIN user_roles ro ON ro.role_id = u.user_role_id
+                WHERE u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL AND ro.role_is_admin = 1");
+            while ($r && ($u = mysqli_fetch_assoc($r))) {
+                mysqli_query($mysqli, "INSERT INTO `notifications` SET notification_type = '$t', notification = '$n', notification_action = '$a', notification_user_id = " . (int) $u['user_id']);
+            }
+        };
+
         if (!$col_exists('domains', 'domain_route_mail')) {
             mysqli_query($mysqli, "ALTER TABLE `domains` ADD `domain_route_mail` TINYINT(1) NOT NULL DEFAULT 0 AFTER `domain_client_id`");
             // Grandfather exactly what routed before: an active domain that one client alone lists and that is not a public mailbox provider
@@ -8754,8 +8767,8 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
                         mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Review', log_description = '$gdesc', log_client_id = " . (int) $gd['domain_client_id'] . ", log_entity_id = " . (int) $gid);
                     }
                 }
-                $gnote = mysqli_real_escape_string($mysqli, count($grandfather) . ' domain(s) were grandfathered for inbound mail auto-routing by the upgrade (DB 2.6.140). Review them: a domain added by a technician before the upgrade keeps filing new senders into that client until "Route inbound mail from this domain to this client" is switched off on the domain. Details are in the activity log (type Database, action Review).');
-                mysqli_query($mysqli, "INSERT INTO `notifications` SET notification_type = 'Domain', notification = '$gnote', notification_action = 'domains.php'");
+                $gnote = (count($grandfather) . ' domain(s) were grandfathered for inbound mail auto-routing by the upgrade (DB 2.6.140). Review them: a domain added by a technician before the upgrade keeps filing new senders into that client until "Route inbound mail from this domain to this client" is switched off on the domain. Details are in the activity log (type Database, action Review).');
+                $notify_admins('Domain', $gnote, 'domains.php');
             }
         }
 
@@ -8770,9 +8783,13 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Update', log_description = 'MSP-DS-156: report schedule #" . (int) $bid . " attributed to its creator from the audit log', log_entity_id = " . (int) $bid);
         }
         if ($bf['unowned']) {
-            mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Review', log_description = 'MSP-DS-156: report schedule(s) #" . implode(', #', array_map('intval', $bf['unowned'])) . " have no known creator and do not send until an admin takes ownership (Reports > Schedules)'");
-            $bnote = mysqli_real_escape_string($mysqli, count($bf['unowned']) . ' scheduled report(s) created before the upgrade have no known owner and will not be emailed until an admin takes ownership of each in Reports > Schedules.');
-            mysqli_query($mysqli, "INSERT INTO `notifications` SET notification_type = 'Report Schedule', notification = '$bnote', notification_action = 'reports/schedules.php'");
+            // re-review M3-18: log_description is varchar(1000): a long id list is cut to the first 40 ids plus a count (strict sql_mode aborts the update on an over-long value)
+            $unowned_ids = array_map('intval', $bf['unowned']);
+            $unowned_list = '#' . implode(', #', array_slice($unowned_ids, 0, 40)) . (count($unowned_ids) > 40 ? ' and ' . (count($unowned_ids) - 40) . ' more' : '');
+            $unowned_desc = mysqli_real_escape_string($mysqli, mb_substr("MSP-DS-156: report schedule(s) $unowned_list have no known creator and do not send until an admin takes ownership (Reports > Schedules)", 0, 1000, 'UTF-8'));
+            mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Review', log_description = '$unowned_desc'");
+            $bnote = count($bf['unowned']) . ' scheduled report(s) created before the upgrade have no known owner and will not be emailed until an admin takes ownership of each in Reports > Schedules.';
+            $notify_admins('Report Schedule', $bnote, 'reports/schedules.php');
         }
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.140'");

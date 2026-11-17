@@ -3,7 +3,7 @@
 // Now the 2.6.140 step attributes them from the "Report Schedule / Create" audit row when that is unambiguous, the rest have no owner and do NOT send
 // (reportScheduleCreatorMaySend fails closed) until someone allowed to send the report takes ownership (Reports > Schedules).
 // The real step text of admin/database_updates.php runs on tables built from the OLD db.sql (7992dd4ff); the real guard and the real scheduler/handler sources are used.
-// Run: SCRATCH_TABLES="domains report_schedules settings logs notifications" bash tests/lib/with_scratch_db.sh php tests/msp_mrr_16.php
+// Run: SCRATCH_TABLES="domains report_schedules settings logs notifications users user_roles" bash tests/lib/with_scratch_db.sh php tests/msp_mrr_16.php
 require __DIR__ . '/lib/ds_src.php';
 if (getenv('RIVETMSP_TEST_DB') !== '1' || !preg_match('/scratch/i', (string) getenv('RIVETMSP_TEST_DB_NAME'))) { fwrite(STDERR, "scratch DB only\n"); exit(2); }
 mysqli_report(MYSQLI_REPORT_OFF);
@@ -25,6 +25,9 @@ foreach (['domains', 'report_schedules'] as $t) {
     $mysqli->multi_query($mm[0]); while ($mysqli->more_results() && $mysqli->next_result()) {}
 }
 $mysqli->query("DELETE FROM settings"); $mysqli->query("INSERT INTO settings (company_id, config_current_database_version) VALUES (1, '2.6.139')");
+$mysqli->query("DELETE FROM user_roles"); $mysqli->query("DELETE FROM users"); $mysqli->query("DELETE FROM notifications");
+$mysqli->query("INSERT INTO user_roles (role_id, role_name, role_is_admin) VALUES (1,'Admin',1),(2,'Tech',0)");
+$mysqli->query("INSERT INTO users (user_id, user_name, user_email, user_password, user_type, user_status, user_role_id) VALUES (1,'admin','a@x.t','x',1,1,1),(2,'tech','t@x.t','x',1,1,2)");
 $mysqli->query("INSERT INTO report_schedules (schedule_id, schedule_report, schedule_frequency, schedule_recipients) VALUES
   (1,'mrr','daily','a@x.t, b@x.t'),      -- one Create log by user 5 -> attributable
   (2,'mrr','weekly','a@x.t'),             -- two different users logged an identical Create -> ambiguous
@@ -45,6 +48,8 @@ ds_t('LIKE wildcards in recipients do not attribute by accident', $creator(4) ==
 ds_t('attributions and the unowned set are logged', (int) $one("SELECT COUNT(*) FROM logs WHERE log_description LIKE 'MSP-DS-156: report schedule #1 attributed%'") === 1
     && (int) $one("SELECT COUNT(*) FROM logs WHERE log_action = 'Review' AND log_description LIKE 'MSP-DS-156: report schedule(s) #2, #3, #4 %'") === 1);
 ds_t('one admin notification for the unowned schedules', (int) $one("SELECT COUNT(*) FROM notifications WHERE notification_type = 'Report Schedule' AND notification LIKE '3 scheduled report(s)%'") === 1);
+ds_t('M3-8: that notification is one row for the admin user (not user 0, not the technician)', (int) $one("SELECT COUNT(*) FROM notifications WHERE notification_type = 'Report Schedule' AND notification_user_id = 1") === 1
+    && (int) $one("SELECT COUNT(*) FROM notifications WHERE notification_user_id <> 1") === 0);
 
 // default-safe at send time: ownerless schedules never send, whatever the report
 ds_t('guard: NULL / empty / 0 creator does NOT send', reportScheduleCreatorMaySend($mysqli, null, 'mrr') === false && reportScheduleCreatorMaySend($mysqli, '', 'mrr') === false && reportScheduleCreatorMaySend($mysqli, 0, 'mrr') === false);
