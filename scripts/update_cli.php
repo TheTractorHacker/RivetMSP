@@ -149,6 +149,10 @@ if (isset($options['update_db'])) {
     // Now include the update logic
     try {
         require_once "../admin/database_updates.php";
+    } catch (\DbUpdateRefusedException $e) {
+        // A migration step refused to run because data needs an admin decision first (nothing of that step was applied): print why, no stack trace.
+        fwrite(STDERR, "Database update stopped: " . $e->getMessage() . "\n");
+        exit(1);
     } catch (\RivetCore\Migration\MigrationInProgressException $e) {
         fwrite(STDERR, "Another database update is running (RivetCore migration lock). Wait for it to finish and run this again.\n");
         exit(1);

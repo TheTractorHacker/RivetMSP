@@ -4,6 +4,25 @@ defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 
 require_once __DIR__ . '/../../includes/payroll_functions.php';
 
+// Re-review M3-9: archive an EMPTY duplicate pay period (same dates as another live period, no live run). Admin only; nothing is deleted; the reason is logged.
+if (isset($_POST['archive_duplicate_payroll_period'])) {
+
+    validateCSRFToken($_POST['csrf_token'] ?? '');
+
+    $period_id = intval($_POST['period_id'] ?? 0);
+    if (empty($session_is_admin)) {
+        flash_alert("Only an administrator can archive a duplicate pay period.", 'error');
+        redirect("/admin/payroll_period.php?id=$period_id");
+    }
+    [$archived, $archive_msg] = payrollArchiveDuplicatePeriod($mysqli, $period_id, (int) $session_user_id, (string) ($_POST['archive_reason'] ?? ''));
+    if (!$archived) {
+        flash_alert($archive_msg, 'error');
+        redirect("/admin/payroll_period.php?id=$period_id");
+    }
+    flash_alert($archive_msg);
+    redirect('/admin/payroll_periods.php');
+}
+
 if (isset($_POST['save_payroll_hours'])) {
 
     validateCSRFToken($_POST['csrf_token']);

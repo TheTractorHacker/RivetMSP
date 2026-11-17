@@ -217,6 +217,23 @@ $job_hours_sql = mysqli_query(
 
         <?php } ?>
 
+        <?php
+        // Re-review M3-9: an empty duplicate period (same dates as another live period, no live run) can be archived by an admin (the 2.6.139 database update refuses until duplicates are gone)
+        $dup_period_chk = !empty($session_is_admin) ? payrollPeriodArchiveCheck($mysqli, $period_id) : ['ok' => false];
+        if ($dup_period_chk['ok']) { ?>
+        <hr>
+        <div class="alert alert-warning">
+            <strong>Duplicate pay period.</strong> Another pay period has exactly these dates and this one has no payroll run. If this is the extra copy, archive it:
+            it is kept (never deleted), hidden from the live lists, and your reason is written to the audit log.
+            <form action="post.php" method="post" class="row g-2 mt-2" autocomplete="off">
+                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                <input type="hidden" name="period_id" value="<?= $period_id ?>">
+                <div class="col-md-6"><input type="text" name="archive_reason" class="form-control" placeholder="Reason (required)" minlength="5" maxlength="500" required></div>
+                <div class="col-md-4"><button type="submit" name="archive_duplicate_payroll_period" class="btn btn-warning confirm-link"><i class="fas fa-archive me-2"></i>Archive this duplicate period</button></div>
+            </form>
+        </div>
+        <?php } ?>
+
     </div>
 </div>
 
