@@ -8464,7 +8464,7 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             return mysqli_num_rows(mysqli_query($mysqli, "SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$t' AND INDEX_NAME = '$i' LIMIT 1")) > 0;
         };
         $db_log = static function (string $description) use ($mysqli): void {
-            $d = mysqli_real_escape_string($mysqli, substr($description, 0, 1000));
+            $d = mysqli_real_escape_string($mysqli, mb_strcut($description, 0, 1000, 'UTF-8'));
             mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Update', log_description = '$d'");
         };
 
@@ -8587,7 +8587,7 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
             if ($ds39_problems) {
                 $ds39_msg = 'Database update 2.6.139 was NOT applied: payroll data needs a decision first. ' . implode('; ', $ds39_problems)
                     . '. To resolve it, sign in as an administrator: open Payroll > Payroll Runs (admin/payroll_runs.php), open each extra run and use "Archive this duplicate" (a finalized duplicate asks for your password and a reason; rows are kept, never deleted). For periods with the same dates that each hold a run, open the extra period in Payroll > Pay Periods (admin/payroll_periods.php) and use "Archive this period and its run" (a period with a finalized run asks for your password and is allowed only while the period you keep still has a finalized run); an extra period with no run left uses "Archive this duplicate period". Nothing was changed or archived by the update. Then run the update again.';
-                $db_refuse_log = mysqli_real_escape_string($mysqli, substr('MSP-DS-39: ' . $ds39_msg, 0, 1000));
+                $db_refuse_log = mysqli_real_escape_string($mysqli, mb_strcut('MSP-DS-39: ' . $ds39_msg, 0, 1000, 'UTF-8'));
                 mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Update', log_description = '$db_refuse_log'");
                 throw new DbUpdateRefusedException($ds39_msg);
             }
@@ -8637,7 +8637,7 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         // duplicates are never archived (the update refuses, see the preflight above).
         mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_payroll_workweek_start` varchar(10) NOT NULL DEFAULT 'period'");
         $ds39_log = static function (string $description) use ($mysqli): void {
-            $d = mysqli_real_escape_string($mysqli, substr($description, 0, 1000));
+            $d = mysqli_real_escape_string($mysqli, mb_strcut($description, 0, 1000, 'UTF-8'));
             mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Update', log_description = '$d'");
         };
         // re-review M3-9: the clean-up pass is keyed on the UNIQUE KEY, not on the generated column, so a retry after an interrupted/refused run (column added, key missing) still archives duplicates instead of skipping straight to a key that cannot be built.
@@ -8768,7 +8768,7 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
                     $gr = mysqli_query($mysqli, "SELECT domain_name, domain_client_id FROM domains WHERE domain_id = " . (int) $gid);
                     $gd = $gr ? mysqli_fetch_assoc($gr) : null;
                     if ($gd) {
-                        $gdesc = mysqli_real_escape_string($mysqli, substr("MSP-DS-16/33: domain {$gd['domain_name']} (id $gid) was grandfathered for inbound mail auto-routing into client {$gd['domain_client_id']} by the upgrade; an admin should confirm the claim is legitimate (edit the domain and review its Route inbound mail option)", 0, 1000));
+                        $gdesc = mysqli_real_escape_string($mysqli, mb_strcut("MSP-DS-16/33: domain {$gd['domain_name']} (id $gid) was grandfathered for inbound mail auto-routing into client {$gd['domain_client_id']} by the upgrade; an admin should confirm the claim is legitimate (edit the domain and review its Route inbound mail option)", 0, 1000));
                         mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Review', log_description = '$gdesc', log_client_id = " . (int) $gd['domain_client_id'] . ", log_entity_id = " . (int) $gid);
                     }
                 }
@@ -8818,6 +8818,35 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         $ds_add_column('users', 'user_session_version', "int(11) NOT NULL DEFAULT 0 AFTER `user_password_reset_token_expire`");
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.141'");
+    }
+
+    if ($rivetit_db_version() == '2.6.141') {
+        // DB 2.6.142 (re-review M4-1, MSP-DS-67; idempotent: the ADD COLUMNs are guarded by information_schema, the backfill only ever lowers/fills).
+        // The change-approval guard used to read the action log, which log retention prunes and logAction() truncates. These two columns replace it.
+        $m4_add_column = function (string $table, string $column, string $definition) use ($mysqli) {
+            $t = mysqli_real_escape_string($mysqli, $table);
+            $c = mysqli_real_escape_string($mysqli, $column);
+            $r = mysqli_query($mysqli, "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '$t' AND column_name = '$c'");
+            if ($r && mysqli_num_rows($r) === 0) {
+                mysqli_query($mysqli, "ALTER TABLE `$table` ADD COLUMN `$column` $definition");
+            }
+        };
+        // set ONCE when a client approval is first requested (or the client first decides); never cleared
+        $m4_add_column('changes', 'client_approval_requested_at', "datetime DEFAULT NULL AFTER `client_decided_at`");
+        // the latest time the client rejected the change; the DS-51 content-edit reset puts client_decision back to 'pending' but never clears this
+        $m4_add_column('changes', 'client_rejected_at', "datetime DEFAULT NULL AFTER `client_approval_requested_at`");
+
+        // Backfill: audit_events (entity_id is the change id as text) ...
+        mysqli_query($mysqli, "UPDATE `changes` c JOIN (SELECT entity_id AS eid, MIN(created_at) AS t FROM `audit_events` WHERE entity_type = 'change' AND event_type IN ('change.client_approval_requested', 'change.client_approved', 'change.client_rejected') GROUP BY entity_id) a ON a.eid = CAST(c.change_id AS CHAR) SET c.client_approval_requested_at = IF(c.client_approval_requested_at IS NULL OR a.t < c.client_approval_requested_at, a.t, c.client_approval_requested_at)");
+        mysqli_query($mysqli, "UPDATE `changes` c JOIN (SELECT entity_id AS eid, MAX(created_at) AS t FROM `audit_events` WHERE entity_type = 'change' AND event_type = 'change.client_rejected' GROUP BY entity_id) a ON a.eid = CAST(c.change_id AS CHAR) SET c.client_rejected_at = IF(c.client_rejected_at IS NULL OR a.t > c.client_rejected_at, a.t, c.client_rejected_at)");
+        // ... and the action log rows that survive (log_entity_id is the change id)
+        mysqli_query($mysqli, "UPDATE `changes` c JOIN (SELECT log_entity_id AS id, MIN(log_created_at) AS t FROM `logs` WHERE log_entity_id > 0 AND log_type = 'Support' AND (log_description LIKE '% sent a client approval request for change %' OR log_description LIKE '% approved change %via guest link' OR log_description LIKE '% rejected change %via guest link') GROUP BY log_entity_id) l ON l.id = c.change_id SET c.client_approval_requested_at = IF(c.client_approval_requested_at IS NULL OR l.t < c.client_approval_requested_at, l.t, c.client_approval_requested_at)");
+        mysqli_query($mysqli, "UPDATE `changes` c JOIN (SELECT log_entity_id AS id, MAX(log_created_at) AS t FROM `logs` WHERE log_entity_id > 0 AND log_type = 'Support' AND log_description LIKE '% rejected change %via guest link' GROUP BY log_entity_id) l ON l.id = c.change_id SET c.client_rejected_at = IF(c.client_rejected_at IS NULL OR l.t > c.client_rejected_at, l.t, c.client_rejected_at)");
+        // ... and the change's own current state: a decided change was certainly requested; a currently rejected one was rejected
+        mysqli_query($mysqli, "UPDATE `changes` SET client_approval_requested_at = COALESCE(client_decided_at, created_at) WHERE client_approval_requested_at IS NULL AND client_decision <> 'pending'");
+        mysqli_query($mysqli, "UPDATE `changes` SET client_rejected_at = COALESCE(client_decided_at, created_at) WHERE client_rejected_at IS NULL AND client_decision = 'rejected'");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.142'");
     }
 
 // Core migrations catch-up, on EVERY Update Database run (idempotent: MigrationRunner keeps its own state in rivet_core_migrations). The version steps above run Core's

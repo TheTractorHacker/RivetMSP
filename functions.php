@@ -3120,34 +3120,51 @@ function ticketCloseBlockReason($ticket_id, bool $with_tasks = false): ?string {
 }
 
 /**
- * MSP-DS-67 (re-review M3-5): has a client approval ever been requested for / decided on this change? Derived from history, not from the
- * current columns: the DS-51 reset puts client_decision back to 'pending' (and a draft is "not started"), which would otherwise make a
- * rejected change look untouched. Reads the action log rows written when an approval request is sent and when the client decides via
- * the guest link.
+ * MSP-DS-67 (re-review M4-1): has a client approval ever been requested for / decided on this change? Judged from durable columns on the
+ * change itself, never from the action log (log retention deletes old rows, and logAction() cuts long descriptions): client_approval_requested_at
+ * is set once when the request is first sent (or the client first decides) and never cleared; client_rejected_at records a client rejection and is
+ * not cleared by the DS-51 reset that puts client_decision back to 'pending'. $row may carry the columns when the caller already loaded them.
  */
-function changeClientApprovalEverStarted($change_id): bool {
+function changeClientApprovalEverStarted($change_id, ?array $row = null): bool {
     global $mysqli;
-    $change_id = intval($change_id);
-    $r = mysqli_query($mysqli, "SELECT 1 FROM logs WHERE log_entity_id = $change_id AND log_type = 'Support' AND (
-        log_description LIKE '% sent a client approval request for change %'
-        OR log_description LIKE '% approved change %via guest link'
-        OR log_description LIKE '% rejected change %via guest link') LIMIT 1");
-    return $r && mysqli_num_rows($r) > 0;
+    if ($row === null || !array_key_exists('client_approval_requested_at', $row) || !array_key_exists('client_rejected_at', $row)) {
+        $change_id = intval($change_id);
+        $r = mysqli_query($mysqli, "SELECT client_approval_requested_at, client_rejected_at, client_decision FROM changes WHERE change_id = $change_id");
+        $row = $r ? mysqli_fetch_assoc($r) : null;
+    }
+    if (!$row) {
+        return false;
+    }
+    return !empty($row['client_approval_requested_at']) || !empty($row['client_rejected_at']) || (($row['client_decision'] ?? 'pending') !== 'pending');
 }
 
 /**
  * MSP-DS-67: true when the change does not need the client's approval or the client has approved it.
  * The agent-side status buttons must not push a change that requires client approval past 'awaiting_approval' otherwise.
+ * (M4-1) The approval must also be NEWER than the latest client rejection and not older than the first request, so a rejection
+ * that the DS-51 reset has turned back into 'pending' is only ever satisfied by a fresh client approval.
  */
 function changeClientApprovalSatisfied($change_id): bool {
     global $mysqli;
     $change_id = intval($change_id);
-    $r = mysqli_query($mysqli, "SELECT requires_client_approval, client_decision FROM changes WHERE change_id = $change_id");
+    $r = mysqli_query($mysqli, "SELECT requires_client_approval, client_decision, client_decided_at, client_approval_requested_at, client_rejected_at FROM changes WHERE change_id = $change_id");
     $row = $r ? mysqli_fetch_assoc($r) : null;
     if (!$row) {
         return true; // not found: let setStatus() report it
     }
-    return !intval($row['requires_client_approval']) || $row['client_decision'] === 'approved';
+    if (!intval($row['requires_client_approval'])) {
+        return true;
+    }
+    if ($row['client_decision'] !== 'approved') {
+        return false;
+    }
+    $decided = (string) $row['client_decided_at'];
+    foreach (['client_rejected_at', 'client_approval_requested_at'] as $c) {
+        if (!empty($row[$c]) && ($decided === '' || strcmp($decided, (string) $row[$c]) < 0)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /**
@@ -4228,9 +4245,10 @@ function logAction($type, $action, $description, $client_id = 0, $entity_id = 0)
     $raw_log_type = (string) $type;
     $raw_log_action = (string) $action;
     $raw_log_description = (string) $description;
-    $type = substr($raw_log_type, 0, 200);
-    $action = substr($raw_log_action, 0, 255);
-    $description = substr($raw_log_description, 0, 1000);
+    // mb_strcut cuts on a byte budget but never inside a multibyte character: a plain substr() left half an emoji, which strict sql_mode rejects (the INSERT failed).
+    $type = mb_strcut($raw_log_type, 0, 200, 'UTF-8');
+    $action = mb_strcut($raw_log_action, 0, 255, 'UTF-8');
+    $description = mb_strcut($raw_log_description, 0, 1000, 'UTF-8');
     $log_ip = (string) $session_ip;
     $log_user_agent = (string) $session_user_agent;
 
@@ -4266,7 +4284,7 @@ function applyCsatRating(mysqli $mysqli, int $ticket_id, int $rating, string $co
 {
     $ticket_id = intval($ticket_id);
     $rating = max(1, min(5, $rating));
-    $comment = substr(trim($comment), 0, 1000);
+    $comment = mb_strcut(trim($comment), 0, 1000, 'UTF-8');
     $comment_esc = mysqli_real_escape_string($mysqli, $comment);
     $comment_sql = $comment !== '' ? "'$comment_esc'" : 'NULL';
 

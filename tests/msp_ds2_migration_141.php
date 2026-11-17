@@ -12,7 +12,7 @@ $col = fn (string $t, string $c) => ($r = $m->query("SELECT COLUMN_TYPE, IS_NULL
 // 1. fresh install (the scratch DB was just built from the current db.sql)
 $ok('fresh db.sql: mcp_pending_actions.grant_id int NOT NULL DEFAULT 0', $col('mcp_pending_actions', 'grant_id') === ['int(11)', 'NO', '0']);
 $ok('fresh db.sql: users.user_session_version int NOT NULL DEFAULT 0', $col('users', 'user_session_version') === ['int(11)', 'NO', '0']);
-$ok('LATEST_DATABASE_VERSION is 2.6.141', str_contains(file_get_contents($root . '/includes/database_version.php'), '"2.6.141"'));
+$ok('LATEST_DATABASE_VERSION is at least 2.6.141', version_compare(preg_match('/"(\d+\.\d+\.\d+)"/', file_get_contents($root . '/includes/database_version.php'), $vm) ? $vm[1] : '0', '2.6.141', '>='));
 
 // 2. upgrade path: rebuild the schema from the previous release's db.sql
 $old = tempnam(sys_get_temp_dir(), 'olddb');

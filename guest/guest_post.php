@@ -171,7 +171,7 @@ if (isset($_POST['approve_change'], $_POST['url_key'])) {
             redirect();
         }
 
-        mysqli_query($mysqli, "UPDATE changes SET client_decision = 'approved', client_decided_at = NOW() WHERE change_id = $change_id");
+        mysqli_query($mysqli, "UPDATE changes SET client_decision = 'approved', client_decided_at = NOW(), client_approval_requested_at = COALESCE(client_approval_requested_at, NOW()) WHERE change_id = $change_id");
 
         appNotify("Change Approved", "Change \"$change_title\" has been approved by $client_name", "/agent/change_details.php?id=$change_id", $client_id);
         logAction("Support", "Edit", "$client_name approved change \"$change_title\" via guest link", $client_id, $change_id);
@@ -203,7 +203,7 @@ if (isset($_POST['reject_change'], $_POST['url_key'])) {
             redirect();
         }
 
-        mysqli_query($mysqli, "UPDATE changes SET client_decision = 'rejected', client_decided_at = NOW() WHERE change_id = $change_id");
+        mysqli_query($mysqli, "UPDATE changes SET client_decision = 'rejected', client_decided_at = NOW(), client_rejected_at = NOW(), client_approval_requested_at = COALESCE(client_approval_requested_at, NOW()) WHERE change_id = $change_id");
 
         appNotify("Change Rejected", "Change \"$change_title\" has been rejected by $client_name", "/agent/change_details.php?id=$change_id", $client_id);
         logAction("Support", "Edit", "$client_name rejected change \"$change_title\" via guest link", $client_id, $change_id);

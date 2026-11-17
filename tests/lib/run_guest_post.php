@@ -26,7 +26,7 @@ foreach ($in['files'] ?? [] as $i => $f) {
 $_FILES = $files['name'] ? ['file' => $files] : [];
 mysqli_report(MYSQLI_REPORT_OFF);
 $mysqli = new mysqli('localhost', (string) getenv('RIVETMSP_TEST_DB_USER'), (string) getenv('RIVETMSP_TEST_DB_PASS'), (string) getenv('RIVETMSP_TEST_DB_NAME'));
-$mysqli->query("SET SESSION sql_mode=''");
+$mysqli->query("SET SESSION sql_mode='" . $mysqli->real_escape_string((string) getenv('RIVETMSP_TEST_SQL_MODE')) . "'"); // RIVETMSP_TEST_SQL_MODE=STRICT_ALL_TABLES runs the handler as production does
 $GLOBALS['mysqli'] = $mysqli;
 register_shutdown_function(static function () use ($files) {
     foreach ($files['tmp_name'] as $t) { @unlink($t); }

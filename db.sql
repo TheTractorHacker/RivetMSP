@@ -700,6 +700,8 @@ CREATE TABLE `changes` (
   `requires_client_approval` tinyint(1) NOT NULL DEFAULT 0,
   `client_decision` enum('pending','approved','rejected') NOT NULL DEFAULT 'pending',
   `client_decided_at` datetime DEFAULT NULL,
+  `client_approval_requested_at` datetime DEFAULT NULL,
+  `client_rejected_at` datetime DEFAULT NULL,
   `url_key` varchar(32) DEFAULT NULL,
   PRIMARY KEY (`change_id`),
   KEY `idx_changes_status` (`status`),

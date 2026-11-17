@@ -161,7 +161,7 @@ function accountingTotalsDriftNote(float $local_total, $remote_total): string {
 function accountingLog(mysqli $mysqli, int $accounting_id, string $type, int $id, string $status, string $message): void {
     $type_esc    = mysqli_real_escape_string($mysqli, $type);
     $status_esc  = mysqli_real_escape_string($mysqli, substr($status, 0, 20));
-    $message_esc = mysqli_real_escape_string($mysqli, substr($message, 0, 1000));
+    $message_esc = mysqli_real_escape_string($mysqli, mb_strcut($message, 0, 1000, 'UTF-8'));
     mysqli_query(
         $mysqli,
         "INSERT INTO accounting_sync_log

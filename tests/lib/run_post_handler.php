@@ -12,7 +12,7 @@ $_SERVER['DOCUMENT_ROOT'] = $root; $_SERVER['REMOTE_ADDR'] = '127.0.0.1'; $_SERV
 $_POST = $in['post'] ?? []; $_GET = $in['get'] ?? [];
 mysqli_report(MYSQLI_REPORT_OFF);
 $mysqli = new mysqli('localhost', (string) getenv('RIVETMSP_TEST_DB_USER'), (string) getenv('RIVETMSP_TEST_DB_PASS'), (string) getenv('RIVETMSP_TEST_DB_NAME'));
-$mysqli->query("SET SESSION sql_mode=''");
+$mysqli->query("SET SESSION sql_mode='" . $mysqli->real_escape_string((string) getenv('RIVETMSP_TEST_SQL_MODE')) . "'"); // RIVETMSP_TEST_SQL_MODE=STRICT_ALL_TABLES runs the handler as production does
 $GLOBALS['mysqli'] = $mysqli;
 $config_app_name = 'Test'; $config_base_url = 'localhost'; $config_timezone = 'UTC';
 require $root . '/functions.php';
