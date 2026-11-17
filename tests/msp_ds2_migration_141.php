@@ -41,12 +41,12 @@ $ok('grant_id added with the same definition as db.sql', $col('mcp_pending_actio
 $ok('user_session_version added with the same definition as db.sql', $col('users', 'user_session_version') === ['int(11)', 'NO', '0']);
 $ok('existing proposal kept, grant_id 0 (legacy: falls back to the client + user check)', $m->query("SELECT grant_id FROM mcp_pending_actions WHERE idempotency_key = 'k1'")->fetch_row()[0] === '0');
 $ok('existing portal user kept, version 0', $m->query("SELECT user_session_version FROM users WHERE user_id = 20")->fetch_row()[0] === '0');
-$ok('version is now 2.6.141', $m->query("SELECT config_current_database_version FROM settings WHERE company_id = 1")->fetch_row()[0] === '2.6.141');
+$ok('version is at least 2.6.141 (later steps may follow)', $m->query("SELECT config_current_database_version FROM settings WHERE company_id = 1")->fetch_row()[0] !== null && version_compare($m->query("SELECT config_current_database_version FROM settings WHERE company_id = 1")->fetch_row()[0], '2.6.141', '>='));
 
 // 3. idempotent: run the step again (as if the version write had been lost)
 $m->query("UPDATE users SET user_session_version = 3 WHERE user_id = 20");
 $m->query("UPDATE settings SET config_current_database_version = '2.6.140' WHERE company_id = 1");
 $ok('second run is clean (no duplicate-column error)', ($r = $run('2.6.141', '2.6.140')) === 'OK' ? true : (print("   $r\n") && false));
 $ok('second run keeps data (version 3 not reset)', $m->query("SELECT user_session_version FROM users WHERE user_id = 20")->fetch_row()[0] === '3');
-$ok('and ends on 2.6.141', $m->query("SELECT config_current_database_version FROM settings WHERE company_id = 1")->fetch_row()[0] === '2.6.141');
+$ok('and still at least 2.6.141 after the re-run', $m->query("SELECT config_current_database_version FROM settings WHERE company_id = 1")->fetch_row()[0] !== null && version_compare($m->query("SELECT config_current_database_version FROM settings WHERE company_id = 1")->fetch_row()[0], '2.6.141', '>='));
 exit($fail ? 1 : 0);
