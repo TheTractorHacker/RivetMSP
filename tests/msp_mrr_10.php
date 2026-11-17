@@ -1,12 +1,12 @@
 <?php
 // MSP-DS-158 (re-review MRR-10): getIP() in HTTP_CF_CONNECTING_IP mode believes the header only from a trusted peer
-// (CONST_TRUSTED_PROXIES, CONST_CLOUDFLARE_RANGES, or - when neither is configured - a private/loopback peer). Runs the REAL getIP() from
+// (CONST_TRUSTED_PROXIES or CONST_CLOUDFLARE_RANGES - built in by default; no private/loopback fallback since re-review M3-3). Runs the REAL getIP() from
 // functions.php in a child process per case (the constants can only be defined once per process).
 // Run: php tests/msp_mrr_10.php
 $fail = 0; $ok = function (string $n, bool $c) use (&$fail) { echo ($c ? 'ok   ' : 'FAIL ') . $n . "\n"; $fail += $c ? 0 : 1; };
 $src = file_get_contents(dirname(__DIR__) . '/functions.php');
 $a = strpos($src, 'function ipInTrustedList'); $b = strpos($src, 'function getWebBrowser');
-$code = substr($src, $a, $b - $a);
+$code = str_replace('__DIR__', var_export(dirname(__DIR__), true), substr($src, $a, $b - $a));
 $run = function (string $method, ?string $trusted, ?string $cfRanges, string $remote, ?string $header) use ($code): string {
     $pre = 'define("CONST_GET_IP_METHOD", ' . var_export($method, true) . ');'
         . ($trusted !== null ? 'define("CONST_TRUSTED_PROXIES", ' . var_export($trusted, true) . ');' : '')
@@ -20,15 +20,17 @@ $run = function (string $method, ?string $trusted, ?string $cfRanges, string $re
 $CF = 'HTTP_CF_CONNECTING_IP';
 $cfr = '173.245.48.0/20,103.21.244.0/22,2400:cb00::/32';
 
-// no list configured: only a private/loopback peer is believed
-$ok('no list, public peer: header ignored (the spoof)', $run($CF, null, null, '203.0.113.9', '1.2.3.4') === '203.0.113.9');
-$ok('no list, loopback peer: header used (local reverse proxy)', $run($CF, null, null, '127.0.0.1', '198.51.100.7') === '198.51.100.7');
-$ok('no list, RFC1918 peer: header used', $run($CF, null, null, '10.1.1.4', '198.51.100.7') === '198.51.100.7');
-$ok('no list, IPv6 loopback peer: header used', $run($CF, null, null, '::1', '198.51.100.7') === '198.51.100.7');
-$ok('no list, IPv4-mapped loopback peer: header used', $run($CF, null, null, '::ffff:127.0.0.1', '198.51.100.7') === '198.51.100.7');
+// nothing configured: the built-in Cloudflare ranges apply; private/loopback peers are NOT believed any more (M3-3)
+$ok('no list, public non-CF peer: header ignored (the spoof)', $run($CF, null, null, '203.0.113.9', '1.2.3.4') === '203.0.113.9');
+$ok('no list, loopback peer: header ignored (no private fallback)', $run($CF, null, null, '127.0.0.1', '198.51.100.7') === '127.0.0.1');
+$ok('no list, RFC1918 peer: header ignored', $run($CF, null, null, '10.1.1.4', '198.51.100.7') === '10.1.1.4');
+$ok('no list, IPv6 loopback peer: header ignored', $run($CF, null, null, '::1', '198.51.100.7') === '::1');
+$ok('no list, IPv4-mapped loopback peer: header ignored', $run($CF, null, null, '::ffff:127.0.0.1', '198.51.100.7') === '::ffff:127.0.0.1');
 $ok('no list, public IPv6 peer: header ignored', $run($CF, null, null, '2001:db8::5', '1.2.3.4') === '2001:db8::5');
+$ok('no list, Cloudflare edge peer (built-in ranges): header used', $run($CF, null, null, '104.16.5.5', '198.51.100.7') === '198.51.100.7');
+$ok('no list, Cloudflare IPv6 edge peer: header used', $run($CF, null, null, '2606:4700::1', '198.51.100.7') === '198.51.100.7');
 $ok('no header: peer address', $run($CF, null, null, '127.0.0.1', null) === '127.0.0.1');
-$ok('malformed header: peer address', $run($CF, null, null, '127.0.0.1', 'not-an-ip') === '127.0.0.1');
+$ok('malformed header: peer address', $run($CF, null, null, '104.16.5.5', 'not-an-ip') === '104.16.5.5');
 
 // CONST_TRUSTED_PROXIES configured: only those peers (a private peer that is not listed is NOT trusted any more)
 $ok('trusted list, listed peer: header used', $run($CF, '192.0.2.0/24', null, '192.0.2.10', '198.51.100.7') === '198.51.100.7');

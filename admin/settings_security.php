@@ -7,7 +7,23 @@ $vault_canonical_key_set_at = $vault_row['config_vault_canonical_key_set_at'] ??
 
 $vault_unsynced_users = intval(mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COUNT(*) AS c FROM users WHERE user_status = 1 AND (user_specific_encryption_ciphertext IS NULL OR user_specific_encryption_ciphertext = '')"))['c']);
 
+
+// M3-3: in Cloudflare mode, say so when this very request came from a peer the header is NOT believed from (its address would then be the proxy's).
+$cf_peer_warning = false;
+if (defined('CONST_GET_IP_METHOD') && CONST_GET_IP_METHOD === 'HTTP_CF_CONNECTING_IP') {
+    [$cf_trusted, $cf_ranges] = rivetCloudflareIpConfig();
+    $cf_peer_warning = !cloudflarePeerTrusted((string) ($_SERVER['REMOTE_ADDR'] ?? ''), $cf_trusted, $cf_ranges);
+}
 ?>
+
+<?php if ($cf_peer_warning) { ?>
+<div class="alert alert-warning">
+    <i class="fas fa-fw fa-exclamation-triangle me-1"></i>
+    Client IP detection is set to Cloudflare (<code>CF-Connecting-IP</code>), but this request reached the server from <code><?php echo nullable_htmlentities((string) $_SERVER['REMOTE_ADDR']); ?></code>,
+    which is neither a Cloudflare address nor listed in <code>CONST_TRUSTED_PROXIES</code>. The header is ignored for this connection, so every visitor behind that proxy shares one address
+    (shared login lockouts). If this is your own reverse proxy, add its address to <code>CONST_TRUSTED_PROXIES</code> in config.php and make it overwrite <code>CF-Connecting-IP</code>. See docs/UPDATING.md.
+</div>
+<?php } ?>
 
 <div class="card card-dark">
     <div class="card-header py-3">

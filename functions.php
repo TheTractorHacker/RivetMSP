@@ -167,8 +167,10 @@ function ipInTrustedList(string $ip, array $list): bool {
         [$net, $bits] = array_pad(explode('/', $entry, 2), 2, null);
         $nbin = @inet_pton($net);
         if ($nbin === false || strlen($nbin) !== strlen($bin)) { continue; }
-        $bits = $bits === null || $bits === '' ? strlen($bin) * 8 : (int) $bits;
-        if ($bits < 0 || $bits > strlen($bin) * 8) { continue; }
+        // M3-3: a prefix length must be plain digits within range for the address family; '1.2.3.4/abc' used to count as /0 and trust everyone
+        if ($bits === null) { $bits = strlen($bin) * 8; }
+        elseif (!ctype_digit($bits) || strlen($bits) > 3 || (int) $bits > strlen($bin) * 8) { continue; }
+        else { $bits = (int) $bits; }
         $bytes = intdiv($bits, 8); $rem = $bits % 8;
         if ($bytes > 0 && substr($bin, 0, $bytes) !== substr($nbin, 0, $bytes)) { continue; }
         if ($rem > 0) {
@@ -193,21 +195,35 @@ function clientIpFromForwardedFor(string $remote, string $xff, array $trusted): 
     return $remote;
 }
 
-// MSP-DS-158 (re-review MRR-10): the client address from a CF-Connecting-IP header, given the immediate peer ($remote). The header is a plain
-// request header any client can send, so it is only believed when the peer is a proxy we trust:
-//   - $trusted (CONST_TRUSTED_PROXIES) or $cfRanges (CONST_CLOUDFLARE_RANGES, Cloudflare's published ranges) contain the peer, or
-//   - neither list is configured AND the peer is a private/loopback address (a local reverse proxy such as nginx/Zoraxy in front of PHP).
-// Anything else (a direct connection from the internet, or a public peer that is not in the configured lists) gets the peer address.
+// MSP-DS-158 (re-review MRR-10, M3-3, M3-4): the proxy lists in effect for HTTP_CF_CONNECTING_IP mode: [CONST_TRUSTED_PROXIES, Cloudflare ranges].
+// CONST_CLOUDFLARE_RANGES (array or comma list) replaces the built-in list in includes/cloudflare_ranges.php, which is Cloudflare's published v4/v6 set.
+function rivetCloudflareIpConfig(): array {
+    $trusted = defined('CONST_TRUSTED_PROXIES') ? CONST_TRUSTED_PROXIES : [];
+    if (is_string($trusted)) { $trusted = explode(',', $trusted); }
+    if (defined('CONST_CLOUDFLARE_RANGES')) {
+        $cf = CONST_CLOUDFLARE_RANGES;
+        if (is_string($cf)) { $cf = explode(',', $cf); }
+    } else {
+        $cf = require __DIR__ . '/includes/cloudflare_ranges.php';
+    }
+    return [(array) $trusted, (array) $cf];
+}
+
+// M3-3: is the immediate peer one the CF-Connecting-IP header may be believed from?
+function cloudflarePeerTrusted(string $remote, array $trusted, array $cfRanges): bool {
+    $peer = stripos($remote, '::ffff:') === 0 ? substr($remote, 7) : $remote;
+    $all = array_merge($trusted, $cfRanges);
+    return ipInTrustedList($remote, $all) || ipInTrustedList($peer, $all);
+}
+
+// The client address from a CF-Connecting-IP header, given the immediate peer ($remote). The header is a plain request header any client can
+// send, so it is only believed when the peer is in CONST_TRUSTED_PROXIES or in the Cloudflare ranges. There is NO private/loopback fallback
+// (M3-3): a local proxy that is reachable directly would let anyone spoof the header. A local proxy (nginx, Zoraxy) must be listed in
+// CONST_TRUSTED_PROXIES and must overwrite CF-Connecting-IP itself. Anything else gets the peer address.
 function clientIpFromCloudflare(string $remote, string $cf, array $trusted, array $cfRanges): string {
     $cf = trim($cf);
     if ($cf === '' || !filter_var($cf, FILTER_VALIDATE_IP)) { return $remote; }
-    $peer = stripos($remote, '::ffff:') === 0 ? substr($remote, 7) : $remote;
-    if ($trusted || $cfRanges) {
-        $all = array_merge($trusted, $cfRanges);
-        return (ipInTrustedList($remote, $all) || ipInTrustedList($peer, $all)) ? $cf : $remote;
-    }
-    $private = filter_var($peer, FILTER_VALIDATE_IP) && !filter_var($peer, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
-    return $private ? $cf : $remote;
+    return cloudflarePeerTrusted($remote, $trusted, $cfRanges) ? $cf : $remote;
 }
 
 function getIP() {
@@ -224,12 +240,8 @@ function getIP() {
         if (is_string($trusted)) { $trusted = explode(',', $trusted); }
         $ip = clientIpFromForwardedFor((string) $_SERVER['REMOTE_ADDR'], (string) getenv('HTTP_X_FORWARDED_FOR'), (array) $trusted);
     } elseif (defined("CONST_GET_IP_METHOD") && CONST_GET_IP_METHOD == "HTTP_CF_CONNECTING_IP") {
-        // MSP-DS-158 (MRR-10): same trust rule as X-Forwarded-For. CONST_TRUSTED_PROXIES and/or CONST_CLOUDFLARE_RANGES (arrays or comma lists)
-        // name the peers allowed to set the header; with neither defined only a private/loopback peer (a local reverse proxy) is believed.
-        $trusted = defined('CONST_TRUSTED_PROXIES') ? CONST_TRUSTED_PROXIES : [];
-        if (is_string($trusted)) { $trusted = explode(',', $trusted); }
-        $cf_ranges = defined('CONST_CLOUDFLARE_RANGES') ? CONST_CLOUDFLARE_RANGES : [];
-        if (is_string($cf_ranges)) { $cf_ranges = explode(',', $cf_ranges); }
+        // MSP-DS-158: only a peer in CONST_TRUSTED_PROXIES or the Cloudflare ranges (built in, overridable by CONST_CLOUDFLARE_RANGES) is believed.
+        [$trusted, $cf_ranges] = rivetCloudflareIpConfig();
         $ip = clientIpFromCloudflare((string) $_SERVER['REMOTE_ADDR'], (string) ($_SERVER['HTTP_CF_CONNECTING_IP'] ?? ''), (array) $trusted, (array) $cf_ranges);
     }
 
