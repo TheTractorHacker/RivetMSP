@@ -516,6 +516,7 @@ if (isset($_POST['add_payment_stripe'])) {
                 'itflow_invoice_number' => $invoice_prefix . $invoice_number,
                 'itflow_invoice_id' => $invoice_id,
                 'itflow_install' => stripeInstallMarker(),
+                'rivet_attempt_key' => $charge_claim['key'],
             ]
         ], $charge_claim['key']);
 
@@ -734,6 +735,7 @@ if (isset($_GET['add_payment_stripe'])) {
                 'itflow_invoice_number' => $invoice_prefix . $invoice_number,
                 'itflow_invoice_id' => $invoice_id,
                 'itflow_install' => stripeInstallMarker(),
+                'rivet_attempt_key' => $charge_claim['key'],
             ]
         ], ['idempotency_key' => $charge_claim['key']]);
 

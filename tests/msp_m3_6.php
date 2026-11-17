@@ -9,18 +9,19 @@ $fail = 0; $ok = function (string $n, bool $c) use (&$fail) { echo ($c ? 'ok   '
 $m = new mysqli('localhost', getenv('RIVETMSP_TEST_DB_USER'), getenv('RIVETMSP_TEST_DB_PASS'), getenv('RIVETMSP_TEST_DB_NAME')); $m->query("SET SESSION sql_mode=''");
 $one = fn (string $s) => ($r = $m->query($s)) && ($x = $r->fetch_row()) ? $x[0] : null;
 $m->query("INSERT INTO invoices (invoice_id, invoice_status, invoice_amount) VALUES (1,'Sent',100.00),(2,'Sent',100.00),(3,'Sent',100.00)");
+$none = fn (string $pi, bool $c = false, ?string $k = null, bool $b = false) => $k !== null ? 'none' : null;   // M4-3: a row with no PaymentIntent id is abandoned only when the Stripe search by attempt key finds nothing
 $age = fn (int $inv, string $by = '20 MINUTE') => $m->query("UPDATE invoice_charge_attempts SET attempt_created_at = NOW() - INTERVAL $by, attempt_updated_at = NOW() - INTERVAL $by WHERE attempt_invoice_id = $inv");
 
 // a guest page load whose request died before any PaymentIntent id was stored, then an agent charges a saved card with method 0
 $g = chargeAttemptClaim($m, 1, 'guest', 0); $age(1);
-$a = chargeAttemptClaim($m, 1, 'agent', 0);
+$a = chargeAttemptClaim($m, 1, 'agent', 0, $none);
 $ok('the agent claim does NOT take over the guest row (different parameters)', $a['ok'] && !$a['reused'] && $a['key'] !== $g['key'] && $a['attempt_id'] !== $g['attempt_id']);
 $ok('the guest row was closed as abandoned', $one("SELECT attempt_status FROM invoice_charge_attempts WHERE attempt_id = " . $g['attempt_id']) === 'failed');
 $ok('guest and agent keys live in different namespaces', $g['key'] !== $a['key'] && str_contains($g['key'], '-g-') && !str_contains($a['key'], '-g-'));
 
 // reverse: an abandoned agent row is not taken over by the guest page
 $a2 = chargeAttemptClaim($m, 2, 'agent', 0); $age(2);
-$g2 = chargeAttemptClaim($m, 2, 'guest', 0);
+$g2 = chargeAttemptClaim($m, 2, 'guest', 0, $none);
 $ok('the guest claim does NOT take over an agent row', $g2['ok'] && !$g2['reused'] && $g2['key'] !== $a2['key']);
 
 // still taken over by its own path (the MRR-1 replay protection is unchanged)

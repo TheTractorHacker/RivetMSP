@@ -200,6 +200,16 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
             logAction("Invoice", "Payment", "Bank payment for invoice ID $processing_invoice_id submitted and processing - $pi_id", $processing_client_id, $processing_invoice_id);
         }
         exit("<br><h2>Your bank payment has been submitted and is processing.</h2><p>Bank payments can take several business days to clear. Your invoice will be marked paid once the payment settles, so please do not pay it again.</p>");
+    } elseif ($pi_obj->status === "requires_action" && chargeAttemptPiIsBankDebit($pi_obj)) {
+        // M4-5: a hand-entered bank account must be verified with two small deposits (or the bank's own login) before the debit starts. That is
+        // pending verification, not a failure: the attempt stays visible to the other paths for days and the webhook settles it.
+        $verify_invoice_id = intval($pi_obj->metadata->itflow_invoice_id ?? 0);
+        if ($verify_invoice_id > 0) {
+            require_once '../includes/billing_guards.php';
+            chargeAttemptSettleIntent($mysqli, $pi_id, $verify_invoice_id, intval(moneyToCents(stripeAmountFromMinor($pi_obj->amount, $pi_obj->currency))), 'pending', 'guest');
+            invoiceHistoryOnce($mysqli, $verify_invoice_id, 'Payment pending', 'Bank account verification pending (microdeposits). Stripe PaymentIntent', $pi_id);
+        }
+        exit("<br><h2>Your bank account needs to be verified.</h2><p>Your payment has not been charged yet. Your bank will receive two small deposits within 1-2 business days; follow the verification link Stripe sends you (or the instructions on your bank statement) to confirm them. Once the account is verified the payment is submitted, and your invoice is marked paid when it clears. Please do not pay it again.</p>");
     } elseif ($pi_obj->status !== "succeeded") {
         exit(WORDING_PAYMENT_FAILED);
     } elseif ($pi_obj->amount !== $pi_obj->amount_received) {

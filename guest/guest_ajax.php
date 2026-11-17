@@ -116,8 +116,13 @@ if (isset($_GET['stripe_create_pi'])) {
             }
             chargeAttemptFinish($mysqli, $reuse_attempt['attempt_id'], 'failed', 'guest intent replaced (' . $open_pi->status . ')');
         } catch (Exception $e) {
-            http_response_code(500);
-            exit(json_encode(['error' => $e->getMessage()]));
+            if (!chargeAttemptIsMissing($e)) {   // a timeout / 5xx: the intent may still exist, so this is an error the customer can retry
+                http_response_code(500);
+                exit(json_encode(['error' => $e->getMessage()]));
+            }
+            // M4-4: Stripe definitely has no such PaymentIntent any more (test-to-live key switch, deleted intent): the page can never confirm it,
+            // so the attempt is closed and a new one is claimed below instead of blocking this invoice with a 500 on every visit
+            chargeAttemptFinish($mysqli, $reuse_attempt['attempt_id'], 'failed', 'abandoned; Stripe intent missing');
         }
     }
 
@@ -143,6 +148,7 @@ if (isset($_GET['stripe_create_pi'])) {
             'itflow_invoice_number' => $invoice_prefix . $invoice_number,
             'itflow_invoice_id' => $invoice_id,
             'itflow_install' => stripeInstallMarker(),
+            'rivet_attempt_key' => $claim['key'],
         ],
         'payment_method_types' => ['card'],
     ];

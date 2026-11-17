@@ -89,6 +89,17 @@ class StripePaymentProvider implements PaymentProviderInterface
     }
 
     /*
+     * M4-3: PaymentIntents whose metadata carries this charge-attempt key (every intent this install creates does), so an attempt whose
+     * response was lost can be told apart from one that never reached Stripe. Search is eventually consistent (under a minute): callers
+     * only use it on attempts at least 15 minutes old.
+     */
+    public function searchCheckoutByAttemptKey(string $key): array
+    {
+        $key = preg_replace('/[^A-Za-z0-9_-]/', '', $key);
+        return $this->client()->paymentIntents->search(['query' => "metadata['rivet_attempt_key']:'" . $key . "'", 'limit' => 5])->data;
+    }
+
+    /*
      * Create a setup-mode Checkout Session (or SetupIntent) used to capture and
      * store a payment method for future off-session charges.
      * Mirrors client/post.php (create_stripe_checkout).

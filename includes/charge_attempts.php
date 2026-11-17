@@ -17,6 +17,7 @@ require_once __DIR__ . '/billing_guards.php';
 const CHARGE_ATTEMPT_STALE_SECONDS = 900;
 const CHARGE_ATTEMPT_PENDING_DAYS = 10;
 const CHARGE_ATTEMPT_GUEST_INTENT_SECONDS = 3600;   // a guest-page PaymentIntent the customer may still confirm keeps its attempt live this long
+const CHARGE_ATTEMPT_BANK_VERIFY_DAYS = 10;         // M4-5: a bank debit waiting for microdeposit verification keeps its attempt (and its PaymentIntent) this long
 const CHARGE_ATTEMPT_KEY_MAX_AGE = 82800;           // Stripe forgets an idempotency key after 24h: a key older than 23h is never replayed
 
 /**
@@ -31,17 +32,60 @@ function stripeChargeAttemptKey($invoice_id, int $balance_cents, $method_id, int
 }
 
 /**
- * MSP-DS-166 (re-review MRR-6 / M3-1): a callable for chargeAttemptClaim() that asks Stripe for the status of an old attempt's PaymentIntent.
- * Called as $lookup($pi_id) it returns the status (null when Stripe could not be asked). Called as $lookup($pi_id, true) it first cancels a
- * PaymentIntent that is still confirmable and returns 'canceled' only when the cancel took effect, otherwise the status Stripe reports now.
- * $retrieve($pi_id) returns the Stripe PaymentIntent object (it must have cancel()).
+ * M4-4: true only for a DEFINITE "that PaymentIntent does not exist" answer from Stripe (HTTP 404 resource_missing, e.g. after a test-to-live key
+ * switch or a deleted intent). A timeout, a 5xx, a rate limit or an auth error is NOT missing: the intent may well still exist.
  */
-function chargeAttemptPiOps(callable $retrieve): callable
+function chargeAttemptIsMissing(\Throwable $e): bool
 {
-    return function (string $pi_id, bool $cancel = false) use ($retrieve): ?string {
+    if (!is_a($e, '\Stripe\Exception\InvalidRequestException')) {
+        return false;
+    }
+    return (int) $e->getHttpStatus() === 404 && ((string) $e->getStripeCode() === 'resource_missing' || stripos($e->getMessage(), 'No such payment_intent') !== false);
+}
+
+/**
+ * M4-5: a PaymentIntent that is a bank debit waiting on the customer/bank (microdeposit verification, or a us_bank_account method already attached).
+ * Such an intent sits in requires_action for days and must not be canceled by the guest-page expiry.
+ */
+function chargeAttemptPiIsBankDebit($pi): bool
+{
+    $next = $pi->next_action ?? null;
+    if ($next && (string) ($next->type ?? '') === 'verify_with_microdeposits') {
+        return true;
+    }
+    $pm = $pi->payment_method ?? null;
+    return is_object($pm) && (string) ($pm->type ?? '') === 'us_bank_account';
+}
+
+/**
+ * MSP-DS-166 (re-review MRR-6 / M3-1): a callable for chargeAttemptClaim() that asks Stripe for the status of an old attempt's PaymentIntent.
+ * Called as $lookup($pi_id) it returns the status (null when Stripe could not be asked; 'missing' when Stripe definitely has no such intent, M4-4;
+ * 'requires_action_bank' for a bank debit waiting for verification, M4-5). Called as $lookup($pi_id, true) it first cancels a PaymentIntent that is
+ * still confirmable and returns 'canceled' only when the cancel took effect, otherwise the status Stripe reports now; a bank debit waiting for
+ * verification is not canceled unless $include_bank. Called as $lookup('', false, $attempt_key) (M4-3) it searches PaymentIntents by the attempt
+ * key kept in their metadata and returns 'none' (nothing found), 'found' or null (the search failed / is not available).
+ * $retrieve($pi_id) returns the Stripe PaymentIntent object (it must have cancel()). $search($attempt_key) returns the list of matching intents.
+ */
+function chargeAttemptPiOps(callable $retrieve, ?callable $search = null): callable
+{
+    return function (string $pi_id, bool $cancel = false, ?string $search_key = null, bool $include_bank = false) use ($retrieve, $search): ?string {
+        if ($search_key !== null) {
+            if ($search === null) {
+                return null;
+            }
+            try {
+                $found = $search($search_key);
+                return is_countable($found) ? (count($found) === 0 ? 'none' : 'found') : null;
+            } catch (\Throwable $e) {
+                return null;
+            }
+        }
         try {
             $pi = $retrieve($pi_id);
             $status = (string) $pi->status;
+            if ($status === 'requires_action' && chargeAttemptPiIsBankDebit($pi) && !$include_bank) {
+                return 'requires_action_bank';
+            }
             if ($cancel && in_array($status, ['requires_payment_method', 'requires_confirmation', 'requires_action', 'requires_capture'], true)) {
                 try {
                     $pi->cancel();
@@ -52,19 +96,25 @@ function chargeAttemptPiOps(callable $retrieve): callable
             }
             return $status;
         } catch (\Throwable $e) {
-            return null;
+            return chargeAttemptIsMissing($e) ? 'missing' : null;
         }
     };
 }
 
 function chargeAttemptStripeLookup($stripe): callable
 {
-    return chargeAttemptPiOps(fn (string $pi_id) => $stripe->paymentIntents->retrieve($pi_id, []));
+    return chargeAttemptPiOps(
+        fn (string $pi_id) => $stripe->paymentIntents->retrieve($pi_id, []),
+        fn (string $key) => $stripe->paymentIntents->search(['query' => "metadata['rivet_attempt_key']:'" . preg_replace('/[^A-Za-z0-9_-]/', '', $key) . "'", 'limit' => 5])->data
+    );
 }
 
 function chargeAttemptProviderLookup($provider): callable
 {
-    return chargeAttemptPiOps(fn (string $pi_id) => $provider->verifyCheckoutResult($pi_id));
+    return chargeAttemptPiOps(
+        fn (string $pi_id) => $provider->verifyCheckoutResult($pi_id),
+        method_exists($provider, 'searchCheckoutByAttemptKey') ? fn (string $key) => $provider->searchCheckoutByAttemptKey($key) : null
+    );
 }
 
 function chargeAttemptRefusal(string $reason): array
@@ -129,9 +179,13 @@ function chargeAttemptClaim($mysqli, $invoice_id, string $source, $method_id = 0
             AND attempt_status = 'processing' AND attempt_source = 'guest' AND attempt_pi_id <> '' ORDER BY attempt_id FOR UPDATE");
         $guest_open = $guest_open ? mysqli_fetch_all($guest_open, MYSQLI_ASSOC) : [];
         foreach ($guest_open as $g) {
-            $g_status = $pi_lookup !== null ? $pi_lookup((string) $g['attempt_pi_id'], true) : null;
+            $g_status = $pi_lookup !== null ? $pi_lookup((string) $g['attempt_pi_id'], true, null, intval($g['attempt_age']) >= CHARGE_ATTEMPT_BANK_VERIFY_DAYS * 86400) : null;
             if ($g_status === 'canceled') {
                 mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = 'guest intent canceled by " . $source . " claim' WHERE attempt_id = " . intval($g['attempt_id']));
+                continue;
+            }
+            if ($g_status === 'missing') {   // M4-4: Stripe definitely has no such intent any more (key switch / deleted): nothing can be confirmed or charged
+                mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = 'abandoned; Stripe intent missing' WHERE attempt_id = " . intval($g['attempt_id']));
                 continue;
             }
             if ($g_status === null && intval($g['attempt_age']) >= CHARGE_ATTEMPT_KEY_MAX_AGE) {
@@ -164,17 +218,26 @@ function chargeAttemptClaim($mysqli, $invoice_id, string $source, $method_id = 0
                 $stale = $row;
                 continue;
             }
-            $old_status = ($pi_lookup !== null && $row['attempt_pi_id'] !== '') ? $pi_lookup((string) $row['attempt_pi_id']) : null;
-            if (in_array($old_status, ['canceled', 'requires_payment_method'], true)) {
-                mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = 'stale; Stripe intent " . $old_status . "' WHERE attempt_id = " . intval($row['attempt_id']));
-                continue;
+            // M4-3: a row is abandoned only on a DEFINITE answer. With a stored PaymentIntent id: Stripe says canceled / requires_payment_method /
+            // missing (M4-4). With no id: a search of PaymentIntents by the attempt key finds nothing. A lookup that merely errored (null), a search that
+            // errored or found an intent, or no way to ask at all, refuses (in_progress; needs_review once the 23h key window has passed).
+            $old_status = null;
+            if ($row['attempt_pi_id'] !== '') {
+                $old_status = $pi_lookup !== null ? $pi_lookup((string) $row['attempt_pi_id']) : null;
+                if (in_array($old_status, ['canceled', 'requires_payment_method', 'missing'], true)) {
+                    mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = 'stale; Stripe intent " . $old_status . "' WHERE attempt_id = " . intval($row['attempt_id']));
+                    continue;
+                }
+            } elseif ($pi_lookup !== null && $pi_lookup('', false, (string) $row['attempt_key']) === 'none') {
+                continue;   // nothing at Stripe carries this attempt's key: it never reached Stripe, closed by the abandon below
             }
-            if ($old_status !== null || ($age >= CHARGE_ATTEMPT_KEY_MAX_AGE && !($row_guest && $row['attempt_pi_id'] === ''))) {
+            if ($old_status !== null || $age >= CHARGE_ATTEMPT_KEY_MAX_AGE) {
                 invoiceHistoryOnce($mysqli, $invoice_id, 'Payment needs review', 'A charge attempt timed out and may have been charged at Stripe; check Stripe before charging again. Attempt', (string) intval($row['attempt_id']));
                 mysqli_commit($mysqli);
                 return chargeAttemptRefusal('needs_review');
             }
-            // unresolved and not replayable (other parameters, or a guest row that never got an intent): closed by the abandon below
+            mysqli_commit($mysqli);
+            return chargeAttemptRefusal('in_progress');   // Stripe could not be asked (or the search found an intent): do not charge, retry later
         }
         mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = 'abandoned' WHERE attempt_invoice_id = $invoice_id
             AND attempt_status IN ('processing','pending')" . ($stale ? ' AND attempt_id <> ' . intval($stale['attempt_id']) : ''));
@@ -253,16 +316,65 @@ function chargeAttemptStoreIntent($mysqli, $attempt_id, $pi_id): void
 function chargeAttemptExpireGuest($mysqli, callable $pi_lookup, int $limit = 50): int
 {
     $limit = max(1, $limit);
-    $r = mysqli_query($mysqli, "SELECT attempt_id, attempt_pi_id FROM invoice_charge_attempts WHERE attempt_status = 'processing' AND attempt_source = 'guest' AND attempt_pi_id <> ''
+    $r = mysqli_query($mysqli, "SELECT attempt_id, attempt_pi_id, attempt_invoice_id, attempt_balance_cents, TIMESTAMPDIFF(SECOND, attempt_created_at, NOW()) AS attempt_age FROM invoice_charge_attempts
+        WHERE attempt_status = 'processing' AND attempt_source = 'guest' AND attempt_pi_id <> ''
         AND attempt_updated_at < NOW() - INTERVAL " . CHARGE_ATTEMPT_GUEST_INTENT_SECONDS . " SECOND ORDER BY attempt_id LIMIT $limit");
+    $rows = $r ? mysqli_fetch_all($r, MYSQLI_ASSOC) : [];
     $closed = 0;
-    while ($r && ($row = mysqli_fetch_assoc($r))) {
-        if ($pi_lookup((string) $row['attempt_pi_id'], true) === 'canceled') {
-            mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = 'abandoned' WHERE attempt_id = " . intval($row['attempt_id']) . " AND attempt_status = 'processing'");
+    foreach ($rows as $row) {
+        $bank_window_over = intval($row['attempt_age']) >= CHARGE_ATTEMPT_BANK_VERIFY_DAYS * 86400;
+        $status = $pi_lookup((string) $row['attempt_pi_id'], true, null, $bank_window_over);   // M4-5: a bank debit waiting for verification is not canceled inside its window
+        if ($status === 'requires_action_bank') {
+            // the customer submitted a bank account and the debit waits for microdeposit verification (days): keep it visible to the other paths as 'pending'
+            chargeAttemptSettleIntent($mysqli, (string) $row['attempt_pi_id'], intval($row['attempt_invoice_id']), intval($row['attempt_balance_cents']), 'pending', 'guest');
+        } elseif ($status === 'canceled' || $status === 'missing') {   // M4-4: an intent Stripe no longer has is as closed as a canceled one
+            mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = '" . ($status === 'missing' ? 'abandoned; Stripe intent missing' : 'abandoned') . "' WHERE attempt_id = " . intval($row['attempt_id']) . " AND attempt_status = 'processing'");
             $closed += max(0, mysqli_affected_rows($mysqli));
         }
     }
     return $closed;
+}
+
+/**
+ * M4-4: an admin clears one stuck attempt (needs_review forever, or an intent Stripe can no longer return). Refused when the attempt is not open, when
+ * a Stripe lookup is possible and the intent is succeeded/processing there, or when Stripe could not be asked (then nothing is known). The attempt is
+ * closed as failed with the admin's reason, and an invoice history row records who/why. $pi_lookup may be null only when no Stripe provider exists.
+ * @return array{ok:bool, message:string}
+ */
+function chargeAttemptClear($mysqli, int $attempt_id, string $reason, ?callable $pi_lookup, string $by = 'admin'): array
+{
+    $reason = trim($reason);
+    if ($reason === '') {
+        return ['ok' => false, 'message' => 'A reason is required to clear a charge attempt'];
+    }
+    $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM invoice_charge_attempts WHERE attempt_id = " . intval($attempt_id)));
+    if (!$row || !in_array($row['attempt_status'], ['processing', 'pending'], true)) {
+        return ['ok' => false, 'message' => 'That charge attempt is not open'];
+    }
+    if ($pi_lookup !== null) {
+        if ($row['attempt_pi_id'] !== '') {
+            $st = $pi_lookup((string) $row['attempt_pi_id']);
+            if ($st === null) {
+                return ['ok' => false, 'message' => 'Stripe could not be asked about this payment right now; try again when it is reachable'];
+            }
+            if (in_array($st, ['succeeded', 'processing', 'requires_capture'], true)) {
+                return ['ok' => false, 'message' => 'Stripe reports this payment as ' . $st . '; it is not cleared (the webhook records it)'];
+            }
+        } else {
+            $st = $pi_lookup('', false, (string) $row['attempt_key']);
+            if ($st !== 'none') {
+                return ['ok' => false, 'message' => $st === 'found' ? 'Stripe has a PaymentIntent for this attempt; it is not cleared' : 'Stripe could not be searched for this attempt right now; try again when it is reachable'];
+            }
+        }
+    }
+    $err = mysqli_real_escape_string($mysqli, substr('cleared by ' . $by . ': ' . $reason, 0, 250));
+    mysqli_query($mysqli, "UPDATE invoice_charge_attempts SET attempt_status = 'failed', attempt_error = '$err' WHERE attempt_id = " . intval($attempt_id) . " AND attempt_status IN ('processing','pending')");
+    if (mysqli_affected_rows($mysqli) < 1) {
+        return ['ok' => false, 'message' => 'That charge attempt was settled in the meantime'];
+    }
+    $desc = mysqli_real_escape_string($mysqli, substr('Charge attempt ' . intval($attempt_id) . ' cleared by ' . $by . ': ' . $reason, 0, 250));
+    mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Charge attempt cleared', history_description = '$desc', history_invoice_id = " . intval($row['attempt_invoice_id']));
+    return ['ok' => true, 'message' => 'Charge attempt cleared'];
 }
 
 function chargeAttemptFinish($mysqli, $attempt_id, string $status, string $error = ''): void

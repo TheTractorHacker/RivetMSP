@@ -30,9 +30,9 @@ $old(3, '25 HOUR');
 $r = chargeAttemptClaim($m, 3, 'agent', 5);
 $ok('a 25h-old row of another method cannot be checked: refused and kept blocking', !$r['ok'] && $r['reason'] === 'needs_review' && $st(3) === 'processing');
 
-// a PaymentIntent that Stripe cannot report on (lookup unavailable) under 23h keeps the earlier behaviour for rows with no intent id
+// a row with no intent id whose Stripe search by attempt key finds nothing (M4-3; an errored search refuses, see msp_m4_3)
 $old(4, '30 MINUTE');
-$r = chargeAttemptClaim($m, 4, 'agent', 5, fn ($pi) => null);
+$r = chargeAttemptClaim($m, 4, 'agent', 5, fn ($pi, $c = false, $k = null) => $k !== null ? 'none' : null);   // M4-3: the search by attempt key finds nothing
 $ok('a 30 minute old row with no intent id (the request died before Stripe) is still just abandoned', $r['ok'] && $st(4) === 'failed');
 
 // the SAME method keeps replaying its key (unchanged), no Stripe call needed

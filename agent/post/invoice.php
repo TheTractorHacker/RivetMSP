@@ -10,6 +10,46 @@ defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 // accounting module + a connected integration with auto-push are configured.
 require_once __DIR__ . '/../../includes/accounting_functions.php';
 
+// M4-4: an admin clears one stuck charge attempt (needs_review forever / an intent Stripe can no longer return). Reason required and logged;
+// refused while Stripe says the payment is succeeded/processing.
+if (isset($_POST['clear_charge_attempt'])) {
+
+    validateCSRFToken($_POST['csrf_token']);
+
+    enforceUserPermission('module_sales', 2);
+    enforceAdminPermission();
+
+    $attempt_id = intval($_POST['attempt_id'] ?? 0);
+    $attempt_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT attempt_invoice_id, invoice_client_id FROM invoice_charge_attempts LEFT JOIN invoices ON invoice_id = attempt_invoice_id WHERE attempt_id = $attempt_id"));
+    if (!$attempt_row) {
+        flash_alert("Charge attempt not found", 'error');
+        redirect();
+    }
+    $invoice_id = intval($attempt_row['attempt_invoice_id']);
+    $client_id = intval($attempt_row['invoice_client_id']);
+
+    enforceClientAccess();
+
+    $pi_lookup = null;
+    $stripe_provider_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payment_provider_id FROM payment_providers WHERE payment_provider_name = 'Stripe' LIMIT 1"));
+    if ($stripe_provider_row) {
+        try {
+            require_once __DIR__ . '/../../includes/payment_provider_factory.php';
+            $pi_lookup = chargeAttemptProviderLookup(getPaymentProvider(intval($stripe_provider_row['payment_provider_id'])));
+        } catch (\Throwable $e) {
+            $pi_lookup = null;
+        }
+    }
+
+    $clear = chargeAttemptClear($mysqli, $attempt_id, (string) ($_POST['reason'] ?? ''), $pi_lookup, (string) ($session_name ?? 'admin'));
+    if ($clear['ok']) {
+        logAction("Invoice", "Edit", "$session_name cleared stuck charge attempt $attempt_id on invoice ID $invoice_id: " . substr(trim((string) ($_POST['reason'] ?? '')), 0, 200), $client_id, $invoice_id);
+    }
+    flash_alert($clear['message'], $clear['ok'] ? 'success' : 'error');
+    redirect();
+
+}
+
 if (isset($_POST['add_invoice'])) {
 
     validateCSRFToken($_POST['csrf_token']);

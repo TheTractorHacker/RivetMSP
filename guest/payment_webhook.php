@@ -95,7 +95,14 @@ if (in_array($event_type, ['charge.refunded', 'charge.dispute.created', 'charge.
     http_response_code(200);
     exit('OK');
 }
-if (in_array($event_type, ['payment_intent.processing', 'payment_intent.payment_failed', 'payment_intent.canceled'], true)) {
+if (in_array($event_type, ['payment_intent.processing', 'payment_intent.payment_failed', 'payment_intent.canceled', 'payment_intent.requires_action'], true)) {
+    // M4-5: payment_intent.requires_action matters only for a bank debit waiting for microdeposit verification (days): it is settled as 'pending' so the
+    // guest-page expiry does not cancel it and the other paths wait. A card's requires_action (3-D Secure on the open page) is not touched here.
+    if ($event_type === 'payment_intent.requires_action' && !chargeAttemptPiIsBankDebit($event->data->object)) {
+        mysqli_query($mysqli, "UPDATE payment_webhook_events SET event_status = 'ignored' WHERE event_id = $event_row_id");
+        http_response_code(200);
+        exit('OK');
+    }
     // MSP-DS-32 / MSP-DS-166: keep the charge attempt in step with Stripe. A bank debit that is processing keeps the invoice blocked for other paths
     // (only when it is this install's intent), a failed or cancelled one frees it for the next attempt. Settled by PaymentIntent id.
     $att_pi = $event->data->object;
@@ -103,8 +110,8 @@ if (in_array($event_type, ['payment_intent.processing', 'payment_intent.payment_
     $att_ours = $att_theirs === '' || stripeInstallMarker() === '' || hash_equals(stripeInstallMarker(), $att_theirs);
     if ($att_ours) {
         $att_invoice = intval($att_pi->metadata->itflow_invoice_id ?? 0);
-        chargeAttemptSettleIntent($mysqli, sanitizeInput($att_pi->id), $event_type === 'payment_intent.processing' ? $att_invoice : 0, moneyToCents(stripeAmountFromMinor($att_pi->amount, $att_pi->currency)),
-            $event_type === 'payment_intent.processing' ? 'pending' : 'failed', 'webhook', $event_type === 'payment_intent.payment_failed');   // M3-1: a card declined in the browser leaves the guest intent confirmable
+        chargeAttemptSettleIntent($mysqli, sanitizeInput($att_pi->id), in_array($event_type, ['payment_intent.processing', 'payment_intent.requires_action'], true) ? $att_invoice : 0, moneyToCents(stripeAmountFromMinor($att_pi->amount, $att_pi->currency)),
+            in_array($event_type, ['payment_intent.processing', 'payment_intent.requires_action'], true) ? 'pending' : 'failed', 'webhook', $event_type === 'payment_intent.payment_failed');   // M3-1: a card declined in the browser leaves the guest intent confirmable
     }
     mysqli_query($mysqli, "UPDATE payment_webhook_events SET event_status = 'processed' WHERE event_id = $event_row_id");
     http_response_code(200);

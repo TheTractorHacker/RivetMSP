@@ -211,6 +211,31 @@ if (isset($_GET['invoice_id'])) {
         <?php } ?>
     </ol>
 
+    <?php
+    // M4-4: admin-only way out of a charge attempt that is stuck (needs review forever, or a guest intent Stripe can no longer return)
+    if (!empty($session_is_admin) && $invoice_status !== 'Paid') {
+        $stuck_attempts = mysqli_query($mysqli, "SELECT attempt_id, attempt_status, attempt_source, attempt_pi_id, attempt_created_at FROM invoice_charge_attempts
+            WHERE attempt_invoice_id = $invoice_id AND attempt_status IN ('processing','pending') ORDER BY attempt_id");
+        while ($stuck_attempts && ($stuck = mysqli_fetch_assoc($stuck_attempts))) { ?>
+            <div class="alert alert-warning d-print-none" data-charge-attempt="<?= intval($stuck['attempt_id']) ?>">
+                <form action="post.php" method="post" class="row g-2 align-items-center">
+                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                    <input type="hidden" name="invoice_id" value="<?= $invoice_id ?>">
+                    <input type="hidden" name="attempt_id" value="<?= intval($stuck['attempt_id']) ?>">
+                    <div class="col-md-5">
+                        <i class="fas fa-fw fa-exclamation-triangle me-2"></i>Charge attempt #<?= intval($stuck['attempt_id']) ?> (<?= nullable_htmlentities($stuck['attempt_source']) ?>, <?= nullable_htmlentities($stuck['attempt_status']) ?>, started <?= nullable_htmlentities($stuck['attempt_created_at']) ?>) is blocking other payments.
+                    </div>
+                    <div class="col-md-5">
+                        <input type="text" class="form-control" name="reason" placeholder="Reason (required, logged)" maxlength="200" required>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" name="clear_charge_attempt" class="btn btn-warning w-100">Clear this stuck charge attempt</button>
+                    </div>
+                </form>
+            </div>
+        <?php }
+    } ?>
+
     <div class="card">
 
             <div class="card-header d-print-none">

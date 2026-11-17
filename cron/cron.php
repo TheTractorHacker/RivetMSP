@@ -1113,6 +1113,7 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
                             'itflow_invoice_number' => $invoice_prefix . $invoice_number,
                             'itflow_invoice_id' => $invoice_id,
                             'itflow_install' => stripeInstallMarker(),
+                            'rivet_attempt_key' => $idempotency_key,
                         ]
                     ], $idempotency_key);
 
