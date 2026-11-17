@@ -39,7 +39,7 @@ $ok('MRR-19 wipe + new rows (oldest row does not follow the head) is broken', $c
 // a head recorded 40 days ago, signed by the real class (headMac via reflection stands in for "it was written back then")
 $fresh(); $a = json_decode(file_get_contents($anchor), true); $a['at'] = gmdate('c', time() - 40 * 86400);
 $m = (new ReflectionClass(AuditChain::class))->getMethod('headMac'); $m->setAccessible(true);
-$a['mac'] = $m->invoke($chain(), (int) $a['id'], $a['hash'], $a['at'], $a['kid'], (int) $a['from']); file_put_contents($anchor, json_encode($a));
+$a['mac'] = $m->invoke($chain(), (int) $a['id'], $a['hash'], $a['at'], $a['kid'], (int) $a['from'], 'hmac'); file_put_contents($anchor, json_encode($a));
 $d = json_decode(PlatformSettings::get($db, 'audit_chain_head', ''), true); $d['at'] = $a['at']; $d['mac'] = $a['mac']; $set('audit_chain_head', json_encode($d));
 $db->query('DELETE FROM audit_events');
 $ok('MRR-19 retention explains the wipe when the head is older than the window (30 days)', in_array($chain(30)->verify()['status'], ['ok', 'empty'], true));

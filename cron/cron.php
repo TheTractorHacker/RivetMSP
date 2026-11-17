@@ -174,7 +174,8 @@ $compliance_profile = (string) ($settings_row['config_compliance_profile'] ?? 'n
 $audit_retention_stored = intval($settings_row['config_audit_retention_days'] ?? 365);
 $has_retention_policy = class_exists(\RivetCore\Compliance\RetentionPolicy::class);
 $log_retention_days = $has_retention_policy ? \RivetCore\Compliance\RetentionPolicy::effectiveDays($compliance_profile, $config_log_retention) : max(0, $config_log_retention);
-$audit_retention_days = $has_retention_policy ? \RivetCore\Compliance\RetentionPolicy::effectiveDays($compliance_profile, $audit_retention_stored) : max(0, $audit_retention_stored);
+// M3-17: one function (compliance profile floor + SecurityBaseline floor) for this delete and for the audit chain verifier that has to explain the gap
+$audit_retention_days = \RivetMSP\Audit\AuditChain::retentionFromSettings($audit_retention_stored, $compliance_profile);
 
 // Cleanup old audit, app/debug and auth logs.
 if ($log_retention_days >= 1) {
@@ -193,9 +194,7 @@ if (class_exists(\RivetCore\Retention\RetentionService::class)) {
         // the "requested" number in logs/traces. A horizon below 1 ("keep everything", RetentionService's own
         // documented convention) is left alone: SecurityBaseline::auditRetentionDays() has no such escape hatch
         // (effective() clamps unconditionally) and would otherwise turn "keep forever" into "keep >= 90 days".
-        $audit_retention_days_floored = ($audit_retention_days >= 1 && class_exists(\RivetCore\Security\SecurityBaseline::class))
-            ? \RivetCore\Security\SecurityBaseline::auditRetentionDays($audit_retention_days)
-            : $audit_retention_days;
+        $audit_retention_days_floored = $audit_retention_days;   // already floored by AuditChain::retentionFromSettings()
         (new \RivetCore\Retention\RetentionService(new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli)))->prune($log_retention_days, $audit_retention_days_floored);
     } catch (\Throwable $e) {
         error_log('RivetCore retention skipped: ' . $e->getMessage());
