@@ -308,6 +308,10 @@ if (isset($_POST['restore'])) {
             deleteDir($tempDir);
             die("SQL import failed: " . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
         }
+        // M5-5: setup wrote a genesis anchor for the (now replaced) database; move it aside so the restored chain is "anchor missing, re-anchor"
+        if (function_exists('setupAuditAnchorAside')) {
+            setupAuditAnchorAside();
+        }
     } else {
         deleteDir($tempDir);
         die("Missing db.sql in the backup archive.");

@@ -311,6 +311,37 @@ final class AuditChain
         return ['ok' => true, 'message' => 'Audit chain anchor (genesis) written.'];
     }
 
+    /** @param array{id:int,hash:string,from:int} $a is this the genesis anchor setup writes (id 0, the zero hash, keyed segment from 0)? */
+    private static function isGenesis(array $a): bool
+    {
+        return (int) $a['id'] === 0 && (string) $a['hash'] === self::GENESIS && (int) $a['from'] === 0;
+    }
+
+    /**
+     * M5-5: after a restore replaced the database, the genesis anchor that setup wrote (signed with a placeholder key) no longer describes anything.
+     * Rename it to <file>.pre-restore-<timestamp> so the state is plainly "anchor missing, use Re-anchor". Only a genesis anchor is moved; any other
+     * anchor (or a symlink) is left alone.
+     *
+     * @return string|null the new name, or null when nothing was moved
+     */
+    public static function setGenesisAnchorAside(?string $anchorFile = null): ?string
+    {
+        $f = $anchorFile ?? (string) ($GLOBALS['config_audit_anchor_file'] ?? dirname(__DIR__, 2) . '/config/audit_chain_head.json');
+        if (is_link($f) || !is_file($f)) {
+            return null;
+        }
+        $a = json_decode((string) @file_get_contents($f), true);
+        if (!is_array($a) || !isset($a['id'], $a['hash']) || !self::isGenesis(['id' => (int) $a['id'], 'hash' => (string) $a['hash'], 'from' => (int) ($a['from'] ?? 0)])) {
+            return null;
+        }
+        $to = $f . '.pre-restore-' . gmdate('YmdHis');
+        for ($i = 1; file_exists($to); $i++) {
+            $to = $f . '.pre-restore-' . gmdate('YmdHis') . '-' . $i;
+        }
+
+        return @rename($f, $to) ? $to : null;
+    }
+
     /** A root-run setup must not leave a 0600 file the web server user cannot read. */
     private function chownLikeDir(): void
     {
@@ -484,7 +515,8 @@ final class AuditChain
             if ($keyId !== '' && $keyId !== $this->keyId()) {
                 // MRR-18: audit_chain_key_id lives in the database, so it is not evidence of a key change. If the install's key still verifies
                 // a signed head, the key did not change and the stored id was edited.
-                if (($file !== null && $this->headSigned($file)) || ($dbHead !== null && $this->headSigned($dbHead))) {
+                // M5-5: the setup genesis anchor (id 0) proves nothing about a chain that was sealed later (a restore leaves it behind), so it is no evidence either way.
+                if (($file !== null && !self::isGenesis($file) && $this->headSigned($file)) || ($dbHead !== null && $this->headSigned($dbHead))) {
                     return $this->failClosed($out, 'The stored key id was changed in the database, but the settings key still verifies the signed chain head: this is tampering, not a key change.');
                 }
                 $out['status'] = 'key_changed';
@@ -515,6 +547,10 @@ final class AuditChain
                 }
             } else {
                 if (!$this->headSigned($file) || $file['mode'] !== 'hmac') {
+                    if (self::isGenesis($file) && $this->hasAnyRows()) {
+                        // M5-5: the genesis anchor setup wrote with a placeholder key, left behind when a backup replaced the database: a restore, not tampering.
+                        return $this->failClosed($out, 'The audit chain anchor file (' . basename($this->anchorFile) . ') is the one setup wrote before this database was restored from a backup, and the entries now in the database were sealed under a different key. This is the state after a restore: use Re-anchor on Administration > Audit trail (needs the key that sealed the backup; if the key differs, restore it first).', 'anchor_missing');
+                    }
                     return $this->failClosed($out, 'The audit chain anchor file (' . basename($this->anchorFile) . ') does not carry a valid key signature.');
                 }
                 if ($file['from'] !== $dbFrom) {

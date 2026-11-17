@@ -119,6 +119,12 @@ step trusts the chain as it is that day.
   Re-anchor (or the legacy button, which is the strict variant). Back up `config/audit_chain_head.json` together with `config.php`.
 * **Fresh install through setup**: setup writes the genesis anchor. A restore that brings its own audit rows has no matching anchor unless
   `config/audit_chain_head.json` is restored too: use Re-anchor.
+* **Restore after setup (M5-5)**: every restore path (`install.sh --restore-from`, Docker `RESTORE_FROM`, `deploy/restore.sh`, the setup wizard)
+  runs setup first, which writes a genesis anchor signed with a placeholder key. After the database is replaced, `restore.sh` and the wizard
+  rename that file to `config/audit_chain_head.json.pre-restore-<timestamp>` (logged), so the state is `anchor_missing` and the page offers
+  Re-anchor. If the file is still there (a restore done by hand), `verify()` recognises a genesis anchor (id 0) in front of existing rows as the
+  same restore state (`anchor_missing`, with restore wording) rather than tampering, and a different key id on the restored rows is reported as
+  `key_changed`, not as "tampering, not a key change". Only a genesis anchor is ever moved; any other anchor is left alone.
 * **Settings key changed or lost**: `key_changed` / `key_unavailable`, not tampering. Restore the old key; nothing else can verify the chain.
 * **Anchor file not writable**: re-anchor reports the path; fix the owner (the web server user) and mode of `config/` and try again.
 

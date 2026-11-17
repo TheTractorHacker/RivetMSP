@@ -392,6 +392,26 @@ EOF
     success "Database import complete."
 }
 
+# set_genesis_anchor_aside(): M5-5. install.sh --restore-from, the Docker entrypoint and an existing instance all run setup (which writes a
+# genesis audit-chain anchor signed with a placeholder key) BEFORE this restore replaces the database. That anchor then describes nothing: verify
+# would call the restored chain tampering. Rename a genesis anchor (id 0, zero hash) to <file>.pre-restore-<timestamp> so the state is plainly
+# "anchor missing", which the audit trail page answers with Re-anchor. Any other anchor, or a symlink, is left alone.
+set_genesis_anchor_aside() {
+    local f="${AUDIT_ANCHOR_FILE:-${APP_DIR}/config/audit_chain_head.json}" to
+    [[ -f "${f}" && ! -L "${f}" ]] || return 0
+    if ! grep -Eq '"id":0[,}]' "${f}" || ! grep -Eq '"hash":"0{64}"' "${f}" || ! grep -Eq '"from":0[,}]' "${f}"; then
+        return 0
+    fi
+    to="${f}.pre-restore-$(date -u +%Y%m%d%H%M%S)"
+    while [[ -e "${to}" ]]; do to="${to}-1"; done
+    if mv -- "${f}" "${to}"; then
+        warn "Moved the setup audit-chain anchor aside to ${to}: after this restore use Re-anchor on Administration > Audit trail (the chain is 'anchor missing' until then)."
+        log "AUDIT ANCHOR MOVED ${f} -> ${to}"
+    else
+        warn "Could not move the setup audit-chain anchor ${f} aside; verify will report it until it is removed and Re-anchor is used."
+    fi
+}
+
 restore_uploads() {
     local src_uploads="${EXTRACT_DIR}/uploads"
     if [[ ! -d "${src_uploads}" ]]; then
@@ -550,6 +570,7 @@ main() {
     decrypt_and_extract
     read_manifest
     import_database
+    set_genesis_anchor_aside
     restore_uploads
     apply_settings_enc_key
     if [[ -n "${KEY_FILE_RESTORE}" ]]; then

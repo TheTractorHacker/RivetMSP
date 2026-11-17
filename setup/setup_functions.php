@@ -683,6 +683,26 @@ if (!function_exists('manifestKeyringNote')) {
 }
 
 // ------------------------------
+// setupAuditAnchorAside (M5-5)
+// ------------------------------
+if (!function_exists('setupAuditAnchorAside')) {
+    /** After a backup replaced the database: move the setup genesis anchor aside (renamed with a timestamp) so verify says "anchor missing, re-anchor" instead of tampering. */
+    function setupAuditAnchorAside(): ?string {
+        try {
+            require_once dirname(__DIR__) . '/vendor/autoload.php';
+            $to = \RivetMSP\Audit\AuditChain::setGenesisAnchorAside();
+            if ($to !== null) {
+                error_log('RivetMSP restore: moved the setup audit chain anchor to ' . $to . '; use Re-anchor on Administration > Audit trail.');
+            }
+
+            return $to;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+}
+
+// ------------------------------
 // setupAuditGenesis (M4-6)
 // ------------------------------
 if (!function_exists('setupAuditGenesis')) {
