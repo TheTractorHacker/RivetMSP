@@ -104,7 +104,7 @@ if (in_array($event_type, ['payment_intent.processing', 'payment_intent.payment_
     if ($att_ours) {
         $att_invoice = intval($att_pi->metadata->itflow_invoice_id ?? 0);
         chargeAttemptSettleIntent($mysqli, sanitizeInput($att_pi->id), $event_type === 'payment_intent.processing' ? $att_invoice : 0, moneyToCents(stripeAmountFromMinor($att_pi->amount, $att_pi->currency)),
-            $event_type === 'payment_intent.processing' ? 'pending' : 'failed');
+            $event_type === 'payment_intent.processing' ? 'pending' : 'failed', 'webhook', $event_type === 'payment_intent.payment_failed');   // M3-1: a card declined in the browser leaves the guest intent confirmable
     }
     mysqli_query($mysqli, "UPDATE payment_webhook_events SET event_status = 'processed' WHERE event_id = $event_row_id");
     http_response_code(200);

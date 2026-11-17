@@ -22,6 +22,13 @@ if (isset($_GET['stripe_create_pi'])) {
 
     header('Content-Type: application/json');
 
+    // MSP-DS-166 (re-review M3-2): every refusal is JSON the page shows (the page's r.json() used to fail on plain text, leaving an empty form)
+    function guestPiError(string $message): void
+    {
+        echo json_encode(['error' => $message]);
+        exit;
+    }
+
     // Params from POST (guest_pay_invoice_stripe.js)
     $jsonStr = file_get_contents('php://input');
     $jsonObj = json_decode($jsonStr, true);
@@ -39,7 +46,7 @@ if (isset($_GET['stripe_create_pi'])) {
         LIMIT 1"
     );
     if (!$invoice_sql || mysqli_num_rows($invoice_sql) !== 1) {
-        exit("Invalid Invoice ID/SQL query");
+        guestPiError("Invalid Invoice ID/SQL query");
     }
 
     $row = mysqli_fetch_assoc($invoice_sql);
@@ -59,28 +66,30 @@ if (isset($_GET['stripe_create_pi'])) {
     $balance_to_pay = round($balance_to_pay, 2);
 
     if (moneyToCents($balance_to_pay) <= 0) {
-        exit("No balance outstanding");
+        guestPiError("No balance outstanding");
     }
 
     // MSP-DS-166 / MSP-DS-32: a saved-card/autopay charge in flight, or a bank debit still processing, means this invoice is being paid already
     // MSP-DS-166 (re-review MRR-2): ... except the guest page's own open PaymentIntent, which is reused below (one open intent per invoice)
+    // MSP-DS-166 (re-review M3-2): the page's own earlier intent is found whatever its age (an abandoned page load 2 hours or 2 days ago), not only
+    // inside the live window, and reused when Stripe says it is still open.
     $live_attempt = chargeAttemptLive($mysqli, $invoice_id);
     $reuse_attempt = null;
-    if ($live_attempt && $live_attempt['attempt_source'] === 'guest' && $live_attempt['attempt_status'] === 'processing' && $live_attempt['attempt_pi_id'] !== '') {
-        $reuse_attempt = $live_attempt;
-    } elseif ($live_attempt) {
-        exit($live_attempt['attempt_status'] === 'pending' ? "A bank payment for this invoice is still processing" : "A payment for this invoice is in progress");
+    if ($live_attempt && !($live_attempt['attempt_source'] === 'guest' && $live_attempt['attempt_status'] === 'processing' && $live_attempt['attempt_pi_id'] !== '')) {
+        guestPiError($live_attempt['attempt_status'] === 'pending' ? "A bank payment for this invoice is still processing" : "A payment for this invoice is in progress");
     }
+    $reuse_attempt = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM invoice_charge_attempts WHERE attempt_invoice_id = $invoice_id AND attempt_status = 'processing'
+        AND attempt_source = 'guest' AND attempt_pi_id <> '' ORDER BY attempt_id DESC LIMIT 1")) ?: null;
 
     // MSP-DS-102: invoices at or above the provider's card threshold are not payable by card, whatever page the request came from
     if (!cardPaymentAllowedForInvoice($mysqli, $invoice_amount)) {
-        exit("This invoice cannot be paid by card");
+        guestPiError("This invoice cannot be paid by card");
     }
 
     // Setup payment provider (Stripe) from payment_providers via the factory
     $stripe_provider = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payment_provider_id FROM payment_providers WHERE payment_provider_name = 'Stripe' LIMIT 1"));
     if (!$stripe_provider) {
-        exit("Stripe not enabled / configured");
+        guestPiError("Stripe not enabled / configured");
     }
     $provider_id = intval($stripe_provider['payment_provider_id']);
 
@@ -100,7 +109,7 @@ if (isset($_GET['stripe_create_pi'])) {
                 exit;
             }
             if (in_array($open_pi->status, ['processing', 'succeeded'], true)) {
-                exit("A payment for this invoice is in progress");
+                guestPiError("A payment for this invoice is in progress");
             }
             if (in_array($open_pi->status, $open_states, true)) {
                 try { $open_pi->cancel(); } catch (Exception $eCancel) { }   // the balance moved since: that intent must not be confirmable any more
@@ -114,9 +123,9 @@ if (isset($_GET['stripe_create_pi'])) {
 
     // Claim the charge (invoice row lock, balance read under it, ONE deterministic idempotency key) BEFORE the PaymentIntent is created, so cron autopay,
     // an agent's saved-card charge and the portal see this guest payment and wait.
-    $claim = chargeAttemptClaim($mysqli, $invoice_id, 'guest', 0);
+    $claim = chargeAttemptClaim($mysqli, $invoice_id, 'guest', 0, chargeAttemptProviderLookup($provider));
     if (!$claim['ok']) {
-        exit($claim['message']);
+        guestPiError($claim['message']);
     }
     $balance_to_pay = $claim['balance'];
     $attempt_id = $claim['attempt_id'];

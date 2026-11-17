@@ -1087,7 +1087,7 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
                 }
                 // MSP-DS-166 / MSP-DS-32: then the shared charge claim (invoice row lock, balance read under it, ONE idempotency key for portal/agent/guest/cron).
                 // A live attempt - a portal/agent charge in flight, or a bank debit still 'processing' for days - means this run does not charge.
-                $charge_claim = chargeAttemptClaim($mysqli, $invoice_id, 'cron', $recurring_payment_saved_payment_id);
+                $charge_claim = chargeAttemptClaim($mysqli, $invoice_id, 'cron', $recurring_payment_saved_payment_id, chargeAttemptProviderLookup($provider));   // M3-1: an open guest-page intent is canceled first
                 if (!$charge_claim['ok']) {
                     if ($charge_claim['reason'] === 'in_progress') {
                         mysqli_query($mysqli, "DELETE FROM history WHERE history_invoice_id = $invoice_id AND history_description = 'Cron autopay attempt on " . date('Y-m-d') . "'");   // not charged: leave today's claim for a later run
@@ -1281,6 +1281,21 @@ while ($row = mysqli_fetch_assoc($sql_invalid_recurring_expenses)) {
 // upstream ITFlow project's telemetry.itflow.org whenever config_telemetry was enabled in Admin >
 // Settings > Telemetry. RivetMSP sends nothing anywhere; config_telemetry keeps its schema default (0).
 
+
+// MSP-DS-166 (re-review M3-2): guest pay page intents nobody finished are canceled at Stripe and their attempts closed, so they never block autopay.
+require_once dirname(__DIR__) . '/includes/charge_attempts.php';
+{
+    try {
+        $expire_provider = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payment_provider_id FROM payment_providers WHERE payment_provider_name = 'Stripe' LIMIT 1"));
+        $expire_open = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM invoice_charge_attempts WHERE attempt_status = 'processing' AND attempt_source = 'guest' AND attempt_pi_id <> '' AND attempt_updated_at < NOW() - INTERVAL " . CHARGE_ATTEMPT_GUEST_INTENT_SECONDS . " SECOND"))[0] ?? 0;
+        if ($expire_provider && intval($expire_open) > 0) {
+            require_once dirname(__DIR__) . '/includes/payment_provider_factory.php';
+            chargeAttemptExpireGuest($mysqli, chargeAttemptProviderLookup(getPaymentProvider(intval($expire_provider['payment_provider_id']))));
+        }
+    } catch (\Throwable $e) {
+        error_log('cron guest intent expiry: ' . $e->getMessage());
+    }
+}
 
 // Fetch Updates: once a day, on the first run at or after 03:00 app time (includes/update_check_schedule.php), not on every cron run.
 require_once dirname(__DIR__) . '/includes/update_check_schedule.php';

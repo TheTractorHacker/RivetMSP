@@ -12,7 +12,7 @@ $m->query("INSERT INTO invoices (invoice_id, invoice_status, invoice_amount) VAL
 
 // the guest page's claim, then its PaymentIntent id is stored
 $g = chargeAttemptClaim($m, 1, 'guest', 0);
-$ok('the guest page gets a claim with a deterministic key', $g['ok'] && str_contains($g['key'], 'inv1-10000-pm0-a0'));
+$ok('the guest page gets a claim with a deterministic key', $g['ok'] && str_contains($g['key'], 'inv1-10000-pm0-g-a0'));
 chargeAttemptStoreIntent($m, $g['attempt_id'], 'pi_guest');
 $ok('the open intent is recorded on the attempt', $one("SELECT attempt_pi_id FROM invoice_charge_attempts WHERE attempt_id = " . $g['attempt_id']) === 'pi_guest');
 

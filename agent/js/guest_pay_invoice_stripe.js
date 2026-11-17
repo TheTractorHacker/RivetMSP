@@ -12,14 +12,27 @@ document
 let emailAddress = '';
 // Fetches a payment intent and captures the client secret
 async function initialize() {
-  const { clientSecret } = await fetch("guest_ajax.php?stripe_create_pi=true", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      invoice_id: document.getElementById("invoice_id").value,
-      url_key: document.getElementById("url_key").value
-    }),
-  }).then((r) => r.json());
+  // M3-2: the endpoint answers {clientSecret} or {error}; show the error instead of leaving an empty form
+  let intent = {};
+  try {
+    intent = await fetch("guest_ajax.php?stripe_create_pi=true", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        invoice_id: document.getElementById("invoice_id").value,
+        url_key: document.getElementById("url_key").value
+      }),
+    }).then((r) => r.json());
+  } catch (e) {
+    intent = { error: "The payment form could not be loaded, please reload the page." };
+  }
+  const { clientSecret } = intent;
+  if (!clientSecret) {
+    const box = document.querySelector("#payment-message");
+    box.classList.remove("hidden");
+    box.textContent = intent.error || "The payment form could not be loaded, please reload the page.";
+    return;
+  }
 
   elements = stripe.elements({ clientSecret });
 
