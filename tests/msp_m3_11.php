@@ -1,6 +1,6 @@
 <?php
 // MSP-DS-173 (re-review M3-11): a keyed install with no anchor file must not read ok because a database writer deleted audit_chain_head and
-// audit_chain_last_verify. A fresh install with no rows, or one that has only sealed (not yet verified) rows, is fine because the first seal writes a genesis anchor.
+// audit_chain_last_verify. A fresh install is fine because SETUP writes its genesis anchor (M4-6: never the application, never from database state; see msp_m4_6.php).
 // Run: SCRATCH_TABLES="audit_events platform_settings" bash tests/lib/with_scratch_db.sh php tests/msp_m3_11.php
 require __DIR__ . '/lib/audit_chain_m3.php';
 
@@ -19,8 +19,8 @@ $ok('M3-11 a cut plus the deletions above is broken', $chain()->verify()['status
 // brand-new installs
 $reset();
 $ok('M3-11 a brand-new install with no rows is fine', in_array($chain()->verify()['status'], ['ok', 'empty'], true));
-$reset(); $add(3); $c = $chain(); $c->seal();      // sealed, never verified
-$ok('M3-11 a fresh install that only sealed rows (before its first verify) writes a genesis anchor', is_file($anchor));
+$reset(); $add(3); $c = $chain(); $c->seal();      // setup's genesis, sealed, never verified
+$ok('M3-11 a fresh install (genesis written by setup) that only sealed rows (before its first verify) has an anchor', is_file($anchor));
 $ok('M3-11 ...and verifies ok', $chain()->verify()['status'] === 'ok');
 $c = $chain(); $c->record($c->verify()); $add(2); $chain()->seal();
 $ok('M3-11 ...and keeps verifying as rows are added', $chain()->verify()['status'] === 'ok');

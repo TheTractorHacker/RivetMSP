@@ -1,7 +1,7 @@
 <?php
 // MSP-DS-173 (re-review M3-16): every keyed install upgraded from 26.10.12 got "Audit trail tampering suspected" on its first nightly run, training admins to
 // press Re-anchor. Now: that state (keyed chain, unsigned legacy head, no anchor file) is reported as "anchor file missing" with the one-time step, and
-// the step (reanchor(true), admin password + click, never automatic) verifies the whole chain as keyed, then writes the signed anchor and a MAC'd head.
+// the step (reanchor(true), admin password + click, never automatic, M4-6: and no application path writes a genesis from database state) verifies the whole chain as keyed, then writes the signed anchor and a MAC'd head.
 // Run: SCRATCH_TABLES="audit_events platform_settings recovery_alerts recovery_settings" bash tests/lib/with_scratch_db.sh php tests/msp_m3_16.php
 require __DIR__ . '/lib/audit_chain_m3.php';
 $GLOBALS['config_audit_anchor_file'] = $anchor;

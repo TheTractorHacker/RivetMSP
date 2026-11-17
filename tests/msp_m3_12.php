@@ -6,10 +6,10 @@ require __DIR__ . '/lib/audit_chain_m3.php';
 use RivetMSP\Audit\AuditChain;
 
 $real = $GLOBALS['config_settings_enc_key'];
-$reset(); unset($GLOBALS['config_settings_enc_key']); $add(4); (new AuditChain($db, null, $anchor, 0))->seal();      // sealed before the install had a key
+unset($GLOBALS['config_settings_enc_key']); $reset(); $add(4); (new AuditChain($db, null, $anchor, 0))->seal();      // sealed before the install had a key
 $GLOBALS['config_settings_enc_key'] = $real;
 $set('audit_chain_mode', 'hmac'); $set('audit_chain_key_id', substr(hash('sha256', (string) AuditChain::deriveKey()), 0, 12));
-$add(3); $chain()->seal();                                                                                         // keyed rows follow the plain ones
+$forceGenesis(); $add(3); $chain()->seal();                                                                                         // keyed rows follow the plain ones
 $set('audit_chain_mode', 'plain'); $set('audit_chain_key_id', '');                                                 // what the database still says
 @unlink($anchor);
 $res = $chain()->reanchor();

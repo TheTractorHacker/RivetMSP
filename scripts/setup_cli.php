@@ -321,6 +321,11 @@ foreach (['company_name', 'country', 'address', 'city', 'state', 'zip', 'phone',
 }
 // MSP-DS-172 end
 
+// M4-6: the genesis anchor of the audit hash chain is written by setup only (the application never derives it from database state)
+require_once __DIR__ . '/../setup/setup_functions.php';
+$audit_genesis = setupAuditGenesis($mysqli);
+echo ($audit_genesis['ok'] ? '' : 'WARNING: ') . $audit_genesis['message'] . "\n";
+
 // Create User
 $password_hash = secPasswordHash(trim($user_password_plain));
 $site_encryption_master_key = randomString();

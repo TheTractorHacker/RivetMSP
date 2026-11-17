@@ -7,7 +7,7 @@ use RivetMSP\Audit\AuditChain;
 
 $bad = '/proc/rivetmsp_no_such_dir/audit_chain_head.json';   // cannot be created or written
 $reset(); $add(4);
-$c = new AuditChain($db, null, $bad, 0); $c->seal();
+$chain()->seal();   // M4-6: sealing needs the real anchor (genesis); the bad path is only for the re-anchor
 $before = [$get('audit_chain_mode'), $get('audit_chain_head'), $get('audit_chain_hmac_from')];
 $res = (new AuditChain($db, null, $bad, 0))->reanchor();
 $ok('M3-19 re-anchor fails when the anchor file cannot be written', !$res['ok']);

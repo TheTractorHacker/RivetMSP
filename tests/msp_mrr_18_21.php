@@ -13,7 +13,7 @@ $GLOBALS['config_settings_enc_key'] = bin2hex(random_bytes(32));
 $anchor = sys_get_temp_dir() . '/audit_anchor_' . bin2hex(random_bytes(4)) . '.json';
 $chain = fn (?int $ret = null) => new AuditChain($db, null, $anchor, $ret ?? 0);
 $add = function (int $n) use ($db) { for ($i = 0; $i < $n; $i++) { $db->query("INSERT INTO audit_events (event_type, action, summary) VALUES ('test', 'x', 'row')"); } };
-$reset = function () use ($db, $anchor) { $db->query('DELETE FROM audit_events'); $db->query('DELETE FROM platform_settings'); if (is_dir($anchor)) { @rmdir($anchor); } @unlink($anchor); };
+$reset = function () use ($db, $anchor, $chain) { $db->query('DELETE FROM audit_events'); $db->query('DELETE FROM platform_settings'); if (is_dir($anchor)) { @rmdir($anchor); } @unlink($anchor);; (function ($c) { if (method_exists($c, 'startFreshChain')) { $c->startFreshChain(); } })($chain()); };   // M4-6: setup writes the genesis anchor of a fresh install
 $fresh = function (int $n = 6) use ($reset, $add, $chain) { $reset(); $add($n); $c = $chain(); $c->seal(); $c->record($c->verify()); return $c; };
 $set = fn (string $k, string $v) => PlatformSettings::set($db, $k, $v);
 
@@ -82,7 +82,7 @@ $res = $chain()->reanchor();
 $ok('MRR-21 re-anchor recovers a lost anchor file', $res['ok'] && is_file($anchor) && $chain()->verify()['status'] === 'ok');
 
 // plain chain sealed before the install had a key, then a key arrives
-$reset(); unset($GLOBALS['config_settings_enc_key']); $add(4); $c = new AuditChain($db, null, $anchor, 0); $c->seal(); $c->record($c->verify());
+unset($GLOBALS['config_settings_enc_key']); $reset(); $add(4); $c = new AuditChain($db, null, $anchor, 0); $c->seal(); $c->record($c->verify());
 $ok('MRR-21 setup: a keyless install seals a plain chain', PlatformSettings::get($db, 'audit_chain_mode', '') === 'plain');
 $GLOBALS['config_settings_enc_key'] = bin2hex(random_bytes(32));
 $ok('MRR-21 before: the plain chain on a keyed install is broken', $chain()->verify()['status'] === 'broken');

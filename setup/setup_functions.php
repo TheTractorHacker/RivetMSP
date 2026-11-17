@@ -681,3 +681,24 @@ if (!function_exists('manifestKeyringNote')) {
             . ($state->path ?? '/etc/rivetmsp/keys.json') . ' (owner root, group www-data, mode 0640, directory 0755), or those secrets stay unreadable (see docs/KEY_MANAGEMENT.md).';
     }
 }
+
+// ------------------------------
+// setupAuditGenesis (M4-6)
+// ------------------------------
+if (!function_exists('setupAuditGenesis')) {
+    /**
+     * A brand-new install writes the genesis anchor of its audit hash chain HERE and nowhere else (the application never derives "this install
+     * never sealed a row" from database state). Needs the key in config.php and the schema imported; refuses on an install that has audit rows.
+     *
+     * @return array{ok:bool,message:string}
+     */
+    function setupAuditGenesis(mysqli $mysqli): array {
+        try {
+            require_once dirname(__DIR__) . '/vendor/autoload.php';
+
+            return (new \RivetMSP\Audit\AuditChain($mysqli))->startFreshChain();
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'message' => 'The audit chain anchor could not be written: ' . $e->getMessage()];
+        }
+    }
+}

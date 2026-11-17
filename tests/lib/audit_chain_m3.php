@@ -13,7 +13,7 @@ $GLOBALS['config_settings_enc_key'] = bin2hex(random_bytes(32));
 $anchor = sys_get_temp_dir() . '/audit_anchor_' . bin2hex(random_bytes(4)) . '.json';
 $chain = fn (?int $ret = 0) => new AuditChain($db, null, $anchor, $ret);
 $add = function (int $n) use ($db) { for ($i = 0; $i < $n; $i++) { $db->query("INSERT INTO audit_events (event_type, action, summary) VALUES ('test', 'x', 'row')"); } };
-$reset = function () use ($db, $anchor) { $db->query('DELETE FROM audit_events'); $db->query('DELETE FROM platform_settings'); if (is_dir($anchor)) { @rmdir($anchor); } @unlink($anchor); };
+$reset = function () use ($db, $anchor, $chain) { $db->query('DELETE FROM audit_events'); $db->query('DELETE FROM platform_settings'); if (is_dir($anchor)) { @rmdir($anchor); } @unlink($anchor); (function ($c) { if (method_exists($c, 'startFreshChain')) { $c->startFreshChain(); } })($chain()); };   // M4-6: what setup does on a fresh install: the genesis anchor
 $fresh = function (int $n = 6) use ($reset, $add, $chain) { $reset(); $add($n); $c = $chain(); $c->seal(); $c->record($c->verify()); return $c; };
 $set = fn (string $k, string $v) => PlatformSettings::set($db, $k, $v);
 $get = fn (string $k) => PlatformSettings::get($db, $k, '');
@@ -33,6 +33,13 @@ $backdate = function (int $days) use ($db, $anchor, $chain) {
     file_put_contents($anchor, json_encode($sign($a)));
     $d = json_decode(PlatformSettings::get($db, 'audit_chain_head', ''), true);
     if (is_array($d)) { PlatformSettings::set($db, 'audit_chain_head', json_encode($sign($d))); }
+};
+/** Put a signed genesis anchor in place without the "no rows yet" guard (tests that build odd histories: a plain prefix then keyed rows). */
+$forceGenesis = function () use ($chain) {
+    $c = $chain();
+    $sh = new ReflectionMethod(AuditChain::class, 'signHead'); $sh->setAccessible(true);
+    $wa = new ReflectionMethod(AuditChain::class, 'writeAnchor'); $wa->setAccessible(true);
+    return $wa->invoke($c, $sh->invoke($c, 0, AuditChain::GENESIS, 0));
 };
 /** Rewrite every row's hash UNKEYED (plain SHA-256), relinking prev_hash: what someone without the key does after editing a row. */
 $rehashPlain = function () use ($db) {

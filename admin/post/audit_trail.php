@@ -30,8 +30,9 @@ if (isset($_POST['reanchor_audit_chain']) || $audit_anchor_legacy) {
         flash_alert('Your current password is required (and must be correct) to re-anchor the audit trail.', 'error');
         redirect();
     }
-    $re = (new \RivetMSP\Audit\AuditChain($mysqli))->reanchor($audit_anchor_legacy);
-    logAction('Settings', 'Edit', "$session_name " . ($audit_anchor_legacy ? 'ran the one-time audit trail anchor setup' : 're-anchored the audit trail hash chain') . " (previous: " . $re['previous'] . '; new head ' . ($re['head_id'] !== null ? '#' . $re['head_id'] : 'none') . ', ' . $re['checked'] . ' entries' . ($re['upgraded'] ? ', plain chain upgraded to keyed' : '') . ')' . ($re['ok'] ? '' : ': refused, ' . $re['reason']));
+    $audit_new_chain = isset($_POST['confirm_new_chain']) && (string) $_POST['confirm_new_chain'] === '1';   // M4-6: explicit "start a new chain from here"
+    $re = (new \RivetMSP\Audit\AuditChain($mysqli))->reanchor($audit_anchor_legacy, $audit_new_chain);
+    logAction('Settings', 'Edit', "$session_name " . ($audit_anchor_legacy ? 'ran the one-time audit trail anchor setup' : 're-anchored the audit trail hash chain') . " (previous: " . $re['previous'] . '; new head ' . ($re['head_id'] !== null ? '#' . $re['head_id'] : 'none') . ', ' . $re['checked'] . ' entries' . ($re['upgraded'] ? ', plain chain upgraded to keyed' : '') . (!empty($re['new_chain']) ? ', NEW CHAIN STARTED from the existing unsealed entries (confirmed by the administrator; nothing before this point is vouched for)' : '') . ')' . ($re['ok'] ? '' : ': refused, ' . $re['reason']));
     if ($re['ok']) {
         \RivetMSP\Recovery\RecoveryAlerts::clear($mysqli, 'audit_chain.broken');
         \RivetMSP\Recovery\RecoveryAlerts::clear($mysqli, 'audit_chain.key');

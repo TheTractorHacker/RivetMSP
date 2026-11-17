@@ -36,6 +36,9 @@ final class Nightly
                 }
                 AuditSink::write($db, $sealed, $appRoot);
                 $out['sealed'] = count($sealed);
+                if ($chain->sealBlockedReason() !== null) {
+                    $out['seal_blocked'] = $chain->sealBlockedReason();   // M4-6: no signed anchor file, nothing was sealed
+                }
             }
         } catch (\Throwable $e) {
             $out['sealed'] = 'error: ' . $e->getMessage();

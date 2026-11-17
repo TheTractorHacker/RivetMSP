@@ -19,7 +19,7 @@ use RivetMSP\Platform\PlatformSettings;
  * Anchors (MSP-DS-173): the last verified head is kept twice, in the database (with a keyed mac) and in config/audit_chain_head.json (0600, same
  * mac), so someone who can only write the database cannot cut the newest rows and move the head; a chain that says "plain" on an install with a
  * key is reported as a downgrade. With a key the anchors fail closed: a missing, unreadable or unsigned anchor file is a failure whatever the
- * database says (only an install with no sealed rows is exempt), a cut is accepted only when the retention window explains it, and the layout
+ * database says (only an install with no audit rows at all is exempt; its genesis anchor is written by setup, never by the application: M4-6), a cut is accepted only when the retention window explains it, and the layout
  * (mode and the start of the keyed segment, hmac_from) comes from the SIGNED anchor, never from the database alone. After restoring a database
  * backup, to move a plain chain onto the key, or once after upgrading from 26.10.12, use reanchor() (Administration > Audit trail).
  * The whole state machine is written down in docs/AUDIT_CHAIN.md.
@@ -200,21 +200,54 @@ final class AuditChain
         $this->db->query("DO RELEASE_LOCK('" . self::LOCK . "')");
     }
 
-    /** The key rows are sealed with now: none while the chain is still recorded as plain (it stays consistent until it is re-anchored). */
-    private function sealKey(): ?string
+    private ?string $sealBlocked = null;
+
+    /** Why the last seal() sealed nothing (M4-6), or null. */
+    public function sealBlockedReason(): ?string
     {
-        return PlatformSettings::get($this->db, 'audit_chain_mode', '') === 'plain' ? null : $this->key;
+        return $this->sealBlocked;
     }
 
     /**
-     * Seal every unsealed row newer than the newest sealed one, oldest first.
+     * How rows are sealed now (M4-6, M4-8): on a keyed install the SIGNED anchor file decides, never the database. Rows with audit_id below `from`
+     * are plain, the others keyed. With no valid signed anchor file there is no layout and nothing may be sealed (the application would otherwise
+     * be a keyed-hash oracle for rows a database writer NULLed). An install without a key seals plain.
+     *
+     * @return array{key:?string,from:int}|null null: sealing is blocked ($this->sealBlocked says why)
+     */
+    private function sealLayout(): ?array
+    {
+        $this->sealBlocked = null;
+        if ($this->key === null) {
+            return ['key' => null, 'from' => PHP_INT_MAX];
+        }
+        $file = $this->readAnchor();
+        if ($file === null) {
+            $this->sealBlocked = 'The audit chain anchor file (' . basename($this->anchorFile) . ') is ' . ($this->anchorState === 'absent' ? 'missing' : $this->anchorState) . ', so new audit entries are left unsealed until an administrator sets it up (Administration > Audit trail).';
+
+            return null;
+        }
+        if (!$this->headSigned($file) || $file['mode'] !== 'hmac') {
+            $this->sealBlocked = 'The audit chain anchor file does not carry a valid key signature, so new audit entries are left unsealed (Administration > Audit trail).';
+
+            return null;
+        }
+
+        return ['key' => $this->key, 'from' => $file['from']];
+    }
+
+    /**
+     * Seal every unsealed row newer than the newest sealed one, oldest first. Seals nothing while the signed anchor file is missing (M4-6).
      *
      * @return list<array<string,mixed>> the rows that were sealed (with prev_hash and row_hash), for the sink
      */
     public function seal(int $max = 2000): array
     {
         $this->ensureMode();
-        $sealKey = $this->sealKey();
+        $layout = $this->sealLayout();
+        if ($layout === null) {
+            return [];
+        }
         $res = $this->db->query('SELECT audit_id, row_hash FROM audit_events WHERE row_hash IS NOT NULL ORDER BY audit_id DESC LIMIT 1');
         $last = $res ? $res->fetch_assoc() : null;
         $prev = $last ? (string) $last['row_hash'] : self::GENESIS;
@@ -222,7 +255,7 @@ final class AuditChain
         $res = $this->db->query("SELECT * FROM audit_events WHERE row_hash IS NULL AND audit_id > $after ORDER BY audit_id ASC LIMIT " . max(1, $max));
         $sealed = [];
         while ($res && ($row = $res->fetch_assoc())) {
-            $hash = self::rowHash($row, $prev, $sealKey);
+            $hash = self::rowHash($row, $prev, (int) $row['audit_id'] < $layout['from'] ? null : $layout['key']);
             $this->db->query("UPDATE audit_events SET prev_hash = '$prev', row_hash = '$hash' WHERE audit_id = " . (int) $row['audit_id'] . ' AND row_hash IS NULL');
             $row['prev_hash'] = $prev;
             $row['row_hash'] = $hash;
@@ -233,23 +266,67 @@ final class AuditChain
         return $sealed;
     }
 
-    /**
-     * Record how the chain is keyed the first time it is used, so the verifier can tell "key changed" from "tampered". On an install with a key
-     * the first use also writes the GENESIS anchor (id 0), so a fresh install has a signed anchor before its first event is verified (M3-11:
-     * "a keyed install with no anchor file is broken" must not hit a brand-new install). Never on an install that already has sealed rows.
-     */
+    /** Record how the chain is keyed the first time it is used (mirror only; M4-6: this NEVER writes an anchor, whatever the database says). */
     private function ensureMode(): void
     {
         if (PlatformSettings::get($this->db, 'audit_chain_mode', '') === '') {
             PlatformSettings::set($this->db, 'audit_chain_mode', $this->key !== null ? 'hmac' : 'plain');
             PlatformSettings::set($this->db, 'audit_chain_key_id', $this->keyId());
-            if ($this->key !== null && !$this->hasSealedRows()) {
-                $this->readAnchor();
-                if ($this->anchorState === 'absent') {
-                    $this->writeAnchor($this->signHead(0, self::GENESIS, 0));
-                }
-            }
         }
+    }
+
+    private function hasAnyRows(): bool
+    {
+        $r = $this->db->query('SELECT 1 FROM audit_events LIMIT 1');
+
+        return $r && $r->fetch_row() !== null;
+    }
+
+    /**
+     * M4-6: the genesis anchor of a FRESH install, written by setup (setup/index.php, scripts/setup_cli.php) and nothing else. It refuses unless
+     * the install has a key, no audit row exists and there is no anchor file, so it cannot be used to re-key rows that exist.
+     *
+     * @return array{ok:bool,message:string}
+     */
+    public function startFreshChain(): array
+    {
+        if ($this->key === null) {
+            return ['ok' => true, 'message' => 'No settings key: the audit chain is unkeyed and needs no anchor.'];
+        }
+        if ($this->hasAnyRows()) {
+            return ['ok' => false, 'message' => 'The audit trail already has entries; a new chain can only be started by an administrator on Administration > Audit trail.'];
+        }
+        $this->readAnchor();
+        if ($this->anchorState !== 'absent') {
+            return ['ok' => false, 'message' => 'An anchor file already exists.'];
+        }
+        if (!$this->writeAnchor($this->signHead(0, self::GENESIS, 0))) {
+            return ['ok' => false, 'message' => $this->anchorWriteProblem()];
+        }
+        $this->chownLikeDir();
+        PlatformSettings::set($this->db, 'audit_chain_mode', 'hmac');
+        PlatformSettings::set($this->db, 'audit_chain_key_id', $this->keyId());
+        PlatformSettings::set($this->db, 'audit_chain_hmac_from', '0');
+
+        return ['ok' => true, 'message' => 'Audit chain anchor (genesis) written.'];
+    }
+
+    /** A root-run setup must not leave a 0600 file the web server user cannot read. */
+    private function chownLikeDir(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            $d = dirname($this->anchorFile);
+            @chown($this->anchorFile, (int) @fileowner($d));
+            @chgrp($this->anchorFile, (int) @filegroup($d));
+        }
+    }
+
+    /** Entries the last verify recorded as checked (a database hint only: it makes an emptied audit trail look like history, never the reverse). */
+    private function lastVerifyChecked(): int
+    {
+        $l = json_decode(PlatformSettings::get($this->db, 'audit_chain_last_verify', ''), true);
+
+        return is_array($l) ? (int) ($l['checked'] ?? 0) : 0;
     }
 
     private function hasSealedRows(): bool
@@ -428,8 +505,10 @@ final class AuditChain
             // exemption is an install that has never sealed a row (nothing to protect yet; its first seal writes the genesis anchor).
             if ($file === null) {
                 if ($fileState === 'absent') {
-                    if ($this->hasSealedRows() || $dbHead !== null) {
-                        return $this->failClosed($out, 'The audit chain anchor file (' . basename($this->anchorFile) . ') is missing although this install has a key and sealed audit entries, so the newest entries cannot be shown to be complete. If you just upgraded from an earlier version, use "Set up the anchor (one time)" on Administration > Audit trail; after restoring a backup or moving the install, use Re-anchor. If neither applies, treat this as tampering.', 'anchor_missing');
+                    // M4-6: "never sealed" is not decided from sealed rows or settings: ANY audit row, a database head, or a last-verify record that
+                    // checked entries means the install has history. Only a brand-new install (setup writes its genesis anchor) is exempt.
+                    if ($this->hasAnyRows() || $dbHead !== null || $this->lastVerifyChecked() > 0) {
+                        return $this->failClosed($out, 'The audit chain anchor file (' . basename($this->anchorFile) . ') is missing although this install has a key and ' . ($this->hasSealedRows() ? 'sealed audit entries' : ($this->hasAnyRows() ? 'audit entries that were never sealed' : 'a record of earlier checks')) . ', so the newest entries cannot be shown to be complete. If you just upgraded from an earlier version, use "Set up the anchor (one time)" on Administration > Audit trail; after restoring a backup or moving the install, use Re-anchor. If neither applies, treat this as tampering.', 'anchor_missing');
                     }
                 } else {
                     return $this->failClosed($out, 'The audit chain anchor file (' . basename($this->anchorFile) . ') is ' . ($fileState === 'invalid' ? 'not a valid anchor' : 'unreadable') . ' although this install has a key and a chain that was verified before, so the newest rows cannot be shown to be complete. If you restored a backup or upgraded, use Re-anchor on Administration > Audit trail.');
@@ -538,11 +617,14 @@ final class AuditChain
      * - Without one the plain and keyed segments are detected by walking (M3-12).
      * - $legacy (the one-time step after upgrading from 26.10.12, M3-16): only when there is no anchor file at all, and the whole chain must
      *   verify as keyed.
+     * - M4-6: the one-time step refuses when an unsealed row sits below a sealed one (a row was un-sealed), or when the database head is newer
+     *   than, or disagrees with, the rows. When audit rows exist but none is sealed and no signed anchor vouches for them, nothing is accepted
+     *   unless $newChain (the administrator's explicit "start a new chain from here") is set; the caller logs it as such.
      * - The anchor file is written first; when that fails nothing else changes and the reason names the file (M3-19).
      *
-     * @return array{ok:bool,reason:string,previous:string,head_id:?int,checked:int,upgraded:bool}
+     * @return array{ok:bool,reason:string,previous:string,head_id:?int,checked:int,upgraded:bool,new_chain?:bool}
      */
-    public function reanchor(bool $legacy = false): array
+    public function reanchor(bool $legacy = false, bool $newChain = false): array
     {
         $res = ['ok' => false, 'reason' => '', 'previous' => $this->describeAnchors(), 'head_id' => null, 'checked' => 0, 'upgraded' => false];
         $locked = $this->lock(5);
@@ -577,6 +659,31 @@ final class AuditChain
 
                 return $res;
             }
+            if ($legacy && (int) $out['checked'] > 0) {
+                $r = $this->db->query('SELECT audit_id FROM audit_events WHERE row_hash IS NULL AND audit_id < (SELECT MAX(audit_id) FROM audit_events WHERE row_hash IS NOT NULL) ORDER BY audit_id LIMIT 1');
+                $x = $r ? $r->fetch_row() : null;
+                if ($x) {
+                    $res['reason'] = 'Audit row #' . (int) $x[0] . ' has no hash although newer rows are sealed (a sealed row was changed back to unsealed). The one-time setup will not accept that; if you are sure the entries are genuine, use Re-anchor.';
+
+                    return $res;
+                }
+                $dh = json_decode(PlatformSettings::get($this->db, 'audit_chain_head', ''), true);
+                if (is_array($dh) && isset($dh['id'], $dh['hash'])) {
+                    $r = $this->db->query('SELECT row_hash FROM audit_events WHERE audit_id = ' . (int) $dh['id']);
+                    $x = $r ? $r->fetch_row() : null;
+                    if ((int) $dh['id'] > (int) ($out['head_id'] ?? 0) || ($x && (string) $x[0] !== (string) $dh['hash'])) {
+                        $res['reason'] = 'The head stored in the database (#' . (int) $dh['id'] . ') does not match the entries (they are newer than the sealed entries, or that entry now has a different hash). The one-time setup will not accept that; if you are sure the entries are genuine, use Re-anchor.';
+
+                        return $res;
+                    }
+                }
+            }
+            if ($this->key !== null && (int) $out['checked'] === 0 && $signed === null && !$newChain && $this->hasAnyRows()) {
+                $res['reason'] = 'The audit trail has entries but none of them is sealed, and there is no signed anchor to vouch for them. Nothing was accepted. If these entries really are the start of the chain (for example an install that never had one), repeat this with "Start a new chain from here" confirmed; every entry is then sealed from now on, and who confirmed it is logged.';
+
+                return $res;
+            }
+            $res['new_chain'] = (int) $out['checked'] === 0 && $newChain && $signed === null && $this->hasAnyRows();
             $headId = (int) $out['head_id'];
             $newFrom = 0;
             if ($this->key !== null && $out['checked'] > 0) {

@@ -120,6 +120,8 @@ if ($chain_cols) {
     $sink_path = \RivetMSP\Platform\PlatformSettings::get($mysqli, 'audit_sink_path');
     $sink_syslog = \RivetMSP\Platform\PlatformSettings::bool($mysqli, 'audit_sink_syslog');
     $sink_problem = $sink_path !== '' ? \RivetMSP\Audit\AuditSink::pathProblem($sink_path, dirname(__DIR__)) : null;
+    // M4-6: entries exist but none is sealed (the anchor file is missing, so nothing was sealed): accepting them starts a NEW chain and must be confirmed
+    $chain_unsealed_only = \RivetMSP\Audit\AuditChain::deriveKey() !== null && (mysqli_num_rows(mysqli_query($mysqli, "SELECT 1 FROM audit_events LIMIT 1")) > 0) && (mysqli_num_rows(mysqli_query($mysqli, "SELECT 1 FROM audit_events WHERE row_hash IS NOT NULL LIMIT 1")) === 0);
     $chain_status_label = ['ok' => ['success', 'Intact'], 'broken' => ['danger', 'BROKEN'], 'empty' => ['secondary', 'Nothing sealed yet'], 'key_changed' => ['warning text-dark', 'Key changed'], 'key_unavailable' => ['warning text-dark', 'Key missing']];
 ?>
 <div class="card mb-3" id="audit-integrity">
@@ -143,7 +145,13 @@ if ($chain_cols) {
                 <?php if ($chain_last && ($chain_last['cause'] ?? '') === 'anchor_missing') { ?>
                 <form action="post.php" method="post" class="mt-3 border rounded p-2" data-confirm="Verify the whole chain and write the anchor file now?">
                     <input type="hidden" name="csrf_token" value="<?= $h($_SESSION['csrf_token']) ?>">
-                    <p class="small mb-2"><strong>One-time setup after upgrading.</strong> This install has a keyed audit chain but no anchor file yet. This step verifies every entry with the settings key and then writes the signed anchor file and head. If you did not just upgrade or restore, treat the missing file as a warning.</p>
+                    <p class="small mb-2"><strong>One-time setup after upgrading.</strong> This install has a keyed audit chain but no anchor file yet. This step verifies every entry with the settings key and then writes the signed anchor file and head; it refuses if an entry was changed back to unsealed. New entries stay unsealed until it is done. If you did not just upgrade or restore, treat the missing file as a warning.</p>
+                    <?php if ($chain_unsealed_only) { ?>
+                    <div class="form-check small mb-2">
+                        <input type="checkbox" class="form-check-input" id="cn1" name="confirm_new_chain" value="1">
+                        <label class="form-check-label" for="cn1"><strong>Start a new chain from here.</strong> None of the existing entries is sealed, so nothing vouches for them. Tick this only if you accept them as they are; the entries before today are then not protected against earlier edits. This is logged.</label>
+                    </div>
+                    <?php } ?>
                     <div class="input-group input-group-sm">
                         <input type="password" class="form-control" name="admin_current_password" placeholder="Your current password" autocomplete="current-password" required>
                         <button type="submit" name="setup_audit_anchor" class="btn btn-outline-primary">Set up the anchor (one time)</button>
@@ -155,6 +163,12 @@ if ($chain_cols) {
                     <form action="post.php" method="post" class="mt-2" data-confirm="Accept the entries as they are now as the new baseline?">
                         <input type="hidden" name="csrf_token" value="<?= $h($_SESSION['csrf_token']) ?>">
                         <p class="small text-muted mb-2">Use this after restoring a database backup, when the anchor file was lost, or to move a chain sealed before the install had a settings key onto the keyed chain. Every entry is checked first; an edited or reordered entry is refused. Do not use it to silence an alert you have not explained. It is logged with your name and the previous head. See docs/AUDIT_CHAIN.md.</p>
+                        <?php if ($chain_unsealed_only) { ?>
+                        <div class="form-check small mb-2">
+                            <input type="checkbox" class="form-check-input" id="cn2" name="confirm_new_chain" value="1">
+                            <label class="form-check-label" for="cn2"><strong>Start a new chain from here.</strong> None of the existing entries is sealed, so nothing vouches for them. Tick this only if you accept them as they are; the entries before today are then not protected against earlier edits. This is logged.</label>
+                        </div>
+                        <?php } ?>
                         <div class="input-group input-group-sm">
                             <input type="password" class="form-control" name="admin_current_password" placeholder="Your current password" autocomplete="current-password" required>
                             <button type="submit" name="reanchor_audit_chain" class="btn btn-outline-danger">Re-anchor</button>

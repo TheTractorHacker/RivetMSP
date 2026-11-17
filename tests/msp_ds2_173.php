@@ -14,8 +14,9 @@ $GLOBALS['config_settings_enc_key'] = bin2hex(random_bytes(32));
 $anchor = sys_get_temp_dir() . '/audit_anchor_' . bin2hex(random_bytes(4)) . '.json';
 $chain = fn () => new AuditChain($db, null, $anchor);
 $add = function (int $n) use ($db) { for ($i = 0; $i < $n; $i++) { $db->query("INSERT INTO audit_events (event_type, action, summary) VALUES ('test', 'x', 'row')"); } };
-$reset = function () use ($db, $anchor) { $db->query('DELETE FROM audit_events'); $db->query('DELETE FROM platform_settings'); @unlink($anchor); };
+$reset = function () use ($db, $anchor, $chain) { $db->query('DELETE FROM audit_events'); $db->query('DELETE FROM platform_settings'); @unlink($anchor);; (function ($c) { if (method_exists($c, 'startFreshChain')) { $c->startFreshChain(); } })($chain()); };   // M4-6: setup writes the genesis anchor of a fresh install
 
+(function ($c) { if (method_exists($c, 'startFreshChain')) { $c->startFreshChain(); } })($chain());   // M4-6: what setup does
 $add(6); $c = $chain(); $c->seal();
 $r = $c->verify(); $c->record($r);
 $ok('clean chain verifies and records its head', $r['status'] === 'ok' && $r['checked'] === 6 && is_file($anchor));
@@ -56,7 +57,7 @@ $r = $chain()->verify();
 $ok('mode flipped to plain on an install with a key is reported as a downgrade', $r['status'] === 'broken' && str_contains($r['reason'], 'unkeyed'));
 
 // an install without a key keeps working in plain mode (no key to downgrade from)
-$reset(); unset($GLOBALS['config_settings_enc_key']); $add(3); $c = new AuditChain($db, null, $anchor); $c->seal();
+unset($GLOBALS['config_settings_enc_key']); $reset(); $add(3); $c = new AuditChain($db, null, $anchor); $c->seal();
 $r = $c->verify(); $c->record($r);
 $ok('a keyless install still seals and verifies', $r['status'] === 'ok' && $r['checked'] === 3);
 $ok('a keyless install detects a cut through the anchor file', (function () use ($db, $anchor) { $db->query('DELETE FROM audit_events ORDER BY audit_id DESC LIMIT 1'); $db->query("DELETE FROM platform_settings WHERE setting_key = 'audit_chain_head'"); return (new AuditChain($db, null, $anchor))->verify()['status'] === 'broken'; })());

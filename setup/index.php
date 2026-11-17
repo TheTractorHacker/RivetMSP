@@ -134,7 +134,11 @@ if (isset($_POST['add_database'])) {
             }
         }
 
-        $_SESSION['alert_message'] = "Database successfully added, now lets add a user." . (($key_file_result['status'] ?? '') === 'failed' ? " Note: " . $key_file_result['message'] : '');
+        // M4-6: the genesis anchor of the audit hash chain is written by setup only (the application never derives it from database state)
+        require_once __DIR__ . '/setup_functions.php';
+        $audit_genesis = setupAuditGenesis($mysqli);
+
+        $_SESSION['alert_message'] = "Database successfully added, now lets add a user." . (($key_file_result['status'] ?? '') === 'failed' ? " Note: " . $key_file_result['message'] : '') . ($audit_genesis['ok'] ? '' : ' Note: ' . $audit_genesis['message']);
         header("Location: ?user");
         exit;
 
