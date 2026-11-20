@@ -396,3 +396,10 @@ pre.bg-body-tertiary, pre.bg-body-secondary, pre.bg-light, pre.bg-body { color: 
 /* Empty band under the filters: the bulk-action row has nothing in it until rows are ticked, and the closed "More filters" panel kept its top margin */
 .ticket-filter-bar > .row.mt-1:has(#bulkActionButton[hidden]) { display: none; }
 .ticket-filter-bar > .collapse.mt-3:not(.show) { margin-top: 0 !important; }
+
+/* ---- Pills: the shared 11px chip read as squished next to table text (status / provider / priority pills) ---- */
+.badge { font-size: .8rem; padding: .4em .85em; line-height: 1.25; }
+.table .badge, .card .badge.rounded-pill { font-size: .8rem; padding: .4em .85em; }
+.btn .badge, .nav-link .badge, .dropdown-item .badge { font-size: .72rem; padding: .3em .6em; }
+.navbar-vertical .badge, .app-sidebar .badge { font-size: .72rem; padding: .3em .6em; }
+.badge.text-bg-info, .badge.bg-info { color: #06222f !important; }
