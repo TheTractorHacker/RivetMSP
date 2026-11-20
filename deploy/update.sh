@@ -83,7 +83,7 @@ Options:
 Steps performed, in order: pre-update backup (or confirmed skip) -> git
 pull via scripts/update_cli.php --update (run as that file's owner) ->
 database migrations via scripts/update_cli.php --update_db -> composer
-install (if composer.json exists) -> php8.4-fpm reload.
+install (if composer.json exists) -> PHP-FPM reload (php<full version>-fpm, else php<major.minor>-fpm).
 EOF
 }
 
@@ -263,13 +263,14 @@ reload_php_fpm() {
     # files get picked up without this step — but reloading here means
     # updated code is guaranteed live immediately after this script exits,
     # rather than after opcache's next timestamp-revalidation window.
-    if ! service_is_active php8.4-fpm; then
-        warn "php8.4-fpm is not active; skipping reload (nothing to reload)."
-        return 0
+    local unit
+    if ! unit="$(php_fpm_unit)"; then
+        # Fail loudly: skipping here is how opcache kept serving the old code after an update on a source-built PHP.
+        die "No active PHP-FPM unit found (tried php<full version>-fpm, then php<major.minor>-fpm). The code and database are updated, but PHP is still serving old bytecode: reload the unit by hand (systemctl reload php8.5.12-fpm) and fix the unit name this script looks for."
     fi
-    announce "Reloading php8.4-fpm to drop any opcache-cached pre-update bytecode."
-    systemctl reload php8.4-fpm
-    success "php8.4-fpm reloaded."
+    announce "Reloading ${unit} to drop any opcache-cached pre-update bytecode."
+    systemctl reload "${unit}" || die "systemctl reload ${unit} failed: PHP is still serving old bytecode."
+    success "${unit} reloaded."
 }
 
 main() {

@@ -598,6 +598,7 @@ if ($has_fav_assets || $has_fav_creds):
                     $credential_name       = nullable_htmlentities($row['credential_name']);
                     $credential_description= nullable_htmlentities($row['credential_description']);
                     $credential_uri        = sanitize_url($row['credential_uri']);
+                    vaultGate('client overview');
                     $credential_username_raw = decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username');
                     $credential_password_raw = decryptCredentialEntry($row['credential_password'], $row['credential_id'] ?? null, 'password');
                     $vault_locked           = ($credential_username_raw === null || $credential_password_raw === null);

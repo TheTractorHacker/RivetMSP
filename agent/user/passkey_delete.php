@@ -8,6 +8,11 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/functions.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/session_init.php';
 ob_end_clean();
 
+// MSP-WEB-3: the session must still be live (idle timeout, revocation), exactly as on every other page.
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/security_policy.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/security_sessions.php';
+if (!empty($_SESSION['logged'])) { secSessionEnforce($mysqli); }
+
 header('Content-Type: application/json');
 
 if (empty($_SESSION['logged']) || empty($_SESSION['user_id'])) {
@@ -25,6 +30,11 @@ if (!hash_equals($_SESSION['csrf_token'] ?? '', $csrf)) {
 }
 
 $uid = intval($_SESSION['user_id']);
+
+if (!secReauthPassword($mysqli, $uid, (string) ($body['current_password'] ?? ''))) {
+    echo json_encode(['ok' => false, 'error' => 'Current password is incorrect']);
+    exit;
+}
 
 $pk = mysqli_fetch_assoc(mysqli_query($mysqli,
     "SELECT passkey_name FROM user_passkeys WHERE passkey_id = $passkey_id AND passkey_user_id = $uid LIMIT 1"

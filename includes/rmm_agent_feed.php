@@ -988,7 +988,8 @@ final class LinuxInstall
         // RivetCore's snippet ends with the install-linux.sh call; whatever follows the token and CA arguments there (the Mesh agent flags) is passed on to `install`.
         $mesh = preg_match('/^\.\/install-linux\.sh --server \S+ --token-file "\$T"(?: --ca "\$C")?(.*)$/m', $coreSnippet, $m) === 1 ? rtrim($m[1]) : '';
         $install = $kind === 'deb'
-            ? "apt-get install -y \"\$D/agent.deb\"\n"
+            ? "chmod 711 \"\$D\"; chmod 644 \"\$D/agent.deb\"   # umask 077 made both unreadable to apt's _apt sandbox user (\"Download is performed unsandboxed as root\"); the token file stays 0600\n"
+            . "apt-get install -y \"\$D/agent.deb\"\n"
             : "if command -v dnf >/dev/null 2>&1; then dnf install -y \"\$D/agent.rpm\"; elif command -v yum >/dev/null 2>&1; then yum install -y \"\$D/agent.rpm\"; else rpm -U \"\$D/agent.rpm\"; fi\n";
 
         return "# RivetIT agent install for client: $label (" . ($kind === 'deb' ? 'Debian / Ubuntu package' : 'RPM package') . '). Run as root. Release ' . (string) ($record['version'] ?? '') . ": the package is downloaded from the release and its SHA-256 is checked before it is installed.\n"

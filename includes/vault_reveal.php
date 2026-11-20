@@ -79,6 +79,61 @@ if (!function_exists('vaultReveal')) {
     }
 
     /**
+     * MSP-WEB-1: every OTHER place that puts decrypted credential values in front of a user (CSV export, client PDF, global search, asset and
+     * contact pages, the credential edit form, share links, the TOTP code) used to skip the reveal limit and the step-up. Each one now calls this
+     * once per request, BEFORE it decrypts. It
+     *   - refuses when the user already used up the reveal limit (and tells the administrators, like vaultReveal),
+     *   - for $bulk disclosures (an export or a PDF of many credentials) also needs a recent password entry (the step-up from the reveal button),
+     *   - records one "Reveal" activity line that names the path and how many values it may disclose, so the limit sees it.
+     * $countsAsReveal false (the TOTP getter, which already logs its own entry and is called on hover) only checks the limit.
+     * Returns null when allowed, otherwise a short sentence for the person.
+     */
+    function vaultDisclosureCheck(mysqli $mysqli, string $path, int $values = 1, bool $bulk = false, bool $countsAsReveal = true): ?string
+    {
+        static $done = [];
+        global $session_user_id, $session_name, $session_is_admin;
+        $userId = (int) ($session_user_id ?? 0);
+        if ($userId <= 0) {
+            return 'Sign in again.';
+        }
+        if (isset($done[$path])) {
+            return null;   // one decision per path and request, however many rows the loop decrypts
+        }
+        $limit = secSettingInt('vault_reveal_limit', $mysqli);
+        if ($limit > 0 && vaultRevealCount($mysqli, $userId) >= $limit) {
+            if (function_exists('logAction')) {
+                logAction('Credential', 'Reveal Limit', ($session_name ?? 'A user') . " exceeded $limit credential reveals in 10 minutes and was blocked ($path)", 0, 0);
+            }
+            vaultNotifyRateLimited($mysqli, $userId, (string) ($session_name ?? ''), $limit);
+
+            return "You reached the credential reveal limit ($limit in 10 minutes). Try again in a few minutes.";
+        }
+        if ($bulk) {
+            $own = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_auth_method FROM users WHERE user_id = $userId"));
+            $hasPassword = strtolower((string) ($own['user_auth_method'] ?? 'local')) === 'local';
+            if (vaultStepUpDue($_SESSION ?? [], secSettingInt('vault_stepup_minutes', $mysqli), $hasPassword)) {
+                return 'Exporting or printing credentials needs your password again: reveal any credential on the Credentials page (it asks for your password), then repeat this.';
+            }
+        }
+        $done[$path] = true;
+        if ($countsAsReveal && function_exists('logAction')) {
+            logAction('Credential', 'Reveal', ($session_name ?? 'A user') . " viewed up to $values credential value(s) through $path", 0, 0);
+        }
+
+        return null;
+    }
+
+    /** vaultDisclosureCheck() for a page or handler: on a refusal, stop with the sentence (JSON-safe plain text for ajax, an access-denied page for a document). */
+    function vaultDisclosureRequire(mysqli $mysqli, string $path, int $values = 1, bool $bulk = false, bool $countsAsReveal = true): void
+    {
+        $why = vaultDisclosureCheck($mysqli, $path, $values, $bulk, $countsAsReveal);
+        if ($why !== null) {
+            denyAccess($why);
+            exit;
+        }
+    }
+
+    /**
      * Reveal or copy one field of one credential.
      *
      * @param array $session  the session array ($_SESSION); vault_stepup_at / vault_stepup_fail* are read and written here

@@ -25,7 +25,7 @@ $sql_assets = mysqli_query(
     "SELECT * FROM service_assets
     LEFT JOIN assets ON service_assets.asset_id = assets.asset_id
     LEFT JOIN asset_interfaces ON interface_asset_id = assets.asset_id AND interface_primary = 1
-    LEFT JOIN credentials ON service_assets.asset_id = credentials.credential_asset_id
+    LEFT JOIN credentials ON service_assets.asset_id = credentials.credential_asset_id AND credentials.credential_client_id = assets.asset_client_id
     LEFT JOIN networks ON interface_network_id = networks.network_id
     LEFT JOIN locations ON assets.asset_location_id = locations.location_id
     WHERE service_id = $service_id"

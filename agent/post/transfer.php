@@ -54,8 +54,15 @@ if (isset($_POST['edit_transfer'])) {
     require_once 'transfer_model.php';
 
     $transfer_id = intval($_POST['transfer_id']);
-    $expense_id = intval($_POST['expense_id']);
-    $revenue_id = intval($_POST['revenue_id']);
+
+    // MSP-INJ-5: the expense and revenue to rewrite are the ones stored on THIS transfer, never ids from the form (a POSTed expense_id rewrote any client's expense).
+    $transfer_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT transfer_expense_id, transfer_revenue_id FROM transfers WHERE transfer_id = $transfer_id"));
+    if (!$transfer_row) {
+        flash_alert('Transfer not found', 'error');
+        redirect();
+    }
+    $expense_id = intval($transfer_row['transfer_expense_id']);
+    $revenue_id = intval($transfer_row['transfer_revenue_id']);
 
     mysqli_query($mysqli,"UPDATE expenses SET expense_date = '$date', expense_amount = $amount, expense_account_id = $account_from WHERE expense_id = $expense_id");
 

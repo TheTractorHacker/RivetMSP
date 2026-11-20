@@ -364,6 +364,22 @@ if (!function_exists('secSetting')) {
         ];
     }
 
+    /**
+     * MSP-WEB-3: re-confirm the signed-in user's own password before a change that can take the account over (email, two-factor, passkeys).
+     * A stolen session cookie alone must not be enough. Failures are audited and counted like a failed sign-in.
+     */
+    function secReauthPassword(mysqli $mysqli, int $userId, string $password): bool
+    {
+        $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $userId AND user_type = 1 AND user_status = 1 AND user_archived_at IS NULL LIMIT 1"));
+        $ok = $row && $password !== '' && password_verify($password, (string) $row['user_password']);
+        if (!$ok) {
+            mysqli_query($mysqli, "UPDATE users SET user_failed_login_count = user_failed_login_count + 1, user_failed_login_at = UTC_TIMESTAMP() WHERE user_id = $userId");
+            secAudit('auth.reauth_failed', $userId, 'user', $userId, 'failure', 'Wrong current password on a security change');
+        }
+
+        return $ok;
+    }
+
     /** May a remember-me cookie stand in for the second factor for this user? Never for admins or vault users unless the setting allows it. */
     function secRememberMeMaySkipMfa(mysqli $mysqli, int $userId): bool
     {

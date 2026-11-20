@@ -59,6 +59,19 @@ function invoiceStatusAfterPayment($invoice_amount, $total_paid): string
 }
 
 /**
+ * MSP-INJ-26(a): the amount to charge is what is STILL OWED (invoice total minus payments already recorded), never the full invoice total. A Partial invoice that was
+ * set back to Sent used to be charged in full. Rounded to cents; zero or less means there is nothing to charge.
+ */
+function invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount): float
+{
+    $invoice_id = intval($invoice_id);
+    $paid = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COALESCE(SUM(payment_amount), 0) FROM payments WHERE payment_invoice_id = $invoice_id"))[0] ?? 0;
+
+    // whole cents, so rounding can never leave 0.01 behind or ask for 0.01 too much
+    return (moneyToCents($invoice_amount) - moneyToCents($paid)) / 100;
+}
+
+/**
  * Whether a payment of $amount fits within the remaining balance (cents comparison).
  */
 function paymentFitsBalance($amount, $balance): bool

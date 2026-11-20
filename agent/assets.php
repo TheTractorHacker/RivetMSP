@@ -651,7 +651,7 @@ $can_rmm_remote_connect = lookupUserPermission('module_rmm_remote_connect') >= 1
                             $location_name_display = $location_name;
                         }
 
-                        $sql_credentials = mysqli_query($mysqli, "SELECT * FROM credentials WHERE credential_asset_id = $asset_id");
+                        $sql_credentials = mysqli_query($mysqli, "SELECT * FROM credentials WHERE credential_asset_id = $asset_id AND credential_client_id = (SELECT asset_client_id FROM assets WHERE asset_id = $asset_id)");
                         $credential_count = mysqli_num_rows($sql_credentials);
 
                         // Tags

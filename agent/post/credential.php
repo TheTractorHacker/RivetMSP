@@ -583,6 +583,7 @@ if (isset($_POST['export_credentials_csv'])) {
 
         //output each row of the data, format line as csv and write to file pointer
         while($row = mysqli_fetch_assoc($sql)){
+            vaultGate('credential export', max(1, mysqli_num_rows($sql)), true);
             $credential_username = decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username');
             $credential_password = decryptCredentialEntry($row['credential_password'], $row['credential_id'] ?? null, 'password');
             $lineData = array($row['credential_name'], $row['credential_description'], $credential_username, $credential_password, decryptOtpSecret($row['credential_otp_secret'] ?? '', $row['credential_id'] ?? null), $row['credential_uri']);

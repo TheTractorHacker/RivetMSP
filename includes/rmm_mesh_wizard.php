@@ -139,7 +139,7 @@ function rivetRmmMeshWizardPage(array $cfg, ?array $view, array $steps, array $o
         . '<li>Copy the key and paste it below. It is stored encrypted and is never shown again.</li></ol>'
         . '<form action="post.php" method="post" class="row g-3" autocomplete="off" id="wiz-form-1">' . $post()
         . '<div class="col-12"><div class="form-check form-switch"><input type="checkbox" class="form-check-input" id="wz_on" name="mesh_enabled" value="1"' . ($enabled ? ' checked' : '') . ' aria-describedby="wz_on_h"><label class="form-check-label" for="wz_on">Turn on remote access</label></div>'
-        . '<div class="form-text" id="wz_on_h">When off, the Remote buttons stay disabled even if everything else is filled in.</div></div>'
+        . '<div class="form-text" id="wz_on_h">' . ((int) ($cfg['mesh_enabled'] ?? 0) === 1 ? 'When off, the Remote buttons stay disabled even if everything else is filled in.' : 'Remote access is off right now. Saving with this switch on turns it on; until then the Remote buttons stay disabled.') . '</div></div>'
         . '<div class="col-lg-6"><label class="form-label" for="wz_url">MeshCentral address</label><input type="url" class="form-control" id="wz_url" name="mesh_url" maxlength="500" value="' . $e($old['url'] ?? ($cfg['mesh_url'] ?? '')) . '" placeholder="https://mesh.example.com" aria-describedby="wz_url_h">'
         . '<div class="form-text" id="wz_url_h">The web address you use to sign in to MeshCentral. It must start with https:// and have no user name or extra path.</div></div>'
         . '<div class="col-lg-6"><label class="form-label" for="wz_dom">Domain <span class="text-muted">(usually empty)</span></label><input class="form-control" id="wz_dom" name="mesh_domain" maxlength="100" value="' . $e($old['domain'] ?? ($cfg['mesh_domain'] ?? '')) . '" placeholder="(default)" aria-describedby="wz_dom_h">'
@@ -157,7 +157,7 @@ function rivetRmmMeshWizardPage(array $cfg, ?array $view, array $steps, array $o
         . '<li>Copy the download address MeshCentral shows (it looks like <code>https://mesh.example.com/meshagents?id=4&amp;meshid=...</code>) and paste the <strong>whole address</strong> below. RivetMSP picks out the group by itself.</li></ol>'
         . ($view === null ? '<div class="alert alert-secondary py-2 mb-0">Not available yet: run the database update (Administration, Updates), then reload this page.</div>'
         : '<form action="post.php" method="post" class="row g-3" autocomplete="off" id="wiz-form-2">' . $post()
-        . '<div class="col-lg-9"><label class="form-label" for="mc_group">Device group address or id <span class="badge bg-warning text-dark">secret</span></label>'
+        . '<div class="col-lg-8"><label class="form-label" for="mc_group">Device group address or id <span class="badge bg-warning text-dark">secret</span></label>'
         . '<input type="password" class="form-control font-monospace" id="mc_group" name="mesh_group_id" maxlength="2000" autocomplete="off" spellcheck="false" value="' . $e($group) . '" aria-describedby="mc_group_h">'
         . '<div class="form-check mt-1"><input type="checkbox" class="form-check-input" id="mc_group_show" data-rmm-mesh-show="mc_group"><label class="form-check-label small" for="mc_group_show">Show it</label></div>'
         . '<div class="form-text" id="mc_group_h">The download address, or just its 64-character group id. Treat it like an invitation key: anyone who has it and can reach your server can add a device to the group.</div></div>'
@@ -170,7 +170,7 @@ function rivetRmmMeshWizardPage(array $cfg, ?array $view, array $steps, array $o
         . '<strong>Private authority or self-signed certificate:</strong> press <em>Read it from the server</em>, compare the fingerprint with the one MeshCentral shows, then save it as the pin.</p>'
         . ($view === null ? '<div class="alert alert-secondary py-2 mb-0">Not available yet: run the database update, then reload.</div>'
         : '<form action="post.php" method="post" class="row g-3" autocomplete="off" id="wiz-form-3">' . $post()
-        . '<div class="col-lg-9"><label class="form-label" for="mc_pin">Server certificate pin <span class="text-muted">(optional)</span></label>'
+        . '<div class="col-lg-8"><label class="form-label" for="mc_pin">Server certificate pin <span class="text-muted">(optional)</span></label>'
         . '<div class="input-group"><input type="text" class="form-control font-monospace" id="mc_pin" name="mesh_server_cert_pin" maxlength="300" autocomplete="off" spellcheck="false" value="' . $e($pin) . '" placeholder="empty = trust public authorities" aria-describedby="mc_pin_h">'
         . '<button type="submit" form="wiz-probe" class="btn btn-outline-secondary" formnovalidate' . ($urlSaved ? '' : ' disabled aria-disabled="true"') . '><i class="fas fa-search me-1" aria-hidden="true"></i>Read it from the server</button></div>'
         . '<div class="form-text" id="mc_pin_h">A fingerprint (96 or 64 hexadecimal characters) of your server\'s certificate; the button only proposes one and never saves it.' . ($urlSaved ? '' : ' Save step 1 first.') . '</div></div>'

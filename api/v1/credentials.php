@@ -145,6 +145,25 @@ if ($cred_client_id > 0 && !api_client_scope_ok($cred_client_id)) {
     api_error(403, 'Access denied');
 }
 
+// MSP-WEB-1 (API): the same per-user reveal limit and audit line as the web vault (includes/vault_reveal.php). Web reveals and API reveals
+// share one count (both are 'Credential' Reveal log lines), so the API is not a way around the web limit.
+require_once $DOCUMENT_ROOT . '/includes/security_policy.php';
+require_once $DOCUMENT_ROOT . '/includes/vault_reveal.php';
+$_rv_name = (string) (mysqli_fetch_row(mysqli_query($mysqli, 'SELECT user_name FROM users WHERE user_id = ' . (int) $api_user_id . ' LIMIT 1'))[0] ?? 'API user');
+$_rv_limit = secSettingInt('vault_reveal_limit', $mysqli);
+if ($_rv_limit > 0 && vaultRevealCount($mysqli, (int) $api_user_id) >= $_rv_limit) {
+    $_rv_already = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM logs WHERE log_type = 'Credential' AND log_action = 'Reveal Limit' AND log_user_id = " . (int) $api_user_id . ' AND log_created_at > (NOW() - INTERVAL ' . VAULT_REVEAL_WINDOW_SECONDS . ' SECOND)'));
+    if ((int) ($_rv_already[0] ?? 0) === 0) {
+        $GLOBALS['session_user_id'] = (int) $api_user_id;
+        logAction('Credential', 'Reveal Limit', "$_rv_name exceeded $_rv_limit credential reveals in 10 minutes and was blocked (API)", $cred_client_id, $id);
+        vaultNotifyRateLimited($mysqli, (int) $api_user_id, $_rv_name, $_rv_limit);
+    }
+    header('Retry-After: ' . VAULT_REVEAL_WINDOW_SECONDS);
+    api_error(429, 'Credential reveal limit reached. Try again later.');
+}
+$GLOBALS['session_user_id'] = (int) $api_user_id;
+logAction('Credential', 'Reveal', "$_rv_name revealed credential " . $row['credential_name'] . ' through the API', $cred_client_id, $id);
+
 api_response(200, [
     'id'         => intval($row['credential_id']),
     'name'       => $row['credential_name'],

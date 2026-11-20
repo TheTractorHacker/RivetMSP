@@ -89,6 +89,7 @@ if (isset($_POST['export_vendor_contacts_csv'])) {
     enforceUserPermission('module_client');
 
     $client_id = intval($_POST['client_id']);
+    enforceClientAccess($client_id);   // MSP-INJ-8: the POSTed client was never checked
 
     //get records from database
     $sql = mysqli_query($mysqli,"SELECT client_name FROM clients WHERE client_id = $client_id");
@@ -142,6 +143,7 @@ if (isset($_POST["import_vendor_contacts_csv"])) {
     enforceUserPermission('module_client', 2);
 
     $client_id = intval($_POST['client_id']);
+    enforceClientAccess($client_id);   // MSP-INJ-8: the POSTed client was never checked
     $error = false;
 
     if (!empty($_FILES["file"]["tmp_name"])) {

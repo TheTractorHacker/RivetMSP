@@ -9,6 +9,11 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/session_init.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/webauthn.php';
 ob_end_clean();
 
+// MSP-WEB-3: the session must still be live (idle timeout, revocation), exactly as on every other page.
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/security_policy.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/security_sessions.php';
+if (!empty($_SESSION['logged'])) { secSessionEnforce($mysqli); }
+
 header('Content-Type: application/json');
 
 // Auth check — return JSON instead of redirect for AJAX

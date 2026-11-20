@@ -61,7 +61,7 @@ $sql_replies = mysqli_query($mysqli, "SELECT tr.ticket_reply, tr.ticket_reply_ty
     FROM ticket_replies tr
     LEFT JOIN users u ON tr.ticket_reply_by = u.user_id
     LEFT JOIN contacts co3 ON tr.ticket_reply_by = co3.contact_id
-    WHERE tr.ticket_reply_ticket_id = $ticket_id AND tr.ticket_reply_archived_at IS NULL
+    WHERE tr.ticket_reply_ticket_id = $ticket_id AND tr.ticket_reply_archived_at IS NULL AND tr.ticket_reply_type IN ('Public', 'Client')
     ORDER BY tr.ticket_reply_id ASC LIMIT 10");
 
 ?><!DOCTYPE html>

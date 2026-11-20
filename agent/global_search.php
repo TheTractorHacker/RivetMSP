@@ -703,6 +703,7 @@ if (isset($_GET['query'])) {
                                 $credential_name = nullable_htmlentities($row['credential_name']);
                                 $credential_description = nullable_htmlentities($row['credential_description']);
                                 $credential_client_id = intval($row['credential_client_id']);
+                                vaultGate('global search');
                                 $credential_username = nullable_htmlentities(decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username'));
                                 $credential_password = nullable_htmlentities(decryptCredentialEntry($row['credential_password'], $row['credential_id'] ?? null, 'password'));
                                 $client_id = intval($row['client_id']);

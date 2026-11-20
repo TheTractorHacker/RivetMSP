@@ -751,7 +751,11 @@ if (isset($_GET['add_payment_by_provider'])) {
     require_once __DIR__ . '/../plugins/stripe-php/init.php';
     $stripe = new \Stripe\StripeClient($private_key);
 
-    $balance_to_pay = round($invoice_amount, 2);
+    $balance_to_pay = invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount);   // MSP-INJ-26(a): the balance, not the invoice total
+    if ($balance_to_pay <= 0) {
+        flash_alert('Nothing left to charge on this invoice', 'error');
+        redirect();
+    }
     $pi_description = "RivetMSP: $client_name payment of $invoice_currency_code $balance_to_pay for $invoice_prefix$invoice_number";
 
     // Create a payment intent

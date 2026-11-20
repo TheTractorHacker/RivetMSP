@@ -34,8 +34,11 @@ if (!$link_id || !in_array($action, $valid_actions, true)) {
 
 // Reboot / command are hands-on device control — gate with the remote-connect
 // permission. Patch scan/install are maintenance — gate with RMM write access.
+// MSP-INJ-3: Core's matrix for the same abilities: reboot = rmm.job.reboot (module_rmm_scripts >= 2), free-form run_command = rmm.job.run_script
+// (module_rmm_scripts >= 3). The remote-connect grant alone (Read) only opens a session; it must not also let a user run commands.
 if ($action === 'reboot' || $action === 'run_command') {
     enforceUserPermission('module_rmm_remote_connect');
+    enforceUserPermission('module_rmm_scripts', $action === 'run_command' ? 3 : 2);
 } else {
     enforceUserPermission('module_rmm', 2);
 }

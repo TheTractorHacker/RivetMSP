@@ -92,12 +92,16 @@ if (isset($_GET['project_id'])) {
     $tab_title = "{$row['project_prefix']}{$row['project_number']}";
     $page_title = $row['project_name'];
 
+    // MSP-INJ-6: a client-restricted user sees only the project's tickets of clients they may access (plus client-0 internal tickets)
+    $project_ticket_scope = $access_permission_query !== '' ? "AND (ticket_client_id = 0 OR ticket_client_id IN ($client_access_string))" : '';
+
     // Get Tickets
     $sql_tickets = mysqli_query($mysqli, "SELECT * FROM tickets
         LEFT JOIN ticket_statuses ON ticket_status = ticket_status_id
         LEFT JOIN clients ON ticket_client_id = client_id
         LEFT JOIN users ON ticket_assigned_to = user_id
         WHERE ticket_project_id = $project_id
+        $project_ticket_scope
         ORDER BY $sort $order"
     );
     $ticket_count = mysqli_num_rows($sql_tickets);

@@ -835,7 +835,12 @@ if (isset($_POST['link_asset_to_credential'])) {
     // to a client this user can access (the check above only covers the
     // credential's client).
     $asset_name = sanitizeInput(getFieldById('assets', $asset_id, 'asset_name'));
-    enforceClientAccess(intval(getFieldById('assets', $asset_id, 'asset_client_id')));
+    $asset_client_id = intval(getFieldById('assets', $asset_id, 'asset_client_id'));
+    enforceClientAccess($asset_client_id);
+    if ($asset_client_id !== $client_id) {
+        flash_alert('A credential can only be linked to an asset of the same client.', 'error');
+        redirect();
+    }
 
     mysqli_query($mysqli,"UPDATE credentials SET credential_asset_id = $asset_id WHERE credential_id = $credential_id");
 

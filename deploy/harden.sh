@@ -244,7 +244,8 @@ detect_os
 
 PHP_VER="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || true)"
 [[ -n "$PHP_VER" ]] || PHP_VER="8.4"   # fall back to this box's known version if detection fails
-PHP_FPM_SVC="php${PHP_VER}-fpm"
+PHP_FPM_SVC="$(php_fpm_unit 2>/dev/null || true)"   # php<full version>-fpm on a source build
+[[ -n "$PHP_FPM_SVC" ]] || PHP_FPM_SVC="php${PHP_VER}-fpm"
 PHP_FPM_BIN="php-fpm${PHP_VER}"
 PHP_FPM_CONF_DIR="/etc/php/${PHP_VER}/fpm/conf.d"
 PHP_SOCK_DEFAULT="/run/php/php${PHP_VER}-fpm.sock"

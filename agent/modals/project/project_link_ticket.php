@@ -3,13 +3,12 @@
 require_once '../../../includes/modal_header.php';
 
 $project_id = intval($_GET['project_id']);
-$client_id = intval($_GET['client_id'] ?? 0);
-
+// MSP-INJ-6: the client is the one STORED on the project (not ?client_id=), and only that client's tickets are offered, exactly what post/project.php accepts
+$client_id = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT project_client_id FROM projects WHERE project_id = $project_id LIMIT 1"))[0] ?? 0);
 if ($client_id) {
-    $client_ticket_select_query = "AND ticket_client_id = $client_id"; // Used when linking a ticket to the project
-} else {
-    $client_ticket_select_query = '';
+    enforceClientAccess($client_id);
 }
+$client_ticket_select_query = "AND ticket_client_id = $client_id"; // Used when linking a ticket to the project
 
 $sql = mysqli_query($mysqli, "SELECT * FROM projects WHERE project_id = $project_id LIMIT 1");
 

@@ -275,6 +275,14 @@ if (!empty($totp_secret)) {
     }
 }
 
+// MSP-INJ-16: the sign-in MFA policy applies here too. An account that must have two-factor but has not enrolled (and is out of its grace period) must not
+// get an API token by password alone: the web app refuses it the same way (secMfaGate). Enrolled accounts already passed the TOTP step above.
+$mfa_state = secMfaEnforcementState($mysqli, $uid);
+if ($mfa_state['applies'] && !$mfa_state['enrolled'] && !$mfa_state['in_grace']) {
+    logAction('Login', 'Failed', "{$user['user_name']} was refused a mobile API token: two-factor is required but not set up (MFA Failed)");
+    api_error(403, 'Two-factor authentication is required for your account. Set it up in the web app (Account > Security), then sign in again.');
+}
+
 // A stored hash that is out of date (bcrypt, or weaker Argon2 parameters) is replaced now that the password is known to be right.
 secPasswordRehashIfNeeded($mysqli, $uid, $password, (string) $user['user_password']);
 secUserTotpRewrap($mysqli, $uid, $user['user_token'] ?? null);

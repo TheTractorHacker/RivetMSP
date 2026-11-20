@@ -74,10 +74,11 @@ $remember_token_count = mysqli_num_rows($sql_remember_tokens);
             <?php if ($sec_mfa_required) { ?>
                 <span class="badge text-bg-secondary" title="Two-factor authentication is required for your account">Required</span>
             <?php } else { ?>
-            <a href="post.php?disable_mfa&csrf_token=<?= $_SESSION['csrf_token'] ?>"
-               class="btn btn-outline-danger btn-sm confirm-link">
-                <i class="fas fa-unlock me-1"></i>Disable
-            </a>
+            <form action="post.php" method="post" class="d-flex align-items-center gap-2 mb-0" autocomplete="off">
+                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                <input type="password" class="form-control form-control-sm" name="current_password" placeholder="Current password" autocomplete="current-password" aria-label="Current password" required style="width:12rem">
+                <button type="submit" name="disable_mfa" value="1" class="btn btn-outline-danger btn-sm"><i class="fas fa-unlock me-1"></i>Disable</button>
+            </form>
             <?php } ?>
         <?php } ?>
     </div>
@@ -187,6 +188,10 @@ $remember_token_count = mysqli_num_rows($sql_remember_tokens);
             <i class="fas fa-plus me-1"></i>Add Passkey
         </button>
     </div>
+    <div class="card-body border-bottom py-2">
+        <label class="form-label small mb-1" for="passkeyReauth">Your current password <span class="text-muted">(needed to remove a passkey)</span></label>
+        <input type="password" class="form-control form-control-sm" id="passkeyReauth" autocomplete="current-password" style="max-width:20rem">
+    </div>
     <div class="card-body p-0">
         <table class="table table-sm table-borderless table-hover mb-0" id="passkey-table">
             <thead class="text-muted small">
@@ -246,6 +251,10 @@ $remember_token_count = mysqli_num_rows($sql_remember_tokens);
                         <input type="text" class="form-control" id="passkeyNameInput"
                                placeholder='e.g. "MacBook Touch ID", "iPhone Face ID"' maxlength="200">
                     </div>
+                    <div class="form-group">
+                        <label for="passkeyPasswordInput">Your current password</label>
+                        <input type="password" class="form-control" id="passkeyPasswordInput" autocomplete="current-password" required>
+                    </div>
                 </div>
                 <div id="passkey-modal-waiting" class="text-center py-3" style="display:none;">
                     <i class="fas fa-fingerprint fa-3x text-primary mb-3" style="animation:pulse 1.2s infinite;"></i>
@@ -289,6 +298,7 @@ function passkeyRegister() {
     document.getElementById('passkey-modal-success').style.display = 'none';
     document.getElementById('passkey-modal-footer').style.display  = '';
     document.getElementById('passkeyNameInput').value = '';
+    document.getElementById('passkeyPasswordInput').value = '';
     $('#passkeyAddModal').modal('show');
 }
 
@@ -309,7 +319,7 @@ async function passkeyDoRegister() {
         if (options.excludeCredentials)
             options.excludeCredentials = options.excludeCredentials.map(c => ({...c, id: b64u_to_buf(c.id)}));
         const credential = await navigator.credentials.create({ publicKey: options });
-        const body = { passkeyName, id: credential.id, type: credential.type,
+        const body = { passkeyName, current_password: document.getElementById('passkeyPasswordInput').value, id: credential.id, type: credential.type,
             response: {
                 clientDataJSON:    buf_to_b64u(credential.response.clientDataJSON),
                 attestationObject: buf_to_b64u(credential.response.attestationObject),
@@ -334,13 +344,14 @@ async function passkeyDoRegister() {
 }
 
 async function deletePasskey(pkId, pkName, btn) {
+    if (!document.getElementById('passkeyReauth').value) { document.getElementById('passkeyReauth').focus(); alert('Enter your current password above first.'); return; }
     if (!(await RivetDialog.confirm('Remove passkey "' + pkName + '"?'))) return;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     try {
         const result = await (await fetch('passkey_delete.php', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ passkey_id: pkId, csrf_token: '<?= $_SESSION["csrf_token"] ?>' })
+            body: JSON.stringify({ passkey_id: pkId, current_password: document.getElementById('passkeyReauth').value, csrf_token: '<?= $_SESSION["csrf_token"] ?>' })
         })).json();
         if (result.ok) {
             const row = btn.closest('tr');

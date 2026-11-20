@@ -1,5 +1,20 @@
 <?php
 
+// MSP-INJ-7: the ticket (and so the client) of a worksheet is the one STORED on the worksheet row, never the ticket_id sent with the request: the old code
+// authorised on the POSTed ticket but wrote by worksheet_id, so any worksheet of any client could be changed. Returns the worksheet row or stops.
+function worksheetOwnedOrStop($mysqli, int $worksheet_id): array
+{
+    $ws = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT w.*, t.ticket_client_id FROM ticket_worksheets w JOIN tickets t ON t.ticket_id = w.worksheet_ticket_id WHERE w.worksheet_id = $worksheet_id LIMIT 1"));
+    if (!$ws) {
+        flash_alert('Worksheet not found', 'error');
+        redirect();
+        exit;
+    }
+    enforceClientAccess((int) $ws['ticket_client_id']);
+
+    return $ws;
+}
+
 if (isset($_POST['add_ticket_worksheet'])) {
     validateCSRFToken($_POST['csrf_token']);
     enforceUserPermission('module_support', 2);
@@ -31,14 +46,14 @@ if (isset($_POST['save_worksheet']) || isset($_POST['complete_worksheet'])) {
     enforceUserPermission('module_support', 2);
 
     $worksheet_id = intval($_POST['worksheet_id']);
-    $ticket_id = intval($_POST['ticket_id']);
-
-    // Derive client from the ticket itself, not the (client-supplied) form field
-    $client_id = intval(getFieldById('tickets', $ticket_id, 'ticket_client_id'));
-    enforceClientAccess();
-
-    $sql_ws = mysqli_query($mysqli, "SELECT worksheet_template_id, worksheet_is_outtake FROM ticket_worksheets WHERE worksheet_id = $worksheet_id LIMIT 1");
-    $ws = mysqli_fetch_assoc($sql_ws);
+    $ws = worksheetOwnedOrStop($mysqli, $worksheet_id);
+    $ticket_id = intval($ws['worksheet_ticket_id']);
+    $client_id = intval($ws['ticket_client_id']);
+    if (!empty($ws['worksheet_signed_at'])) {
+        flash_alert('This worksheet was signed by the customer and can no longer be edited.', 'error');
+        redirect();
+        exit;
+    }
     $template_id = intval($ws['worksheet_template_id']);
 
     $fields = mysqli_query($mysqli, "SELECT field_id FROM worksheet_template_fields WHERE field_template_id = $template_id ORDER BY field_order");
@@ -69,11 +84,9 @@ if (isset($_GET['unfinalize_worksheet'])) {
     enforceUserPermission('module_support', 2);
 
     $worksheet_id = intval($_GET['unfinalize_worksheet']);
-    $ticket_id    = intval($_GET['ticket_id']);
-
-    // Derive client from the ticket itself, not the (client-supplied) URL param
-    $client_id = intval(getFieldById('tickets', $ticket_id, 'ticket_client_id'));
-    enforceClientAccess();
+    $ws = worksheetOwnedOrStop($mysqli, $worksheet_id);
+    $ticket_id = intval($ws['worksheet_ticket_id']);
+    $client_id = intval($ws['ticket_client_id']);
 
     mysqli_query($mysqli, "UPDATE ticket_worksheets SET worksheet_completed_at = NULL WHERE worksheet_id = $worksheet_id AND worksheet_signed_at IS NULL");
 
@@ -88,11 +101,14 @@ if (isset($_GET['delete_ticket_worksheet'])) {
     enforceUserPermission('module_support', 2);
 
     $worksheet_id = intval($_GET['delete_ticket_worksheet']);
-    $ticket_id = intval($_GET['ticket_id']);
-
-    // Derive client from the ticket itself, not the (client-supplied) URL param
-    $client_id = intval(getFieldById('tickets', $ticket_id, 'ticket_client_id'));
-    enforceClientAccess();
+    $ws = worksheetOwnedOrStop($mysqli, $worksheet_id);
+    $ticket_id = intval($ws['worksheet_ticket_id']);
+    $client_id = intval($ws['ticket_client_id']);
+    if (!empty($ws['worksheet_signed_at'])) {
+        flash_alert('This worksheet was signed by the customer and cannot be deleted.', 'error');
+        redirect();
+        exit;
+    }
 
     mysqli_query($mysqli, "DELETE FROM ticket_worksheet_responses WHERE response_worksheet_id = $worksheet_id");
     mysqli_query($mysqli, "DELETE FROM ticket_worksheets WHERE worksheet_id = $worksheet_id");

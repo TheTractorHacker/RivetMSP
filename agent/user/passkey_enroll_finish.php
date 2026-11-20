@@ -9,6 +9,11 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/session_init.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/webauthn.php';
 ob_end_clean();
 
+// MSP-WEB-3: the session must still be live (idle timeout, revocation), exactly as on every other page.
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/security_policy.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/security_sessions.php';
+if (!empty($_SESSION['logged'])) { secSessionEnforce($mysqli); }
+
 header('Content-Type: application/json');
 
 if (empty($_SESSION['logged']) || empty($_SESSION['user_id'])) {
@@ -27,6 +32,11 @@ $session_name = $userRow['user_name'];
 
 $body = json_decode(file_get_contents('php://input'), true);
 if (!$body) { echo json_encode(['ok' => false, 'error' => 'Invalid JSON']); exit; }
+if (!secReauthPassword($mysqli, (int) $_SESSION['user_id'], (string) ($body['current_password'] ?? ''))) {
+    unset($_SESSION['passkey_register_challenge']);
+    echo json_encode(['ok' => false, 'error' => 'Current password is incorrect']);
+    exit;
+}
 
 $challenge = $_SESSION['passkey_register_challenge'] ?? null;
 if (!$challenge) { echo json_encode(['ok' => false, 'error' => 'No registration challenge in session']); exit; }
