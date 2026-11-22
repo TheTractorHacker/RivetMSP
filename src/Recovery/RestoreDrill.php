@@ -562,6 +562,26 @@ final class RestoreDrill
         return hash_final($h);
     }
 
+    /** Copies a dump line by line, removing DEFINER=`user`@`host` from CREATE VIEW/TRIGGER/PROCEDURE/FUNCTION/EVENT statements and versioned comments. */
+    public static function stripDefiners(string $in, string $out): void
+    {
+        $r = fopen($in, 'rb');
+        $w = fopen($out, 'wb');
+        if (!$r || !$w) {
+            throw new \RuntimeException('cannot prepare the dump for import');
+        }
+        @chmod($out, 0600);
+        $re = '/\sDEFINER\s*=\s*(?:`[^`]*`|\'[^\']*\'|"[^"]*"|[\w$.-]+)@(?:`[^`]*`|\'[^\']*\'|"[^"]*"|[\w$.%:-]+)/i';
+        while (($line = fgets($r)) !== false) {
+            if (stripos($line, 'DEFINER') !== false && preg_match('/^\s*(CREATE\b|\/\*!\d+\s+(CREATE|DEFINER))/i', $line)) {
+                $line = preg_replace($re, '', $line, 1) ?? $line;
+            }
+            fwrite($w, $line);
+        }
+        fclose($r);
+        fclose($w);
+    }
+
     // -- import / scratch --------------------------------------------------------------------------------------------------
 
     private function import(string $sqlFile): void
@@ -582,8 +602,12 @@ final class RestoreDrill
         file_put_contents($cnf, implode("\n", $lines) . "\n");
         @chmod($cnf, 0600);
         $errFile = $this->work . '/import.err';
+        // The scoped drill account cannot create objects "as" another user, so views/triggers/routines dumped with DEFINER=`app`@`host` would
+        // fail the whole import. Strip the DEFINER clause into a working copy (the backup itself is never changed); they then belong to the drill account.
+        $cleanFile = $this->work . '/db.nodefiner.sql';
+        self::stripDefiners($sqlFile, $cleanFile);
         $cmd = [$bin, '--defaults-extra-file=' . $cnf, '--default-character-set=utf8mb4', '--database=' . $this->scratch];
-        $proc = proc_open($cmd, [0 => ['file', $sqlFile, 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', $errFile, 'w']], $pipes);
+        $proc = proc_open($cmd, [0 => ['file', $cleanFile, 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', $errFile, 'w']], $pipes);
         if (!is_resource($proc)) {
             throw new \RuntimeException('cannot start the mysql client');
         }
@@ -603,6 +627,7 @@ final class RestoreDrill
         $exit = $st['exitcode'];
         proc_close($proc);
         @unlink($cnf);
+        @unlink($cleanFile);
         if ($exit !== 0) {
             $err = trim((string) @file_get_contents($errFile));
             throw new \RuntimeException('importing db.sql failed: ' . substr(preg_replace('/\s+/', ' ', $err), 0, 300));
