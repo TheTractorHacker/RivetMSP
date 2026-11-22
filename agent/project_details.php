@@ -300,7 +300,7 @@ if (isset($_GET['project_id'])) {
 </ul>
 
 <!-- Project Header -->
-<div class="card">
+<div class="card project-header-card">
     <div class="card-header">
         <h5 class="card-title">
             <i class="fas fa-project-diagram text-secondary me-2"></i>
@@ -374,45 +374,45 @@ if (isset($_GET['project_id'])) {
     </div>
 </div>
 
-<div class="card-group mb-3">
-    <div class="card card-body">
-        <h5 class="mb-0"><?= $project_name ?></h5>
-        <div><small class="text-secondary"><?php echo $project_description; ?></small></div>
+<?php /* One summary panel under the header: name + description, labelled facts, then the progress bars full width.
+         (It used to be three equal boxes with unlabelled icon lines and a bar stretched across a wide screen.) */
+$ps_fact = static function ($label, $value, $icon) { return '<div class="ps-fact"><span class="ps-label"><i class="fas fa-fw ' . $icon . ' me-1"></i>' . $label . '</span><span class="ps-value">' . $value . '</span></div>'; };
+?>
+<div class="card mb-3 project-summary-group">
+    <div class="ps-top">
+        <div class="ps-main">
+            <h5 class="ps-title"><?= $project_name ?></h5>
+            <?php if (trim(strip_tags((string) $project_description)) !== '') { ?><div class="ps-desc"><?php echo $project_description; ?></div><?php } ?>
+        </div>
+        <div class="ps-facts">
+            <?php
+            if ($client_name) { echo $ps_fact('Client', $client_name, 'fa-users'); }
+            echo $ps_fact('Manager', $project_manager ? $project_manager_name : 'Not assigned', 'fa-user-tie');
+            echo $ps_fact('Due', $project_due ?: 'Not set', 'fa-calendar-check');
+            if (!empty($project_completed_at)) { echo $ps_fact('Closed', date('Y-m-d', strtotime($project_completed_at)), 'fa-door-closed'); }
+            if ($ticket_total_reply_time) { echo $ps_fact('Time worked', $ticket_total_reply_time, 'fa-clock'); }
+            ?>
+        </div>
     </div>
-    <div class="card card-body">
-        <div><?php echo $client_name_display; ?></div>
-        <div><?php echo $project_manager_display; ?></div>
-        <div class='text-secondary'><i class='fa fa-fw fa-clock me-2'></i><?php echo $project_due; ?></div>
-        <div><?php echo $project_completed_date_display; ?></div>
-        <!-- Time tracking -->
-        <?php if ($ticket_total_reply_time) { ?>
-            <div>
-                <i class="far fa-fw fa-clock text-secondary me-2"></i>Total time worked: <?php echo $ticket_total_reply_time; ?>
-            </div>
-        <?php } ?>
-    </div>
-
-    <div class="card card-body">
+    <?php if ($ticket_count || $task_count || $ticket_collaborators) { ?>
+    <div class="ps-progress">
         <?php if ($ticket_count) { ?>
-            <div class="progress-meter">
-<i class="fa fas fa-fw fa-life-ring text-secondary" aria-hidden="true"></i>
-<div class="progress" role="progressbar" aria-valuenow="<?php echo (int) $tickets_closed_percent; ?>" aria-valuemin="0" aria-valuemax="100" aria-label="Tickets closed"><div class="progress-bar bg-primary" style="width: <?php echo $tickets_closed_percent; ?>%;"></div></div>
-<span class="progress-label"><?php echo $closed_ticket_count; ?> / <?php echo $ticket_count; ?></span>
-</div>
+            <div class="ps-bar">
+                <div class="d-flex justify-content-between"><span class="ps-label"><i class="fa fa-fw fa-life-ring me-1"></i>Tickets</span><span><strong><?php echo $closed_ticket_count; ?></strong> / <?php echo $ticket_count; ?> closed (<?php echo $tickets_closed_percent; ?>%)</span></div>
+                <div class="progress mt-1"><div class="progress-bar bg-primary" style="width: <?php echo $tickets_closed_percent; ?>%;"></div></div>
+            </div>
         <?php } ?>
         <?php if ($task_count) { ?>
-            <div class="progress-meter mt-2">
-<i class="fa fas fa-fw fa-tasks text-secondary" aria-hidden="true"></i>
-<div class="progress" role="progressbar" aria-valuenow="<?php echo (int) $tasks_completed_percent; ?>" aria-valuemin="0" aria-valuemax="100" aria-label="Tasks completed"><div class="progress-bar bg-secondary" style="width: <?php echo $tasks_completed_percent; ?>%;"></div></div>
-<span class="progress-label"><?php echo $completed_task_count; ?> / <?php echo $task_count; ?></span>
-</div>
-        <?php } ?>
-        <?php if ($ticket_collaborators) { ?>
-            <div class=mt-1>
-                <i class="fas fa-fw fa-users me-2 text-secondary"></i><?php echo $ticket_collaborators; ?>
+            <div class="ps-bar">
+                <div class="d-flex justify-content-between"><span class="ps-label"><i class="fa fa-fw fa-tasks me-1"></i>Tasks</span><span><strong><?php echo $completed_task_count; ?></strong> / <?php echo $task_count; ?> done (<?php echo $tasks_completed_percent; ?>%)</span></div>
+                <div class="progress mt-1"><div class="progress-bar bg-secondary" style="width: <?php echo $tasks_completed_percent; ?>%;"></div></div>
             </div>
         <?php } ?>
+        <?php if ($ticket_collaborators) { ?>
+            <div class="ps-bar"><span class="ps-label"><i class="fas fa-fw fa-users me-1"></i>Collaborators</span><div><?php echo $ticket_collaborators; ?></div></div>
+        <?php } ?>
     </div>
+    <?php } ?>
 </div>
 
 <!-- Budget & Effort card -->
