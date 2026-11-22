@@ -703,6 +703,53 @@ if (!function_exists('setupAuditAnchorAside')) {
 }
 
 // ------------------------------
+// setupProvisionRestoreDrill
+// ------------------------------
+if (!function_exists('setupProvisionRestoreDrill')) {
+    /**
+     * Fresh install: creates the restore drill's own database account (it can create and fill only `drill_%` databases, nothing on the live
+     * schema), stores its encrypted password in recovery_settings and switches the nightly drill ON. Needs a database user that may CREATE USER
+     * and GRANT; the usual app account may not, and then nothing is enabled (an enabled-but-unconfigured drill would only raise alerts) and the
+     * message gives the exact SQL to run once. Never throws.
+     *
+     * @param ?callable $exec Test seam: fn(string $sql): bool used instead of $mysqli->query for the CREATE USER / GRANT statements.
+     * @return array{ok:bool,enabled:bool,message:string}
+     */
+    function setupProvisionRestoreDrill(mysqli $mysqli, string $dbHost, ?callable $exec = null, string $user = 'rivet_drill'): array {
+        try {
+            require_once dirname(__DIR__) . '/vendor/autoload.php';
+            if (!\RivetMSP\Recovery\RecoverySettings::ready($mysqli)) {
+                return ['ok' => false, 'enabled' => false, 'message' => 'Restore drill not set up: the recovery tables are missing.'];
+            }
+            $pass   = bin2hex(random_bytes(24));
+            $local  = in_array(strtolower($dbHost), ['localhost', '127.0.0.1', '::1'], true);
+            $acctHost = $local ? 'localhost' : '%';
+            $qUser  = "'" . $mysqli->real_escape_string($user) . "'@'" . $mysqli->real_escape_string($acctHost) . "'";
+            $run    = $exec ?? static fn (string $sql): bool => (bool) @$mysqli->query($sql);
+            $manual = "CREATE USER IF NOT EXISTS $qUser IDENTIFIED BY '<a long random password>'; GRANT ALL PRIVILEGES ON `drill\\_%`.* TO $qUser;";
+            if (!$run("CREATE USER IF NOT EXISTS $qUser IDENTIFIED BY '" . $mysqli->real_escape_string($pass) . "'")
+                || !$run("ALTER USER $qUser IDENTIFIED BY '" . $mysqli->real_escape_string($pass) . "'")
+                || !$run("GRANT ALL PRIVILEGES ON `drill\\_%`.* TO $qUser")) {
+                return ['ok' => false, 'enabled' => false, 'message' => "The nightly restore drill was not enabled: the database account used by setup may not create users. As a database administrator run: $manual then enter the account under Admin > Backup > Restore drill and tick Enable."];
+            }
+            if (!function_exists('encryptSetting')) {
+                return ['ok' => false, 'enabled' => false, 'message' => 'The restore drill was not enabled: stored secrets cannot be encrypted at this point.'];
+            }
+            $stored = encryptSetting($pass);
+            $okAll = \RivetMSP\Recovery\RecoverySettings::set($mysqli, 'drill_db_user', $user)
+                && \RivetMSP\Recovery\RecoverySettings::set($mysqli, 'drill_db_pass', $stored)
+                && \RivetMSP\Recovery\RecoverySettings::set($mysqli, 'drill_enabled', '1');
+
+            return $okAll
+                ? ['ok' => true, 'enabled' => true, 'message' => 'The nightly restore drill is set up and enabled.']
+                : ['ok' => false, 'enabled' => false, 'message' => 'The restore drill account was created but its settings could not be saved; set it under Admin > Backup > Restore drill.'];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'enabled' => false, 'message' => 'The restore drill could not be set up: ' . $e->getMessage()];
+        }
+    }
+}
+
+// ------------------------------
 // setupAuditGenesis (M4-6)
 // ------------------------------
 if (!function_exists('setupAuditGenesis')) {

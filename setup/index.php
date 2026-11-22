@@ -137,8 +137,10 @@ if (isset($_POST['add_database'])) {
         // M4-6: the genesis anchor of the audit hash chain is written by setup only (the application never derives it from database state)
         require_once __DIR__ . '/setup_functions.php';
         $audit_genesis = setupAuditGenesis($mysqli);
+        // The nightly restore drill: own scoped database account, created and switched on here (or the exact SQL to run if setup's account cannot).
+        $drill_setup = setupProvisionRestoreDrill($mysqli, (string) $host);
 
-        $_SESSION['alert_message'] = "Database successfully added, now lets add a user." . (($key_file_result['status'] ?? '') === 'failed' ? " Note: " . $key_file_result['message'] : '') . ($audit_genesis['ok'] ? '' : ' Note: ' . $audit_genesis['message']);
+        $_SESSION['alert_message'] = "Database successfully added, now lets add a user." . (($key_file_result['status'] ?? '') === 'failed' ? " Note: " . $key_file_result['message'] : '') . ($audit_genesis['ok'] ? '' : ' Note: ' . $audit_genesis['message']) . ($drill_setup['ok'] ? '' : ' Note: ' . $drill_setup['message']);
         header("Location: ?user");
         exit;
 
