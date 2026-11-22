@@ -196,6 +196,10 @@ if (isset($_POST['upload_backup'])) {
         flash_alert("Could not open the uploaded zip file", "error");
         redirect();
     }
+    // In-app backups are AES-256 encrypted with the saved backup passphrase (older ones are plain; harmless there).
+    if (!empty($config_backup_passphrase)) {
+        $zip->setPassword((string) $config_backup_passphrase);
+    }
 
     $sqlContent = $zip->getFromName('db.sql');
     if ($sqlContent === false) {
@@ -210,7 +214,7 @@ if (isset($_POST['upload_backup'])) {
     $zip->close();
 
     if ($sqlContent === false) {
-        flash_alert("Could not find a db.sql file inside the uploaded zip", "error");
+        flash_alert("Could not read db.sql from the uploaded zip. If the backup is encrypted, the saved backup passphrase must match the one it was made with.", "error");
         redirect();
     }
 

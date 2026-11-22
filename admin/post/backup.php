@@ -287,7 +287,6 @@ function build_backup_manifest(mysqli $mysqli, string $baseName, ?string $passph
 function build_backup(mysqli $mysqli, string $type, string $backupDir): array {
     // Refuse before any temp file or dump is created. Throws BackupPassphraseRequired or BackupUnencryptedNotAllowed.
     $passphrase   = backup_require_passphrase();
-    backup_require_unencrypted_override();
     // Status record (Recovery): a failed or interrupted run is alerted, see src/Recovery/BackupStatus.php.
     $statusId     = \RivetMSP\Recovery\BackupStatus::begin($mysqli, $type === 'auto' ? 'app_auto' : 'app_manual');
     $timestamp    = date('YmdHis');
@@ -374,6 +373,16 @@ function build_backup(mysqli $mysqli, string $type, string $backupDir): array {
     $final->addFile($manifest['path'], $manifest['name']);
     if ($rmmPgDump !== null) { $final->addFile($rmmPgDump, 'rmm-postgres.dump'); }
     $snapshotFile = \RivetMSP\Recovery\TableSnapshot::attach($final, $mysqli, $baseName);   // restore-drill row counts (no secrets)
+    // Encrypt EVERY entry (db.sql, uploads.zip, version.txt, manifest, snapshot, pg dump) with the backup passphrase: zip AES-256.
+    // A zip that cannot be fully encrypted is never written (the same refusal as a missing passphrase), so no plain backup ever lands on disk.
+    for ($i = 0; $i < $final->numFiles; $i++) {
+        if (!$final->setEncryptionIndex($i, ZipArchive::EM_AES_256, $passphrase)) {
+            @$final->close();
+            @unlink($finalZip);
+            foreach ([$sqlFile, $uploadsZip, $versionFile, $manifest['path'], $rmmPgDump, $snapshotFile] as $tmp) { if ($tmp) { @unlink($tmp); } }
+            throw new RuntimeException('Could not encrypt the backup zip (AES-256); no backup was written.');
+        }
+    }
     $zipClosed = $final->close();
     @chmod($finalZip, 0640);
 
@@ -551,9 +560,7 @@ if (isset($_POST['save_backup_settings'])) {
     $auto    = isset($_POST['config_backup_auto_enabled']) ? 1 : 0;
     $freq    = in_array($_POST['config_backup_frequency'] ?? '', ['daily','weekly']) ? $_POST['config_backup_frequency'] : 'daily';
     $retain  = max(1, min(90, intval($_POST['config_backup_retain_count'] ?? 7)));
-    // rc.53 GAP-11: audit-logged admin opt-in (see BackupUnencryptedNotAllowed's doc comment).
-    $allow_unencrypted = isset($_POST['config_backup_allow_unencrypted_override']) ? 1 : 0;
-    $set = "config_backup_auto_enabled = $auto, config_backup_frequency = '$freq', config_backup_retain_count = $retain, config_backup_allow_unencrypted_override = $allow_unencrypted";
+    $set = "config_backup_auto_enabled = $auto, config_backup_frequency = '$freq', config_backup_retain_count = $retain";
     // Blank = keep whatever is already saved (same convention as the S3 secret key below it on this form).
     if (trim($_POST['config_backup_passphrase'] ?? '') !== '') {
         $new_passphrase = trim($_POST['config_backup_passphrase']);
@@ -564,10 +571,8 @@ if (isset($_POST['save_backup_settings'])) {
         $passphrase = mysqli_real_escape_string($mysqli, encryptSetting($new_passphrase));
         $set .= ", config_backup_passphrase = '$passphrase'";
     }
-    $unencrypted_changed = $allow_unencrypted !== (int) ($GLOBALS['config_backup_allow_unencrypted_override'] ?? 0);
     mysqli_query($mysqli, "UPDATE settings SET $set WHERE company_id = 1");
-    logAction('Settings', 'Edit', "$session_name updated backup settings"
-        . ($unencrypted_changed ? ($allow_unencrypted ? ' (turned ON \'allow unencrypted in-app backups\')' : ' (turned OFF \'allow unencrypted in-app backups\')') : ''));
+    logAction('Settings', 'Edit', "$session_name updated backup settings");
     flash_alert('Backup settings saved');
     redirect();
 }

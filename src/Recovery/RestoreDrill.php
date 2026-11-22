@@ -314,6 +314,11 @@ final class RestoreDrill
         if ($zip->open($path) !== true) {
             throw new \RuntimeException('the newest backup is not a readable zip archive: ' . basename($path));
         }
+        // In-app zips are AES-256 encrypted with the backup passphrase (older ones are plain; setPassword is harmless on those).
+        $zipPass = (string) ($this->opts['passphrase'] ?? ($GLOBALS['config_backup_passphrase'] ?? ''));
+        if ($zipPass !== '') {
+            $zip->setPassword($zipPass);
+        }
         $names = [];
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $names[$zip->getNameIndex($i)] = $i;
