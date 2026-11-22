@@ -281,11 +281,17 @@ if (isset($_POST['restore'])) {
         }
     }
 
+    // In-app backups are AES-256 encrypted with the backup passphrase: the passphrase field below also opens the zip itself.
+    $restore_zip_pass = trim((string) ($_POST['backup_passphrase'] ?? ''));
+    if ($restore_zip_pass !== '') {
+        $zip->setPassword($restore_zip_pass);
+    }
+
     if (!$zip->extractTo($tempDir)) {
         $zip->close();
         @unlink($tempZip);
         deleteDir($tempDir);
-        die("Failed to extract backup contents.");
+        die("Failed to extract backup contents. If the backup is encrypted, check the backup passphrase.");
     }
 
     $zip->close();
