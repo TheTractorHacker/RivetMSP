@@ -1806,6 +1806,46 @@ if ($config_module_enable_rmm) {
 
 /*
  * ###############################################################################################################
+ *  UNIFI SYNC (scheduled)
+ *  Every enabled UniFi controller (local or cloud) is synced automatically, at most once per 15 minutes each: the throttle looks at the
+ *  newest unifi_sync_log row of ANY status, so a controller that is down or slow is retried every 15 minutes, not on every cron tick.
+ *  Each run writes its own unifi_sync_log row (triggered_by 0 = Auto) so the Recent Sync Log and the recovery watch see it.
+ *  scripts/unifi_sync_cli.php remains for running it by hand.
+ * ###############################################################################################################
+ */
+
+$sql_unifi_auto = mysqli_query($mysqli, "SELECT id, name, type FROM unifi_integrations WHERE enabled=1");
+if ($sql_unifi_auto && mysqli_num_rows($sql_unifi_auto) > 0) {
+    require_once dirname(__DIR__) . '/includes/class_unifi.php';
+    require_once dirname(__DIR__) . '/includes/class_unifi_sync_mapper.php';
+    while ($unifi_auto = mysqli_fetch_assoc($sql_unifi_auto)) {
+        $unifi_auto_id = intval($unifi_auto['id']);
+        $unifi_recent = mysqli_query($mysqli, "SELECT id FROM unifi_sync_log WHERE integration_id=$unifi_auto_id AND started_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE) LIMIT 1");
+        if ($unifi_recent && mysqli_num_rows($unifi_recent) > 0) {
+            continue;
+        }
+        $unifi_log_id = 0;
+        try {
+            $unifi_mapper = new UnifiSyncMapper($mysqli, $unifi_auto_id, 0);
+            $unifi_log_id = $unifi_mapper->startSyncLog();
+            if (($unifi_auto['type'] ?? 'local') === 'cloud') {
+                $unifi_stats = $unifi_mapper->syncCloud(new UnifiCloudClient($unifi_auto_id));
+            } else {
+                $unifi_stats = $unifi_mapper->sync(new UnifiClient($unifi_auto_id));
+            }
+            $unifi_mapper->finishSyncLog($unifi_log_id, $unifi_stats);
+            logApp("Cron", "info", "UniFi sync for '{$unifi_auto['name']}': devices {$unifi_stats['devices_created']} created, {$unifi_stats['devices_updated']} updated; Wi-Fi {$unifi_stats['wifi_created']} created; networks {$unifi_stats['networks_created']} created");
+        } catch (\Throwable $e) {
+            logApp("Cron", "error", "UniFi sync failed for '{$unifi_auto['name']}': " . $e->getMessage());
+            if ($unifi_log_id > 0) {
+                mysqli_query($mysqli, "UPDATE unifi_sync_log SET finished_at=NOW(), status='failed', errors='" . mysqli_real_escape_string($mysqli, $e->getMessage()) . "' WHERE id=$unifi_log_id");
+            }
+        }
+    }
+}
+
+/*
+ * ###############################################################################################################
  *  RMM ALERT AUTO-TICKETING (Syncro-Beta)
  * ###############################################################################################################
  */
