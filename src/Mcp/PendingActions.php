@@ -31,7 +31,7 @@ final class PendingActions
      * @return array{action:array, replayed:bool}
      * @throws McpActionRefused
      */
-    public function queue(int $userId, string $oauthClientId, string $tool, array $args, int $targetClientId, ?int $ticketId, ?string $clientKey): array
+    public function queue(int $userId, string $oauthClientId, string $tool, array $args, int $targetClientId, ?int $ticketId, ?string $clientKey, int $grantId = 0): array
     {
         $hash = McpWriteActions::argsHash($tool, $args);
 
@@ -63,9 +63,9 @@ final class PendingActions
         $hours = WriteConfig::expiryHours($this->db);
         $json = json_encode($args, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         $stmt = $this->db->prepare("INSERT INTO mcp_pending_actions
-            (requested_by, oauth_client_id, tool, args_json, args_hash, target_client_id, target_ticket_id, status, idempotency_key, created_at, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, NOW(), NOW() + INTERVAL ? HOUR)");
-        $stmt->bind_param('issssiisi', $userId, $oauthClientId, $tool, $json, $hash, $targetClientId, $ticketId, $key, $hours);
+            (requested_by, oauth_client_id, grant_id, tool, args_json, args_hash, target_client_id, target_ticket_id, status, idempotency_key, created_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NOW(), NOW() + INTERVAL ? HOUR)");
+        $stmt->bind_param('isisssiisi', $userId, $oauthClientId, $grantId, $tool, $json, $hash, $targetClientId, $ticketId, $key, $hours);
         try {
             $stmt->execute();
         } catch (\mysqli_sql_exception $e) {
@@ -210,6 +210,13 @@ final class PendingActions
             return $fail('The agent who requested this no longer has access to do it. Reject it instead.');
         }
 
+        // MSP-DS-114: the OAuth client that proposed this must still be enabled and the requester must still hold a live consent for it.
+        if (!$this->oauthSourceStillLive((string) $row['oauth_client_id'], $requester, (int) ($row['grant_id'] ?? 0))) {
+            $this->audit('mcp.action_denied', $approverId, $id, 'Proposing OAuth grant no longer live', ['requested_by' => $requester]);
+
+            return $fail('The connection that proposed this action has been revoked or disabled. Reject it instead.');
+        }
+
         // Atomic claim: exactly one caller can move pending -> approved, and only while it has not expired.
         $stmt = $this->db->prepare("UPDATE mcp_pending_actions SET status = 'approved', decided_by = ?, decided_at = NOW() WHERE action_id = ? AND status = 'pending' AND expires_at > NOW()");
         $stmt->bind_param('ii', $approverId, $id);
@@ -263,6 +270,29 @@ final class PendingActions
         $this->audit('mcp.action_executed', $approverId, $id, "Executed MCP action #$id ({$row['tool']})", ['tool' => $row['tool'], 'result' => $out['result']]);
 
         return ['ok' => true, 'message' => $msg];
+    }
+
+    /**
+     * MSP-DS-114: false when the proposal came through an OAuth client that is now disabled/deleted, or the consent that proposed it is no
+     * longer live. A proposal stores the grant (consent) id it was queued under: that exact grant must still be unrevoked, unexpired, hold
+     * mcp:write and belong to the requester. A proposal queued before the grant_id column existed (grant id 0) falls back to "the requester
+     * has any live mcp:write consent for that client". A proposal without an OAuth client (legacy token) is not affected.
+     */
+    public function oauthSourceStillLive(string $oauthClientId, int $requesterId, int $grantId = 0): bool
+    {
+        if ($oauthClientId === '') {
+            return true;
+        }
+        $sql = "SELECT g.grant_id FROM mcp_oauth_grants g JOIN mcp_oauth_clients c ON c.client_id = g.client_id
+            WHERE g.client_id = ? AND g.user_id = ? AND g.revoked_at IS NULL AND g.expires_at > UTC_TIMESTAMP() AND c.disabled_at IS NULL
+            AND FIND_IN_SET('mcp:write', REPLACE(g.scope, ' ', ',')) > 0";
+        if ($grantId > 0) {
+            $rows = McpAccess::rows($this->db, $sql . ' AND g.grant_id = ? LIMIT 1', 'sii', [$oauthClientId, $requesterId, $grantId]);
+        } else {
+            $rows = McpAccess::rows($this->db, $sql . ' LIMIT 1', 'si', [$oauthClientId, $requesterId]);
+        }
+
+        return $rows !== [];
     }
 
     /** @return array{ok:bool, message:string} */

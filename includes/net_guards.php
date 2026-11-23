@@ -4,12 +4,26 @@
  * Outbound-request guards that need no database or request context.
  */
 
-// True only when every A/AAAA address of the host (or the literal IP) is public. Unresolvable hosts return false.
-function hostResolvesOnlyToPublicIps($host)
+/**
+ * MSP-DS-107: the vetted addresses of a host, or [] when the host does not resolve or ANY of its addresses is not public. "Public" is RivetCore's
+ * UrlPolicy::isPublicIp(): beyond the PHP FILTER_FLAG_NO_PRIV/NO_RES flags it also refuses CGNAT 100.64/10, 198.18/15, NAT64 and 6to4 (and the IPv4 they embed).
+ * A caller that goes on to connect must connect to one of THESE addresses, not re-resolve the name (DNS rebinding).
+ *
+ * @return list<string>
+ */
+function publicIpsForHost($host): array
 {
     $host = trim((string) $host, '[]');
     if ($host === '') {
-        return false;
+        return [];
+    }
+    if (!class_exists('RivetCore\\Webhooks\\UrlPolicy')) {
+        if (function_exists('rivetEnsureAutoload')) {
+            rivetEnsureAutoload();
+        }
+        if (!class_exists('RivetCore\\Webhooks\\UrlPolicy') && is_file(__DIR__ . '/../vendor/autoload.php')) {
+            require_once __DIR__ . '/../vendor/autoload.php';
+        }
     }
     $ips = [];
     if (filter_var($host, FILTER_VALIDATE_IP)) {
@@ -24,12 +38,18 @@ function hostResolvesOnlyToPublicIps($host)
         }
     }
     if (!$ips) {
-        return false;
+        return [];
     }
     foreach ($ips as $ip) {
-        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
-            return false;
+        if (!\RivetCore\Webhooks\UrlPolicy::isPublicIp($ip)) {
+            return [];
         }
     }
-    return true;
+    return array_values($ips);
+}
+
+// True only when every A/AAAA address of the host (or the literal IP) is public. Unresolvable hosts return false.
+function hostResolvesOnlyToPublicIps($host)
+{
+    return publicIpsForHost($host) !== [];
 }

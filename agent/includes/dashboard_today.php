@@ -3,7 +3,7 @@
 /*
  * Dashboard "Today" board: what is waiting on a person today, ranked by money, one click from action.
  *
- * Money view (accounting module on, and a role that already sees the Financial section):
+ * Money view (accounting module on, and a role with the Financial module; the quotes column also needs Sales):
  *   Ready to bill   closed, billable, not yet invoiced tickets, estimated as logged time x the client's hourly rate (an estimate, labelled as one)
  *   Overdue         unpaid invoices past their due date: invoice amount minus payments (actual)
  *   Quotes waiting  sent or viewed quotes that have not expired (potential, not income)
@@ -14,7 +14,8 @@
  * $config_module_enable_accounting.
  */
 
-$td_money = !empty($config_module_enable_accounting) && ($session_user_role == 1 || $session_user_role == 3);
+$td_money = !empty($config_module_enable_accounting) && lookupUserPermission('module_financial') >= 1;   // MSP-DS-125: module permission, not hard-coded role ids
+$td_quotes_ok = lookupUserPermission('module_sales') >= 1;   // the quotes column also needs Sales, as the quotes_waiting widget does
 $td_scope = $access_permission_query ?? '';
 $td_fmt = static fn($v): string => numfmt_format_currency($currency_format, (float) $v, "$session_company_currency");
 $td_h = static fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
@@ -60,7 +61,7 @@ if ($td_money) {
 
     // Quotes waiting on a yes.
     $td_quotes = ['n' => 0, 'v' => 0.0, 'rows' => []];
-    $q = mysqli_query($mysqli, "SELECT quote_id, quote_prefix, quote_number, quote_amount, quote_expire, clients.client_name AS client_name
+    $q = !$td_quotes_ok ? false : mysqli_query($mysqli, "SELECT quote_id, quote_prefix, quote_number, quote_amount, quote_expire, clients.client_name AS client_name
         FROM quotes LEFT JOIN clients ON clients.client_id = quote_client_id
         WHERE quote_status IN ('Sent', 'Viewed') AND quote_archived_at IS NULL AND (quote_expire IS NULL OR quote_expire >= CURRENT_DATE) $td_scope
         ORDER BY quote_amount DESC");
@@ -78,6 +79,9 @@ if ($td_money) {
         ['key' => 'late', 'title' => 'Overdue', 'basis' => 'unpaid and past due', 'unit' => ['invoice', 'invoices'], 'data' => $td_overdue, 'cta' => 'Collect', 'href' => 'invoices.php?status=Sent', 'empty' => 'No invoice is past due.'],
         ['key' => 'quote', 'title' => 'Waiting on a yes', 'basis' => 'sent and not expired', 'unit' => ['quote', 'quotes'], 'data' => $td_quotes, 'cta' => 'Follow up', 'href' => 'quotes.php?status=Sent', 'empty' => 'No quote is waiting for an answer.'],
     ];
+    if (!$td_quotes_ok) {
+        $td_columns = array_values(array_filter($td_columns, static fn($c) => $c['key'] !== 'quote'));
+    }
     $td_total = array_sum(array_map(static fn($c) => $c['data']['v'], $td_columns));
     $td_heading = $td_total > 0 ? $td_fmt($td_total) : '';
     $td_title = 'Waiting on you';

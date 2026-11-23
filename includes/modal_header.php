@@ -49,6 +49,18 @@ if (strpos($_SERVER['SCRIPT_NAME'] ?? '', '/agent/modals/') !== false) {
     if (empty($session_is_admin) && (int) lookupUserPermission($mh_module) < 1) {
         $mh_deny('Your role does not have access to this.');
     }
+    // MSP-DS-30: most add / bulk / import pop-ups take ?client_id= and list that client's records; a client-restricted user may only name their own clients
+    if (isset($_GET['client_id']) && (int) $_GET['client_id'] > 0 && empty($session_is_admin)) {
+        $mh_get_client = (int) $_GET['client_id'];
+        $mh_perm_rows = [];
+        $mh_res = mysqli_query($mysqli, 'SELECT client_id FROM user_client_permissions WHERE user_id = ' . (int) $session_user_id);
+        while ($mh_res && ($mh_r = mysqli_fetch_row($mh_res))) {
+            $mh_perm_rows[] = (int) $mh_r[0];
+        }
+        if ($mh_perm_rows !== [] && !in_array($mh_get_client, $mh_perm_rows, true)) {
+            $mh_deny('You do not have access to this client.');
+        }
+    }
     if ($mh_dir === 'ticket' && isset($_GET['ticket_id']) && empty($session_is_admin)) {
         $mh_ticket_client = (int) (mysqli_fetch_row(mysqli_query($mysqli, 'SELECT ticket_client_id FROM tickets WHERE ticket_id = ' . (int) $_GET['ticket_id'] . ' LIMIT 1'))[0] ?? 0);
         if ($mh_ticket_client > 0) {
@@ -65,9 +77,13 @@ if (strpos($_SERVER['SCRIPT_NAME'] ?? '', '/agent/modals/') !== false) {
 }
 
 header('Content-Type: application/json');
-
-// Check for the 'id' parameter
-//if (!isset($_GET['id'])) {
-//    echo json_encode(['error' => 'ID missing.']);
-//    exit;
-//}
+header('X-Content-Type-Options: nosniff');
+// IT-WEB-1: per-response script token. js/ajax_modal.js re-runs a pop-up's <script> elements (innerHTML-inserted scripts are inert)
+// with the page CSP nonce, and ONLY those stamped with this response's token, which it reads from the X-Rivet-Modal-Token header.
+// A static file (an upload) or any other same-origin response cannot carry the header, so it can never get its scripts executed.
+// The stamping happens in an output callback so every pop-up that ends in json_encode(['content' => ...]) is covered, whether it
+// uses modal_footer.php or not; any data-modal-script the content already carried is removed first.
+$GLOBALS['rivet_modal_script_token'] = bin2hex(random_bytes(16));
+header('X-Rivet-Modal-Token: ' . $GLOBALS['rivet_modal_script_token']);
+require_once __DIR__ . '/modal_script_token.php';
+ob_start(static fn (string $out): string => rivet_modal_stamp_scripts($out, $GLOBALS['rivet_modal_script_token']));

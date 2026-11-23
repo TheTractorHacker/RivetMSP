@@ -51,6 +51,9 @@ $status_filter_id = $ticket_filters['status']['ids'][0] ?? '';
 $status = ['open' => 'Open', 'closed' => 'Closed', 'all' => 'All', 'specific' => ''][$ticket_filters['status']['mode']];
 $ticket_status_snippet = $_tf_sql['status'];
 
+// MSP-DS-72: defined on every path (billable=1 without unbilled used to leave them undefined)
+$billable = 0;
+$ticket_billable_snippet = '';
 if (isset($_GET['billable']) && ($_GET['billable']) == '1') {
     if (isset($_GET['unbilled'])) {
         $billable = 1;
@@ -114,7 +117,7 @@ $query =
     $onsite_query
     $stat_query
     AND $ticket_date_sql
-    AND (CONCAT(ticket_prefix,ticket_number) LIKE '%$q%' OR client_name LIKE '%$q%' OR ticket_subject LIKE '%$q%' OR ticket_status_name LIKE '%$q%' OR ticket_priority LIKE '%$q%' OR user_name LIKE '%$q%' OR contact_name LIKE '%$q%' OR asset_name LIKE '%$q%' OR vendor_name LIKE '%$q%' OR ticket_vendor_ticket_number LIKE '%q%')
+    AND (CONCAT(ticket_prefix,ticket_number) LIKE '%$q%' OR client_name LIKE '%$q%' OR ticket_subject LIKE '%$q%' OR ticket_status_name LIKE '%$q%' OR ticket_priority LIKE '%$q%' OR user_name LIKE '%$q%' OR contact_name LIKE '%$q%' OR asset_name LIKE '%$q%' OR vendor_name LIKE '%$q%' OR ticket_vendor_ticket_number LIKE '%$q%')
     $ticket_billable_snippet
     $ticket_project_snippet
     $ticket_tag_query

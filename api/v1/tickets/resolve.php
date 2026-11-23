@@ -23,6 +23,11 @@ if (!empty($ticket_id)) {
     $ticket_number = intval($ticket_row['ticket_number']);
     $ticket_first_response_at = sanitizeInput($ticket_row['ticket_first_response_at']);
 
+    // MSP-DS-66: same close preconditions as the web app (outtake custody); nothing is changed when blocked
+    if ($ticket_id && ticketCloseBlockReason($ticket_id)) {
+        $ticket_id = 0;
+    }
+
     // Mark FR (if not)
     if (empty($ticket_first_response_at)) {
         mysqli_query($mysqli, "UPDATE tickets SET ticket_first_response_at = NOW() WHERE ticket_id = $ticket_id AND ticket_client_id = $client_id LIMIT 1");

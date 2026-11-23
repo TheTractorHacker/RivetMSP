@@ -8,11 +8,15 @@ if (isset($_POST['add_kb_category'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
-    enforceUserPermission('module_kb');
+    enforceUserPermission('module_kb', 2);
 
     $name = sanitizeInput($_POST['name']);
     $parent_id = intval($_POST['parent_id'] ?? 0);
     $kb_category_client_id = intval($_POST['client_id'] ?? 0);
+
+    if ($kb_category_client_id) {
+        enforceClientAccess($kb_category_client_id);
+    }
 
     $sql_order = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COALESCE(MAX(kb_category_order), -1) + 1 AS next_order FROM kb_categories WHERE kb_category_parent_id = $parent_id"));
     $order = intval($sql_order['next_order']);
@@ -40,12 +44,21 @@ if (isset($_POST['edit_kb_category'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
-    enforceUserPermission('module_kb');
+    enforceUserPermission('module_kb', 2);
 
     $kb_category_id = intval($_POST['kb_category_id']);
     $name = sanitizeInput($_POST['name']);
     $parent_id = intval($_POST['parent_id'] ?? 0);
     $kb_category_client_id = intval($_POST['client_id'] ?? 0);
+
+    // The stored client comes from the database, not the POST (MSP-DS-10): access to both the current and the new client is needed
+    $existing_kb_category_client_id = intval(getFieldById('kb_categories', $kb_category_id, 'kb_category_client_id'));
+    if ($existing_kb_category_client_id) {
+        enforceClientAccess($existing_kb_category_client_id);
+    }
+    if ($kb_category_client_id) {
+        enforceClientAccess($kb_category_client_id);
+    }
 
     // A category can't be its own parent.
     if ($parent_id == $kb_category_id) {
@@ -73,9 +86,14 @@ if (isset($_GET['delete_kb_category'])) {
 
     validateCSRFToken($_GET['csrf_token']);
 
-    enforceUserPermission('module_kb');
+    enforceUserPermission('module_kb', 3);
 
     $kb_category_id = intval($_GET['delete_kb_category']);
+
+    $existing_kb_category_client_id = intval(getFieldById('kb_categories', $kb_category_id, 'kb_category_client_id'));
+    if ($existing_kb_category_client_id) {
+        enforceClientAccess($existing_kb_category_client_id);
+    }
 
     $kb_category_name = sanitizeInput(getFieldById('kb_categories', $kb_category_id, 'kb_category_name'));
 

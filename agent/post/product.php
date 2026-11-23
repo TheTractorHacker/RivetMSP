@@ -263,7 +263,7 @@ if (isset($_POST['export_products_csv'])) {
     if ($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename("$session_company_name-Products-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -276,7 +276,7 @@ if (isset($_POST['export_products_csv'])) {
         //output each row of the data, format line as csv and write to file pointer
         while($row = mysqli_fetch_assoc($sql)) {
             $lineData = array($row['product_name'], $row['product_description'], $row['product_price'], $row['product_currency_code'], $row['category_name'], $row['tax_name']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file

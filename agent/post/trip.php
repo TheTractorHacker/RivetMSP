@@ -128,7 +128,7 @@ if (isset($_POST['export_trips_csv'])) {
     if ($count > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Trips-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -141,7 +141,7 @@ if (isset($_POST['export_trips_csv'])) {
         //output each row of the data, format line as csv and write to file pointer
         while($row = mysqli_fetch_assoc($sql)){
             $lineData = array($row['trip_date'], $row['trip_purpose'], $row['trip_source'], $row['trip_destination'], $row['trip_miles']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file

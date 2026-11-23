@@ -8,7 +8,7 @@ if (isset($_POST['save_payroll_pay_rate'])) {
 
     $user_id = intval($_POST['user_id']);
     $pay_type = sanitizeInput($_POST['pay_type'] ?? 'hourly');
-    $pay_amount = round(floatval($_POST['pay_amount'] ?? 0), 2);
+    $pay_amount = max(0, round(floatval($_POST['pay_amount'] ?? 0), 2));
 
     if (!in_array($pay_type, ['hourly', 'salary'], true)) {
         $pay_type = 'hourly';
@@ -56,7 +56,7 @@ if (isset($_POST['add_payroll_employee_deduction'])) {
 
     $user_id = intval($_POST['user_id']);
     $category_id = intval($_POST['category_id']);
-    $amount = round(floatval($_POST['amount'] ?? 0), 2);
+    $amount = max(0, round(floatval($_POST['amount'] ?? 0), 2));
 
     $category_name = sanitizeInput(getFieldById('payroll_deduction_categories', $category_id, 'payroll_deduction_category_name'));
     if ($user_id <= 0 || $category_id <= 0 || $category_name === '') {

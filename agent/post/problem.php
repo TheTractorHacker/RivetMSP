@@ -125,6 +125,12 @@ if (isset($_POST['link_problem_change'])) {
         redirect("problem_details.php?id=$problem_id");
     }
 
+    // MSP-DS-130: a change of a client the user cannot see cannot be linked (internal changes, client 0, can)
+    $change_client_id = intval(getFieldById('changes', $change_id, 'client_id'));
+    if ($change_client_id > 0) {
+        enforceClientAccess($change_client_id);
+    }
+
     rivetItsmProblems()->linkChange($problem_id, $change_id);
 
     logAction("Support", "Edit", "$session_name linked change #$change_id to problem #$problem_id", 0, $problem_id);

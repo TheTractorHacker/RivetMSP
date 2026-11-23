@@ -367,7 +367,7 @@ $has_locations    = mysqli_num_rows($sql_client_locations) > 0;
         <div class="card card-dark mb-3">
             <div class="card-header p-2 d-flex align-items-center justify-content-between">
                 <h5 class="card-title mb-0"><i class="fas fa-fw fa-history me-2"></i>Recent Activity</h5>
-                <?php if ($session_user_role == 3): ?>
+                <?php if ($session_is_admin): ?>
                 <a href="../admin/audit_log.php?client=<?= $client_id ?>" class="text-muted small">Full log <i class="fas fa-chevron-right fa-xs"></i></a>
                 <?php endif; ?>
             </div>
@@ -598,7 +598,7 @@ if ($has_fav_assets || $has_fav_creds):
                     $credential_name       = nullable_htmlentities($row['credential_name']);
                     $credential_description= nullable_htmlentities($row['credential_description']);
                     $credential_uri        = sanitize_url($row['credential_uri']);
-                    vaultGate('client overview');
+                    if (!vaultGateRow('client overview')) { echo vaultRowDeniedHtml($credential_name, 3); continue; }   // R9: mask the row, never die mid-table
                     $credential_username_raw = decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username');
                     $credential_password_raw = decryptCredentialEntry($row['credential_password'], $row['credential_id'] ?? null, 'password');
                     $vault_locked           = ($credential_username_raw === null || $credential_password_raw === null);

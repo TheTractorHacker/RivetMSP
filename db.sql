@@ -23,6 +23,8 @@ CREATE TABLE `accounting_entity_map` (
   `map_local_subtype` varchar(20) DEFAULT NULL,
   `map_remote_sync_token` varchar(32) DEFAULT NULL,
   `map_last_synced_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `map_provider` varchar(30) NOT NULL DEFAULT '',
+  `map_realm_id` varchar(64) NOT NULL DEFAULT '',
   PRIMARY KEY (`map_id`),
   UNIQUE KEY `uniq_map` (`map_accounting_id`,`map_local_type`,`map_local_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -434,6 +436,7 @@ CREATE TABLE `assets` (
   `asset_location_id` int(11) NOT NULL DEFAULT 0,
   `asset_contact_id` int(11) NOT NULL DEFAULT 0,
   `asset_client_id` int(11) NOT NULL DEFAULT 0,
+  `asset_public_ip` varchar(64) DEFAULT NULL,
   PRIMARY KEY (`asset_id`),
   KEY `idx_assets_client_archived` (`asset_client_id`,`asset_archived_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -698,6 +701,8 @@ CREATE TABLE `changes` (
   `requires_client_approval` tinyint(1) NOT NULL DEFAULT 0,
   `client_decision` enum('pending','approved','rejected') NOT NULL DEFAULT 'pending',
   `client_decided_at` datetime DEFAULT NULL,
+  `client_approval_requested_at` datetime DEFAULT NULL,
+  `client_rejected_at` datetime DEFAULT NULL,
   `url_key` varchar(32) DEFAULT NULL,
   PRIMARY KEY (`change_id`),
   KEY `idx_changes_status` (`status`),
@@ -1593,6 +1598,7 @@ CREATE TABLE `domains` (
   `domain_dnshost` int(11) NOT NULL DEFAULT 0,
   `domain_mailhost` int(11) NOT NULL DEFAULT 0,
   `domain_client_id` int(11) NOT NULL DEFAULT 0,
+  `domain_route_mail` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`domain_id`),
   KEY `idx_domains_client_archived_expire` (`domain_client_id`,`domain_archived_at`,`domain_expire`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -2478,6 +2484,49 @@ CREATE TABLE `invoice_items` (
   PRIMARY KEY (`item_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `invoice_charge_attempts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `invoice_charge_attempts` (
+  `attempt_id` int(11) NOT NULL AUTO_INCREMENT,
+  `attempt_invoice_id` int(11) NOT NULL,
+  `attempt_key` varchar(120) NOT NULL,
+  `attempt_balance_cents` bigint(20) NOT NULL DEFAULT 0,
+  `attempt_method_id` int(11) NOT NULL DEFAULT 0,
+  `attempt_source` varchar(20) NOT NULL DEFAULT '',
+  `attempt_status` varchar(20) NOT NULL DEFAULT 'processing',
+  `attempt_pi_id` varchar(100) NOT NULL DEFAULT '',
+  `attempt_error` varchar(255) NOT NULL DEFAULT '',
+  `attempt_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `attempt_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`attempt_id`),
+  UNIQUE KEY `uniq_charge_attempt_key` (`attempt_key`),
+  KEY `idx_charge_attempt_invoice` (`attempt_invoice_id`,`attempt_status`),
+  KEY `idx_charge_attempt_pi` (`attempt_pi_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `payment_reversals`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `payment_reversals` (
+  `reversal_id` int(11) NOT NULL AUTO_INCREMENT,
+  `reversal_ref` varchar(100) NOT NULL,
+  `reversal_kind` varchar(10) NOT NULL DEFAULT 'refund',
+  `reversal_payment_id` int(11) NOT NULL DEFAULT 0,
+  `reversal_invoice_id` int(11) NOT NULL DEFAULT 0,
+  `reversal_pi_id` varchar(100) NOT NULL DEFAULT '',
+  `reversal_amount` decimal(15,2) NOT NULL DEFAULT 0.00,
+  `reversal_currency` varchar(10) NOT NULL DEFAULT '',
+  `reversal_status` varchar(40) NOT NULL DEFAULT '',
+  `reversal_event_type` varchar(60) NOT NULL DEFAULT '',
+  `reversal_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `reversal_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`reversal_id`),
+  UNIQUE KEY `uniq_payment_reversal_ref` (`reversal_ref`),
+  KEY `idx_payment_reversal_payment` (`reversal_payment_id`),
+  KEY `idx_payment_reversal_invoice` (`reversal_invoice_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `invoices`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -2501,7 +2550,8 @@ CREATE TABLE `invoices` (
   `invoice_category_id` int(11) NOT NULL,
   `invoice_recurring_invoice_id` int(11) NOT NULL DEFAULT 0,
   `invoice_client_id` int(11) NOT NULL,
-  PRIMARY KEY (`invoice_id`)
+  PRIMARY KEY (`invoice_id`),
+  UNIQUE KEY `uniq_invoices_prefix_number` (`invoice_prefix`,`invoice_number`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `kb_article_attachments`;
@@ -2633,6 +2683,7 @@ CREATE TABLE `locations` (
   `location_fax_country_code` varchar(10) DEFAULT NULL,
   `location_fax` varchar(200) DEFAULT NULL,
   `location_hours` varchar(200) DEFAULT NULL,
+  `location_wan_ip` varchar(255) DEFAULT NULL,
   `location_photo` varchar(200) DEFAULT NULL,
   `location_primary` tinyint(1) NOT NULL DEFAULT 0,
   `location_notes` text DEFAULT NULL,
@@ -2922,6 +2973,7 @@ CREATE TABLE `mcp_pending_actions` (
   `action_id` int(11) NOT NULL AUTO_INCREMENT,
   `requested_by` int(11) NOT NULL,
   `oauth_client_id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+  `grant_id` int(11) NOT NULL DEFAULT 0,
   `tool` varchar(60) NOT NULL,
   `args_json` text NOT NULL,
   `args_hash` char(64) NOT NULL,
@@ -3211,7 +3263,9 @@ CREATE TABLE `payroll_periods` (
   `payroll_period_created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `payroll_period_updated_at` datetime DEFAULT NULL ON UPDATE current_timestamp(),
   `payroll_period_archived_at` datetime DEFAULT NULL,
-  PRIMARY KEY (`payroll_period_id`)
+  `payroll_period_live_key` varchar(21) GENERATED ALWAYS AS (if(`payroll_period_archived_at` is null,concat(`payroll_period_start_date`,'|',`payroll_period_end_date`),NULL)) STORED,
+  PRIMARY KEY (`payroll_period_id`),
+  UNIQUE KEY `uniq_payroll_period_live_key` (`payroll_period_live_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `payroll_run_line_item_deductions`;
@@ -3287,7 +3341,9 @@ CREATE TABLE `payroll_runs` (
   `payroll_run_finalized_at` datetime DEFAULT NULL,
   `payroll_run_finalized_by` int(11) DEFAULT NULL,
   `payroll_run_archived_at` datetime DEFAULT NULL,
+  `payroll_run_live_period_id` int(11) GENERATED ALWAYS AS (if(`payroll_run_archived_at` is null,`payroll_run_period_id`,NULL)) STORED,
   PRIMARY KEY (`payroll_run_id`),
+  UNIQUE KEY `uniq_payroll_run_live_period` (`payroll_run_live_period_id`),
   KEY `idx_payroll_run_period` (`payroll_run_period_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -3507,7 +3563,8 @@ CREATE TABLE `quotes` (
   `quote_archived_at` datetime DEFAULT NULL,
   `quote_category_id` int(11) NOT NULL,
   `quote_client_id` int(11) NOT NULL,
-  PRIMARY KEY (`quote_id`)
+  PRIMARY KEY (`quote_id`),
+  UNIQUE KEY `uniq_quotes_prefix_number` (`quote_prefix`,`quote_number`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `rack_units`;
@@ -3757,6 +3814,7 @@ CREATE TABLE `report_schedules` (
   `schedule_last_sent` datetime DEFAULT NULL,
   `schedule_active` tinyint(4) DEFAULT 1,
   `schedule_created_at` datetime DEFAULT current_timestamp(),
+  `schedule_created_by` int(11) DEFAULT NULL,
   PRIMARY KEY (`schedule_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -5591,6 +5649,7 @@ CREATE TABLE `settings` (
   `config_payroll_overtime_threshold_hours` decimal(6,2) NOT NULL DEFAULT 40.00,
   `config_payroll_overtime_multiplier` decimal(4,2) NOT NULL DEFAULT 1.50,
   `config_payroll_default_pay_frequency` varchar(20) NOT NULL DEFAULT 'biweekly',
+  `config_payroll_workweek_start` varchar(10) NOT NULL DEFAULT 'period',
   `config_module_enable_payroll` tinyint(1) NOT NULL DEFAULT 0,
   `config_ticket_default_technician_id` int(11) DEFAULT NULL,
   `config_ticket_default_category_id` int(11) NOT NULL DEFAULT 0,
@@ -6459,6 +6518,7 @@ CREATE TABLE `tickets` (
   `ticket_sla_started_at` datetime DEFAULT NULL,
   `ticket_catalog_item_id` int(11) DEFAULT NULL,
   PRIMARY KEY (`ticket_id`),
+  UNIQUE KEY `uniq_tickets_prefix_number` (`ticket_prefix`,`ticket_number`),
   KEY `idx_tickets_client_archived_updated` (`ticket_client_id`,`ticket_archived_at`,`ticket_updated_at`),
   KEY `idx_tickets_problem` (`ticket_problem_id`),
   KEY `idx_ticket_mail_message_id` (`ticket_mail_message_id`),
@@ -6812,6 +6872,7 @@ CREATE TABLE `users` (
   `user_token` text DEFAULT NULL,
   `user_password_reset_token` varchar(200) DEFAULT NULL,
   `user_password_reset_token_expire` datetime DEFAULT NULL,
+  `user_session_version` int(11) NOT NULL DEFAULT 0,
   `user_avatar` varchar(200) DEFAULT NULL,
   `user_specific_encryption_ciphertext` text DEFAULT NULL,
   `user_php_session` varchar(255) DEFAULT NULL,
@@ -6831,8 +6892,14 @@ CREATE TABLE `users` (
   `user_passkey_bootstrap_key` varchar(64) DEFAULT NULL,
   `user_oidc_issuer` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
   `user_oidc_subject` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  `user_calendar_token_hash` char(64) DEFAULT NULL,
+  `user_calendar_token_rotated_at` datetime DEFAULT NULL,
+  `user_calendar_legacy_until` datetime DEFAULT NULL,
+  `user_staff_email_key` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci GENERATED ALWAYS AS (IF(`user_type` = 1 AND `user_email` <> '', `user_email`, NULL)) VIRTUAL,
   PRIMARY KEY (`user_id`),
-  UNIQUE KEY `uniq_user_oidc` (`user_oidc_issuer`, `user_oidc_subject`)
+  UNIQUE KEY `uniq_user_oidc` (`user_oidc_issuer`, `user_oidc_subject`),
+  UNIQUE KEY `uniq_users_staff_email` (`user_staff_email_key`),
+  KEY `idx_users_calendar_token` (`user_calendar_token_hash`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `vendor_credentials`;

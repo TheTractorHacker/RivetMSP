@@ -6,7 +6,7 @@ function generatePassword(login_id) {
         },
         function(data) {
             //If we get a response from post.php, parse it as JSON
-            const password = JSON.parse(data);
+            const password = data; // jQuery already parsed the application/json response (MSP-DS-28 review R1)
 
             document.getElementById("password").value = password;
         }

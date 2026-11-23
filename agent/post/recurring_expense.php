@@ -13,6 +13,11 @@ if (isset($_POST['create_recurring_expense'])) {
     enforceUserPermission('module_financial', 2);
 
     $frequency = intval($_POST['frequency']);
+    // MSP-DS-92: only monthly (1) and yearly (2) exist; anything else would be re-booked on every cron run
+    if (!in_array($frequency, [1, 2], true)) {
+        flash_alert('Choose a valid frequency (monthly or yearly)', 'error');
+        redirect();
+    }
     $day = intval($_POST['day']);
     $month = intval($_POST['month']);
     $amount =  floatval(str_replace(',', '', $_POST['amount']));
@@ -23,7 +28,7 @@ if (isset($_POST['create_recurring_expense'])) {
     $description = sanitizeInput($_POST['description']);
     $reference = sanitizeInput($_POST['reference']);
 
-    enforceClientAccess();
+    if ($client_id) { enforceClientAccess(); } // MSP-DS-55: internal (no-client) rows have no client to check
 
     $year = date('Y');
     if (strtotime("$year-$month-$day") < time()) {
@@ -54,9 +59,15 @@ if (isset($_POST['edit_recurring_expense'])) {
     $recurring_expense_id = intval($_POST['recurring_expense_id']);
 
     // Confirm access to the recurring expense's current client before allowing any edit
-    enforceClientAccess(intval(getFieldById('recurring_expenses', $recurring_expense_id, 'recurring_expense_client_id')));
+    $current_re_client_id = intval(getFieldById('recurring_expenses', $recurring_expense_id, 'recurring_expense_client_id'));
+    if ($current_re_client_id) { enforceClientAccess($current_re_client_id); } // MSP-DS-55
 
     $frequency = intval($_POST['frequency']);
+    // MSP-DS-92: only monthly (1) and yearly (2) exist; anything else would be re-booked on every cron run
+    if (!in_array($frequency, [1, 2], true)) {
+        flash_alert('Choose a valid frequency (monthly or yearly)', 'error');
+        redirect();
+    }
     $day = intval($_POST['day']);
     $month = intval($_POST['month']);
     $amount =  floatval(str_replace(',', '', $_POST['amount']));
@@ -69,7 +80,7 @@ if (isset($_POST['edit_recurring_expense'])) {
 
     // The form may also reassign the rule to a different client - confirm access
     // to that destination client too.
-    enforceClientAccess();
+    if ($client_id) { enforceClientAccess(); } // MSP-DS-55: internal (no-client) rows have no client to check
 
     $year = date('Y');
     if (strtotime("$year-$month-$day") < time()) {
@@ -103,7 +114,7 @@ if (isset($_GET['delete_recurring_expense'])) {
     $recurring_expense_description = sanitizeInput($row['recurring_expense_description']);
     $client_id = intval($row['recurring_expense_client_id']);
 
-    enforceClientAccess();
+    if ($client_id) { enforceClientAccess(); } // MSP-DS-55: internal (no-client) rows have no client to check
 
     mysqli_query($mysqli,"DELETE FROM recurring_expenses WHERE recurring_expense_id = $recurring_expense_id");
 

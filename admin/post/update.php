@@ -142,6 +142,13 @@ if (isset($_GET['update_db'])) {
     // Perform upgrades, if required
     try {
         require_once ('database_updates.php');
+    } catch (\DbUpdateRefusedException $e) {
+        // A migration step refused to run because data needs an admin decision first (nothing of that step was applied): show why.
+        if ($update_lock !== null) {
+            $update_lock->release();
+        }
+        flash_alert($e->getMessage(), 'error');
+        redirect();
     } catch (\RivetCore\Migration\MigrationInProgressException $e) {
         // Another process holds the RivetCore migration lock for this schema: not a failure, just try again shortly.
         if ($update_lock !== null) {

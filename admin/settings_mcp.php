@@ -105,6 +105,9 @@ $csrf = $_SESSION['csrf_token'];
         <span class="badge bg-<?= $oauth['builtin'] ? 'success' : 'secondary' ?>"><?= $oauth['builtin'] ? 'On' : 'Off' ?></span>
     </div>
     <div class="card-body">
+        <?php if (!is_file(__DIR__ . '/../oauth/authorize.php')) { ?>
+        <div class="alert alert-warning">The sign-in pages this needs (<code>/oauth/authorize.php</code>, <code>/oauth/token.php</code>, <code>/oauth/revoke.php</code>) are not part of this edition yet, so built-in sign-in cannot issue a token here. Use an external identity provider below.</div>
+        <?php } ?>
         <p class="text-muted"><?= htmlspecialchars(defined('APP_NAME') ? APP_NAME : 'RivetMSP') ?> acts as its own OAuth server for MCP. Add the address above to Claude (Settings &rarr; Connectors) or ToolHive; the person signs in to <?= htmlspecialchars(defined('APP_NAME') ? APP_NAME : 'RivetMSP') ?> as usual (password, 2FA) and approves a read-only connection. No API key and no other identity provider. While this is on, tokens from an external identity provider are not accepted.</p>
         <form action="post.php" method="post" autocomplete="off">
             <input type="hidden" name="csrf_token" value="<?= $csrf ?>">
@@ -449,7 +452,7 @@ $write_pending = $write_ready ? (new \RivetMSP\Mcp\PendingActions($mysqli))->pen
             </ul>
         </details>
         <details><summary class="fw-semibold">Web server setup (nginx)</summary>
-            <p class="mt-2">If the health check says the address returns 404, add these blocks to this site's nginx configuration, then test and reload nginx. Apache users need nothing: the bundled <code>.htaccess</code> already has the rules.</p>
+            <p class="mt-2">If the health check says the address returns 404, add these blocks to this site's nginx configuration, then test and reload nginx. Apache users need nothing for <code>/mcp</code> and <code>/.well-known/oauth-protected-resource</code>: the bundled <code>.htaccess</code> has those rules (it does not route <code>/.well-known/oauth-authorization-server</code>, which only the built-in sign-in uses).</p>
             <div class="position-relative">
             <button type="button" class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2 js-copy-text" data-copy-target="mcp-nginx">Copy</button>
             <pre id="mcp-nginx" class="border rounded p-3 pe-5 small mb-0" style="overflow-x:auto">location = /mcp {

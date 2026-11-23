@@ -503,6 +503,48 @@ if (isset($_GET['asset_id'])) {
                 <?php endif; ?>
 
 
+                <?php
+                // Network: the address this device reaches the internet from (RMM / agent), compared with the location's WAN IP, plus its LAN IP.
+                $asset_public = \RivetMSP\Assets\PublicIp::forAsset($mysqli, $asset_id);
+                $net_lan = (!empty($asset_ip) && filter_var(html_entity_decode((string) $asset_ip), FILTER_VALIDATE_IP)) ? $asset_ip : '';
+                if ($asset_public || $net_lan) {
+                    $net_loc_wan = [];
+                    $net_loc = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT l.location_wan_ip FROM assets a JOIN locations l ON l.location_id = a.asset_location_id WHERE a.asset_id = $asset_id"));
+                    if ($net_loc) { $net_loc_wan = \RivetMSP\Assets\PublicIp::parseList((string) ($net_loc['location_wan_ip'] ?? '')); }
+                ?>
+                <div class="card card-dark">
+                    <div class="card-header">
+                        <h5 class="card-title">Network</h5>
+                    </div>
+                    <div class="card-body">
+                        <?php if ($asset_public) { $net_pub = nullable_htmlentities($asset_public['ip']); ?>
+                            <div class="text-muted small text-uppercase" style="letter-spacing:.4px"><i class="fa fa-fw fa-globe me-1"></i>Public (WAN) IP</div>
+                            <div class="d-flex align-items-center gap-2 mt-1">
+                                <code class="fs-5 user-select-all"><?= $net_pub ?></code>
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1 net-copy" data-copy="<?= $net_pub ?>" title="Copy" aria-label="Copy public IP"><i class="fa fa-fw fa-copy"></i></button>
+                            </div>
+                            <div class="small text-muted mt-1">Reported by <?= $asset_public['source'] === 'agent' ? 'the RivetMSP agent' : 'the RMM' ?>.
+                            <?php if ($net_loc_wan) {
+                                if (in_array($asset_public['ip'], $net_loc_wan, true)) { ?>
+                                    <span class="text-success"><i class="fa fa-fw fa-check-circle"></i>Matches the location's WAN IP.</span>
+                                <?php } else { ?>
+                                    <span class="text-warning"><i class="fa fa-fw fa-exclamation-triangle"></i>Not the location's WAN IP (<?= nullable_htmlentities(implode(', ', $net_loc_wan)) ?>).</span>
+                                <?php }
+                            } ?></div>
+                        <?php } ?>
+                        <?php if ($net_lan) { ?>
+                            <div class="text-muted small text-uppercase<?= $asset_public ? ' mt-3' : '' ?>" style="letter-spacing:.4px"><i class="fa fa-fw fa-network-wired me-1"></i>LAN IP</div>
+                            <code class="user-select-all"><?= $net_lan ?></code>
+                        <?php } ?>
+                    </div>
+                </div>
+                <script nonce="<?= htmlspecialchars($csp_nonce ?? '', ENT_QUOTES) ?>">
+                document.querySelectorAll('.net-copy').forEach(function (b) {
+                    b.addEventListener('click', function () { navigator.clipboard.writeText(b.dataset.copy); b.innerHTML = '<i class="fa fa-fw fa-check"></i>'; });
+                });
+                </script>
+                <?php } ?>
+
                 <div class="card card-dark">
                     <div class="card-header">
                         <h5 class="card-title">Assignment</h5>
@@ -1186,7 +1228,7 @@ if (isset($_GET['asset_id'])) {
                                                         data-modal-url="modals/asset/asset_interface_edit.php?id=<?= $interface_id ?>">
                                                         <i class="fas fa-fw fa-edit me-2"></i>Edit
                                                     </a>
-                                                    <?php if ($session_user_role == 3 && $interface_primary == 0): ?>
+                                                    <?php if ($session_is_admin && $interface_primary == 0): ?>
                                                         <div class="dropdown-divider"></div>
                                                         <a class="dropdown-item text-danger text-bold" href="post.php?delete_asset_interface=<?= $interface_id; ?>&csrf_token=<?= $_SESSION['csrf_token']; ?>">
                                                             <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -1234,9 +1276,9 @@ if (isset($_GET['asset_id'])) {
                                     if (empty($credential_uri)) {
                                         $credential_uri_display = "-";
                                     } else {
-                                        $credential_uri_display = "$credential_uri<button class='btn btn-sm clipboardjs' data-clipboard-text='$credential_uri'><i class='far fa-copy text-secondary'></i></button><a href='$credential_uri' target='_blank'><i class='fa fa-external-link-alt text-secondary'></i></a>";
+                                        $credential_uri_display = "$credential_uri<button class='btn btn-sm clipboardjs' data-clipboard-text='$credential_uri'><i class='far fa-copy text-secondary'></i></button><a href='" . sanitize_url($row['credential_uri']) . "' target='_blank'><i class='fa fa-external-link-alt text-secondary'></i></a>";
                                     }
-                                    vaultGate('asset page');
+                                    if (!vaultGateRow('asset page')) { echo vaultRowDeniedHtml($credential_name, 6); continue; }   // R9: mask the row, never die mid-table
                                     $credential_username = nullable_htmlentities(decryptCredentialEntry($row['credential_username'], ($row['credentials_credential_id'] ?? $row['credential_id'] ?? null), 'username'));
                                     if (empty($credential_username)) {
                                         $credential_username_display = "-";
@@ -1311,7 +1353,7 @@ if (isset($_GET['asset_id'])) {
                                                     <a class="dropdown-item" href="post.php?unlink_credential_from_asset&asset_id=<?= $asset_id; ?>&credential_id=<?= $credential_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                         <i class="fas fa-fw fa-unlink me-2"></i>Unlink
                                                     </a>
-                                                    <?php if ($session_user_role == 3) { ?>
+                                                    <?php if ($session_is_admin) { ?>
                                                         <div class="dropdown-divider"></div>
                                                         <a class="dropdown-item text-danger text-bold" href="post.php?delete_credential=<?= $credential_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                             <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -1637,7 +1679,7 @@ if (isset($_GET['asset_id'])) {
                                                         <i class="fa fa-fw fa-paper-plane text-secondary me-2"></i>Force Reoccur
                                                     </a>
                                                     <?php
-                                                    if ($session_user_role == 3) { ?>
+                                                    if ($session_is_admin) { ?>
                                                     <div class="dropdown-divider"></div>
                                                     <a class="dropdown-item text-danger text-bold confirm-link" href="post.php?delete_recurring_ticket=<?= $recurring_ticket_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                         <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -1807,7 +1849,6 @@ if (isset($_GET['asset_id'])) {
 
         </div><!-- /#asset-details-content -->
 
-        <?php $rel_type = 'asset'; $rel_id = $asset_id; require __DIR__ . '/../includes/relationships_card.php'; ?>
 
         <?php
 

@@ -153,6 +153,28 @@ if ($run['payroll_run_finalized_by']) {
         <small class="d-block text-muted mt-2">Finalizing locks this run and its pay period permanently - the numbers above can never be changed again.</small>
         <?php } ?>
 
+        <?php
+        // Re-review M3-9: duplicate-run resolution (admins only; the 2.6.139 database update refuses until duplicates are gone)
+        require_once "../includes/payroll_functions.php";
+        $dup_chk = !empty($session_is_admin) ? payrollRunArchiveCheck($mysqli, $run_id) : ['ok' => false];
+        if ($dup_chk['ok']) { ?>
+        <hr>
+        <div class="alert alert-warning">
+            <strong>Duplicate run.</strong> Another <?= $is_finalized ? 'finalized ' : '' ?>run exists for this same pay period. If this one is the extra copy, archive it:
+            it is kept (never deleted), hidden from the live lists, and your reason is written to the audit log.
+            <?php if ($is_finalized) { ?>This run is FINALIZED, so your password is needed as well.<?php } ?>
+            <form action="post.php" method="post" class="row g-2 mt-2" autocomplete="off">
+                <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                <input type="hidden" name="run_id" value="<?= $run_id ?>">
+                <div class="col-md-5"><input type="text" name="archive_reason" class="form-control" placeholder="Reason (required)" minlength="5" maxlength="500" required></div>
+                <?php if ($is_finalized) { ?>
+                <div class="col-md-3"><input type="password" name="admin_current_password" class="form-control" placeholder="Your password" autocomplete="current-password" required></div>
+                <?php } ?>
+                <div class="col-md-3"><button type="submit" name="archive_duplicate_payroll_run" class="btn btn-warning confirm-link"><i class="fas fa-archive me-2"></i>Archive this duplicate</button></div>
+            </form>
+        </div>
+        <?php } ?>
+
     </div>
 </div>
 

@@ -60,3 +60,88 @@ function reportScheduleStaffEmails($mysqli): array
     }
     return $out;
 }
+
+/**
+ * MSP-DS-156: staff emails that may actually READ this report: admins, or a role with the report's module at level 1+,
+ * and never an account restricted to a subset of clients (the headline figures are company-wide).
+ * Applied at send time on top of reportScheduleStaffEmails(), so a role change takes effect on the next send.
+ */
+function reportScheduleEligibleEmails($mysqli, $report_key): array
+{
+    $module = $mysqli->real_escape_string(reportScheduleRequiredModule($report_key));
+    $out = [];
+    $res = mysqli_query($mysqli,
+        "SELECT u.user_email FROM users u
+         JOIN user_roles r ON r.role_id = u.user_role_id
+         WHERE u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL AND u.user_email != ''
+           AND NOT EXISTS (SELECT 1 FROM user_client_permissions p WHERE p.user_id = u.user_id)
+           AND (r.role_is_admin = 1 OR EXISTS (
+                SELECT 1 FROM user_role_permissions rp JOIN modules m ON m.module_id = rp.module_id
+                WHERE rp.user_role_id = u.user_role_id AND m.module_name = '$module' AND rp.user_role_permission_level >= 1))");
+    while ($res && ($row = mysqli_fetch_assoc($res))) {
+        $out[] = $row['user_email'];
+    }
+    return $out;
+}
+
+/**
+ * MSP-DS-156: may the schedule's creator still send this report? Re-checked on every send, so a schedule stops when its creator is
+ * archived/disabled or no longer holds module_reporting (write) and the report's module. NULL/0 creator = a schedule created before the
+ * creator was recorded that the 2.6.140 backfill could not attribute: it does NOT send (fail closed, MSP-DS-156 re-review MRR16) until
+ * someone allowed to send that report takes it over ("Take ownership" in Reports > Schedules).
+ */
+function reportScheduleCreatorMaySend($mysqli, $created_by, $report_key): bool
+{
+    if ($created_by === null || $created_by === '' || (int) $created_by <= 0) {
+        return false;
+    }
+    $uid = (int) $created_by;
+    $module = $mysqli->real_escape_string(reportScheduleRequiredModule($report_key));
+    $res = mysqli_query($mysqli,
+        "SELECT 1 FROM users u
+         JOIN user_roles r ON r.role_id = u.user_role_id
+         WHERE u.user_id = $uid AND u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL
+           AND (r.role_is_admin = 1 OR (
+                EXISTS (SELECT 1 FROM user_role_permissions rp JOIN modules m ON m.module_id = rp.module_id
+                        WHERE rp.user_role_id = u.user_role_id AND m.module_name = 'module_reporting' AND rp.user_role_permission_level >= 2)
+                AND EXISTS (SELECT 1 FROM user_role_permissions rp2 JOIN modules m2 ON m2.module_id = rp2.module_id
+                        WHERE rp2.user_role_id = u.user_role_id AND m2.module_name = '$module' AND rp2.user_role_permission_level >= 1)))
+         LIMIT 1");
+    return $res && mysqli_num_rows($res) > 0;
+}
+
+/**
+ * MSP-DS-156 re-review MRR16: attribute schedules created before report_schedules.schedule_created_by existed (NULL / 0) to their creator, using the
+ * audit log row the Add handler wrote ("Report Schedule" / "Create": "Scheduled '<name>' (<frequency>) to <recipients>"). A schedule is attributed
+ * only when its frequency and recipient list match Create log rows that all name ONE user; anything ambiguous or unmatched stays unowned
+ * (and therefore does not send until it is taken over). Idempotent: only touches rows without a creator.
+ *
+ * @return array{owned:int[],unowned:int[]} schedule ids by outcome
+ */
+function reportScheduleBackfillCreators($mysqli): array
+{
+    $out = ['owned' => [], 'unowned' => []];
+    $res = mysqli_query($mysqli, "SELECT schedule_id, schedule_frequency, schedule_recipients FROM report_schedules WHERE schedule_created_by IS NULL OR schedule_created_by = 0");
+    $rows = [];
+    while ($res && ($r = mysqli_fetch_assoc($res))) {
+        $rows[] = $r;
+    }
+    foreach ($rows as $r) {
+        $id = (int) $r['schedule_id'];
+        $suffix = "(" . $r['schedule_frequency'] . ") to " . trim((string) $r['schedule_recipients']);
+        $like = mysqli_real_escape_string($mysqli, addcslashes($suffix, '\\%_'));
+        $q = mysqli_query($mysqli, "SELECT DISTINCT log_user_id FROM logs WHERE log_type = 'Report Schedule' AND log_action = 'Create' AND log_user_id > 0
+            AND log_description LIKE CONCAT('Scheduled %', '$like')");
+        $users = [];
+        while ($q && ($x = mysqli_fetch_row($q))) {
+            $users[] = (int) $x[0];
+        }
+        if (count($users) === 1) {
+            mysqli_query($mysqli, "UPDATE report_schedules SET schedule_created_by = {$users[0]} WHERE schedule_id = $id");
+            $out['owned'][] = $id;
+        } else {
+            $out['unowned'][] = $id;
+        }
+    }
+    return $out;
+}

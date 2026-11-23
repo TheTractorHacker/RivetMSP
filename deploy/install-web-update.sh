@@ -39,14 +39,20 @@ rm -rf "${DEST}"; mv "${DEST}.new" "${DEST}"
 umask 022
 {
     echo "APP_DIR=${APP_DIR}"
+    echo "WEB_USER=${WEB_USER}"
     [[ -n "${PASSPHRASE_FILE}" ]] && echo "PASSPHRASE_FILE=${PASSPHRASE_FILE}"
     [[ "${NO_BACKUP}" -eq 1 ]] && echo "NO_BACKUP_CONFIRMED=1"
 } > /etc/rivetmsp/web-update.conf
 chown root:root /etc/rivetmsp/web-update.conf; chmod 0644 /etc/rivetmsp/web-update.conf
+write_web_user_conf "${WEB_USER}"   # MSP-DS-34 RR1: the root-controlled source of the account the tooling drops app code to
 
 RULE="/etc/sudoers.d/rivetmsp-web-update"
 TMP="$(mktemp)"
-printf '%s ALL=(root) NOPASSWD: %s/web-update.sh, %s/web-update.sh --branch=*\n' "${WEB_USER}" "${DEST}" "${DEST}" > "${TMP}"
+# No environment passing: env_reset is forced for this command, SETENV is off, and nothing is env_keep'd, so the web user cannot hand the
+# root helper any variable (the helper also unsets its own test hooks).
+# A command with no argument list allows any arguments (the helper validates its one optional --branch=<name> strictly); sudo-rs and newer
+# sudo reject the old `web-update.sh --branch=*` wildcard form, which made this installer refuse to install the rule.
+printf 'Defaults!%s/web-update.sh env_reset, !setenv\n%s ALL=(root) NOPASSWD: %s/web-update.sh\n' "${DEST}" "${WEB_USER}" "${DEST}" > "${TMP}"
 visudo -cf "${TMP}" >/dev/null || { rm -f "${TMP}"; die "The generated sudoers rule did not validate; nothing installed."; }
 install -m 0440 -o root -g root "${TMP}" "${RULE}"; rm -f "${TMP}"
 success "Installed ${DEST}, /etc/rivetmsp/web-update.conf and ${RULE}. Administration > Update > Update App now runs through it."

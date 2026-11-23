@@ -10,6 +10,46 @@ defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 // accounting module + a connected integration with auto-push are configured.
 require_once __DIR__ . '/../../includes/accounting_functions.php';
 
+// M4-4: an admin clears one stuck charge attempt (needs_review forever / an intent Stripe can no longer return). Reason required and logged;
+// refused while Stripe says the payment is succeeded/processing.
+if (isset($_POST['clear_charge_attempt'])) {
+
+    validateCSRFToken($_POST['csrf_token']);
+
+    enforceUserPermission('module_sales', 2);
+    enforceAdminPermission();
+
+    $attempt_id = intval($_POST['attempt_id'] ?? 0);
+    $attempt_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT attempt_invoice_id, invoice_client_id FROM invoice_charge_attempts LEFT JOIN invoices ON invoice_id = attempt_invoice_id WHERE attempt_id = $attempt_id"));
+    if (!$attempt_row) {
+        flash_alert("Charge attempt not found", 'error');
+        redirect();
+    }
+    $invoice_id = intval($attempt_row['attempt_invoice_id']);
+    $client_id = intval($attempt_row['invoice_client_id']);
+
+    enforceClientAccess();
+
+    $pi_lookup = null;
+    $stripe_provider_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payment_provider_id FROM payment_providers WHERE payment_provider_name = 'Stripe' LIMIT 1"));
+    if ($stripe_provider_row) {
+        try {
+            require_once __DIR__ . '/../../includes/payment_provider_factory.php';
+            $pi_lookup = chargeAttemptProviderLookup(getPaymentProvider(intval($stripe_provider_row['payment_provider_id'])));
+        } catch (\Throwable $e) {
+            $pi_lookup = null;
+        }
+    }
+
+    $clear = chargeAttemptClear($mysqli, $attempt_id, (string) ($_POST['reason'] ?? ''), $pi_lookup, (string) ($session_name ?? 'admin'), !empty($_POST['stripe_checked']));
+    if ($clear['ok']) {
+        logAction("Invoice", "Edit", "$session_name cleared stuck charge attempt $attempt_id on invoice ID $invoice_id: " . substr(trim((string) ($_POST['reason'] ?? '')), 0, 200), $client_id, $invoice_id);
+    }
+    flash_alert($clear['message'], $clear['ok'] ? 'success' : 'error');
+    redirect();
+
+}
+
 if (isset($_POST['add_invoice'])) {
 
     validateCSRFToken($_POST['csrf_token']);
@@ -104,6 +144,12 @@ if (isset($_POST['edit_invoice'])) {
     }
 
     $invoice_amount = max(0, $invoice_amount - $invoice_discount);
+
+    // MSP-DS-129: the new total may never be lower than what has already been paid
+    if (invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount) < 0) {
+        flash_alert("The new total would be lower than the payments already recorded on this invoice", 'error');
+        redirect();
+    }
 
     mysqli_query($mysqli,"UPDATE invoices SET invoice_scope = '$scope', invoice_date = '$date', invoice_due = '$due', invoice_category_id = $category, invoice_discount_amount = '$invoice_discount', invoice_amount = '$invoice_amount' WHERE invoice_id = $invoice_id");
 
@@ -321,13 +367,33 @@ if (isset($_GET['delete_invoice'])) {
         redirect();
     }
 
+    // MSP-DS-56 (re-review MRR-3): the delete is one transaction. The lines are locked first (the same order delete_invoice_item uses: line, then invoice),
+    // then the invoice row, and the checks run again under the lock. Stock goes back only for a line whose own DELETE removed a row, so a double
+    // click or a race with delete_invoice_item returns each stocked line exactly once.
+    mysqli_begin_transaction($mysqli);
+    $lines = mysqli_query($mysqli,"SELECT invoice_items.*, products.product_type FROM invoice_items LEFT JOIN products ON product_id = item_product_id WHERE item_invoice_id = $invoice_id FOR UPDATE");
+    $lines = $lines ? mysqli_fetch_all($lines, MYSQLI_ASSOC) : [];
+    $inv_locked = mysqli_fetch_assoc(mysqli_query($mysqli,"SELECT invoice_id FROM invoices WHERE invoice_id = $invoice_id FOR UPDATE"));
+    if (!$inv_locked || ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id, true))) {
+        mysqli_rollback($mysqli);
+        flash_alert($inv_locked ? $block_reason : "Invoice not found (it may already have been deleted)", 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"DELETE FROM invoices WHERE invoice_id = $invoice_id");
 
     //Delete Items Associated with the Invoice
-    $sql = mysqli_query($mysqli,"SELECT * FROM invoice_items WHERE item_invoice_id = $invoice_id");
-    while($row = mysqli_fetch_assoc($sql)) {
+    foreach ($lines as $row) {
         $item_id = intval($row['item_id']);
         mysqli_query($mysqli,"DELETE FROM invoice_items WHERE item_id = $item_id");
+        if (mysqli_affected_rows($mysqli) !== 1) {
+            continue;   // another request removed this line (and returned its stock) first
+        }
+        // MSP-DS-56: stocked lines go back to stock when their invoice is deleted
+        if (intval($row['item_product_id']) > 0 && ($row['product_type'] ?? '') === 'product' && floatval($row['item_quantity']) > 0) {
+            $return_qty = floatval($row['item_quantity']);
+            productStockMove($mysqli, intval($row['item_product_id']), $return_qty, "Returned QTY $return_qty back to stock from deleted Invoice $invoice_id");
+        }
     }
 
     //Delete History Associated with the Invoice
@@ -346,6 +412,7 @@ if (isset($_GET['delete_invoice'])) {
 
     //unlink tickets from invoice
     mysqli_query($mysqli,"UPDATE tickets SET ticket_invoice_id = 0 WHERE ticket_invoice_id = $invoice_id");
+    mysqli_commit($mysqli);
 
     logAction("Invoice", "Delete", "$session_name deleted invoice $invoice_prefix$invoice_number", $client_id);
 
@@ -396,31 +463,14 @@ if (isset($_POST['add_invoice_item'])) {
 
     $subtotal = $price * $qty;
 
-    // Update Product Inventory
-    if ($product_id) {
-         // Only enforce stock for tangible products
-        $product_type = sanitizeInput(getFieldById('products', $product_id, 'product_type'));
-        if ($product_type === 'product') {
-
-            // Current available stock
-            $sql = mysqli_query(
-                $mysqli,
-                "SELECT COALESCE(SUM(stock_qty), 0) AS available_stock
-                 FROM product_stock
-                 WHERE stock_product_id = $product_id"
-            );
-            $row = mysqli_fetch_assoc($sql);
-            $available_stock = floatval($row['available_stock']);
-
-            // Enough in stock?
-            if ($available_stock >= $qty) {
-                mysqli_query($mysqli,"INSERT INTO product_stock SET stock_qty = -$qty, stock_note = 'QTY $qty - Invoice $invoice_id', stock_product_id = $product_id");
-            } else {
-                // Not enough in stock: stop and notify
-                flash_alert("Not Enough <strong>$name</strong> in stock", 'error');
-                redirect();
-            }
-        }
+    // MSP-DS-129 (review R15): a negative price must not take the total below what was already paid
+    $line_tax_pct = 0;
+    if ($tax_id > 0) {
+        $line_tax_pct = floatval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT tax_percent FROM taxes WHERE tax_id = $tax_id"))[0] ?? 0);
+    }
+    if ($line_block = invoiceLineBlockReason($mysqli, $invoice_id, $subtotal + $subtotal * $line_tax_pct / 100)) {
+        flash_alert($line_block, 'error');
+        redirect();
     }
 
     // Tax
@@ -435,7 +485,26 @@ if (isset($_POST['add_invoice_item'])) {
 
     $total = $subtotal + $tax_amount;
 
-    mysqli_query($mysqli,"INSERT INTO invoice_items SET item_name = '$name', item_description = '$description', item_quantity = $qty, item_price = $price, item_subtotal = $subtotal, item_tax = $tax_amount, item_total = $total, item_order = $item_order, item_tax_id = $tax_id, item_product_id = $product_id, item_invoice_id = $invoice_id");
+    // MSP-DS-56: the availability check, the stock decrement and the line INSERT are ONE transaction on the locked product row: two concurrent adds cannot both
+    // take the last unit, and a line INSERT that fails (e.g. price x qty out of range) gives the stock back instead of losing it.
+    $stock_product = $product_id && sanitizeInput(getFieldById('products', $product_id, 'product_type')) === 'product';
+    try {
+        mysqli_begin_transaction($mysqli);
+        if ($stock_product && !productStockMove($mysqli, $product_id, -$qty, "QTY $qty - Invoice $invoice_id")) {
+            mysqli_rollback($mysqli);
+            flash_alert("Not Enough <strong>$name</strong> in stock", 'error');
+            redirect();
+        }
+        $line_ok = mysqli_query($mysqli,"INSERT INTO invoice_items SET item_name = '$name', item_description = '$description', item_quantity = $qty, item_price = $price, item_subtotal = $subtotal, item_tax = $tax_amount, item_total = $total, item_order = $item_order, item_tax_id = $tax_id, item_product_id = $product_id, item_invoice_id = $invoice_id");
+        if (!$line_ok) {
+            throw new RuntimeException('line insert failed');
+        }
+        mysqli_commit($mysqli);
+    } catch (RuntimeException | mysqli_sql_exception $e) {
+        mysqli_rollback($mysqli);
+        flash_alert("The line could not be added", 'error');
+        redirect();
+    }
 
     // Get Discount and Invoice Details
     $sql = mysqli_query($mysqli,"SELECT * FROM invoices WHERE invoice_id = $invoice_id");
@@ -454,6 +523,8 @@ if (isset($_POST['add_invoice_item'])) {
     $new_invoice_amount = max(0, $invoice_total - $invoice_discount);
 
     mysqli_query($mysqli,"UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
+
+    invoiceSettleStatus($mysqli, $invoice_id);
 
     logAction("Invoice", "Edit", "$session_name added item $name to invoice $invoice_prefix$invoice_number", $client_id, $invoice_id);
 
@@ -523,9 +594,11 @@ if (isset($_POST['edit_invoice_item'])) {
     $total = $subtotal + $tax_amount;
 
     // Determine what type of line item
-    $sql = mysqli_query($mysqli,"SELECT item_invoice_id FROM invoice_items WHERE item_id = $item_id");
+    $sql = mysqli_query($mysqli,"SELECT item_invoice_id, item_quantity, item_product_id FROM invoice_items WHERE item_id = $item_id");
     $row = mysqli_fetch_assoc($sql);
     $invoice_id = intval($row['item_invoice_id']);
+    $old_item_quantity = floatval($row['item_quantity']);
+    $old_item_product_id = intval($row['item_product_id']);
 
     //Get Discount Amount
     $sql = mysqli_query($mysqli,"SELECT * FROM invoices WHERE invoice_id = $invoice_id");
@@ -537,12 +610,41 @@ if (isset($_POST['edit_invoice_item'])) {
 
     enforceClientAccess();
 
-    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id)) {
+    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id, true)) {   // MSP-DS-129: lines of an invoice with payments are frozen (the total could drop below what was paid)
         flash_alert($block_reason, 'error');
         redirect();
     }
 
-    mysqli_query($mysqli,"UPDATE invoice_items SET item_name = '$name', item_description = '$description', item_quantity = $qty, item_price = $price, item_subtotal = $subtotal, item_tax = $tax_amount, item_total = $total, item_tax_id = $tax_id WHERE item_id = $item_id");
+    // MSP-DS-56: a stocked line's quantity change moves the DIFFERENCE through stock (same availability check as adding the line), in one transaction with the
+    // line UPDATE: the stored line (re-read under its row lock) decides the product and the old quantity, not the posted product_id or the value read above.
+    try {
+        mysqli_begin_transaction($mysqli);
+        $locked = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT item_quantity, item_product_id FROM invoice_items WHERE item_id = $item_id FOR UPDATE"));
+        if (!$locked) {
+            mysqli_rollback($mysqli);
+            flash_alert("Item not found (it may already have been deleted)", 'error');
+            redirect();
+        }
+        $old_item_quantity = floatval($locked['item_quantity']);
+        $old_item_product_id = intval($locked['item_product_id']);
+        if ($old_item_product_id > 0 && getFieldById('products', $old_item_product_id, 'product_type') === 'product') {
+            $stock_delta = $qty - $old_item_quantity;
+            $stock_note = $stock_delta > 0 ? "QTY +$stock_delta - Invoice $invoice_id (line edited)" : "Returned QTY " . abs($stock_delta) . " back to stock - Invoice $invoice_id (line edited)";
+            if (!productStockMove($mysqli, $old_item_product_id, -$stock_delta, $stock_note)) {
+                mysqli_rollback($mysqli);
+                flash_alert("Not Enough <strong>$name</strong> in stock", 'error');
+                redirect();
+            }
+        }
+        if (!mysqli_query($mysqli,"UPDATE invoice_items SET item_name = '$name', item_description = '$description', item_quantity = $qty, item_price = $price, item_subtotal = $subtotal, item_tax = $tax_amount, item_total = $total, item_tax_id = $tax_id WHERE item_id = $item_id")) {
+            throw new RuntimeException('line update failed');
+        }
+        mysqli_commit($mysqli);
+    } catch (RuntimeException | mysqli_sql_exception $e) {
+        mysqli_rollback($mysqli);
+        flash_alert("The line could not be updated", 'error');
+        redirect();
+    }
 
     //Update Invoice Balances by tallying up invoice items
     $sql_invoice_total = mysqli_query($mysqli,"SELECT SUM(item_total) AS invoice_total FROM invoice_items WHERE item_invoice_id = $invoice_id");
@@ -589,21 +691,31 @@ if (isset($_GET['delete_invoice_item'])) {
 
     enforceClientAccess();
 
-    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id)) {
+    if ($block_reason = invoiceChangeBlockReason($mysqli, $invoice_id, true)) {   // MSP-DS-129: lines of an invoice with payments are frozen (the total could drop below what was paid)
         flash_alert($block_reason, 'error');
         redirect();
     }
 
+    // MSP-DS-56: the line is read again under its row lock, deleted and its ORIGINAL (stored) quantity returned in one transaction: a concurrent edit or a
+    // second delete of the same line cannot return stock twice or a stale quantity. Only stocked products ever left stock.
+    mysqli_begin_transaction($mysqli);
+    $locked = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT item_quantity, item_product_id, item_total FROM invoice_items WHERE item_id = $item_id FOR UPDATE"));
+    if (!$locked) {
+        mysqli_rollback($mysqli);
+        flash_alert("Item not found (it may already have been deleted)", 'error');
+        redirect();
+    }
+    $item_quantity = floatval($locked['item_quantity']);
+    $item_product_id = intval($locked['item_product_id']);
+    $item_total = floatval($locked['item_total']);
     $new_invoice_amount = max(0, floatval($row['invoice_amount']) - $item_total);
 
     mysqli_query($mysqli,"UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
-
     mysqli_query($mysqli,"DELETE FROM invoice_items WHERE item_id = $item_id");
-
-    // Return Product Inventory
-    if ($item_product_id) {
-        mysqli_query($mysqli,"INSERT INTO product_stock SET stock_qty = $item_quantity, stock_note = 'Returned QTY $item_quantity back to stock from Invoice $invoice_id', stock_product_id = $item_product_id");
+    if ($item_product_id && $item_quantity > 0 && getFieldById('products', $item_product_id, 'product_type') === 'product') {
+        productStockMove($mysqli, $item_product_id, $item_quantity, "Returned QTY $item_quantity back to stock from Invoice $invoice_id");
     }
+    mysqli_commit($mysqli);
 
     logAction("Invoice", "Delete", "$session_name removed item $item_name from invoice $invoice_prefix$invoice_number", $client_id, $invoice_id);
 
@@ -674,10 +786,10 @@ if (isset($_GET['email_invoice'])) {
 
     if ($invoice_status == 'Paid') {
         $subject = "Invoice $invoice_prefix$invoice_number Receipt";
-        $body = "Hello $contact_name,<br><br>Please click on the link below to see your invoice regarding \"$invoice_scope\" marked <b>paid</b>.<br><br><a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\'>Invoice Link</a><br><br><br>--<br>$company_name - Billing<br>$config_invoice_from_email<br>$company_phone";
+        $body = "Hello $contact_name,<br><br>Please click on the link below to see your invoice regarding \"$invoice_scope\" marked <b>paid</b>.<br><br><a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>Invoice Link</a><br><br><br>--<br>$company_name - Billing<br>$config_invoice_from_email<br>$company_phone";
     } else {
         $subject = "Invoice $invoice_prefix$invoice_number";
-        $body = "Hello $contact_name,<br><br>Please view the details of your invoice regarding \"$invoice_scope\" below.<br><br>Invoice: $invoice_prefix$invoice_number<br>Issue Date: $invoice_date<br>Total: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br>Balance Due: " . numfmt_format_currency($currency_format, $balance, $invoice_currency_code) . "<br>Due Date: $invoice_due<br><br><br>To view your invoice, please click <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\'>here</a>.<br><br><br>--<br>$company_name - Billing<br>$config_invoice_from_email<br>$company_phone";
+        $body = "Hello $contact_name,<br><br>Please view the details of your invoice regarding \"$invoice_scope\" below.<br><br>Invoice: $invoice_prefix$invoice_number<br>Issue Date: $invoice_date<br>Total: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br>Balance Due: " . numfmt_format_currency($currency_format, $balance, $invoice_currency_code) . "<br>Due Date: $invoice_due<br><br><br>To view your invoice, please click <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>here</a>.<br><br><br>--<br>$company_name - Billing<br>$config_invoice_from_email<br>$company_phone";
     }
 
     // Queue Mail
@@ -779,7 +891,7 @@ if (isset($_POST['export_invoices_csv'])) {
     if ($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Invoices-$file_name_date.csv");
 
         //create a file pointer
@@ -792,7 +904,7 @@ if (isset($_POST['export_invoices_csv'])) {
         //output each row of the data, format line as csv and write to file pointer
         while($row = $sql->fetch_assoc()) {
             $lineData = array($row['invoice_prefix'] . $row['invoice_number'], $row['invoice_scope'], $row['invoice_amount'], $row['invoice_date'], $row['invoice_due'], $row['invoice_status'], $row['client_name']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file
@@ -845,6 +957,13 @@ if (isset($_POST['add_ticket_to_invoice'])) {
     $client_id = intval(getFieldById('tickets', $ticket_id, 'ticket_client_id'));
 
     enforceClientAccess();
+
+    // MSP-DS-67: the invoice must belong to the ticket's own client
+    $link_invoice_client_id = intval(getFieldById('invoices', $invoice_id, 'invoice_client_id'));
+    if ($link_invoice_client_id !== $client_id) {
+        flash_alert("That invoice belongs to a different client than the ticket.", 'error');
+        redirect();
+    }
 
     mysqli_query($mysqli,"UPDATE tickets SET ticket_invoice_id = $invoice_id WHERE ticket_id = $ticket_id");
 

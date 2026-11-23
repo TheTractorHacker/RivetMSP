@@ -41,7 +41,7 @@ if ($id === null) {
             'status'   => $row['invoice_status'],
             'total'    => floatval($row['invoice_amount']),
             'client'   => $row['client_name'],
-            'guest_url'=> $row['invoice_url_key'] ? '/invoice.php?key=' . $row['invoice_url_key'] : null,
+            'guest_url'=> $row['invoice_url_key'] ? '/guest/guest_view_invoice.php?invoice_id=' . intval($row['invoice_id']) . '&url_key=' . $row['invoice_url_key'] : null,
         ];
     }
     api_response(200, ['data' => $invoices, 'total' => $total]);
@@ -58,7 +58,9 @@ $items = [];
 $isql  = mysqli_query($mysqli,
     "SELECT * FROM invoice_items WHERE item_invoice_id = $id ORDER BY item_order ASC"
 );
+$sum_subtotal = 0.0; $sum_tax = 0.0;   // MSP-DS-181: real subtotal and tax from the line items
 while ($item = mysqli_fetch_assoc($isql)) {
+    $sum_subtotal += floatval($item['item_subtotal']); $sum_tax += floatval($item['item_tax']);
     $items[] = [
         'description' => $item['item_description'],
         'quantity'    => floatval($item['item_quantity']),
@@ -74,11 +76,11 @@ api_response(200, [
     'date'         => $row['invoice_date'],
     'due_date'     => $row['invoice_due'],
     'status'       => $row['invoice_status'],
-    'subtotal'     => floatval($row['invoice_amount']),
-    'tax'          => 0.0,
+    'subtotal'     => round($sum_subtotal, 2),
+    'tax'          => round($sum_tax, 2),
     'total'        => floatval($row['invoice_amount']),
     'client'       => $row['client_name'],
     'notes'        => $row['invoice_note'] ?? '',
-    'guest_url'    => $row['invoice_url_key'] ? '/invoice.php?key=' . $row['invoice_url_key'] : null,
+    'guest_url'    => $row['invoice_url_key'] ? '/guest/guest_view_invoice.php?invoice_id=' . intval($row['invoice_id']) . '&url_key=' . $row['invoice_url_key'] : null,
     'items'        => $items,
 ]);

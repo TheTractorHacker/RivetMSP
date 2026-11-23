@@ -4,6 +4,36 @@ defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 
 require_once __DIR__ . '/../../includes/payroll_functions.php';
 
+// Re-review M3-9: resolve a duplicate payroll run (what the 2.6.139 database update asks for). Admin only; nothing is deleted; a reason is required and logged;
+// archiving a FINALIZED duplicate also re-confirms the admin's own password.
+if (isset($_POST['archive_duplicate_payroll_run'])) {
+
+    validateCSRFToken($_POST['csrf_token'] ?? '');
+
+    $run_id = intval($_POST['run_id'] ?? 0);
+    if (empty($session_is_admin)) {
+        flash_alert("Only an administrator can archive a duplicate payroll run.", 'error');
+        redirect("/admin/payroll_run.php?id=$run_id");
+    }
+    $chk = payrollRunArchiveCheck($mysqli, $run_id);
+    if (!$chk['ok']) {
+        flash_alert($chk['reason'], 'error');
+        redirect('/admin/payroll_runs.php');
+    }
+    require_once __DIR__ . '/../../includes/security_policy.php';
+    if ($chk['finalized'] && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert("Archiving a finalized payroll run needs your current password.", 'error');
+        redirect("/admin/payroll_run.php?id=$run_id");
+    }
+    [$archived, $archive_msg] = payrollArchiveDuplicateRun($mysqli, $run_id, (int) $session_user_id, (string) ($_POST['archive_reason'] ?? ''));
+    if (!$archived) {
+        flash_alert($archive_msg, 'error');
+        redirect("/admin/payroll_run.php?id=$run_id");
+    }
+    flash_alert($archive_msg);
+    redirect('/admin/payroll_runs.php');
+}
+
 if (isset($_POST['recalculate_payroll_run'])) {
 
     validateCSRFToken($_POST['csrf_token']);
@@ -19,6 +49,13 @@ if (isset($_POST['recalculate_payroll_run'])) {
     // direct POST must be rejected too, not just hidden client-side.
     if ($run['payroll_run_status'] === 'finalized') {
         flash_alert("This payroll run is finalized and can no longer be recalculated.", 'error');
+        redirect("/admin/payroll_run.php?id=$run_id");
+    }
+
+    // MSP-DS-39: a locked period is closed, whatever the run row says
+    $recalc_period = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payroll_period_status FROM payroll_periods WHERE payroll_period_id = " . intval($run['payroll_run_period_id']) . " LIMIT 1"));
+    if (($recalc_period['payroll_period_status'] ?? '') === 'locked') {
+        flash_alert("This pay period is locked - the run can no longer be recalculated.", 'error');
         redirect("/admin/payroll_run.php?id=$run_id");
     }
 
@@ -46,7 +83,10 @@ if (isset($_POST['finalize_payroll_run'])) {
         redirect("/admin/payroll_run.php?id=$run_id");
     }
 
-    payrollFinalizeRun($mysqli, $run_id, intval($session_user_id));
+    if (!payrollFinalizeRun($mysqli, $run_id, intval($session_user_id))) {
+        flash_alert("This payroll run is already finalized.", 'error');   // a concurrent request finalized it first
+        redirect("/admin/payroll_run.php?id=$run_id");
+    }
 
     logAction("Payroll", "Edit", "$session_name finalized payroll run #$run_id");
 
@@ -60,9 +100,10 @@ if (isset($_POST['edit_payroll_run_hours'])) {
 
     $run_id = intval($_POST['run_id'] ?? 0);
     $user_id = intval($_POST['user_id'] ?? 0);
-    $period_id = intval($_POST['period_id'] ?? 0);
 
     $run = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM payroll_runs WHERE payroll_run_id = $run_id AND payroll_run_archived_at IS NULL LIMIT 1"));
+    // MSP-DS-39: the period is the run's own period, never one named in the POST
+    $period_id = $run ? intval($run['payroll_run_period_id']) : 0;
     $period = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM payroll_periods WHERE payroll_period_id = $period_id LIMIT 1"));
 
     if (!$run || !$period) {
@@ -72,6 +113,11 @@ if (isset($_POST['edit_payroll_run_hours'])) {
     // Server-side guard - reject correcting hours on a finalized run.
     if ($run['payroll_run_status'] === 'finalized') {
         flash_alert("This payroll run is finalized - hours can no longer be edited.", 'error');
+        redirect("/admin/payroll_run.php?id=$run_id");
+    }
+
+    if (($period['payroll_period_status'] ?? '') === 'locked') {
+        flash_alert("This pay period is locked - hours can no longer be edited.", 'error');
         redirect("/admin/payroll_run.php?id=$run_id");
     }
 

@@ -14,6 +14,34 @@
  * rule (trigger: ticket_created, etc.) instead of a second bespoke config surface.
  */
 
+if (!function_exists('ticketAssigneeEligibleSql')) {
+
+    /**
+     * MSP-DS-167: SQL fragment ("AND ...") limiting users alias $alias to people who can actually work a ticket of $client_id:
+     * an admin, or a role with module_support write access, and (when the account is restricted to certain clients) the ticket's
+     * client must be one of them. $client_id 0 (no client / unknown) is only workable by unrestricted accounts.
+     */
+    function ticketAssigneeEligibleSql(string $alias, int $client_id): string {
+        $client_id = intval($client_id);
+        return "AND EXISTS (SELECT 1 FROM user_roles r WHERE r.role_id = $alias.user_role_id AND (r.role_is_admin = 1 OR EXISTS (
+                SELECT 1 FROM user_role_permissions rp JOIN modules m ON m.module_id = rp.module_id
+                WHERE rp.user_role_id = $alias.user_role_id AND m.module_name = 'module_support' AND rp.user_role_permission_level >= 2)))
+            AND (NOT EXISTS (SELECT 1 FROM user_client_permissions p WHERE p.user_id = $alias.user_id)
+                 OR EXISTS (SELECT 1 FROM user_client_permissions p2 WHERE p2.user_id = $alias.user_id AND p2.client_id = $client_id))";
+    }
+
+    /** MSP-DS-167: may this active technician be assigned a ticket of $client_id by automation / the default-technician fallback? */
+    function ticketAssigneeEligible($mysqli, int $user_id, int $client_id): bool {
+        $user_id = intval($user_id);
+        if ($user_id <= 0 || !$mysqli) {
+            return false;
+        }
+        $sql = ticketAssigneeEligibleSql('u', $client_id);
+        $res = mysqli_query($mysqli, "SELECT u.user_id FROM users u WHERE u.user_id = $user_id AND u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL $sql LIMIT 1");
+        return $res && mysqli_num_rows($res) > 0;
+    }
+}
+
 if (!function_exists('dispatchAssignTicket')) {
 
     /**
@@ -31,11 +59,15 @@ if (!function_exists('dispatchAssignTicket')) {
         }
 
         $trow = mysqli_fetch_assoc(mysqli_query($mysqli,
-            "SELECT ticket_category FROM tickets WHERE ticket_id = $ticket_id LIMIT 1"));
+            "SELECT ticket_category, ticket_client_id FROM tickets WHERE ticket_id = $ticket_id LIMIT 1"));
         if (!$trow) {
             return null;
         }
         $category_id = intval($trow['ticket_category'] ?? 0);
+
+        // MSP-DS-167: only people who can actually work this ticket (shared with the assign_to/escalate actions and the default-technician fallback)
+        $ticket_client_id = intval($trow['ticket_client_id'] ?? 0);
+        $eligible_sql = ticketAssigneeEligibleSql('u', $ticket_client_id);
 
         $required_skill_tag_id = 0;
         if ($category_id > 0) {
@@ -50,7 +82,7 @@ if (!function_exists('dispatchAssignTicket')) {
             $res = mysqli_query($mysqli,
                 "SELECT DISTINCT u.user_id FROM users u
                  INNER JOIN user_tags ut ON ut.user_tag_user_id = u.user_id AND ut.user_tag_tag_id = $required_skill_tag_id
-                 WHERE u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL"
+                 WHERE u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL $eligible_sql"
             );
             while ($res && ($r = mysqli_fetch_assoc($res))) {
                 $candidates[] = intval($r['user_id']);
@@ -61,7 +93,7 @@ if (!function_exists('dispatchAssignTicket')) {
         // nobody currently holds it - an unmatched ticket must still get dispatched, not stranded.
         if (empty($candidates)) {
             $res = mysqli_query($mysqli,
-                "SELECT user_id FROM users WHERE user_type = 1 AND user_status = 1 AND user_archived_at IS NULL");
+                "SELECT u.user_id FROM users u WHERE u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL $eligible_sql");
             while ($res && ($r = mysqli_fetch_assoc($res))) {
                 $candidates[] = intval($r['user_id']);
             }

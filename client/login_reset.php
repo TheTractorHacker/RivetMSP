@@ -9,6 +9,7 @@ header("Content-Security-Policy: default-src 'self'");
 require_once '../config.php';
 require_once '../functions.php';
 require_once '../includes/load_global_settings.php';
+require_once '../includes/security_sessions.php';   // MSP-DS-145: secPortalSessionsRevoke()
 
 
 if (empty($config_smtp_host)) {
@@ -66,7 +67,21 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
         $sql = mysqli_query($mysqli, "SELECT contact_id, contact_name, user_email, contact_client_id, user_id FROM users LEFT JOIN contacts ON user_id = contact_user_id WHERE user_email = '$email' AND user_auth_method = 'local' AND user_type = 2 AND user_status = 1 AND user_archived_at IS NULL LIMIT 1");
         $row = mysqli_fetch_assoc($sql);
 
-        if ($row['user_email'] == $email) {
+        // MSP-DS-148: at most 10 requests per address per hour (Redis, when it is configured) and 3 reset e-mails per account per hour (logs).
+        // Over the limit nothing is sent and the answer is the same as for an unknown address.
+        $reset_throttled = false;
+        require_once __DIR__ . '/../includes/redis_guards.php';
+        if (!rivetRateLimit('portal-reset:ip:' . (string) getIP(), 10, 3600)['allowed']) {
+            $reset_throttled = true;
+        }
+        if (!$reset_throttled && $row && $row['user_email'] == $email) {
+            $recent = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM logs WHERE log_type = 'Contact' AND log_description = 'Sent a portal password reset e-mail for $email.' AND log_created_at > (NOW() - INTERVAL 1 HOUR)"));
+            if ($recent && intval($recent[0]) >= 3) {
+                $reset_throttled = true;
+            }
+        }
+
+        if (!$reset_throttled && $row && $row['user_email'] == $email) {
             $id = intval($row['contact_id']);
             $user_id = intval($row['user_id']);
             $name = sanitizeInput($row['contact_name']);
@@ -74,7 +89,8 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
 
             $token = randomString(32);
             $token_hash = hash('sha256', $token);
-            $url = "https://$config_base_url/client/login_reset.php?email=$email&token=$token&client=$client";
+            // MSP-DS-89: the address is URL-encoded from the stored (unescaped) value, so + and & survive the round trip
+            $url = "https://$config_base_url/client/login_reset.php?" . http_build_query(['email' => (string) $row['user_email'], 'token' => $token, 'client' => $client]);
             mysqli_query($mysqli, "UPDATE users SET user_password_reset_token = '$token_hash' WHERE user_id = $user_id LIMIT 1");
             mysqli_query($mysqli, "INSERT INTO logs SET log_type = 'Contact', log_action = 'Modify', log_description = 'Sent a portal password reset e-mail for $email.', log_ip = '$ip', log_user_agent = '$user_agent', log_client_id = $client");
 
@@ -136,6 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
             // Set password, invalidate token, logging
             $password = password_hash($_POST['new_password'], PASSWORD_DEFAULT);
             mysqli_query($mysqli, "UPDATE users SET user_password = '$password', user_password_reset_token = NULL WHERE user_id = $user_id LIMIT 1");
+            secPortalSessionsRevoke($mysqli, $user_id);   // MSP-DS-145: a reset signs every open portal session of the account out
             mysqli_query($mysqli, "INSERT INTO logs SET log_type = 'Contact User', log_action = 'Modify', log_description = 'Reset portal password for $email.', log_ip = '$ip', log_user_agent = '$user_agent', log_client_id = $client, log_user_id = $user_id");
 
             // Send confirmation email: Admin > Settings > Email templates, "Client portal password reset confirmation" (null when switched off)

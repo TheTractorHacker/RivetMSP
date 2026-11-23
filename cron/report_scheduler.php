@@ -86,6 +86,15 @@ while ($sched = mysqli_fetch_assoc($res)) {
         }
     }
 
+    // MSP-DS-156: the creator must still be allowed to send this report (active account, module_reporting write + the report's module)
+    if (!reportScheduleCreatorMaySend($mysqli, $sched['schedule_created_by'] ?? null, $report_key)) {
+        if (function_exists('logApp')) {
+            logApp("Cron", "warning", "Report scheduler skipped schedule #$schedule_id: its creator can no longer send '$report_key'");
+        }
+        mysqli_query($mysqli, "UPDATE report_schedules SET schedule_last_sent = NOW() WHERE schedule_id = $schedule_id"); // throttle: re-checked next cycle
+        continue;
+    }
+
     $rendered = report_render_email_html($mysqli, $report_key);
     if ($rendered === null) {
         // Unknown/removed report key — skip without stamping so a fixed key can resume later.
@@ -96,7 +105,7 @@ while ($sched = mysqli_fetch_assoc($res)) {
     }
 
     // Recipients may be comma/semicolon/whitespace separated.
-    $emails = reportScheduleFilterRecipients($recipients, $scheduler_staff_emails)['allowed'];
+    $emails = reportScheduleFilterRecipients($recipients, array_intersect($scheduler_staff_emails, reportScheduleEligibleEmails($mysqli, $report_key)))['allowed'];   // MSP-DS-156
     $mail = [];
     foreach ($emails as $to) {
         $mail[] = [

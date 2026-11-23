@@ -50,7 +50,11 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
 
     // Save signature + signed info
     $sig_escaped = mysqli_real_escape_string($mysqli, $signature);
-    mysqli_query($mysqli, "UPDATE ticket_outtake_forms SET outtake_signed_name = '$signed_name', outtake_signed_at = NOW(), outtake_signature = '$sig_escaped' WHERE outtake_id = $outtake_id");
+    // MSP-DS-24: claim the form atomically; a double submit that passed the SELECT above produces one PDF, not two
+    mysqli_query($mysqli, "UPDATE ticket_outtake_forms SET outtake_signed_name = '$signed_name', outtake_signed_at = NOW(), outtake_signature = '$sig_escaped' WHERE outtake_id = $outtake_id AND outtake_signed_at IS NULL");
+    if (mysqli_affected_rows($mysqli) !== 1) {
+        return ['ok' => false, 'error' => 'This form has already been signed or does not exist.'];
+    }
 
     // --- Generate PDF ---
     $co = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM companies, settings WHERE companies.company_id = settings.company_id AND companies.company_id = 1 LIMIT 1"));
@@ -68,6 +72,7 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
     $sql_replies = mysqli_query($mysqli, "SELECT tr.ticket_reply, tr.ticket_reply_type, tr.ticket_reply_created_at, u.user_name
         FROM ticket_replies tr LEFT JOIN users u ON tr.ticket_reply_by = u.user_id
         WHERE tr.ticket_reply_ticket_id = $ticket_id AND tr.ticket_reply_archived_at IS NULL
+          AND tr.ticket_reply_type IN ('Public', 'Client')
         ORDER BY tr.ticket_reply_id ASC LIMIT 10");
     while ($r = mysqli_fetch_assoc($sql_replies)) {
         $by   = htmlspecialchars($r['user_name'] ?: 'Client');

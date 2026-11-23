@@ -5,7 +5,8 @@ defined('FROM_API') || die();
 require_once __DIR__ . '/includes/api_permissions.php';
 
 $uid = $api_user_id;
-api_require_module_permission($mysqli, $uid, 'module_financial');
+// MSP-DS-76: creating an expense needs level 2, like agent/post/expense.php; listing stays at level 1.
+api_require_module_permission($mysqli, $uid, 'module_financial', $method === 'GET' ? 1 : 2);
 
 // Client-scope restriction, mirroring tickets.php/client_tabs.php.
 $expense_client_scope_clause = api_client_scope_sql('e.expense_client_id');
@@ -64,7 +65,8 @@ if ($method === 'POST') {
         $mime    = $finfo->file($_FILES['receipt']['tmp_name']);
         if (!in_array($mime, $allowed)) api_error(400, 'Invalid receipt file type');
 
-        $ext      = strtolower(pathinfo($_FILES['receipt']['name'], PATHINFO_EXTENSION));
+        // MSP-DS-144: the extension comes from the sniffed type, never from the client's file name
+        $ext      = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'application/pdf' => 'pdf'][$mime];
         $filename = time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
         $dest     = $_SERVER['DOCUMENT_ROOT'] . '/uploads/expenses/' . $filename;
         @mkdir(dirname($dest), 0755, true);

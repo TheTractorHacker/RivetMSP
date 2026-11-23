@@ -45,12 +45,13 @@ if (!function_exists('vaultReveal')) {
     }
 
     /**
-     * May this user reach this client's credentials? Mirrors enforceClientAccess(): administrators and global (client 0)
-     * items always; otherwise a user with no client rows may reach all, and a user with rows only those clients.
+     * May this user reach this client's credentials? Administrators always; otherwise a user with no client rows may reach all, and a user with
+     * rows only those clients. MSP-DS-109: client 0 (MSP-internal credentials) is NOT a free pass: a client-restricted user has no row for it, exactly as
+     * on every other path (credentials list, credential_view.php, LinkActor::canAccessClient()).
      */
     function vaultUserCanAccessClient(mysqli $mysqli, int $userId, bool $isAdmin, int $clientId): bool
     {
-        if ($isAdmin || $clientId === 0) {
+        if ($isAdmin) {
             return true;
         }
         $rows = [];
@@ -90,15 +91,13 @@ if (!function_exists('vaultReveal')) {
      */
     function vaultDisclosureCheck(mysqli $mysqli, string $path, int $values = 1, bool $bulk = false, bool $countsAsReveal = true): ?string
     {
-        static $done = [];
         global $session_user_id, $session_name, $session_is_admin;
         $userId = (int) ($session_user_id ?? 0);
         if ($userId <= 0) {
             return 'Sign in again.';
         }
-        if (isset($done[$path])) {
-            return null;   // one decision per path and request, however many rows the loop decrypts
-        }
+        // MSP-DS-26: no per-path/per-request shortcut any more. Pages that decrypt several credentials call this once per credential, so each
+        // one is counted against the reveal limit and logged; a bulk caller passes $values and gets that many log lines.
         $limit = secSettingInt('vault_reveal_limit', $mysqli);
         if ($limit > 0 && vaultRevealCount($mysqli, $userId) >= $limit) {
             if (function_exists('logAction')) {
@@ -115,9 +114,12 @@ if (!function_exists('vaultReveal')) {
                 return 'Exporting or printing credentials needs your password again: reveal any credential on the Credentials page (it asks for your password), then repeat this.';
             }
         }
-        $done[$path] = true;
         if ($countsAsReveal && function_exists('logAction')) {
-            logAction('Credential', 'Reveal', ($session_name ?? 'A user') . " viewed up to $values credential value(s) through $path", 0, 0);
+            // The limit counts log lines, so a disclosure of $values credentials writes $values lines (capped so one export cannot flood the log).
+            $lines = max(1, min($values, 500));
+            for ($i = 0; $i < $lines; $i++) {
+                logAction('Credential', 'Reveal', ($session_name ?? 'A user') . ($lines > 1 ? " viewed credential value $i of $values" : ' viewed 1 credential value') . " through $path", 0, 0);
+            }
         }
 
         return null;
@@ -131,6 +133,26 @@ if (!function_exists('vaultReveal')) {
             denyAccess($why);
             exit;
         }
+    }
+
+    /**
+     * MSP-DS-26 (review R9): vaultDisclosureCheck() for ONE row of a list page that is already printing HTML. Same counting (one reveal per credential,
+     * one log line each), but a refusal returns false so the caller renders that row masked, instead of denyAccess()+exit mid-table. Only the FIRST
+     * refusal in a request logs "Reveal Limit" and notifies the administrators; later rows are refused without more log lines or notifications.
+     * $GLOBALS['vault_row_refused'] holds the per-request state.
+     */
+    function vaultDisclosureRow(mysqli $mysqli, string $path, int $values = 1): bool
+    {
+        if (!empty($GLOBALS['vault_row_refused'])) {
+            return false;
+        }
+        if (vaultDisclosureCheck($mysqli, $path, $values, false, true) !== null) {
+            $GLOBALS['vault_row_refused'] = true;
+
+            return false;
+        }
+
+        return true;
     }
 
     /**

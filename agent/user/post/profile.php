@@ -29,6 +29,27 @@ if (isset($_POST['edit_your_user_details'])) {
         redirect();
     }
 
+    // MSP-DS-141 / review R18+R19: a real email, and a CHANGED name or email may not equal another staff member's name or email (the mobile API
+    // login looks users up by either). An unchanged name that another agent happens to share must not block a save, and this validation runs
+    // BEFORE any side effect (email-change notice, avatar replacement).
+    $email_plain = trim((string) $_POST['email']);
+    $name_plain = trim((string) $_POST['name']);
+    if (!filter_var($email_plain, FILTER_VALIDATE_EMAIL)) {
+        flash_alert('Enter a valid email address.', 'error');
+        redirect();
+    }
+    $name_before = (string) (mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_name FROM users WHERE user_id = $session_user_id"))['user_name'] ?? '');
+    $name_changed = ($name_plain !== trim($name_before)) ? 1 : 0;
+    $email_changed = ($email_plain !== trim($email_before)) ? 1 : 0;
+    if ($name_changed || $email_changed) {
+        $taken = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM users WHERE user_id != $session_user_id AND user_type = 1 AND user_archived_at IS NULL
+            AND (($email_changed AND (user_email = '$email' OR user_name = '$email')) OR ($name_changed AND (user_email = '$name' OR user_name = '$name')))"));
+        if ($taken && intval($taken[0]) > 0) {
+            flash_alert('That name or email is already used by another user.', 'error');
+            redirect();
+        }
+    }
+
     $logout = false;
     $extended_log_description = '';
 
@@ -135,8 +156,7 @@ if (isset($_POST['edit_your_user_password'])) {
     }
 
     // Verify current password before allowing change
-    $pw_check = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $session_user_id"));
-    if (!$pw_check || !password_verify($current_password, $pw_check['user_password'])) {
+    if (!secReauthPassword($mysqli, (int) $session_user_id, (string) $current_password)) {   // MSP-DS-140: counted and limited
         flash_alert('Current password is incorrect', 'error');
         redirect('user_security.php');
     }
@@ -373,7 +393,7 @@ if (isset($_POST['regenerate_recovery_codes'])) {
     validateCSRFToken($_POST['csrf_token']);
 
     $own = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password, user_token FROM users WHERE user_id = $session_user_id"));
-    if (!$own || !password_verify((string) ($_POST['current_password'] ?? ''), (string) $own['user_password'])) {
+    if (!$own || !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['current_password'] ?? ''))) {   // MSP-DS-140
         flash_alert('Current password is incorrect', 'error');
         redirect('user_security.php');
     }
@@ -414,6 +434,10 @@ if (isset($_POST['sign_out_everywhere'])) {
 
     $ended = secSessionRevokeAll($mysqli, $session_user_id, null, 'sign_out_everywhere');
     mysqli_query($mysqli, "DELETE FROM remember_tokens WHERE remember_token_user_id = $session_user_id");
+    // MSP-DS-142: mobile API bearer tokens never expire, so "sign out everywhere" has to revoke them too.
+    mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $session_user_id");
+    // MSP-DS-140: and registered passkeys: an intruder's passkey must not survive "sign out everywhere".
+    secPasskeysRevoke($mysqli, (int) $session_user_id);
     logAction("User Account", "Edit", "$session_name signed out of every session ($ended)");
     secAudit('auth.sign_out_everywhere', $session_user_id, 'user', $session_user_id, 'success', "$session_name signed out of every session", ['sessions' => $ended]);
 
@@ -450,28 +474,7 @@ if (isset($_POST['save_user_color'])) {
     redirect();
 }
 
-if (isset($_GET['delete_passkey'])) {
-
-    validateCSRFToken($_GET['csrf_token']);
-
-    $passkey_id = intval($_GET['delete_passkey']);
-
-    // Ensure the passkey belongs to the logged-in user
-    $pk = mysqli_fetch_assoc(mysqli_query($mysqli,
-        "SELECT passkey_name FROM user_passkeys WHERE passkey_id = $passkey_id AND passkey_user_id = $session_user_id LIMIT 1"
-    ));
-
-    if ($pk) {
-        $pk_name = sanitizeInput($pk['passkey_name']);
-        mysqli_query($mysqli, "DELETE FROM user_passkeys WHERE passkey_id = $passkey_id AND passkey_user_id = $session_user_id");
-        logAction("Passkey", "Delete", "$session_name removed passkey '$pk_name'");
-        flash_alert("Passkey <strong>$pk_name</strong> removed", 'error');
-    }
-
-    redirect();
-
-}
-
+// MSP-DS-75: the GET delete_passkey handler was removed; passkeys are removed through agent/user/passkey_delete.php, which re-checks the password.
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/firebase.php';
 

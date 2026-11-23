@@ -22,6 +22,10 @@ final class AuditSink
         if ($path[0] !== '/' || str_contains($path, "\0") || preg_match('#(^|/)\.\.(/|$)#', $path)) {
             return 'Use an absolute path without "..".';
         }
+        // MSP-DS-113: plain characters only and a log-style extension, so a path can never carry markup or name an executable file (.php).
+        if (!preg_match('#^[A-Za-z0-9_./-]+$#', $path) || !preg_match('/\.(log|jsonl|ndjson|json|txt)$/i', $path)) {
+            return 'Use a path of letters, digits, "_", "-", "." and "/" that ends in .log, .jsonl, .ndjson, .json or .txt.';
+        }
         $dir = dirname($path);
         $realDir = realpath($dir);
         if ($realDir === false || !is_dir($realDir)) {
@@ -44,7 +48,17 @@ final class AuditSink
         return null;
     }
 
-    /** @param list<array<string,mixed>> $rows sealed audit rows */
+    /** M5-6: is a file or syslog copy configured? */
+    public static function enabled(\mysqli $db): bool
+    {
+        try {
+            return PlatformSettings::get($db, 'audit_sink_path') !== '' || PlatformSettings::bool($db, 'audit_sink_syslog');
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /** @param list<array<string,mixed>> $rows audit rows: sealed ones, or (M5-6, while sealing is blocked) unsealed ones, written with "sealed":false */
     public static function write(\mysqli $db, array $rows, string $appRoot): void
     {
         if ($rows === []) {
@@ -63,8 +77,8 @@ final class AuditSink
                     'ts' => gmdate('Y-m-d\TH:i:s\Z', strtotime((string) $r['created_at'] . ' UTC') ?: time()),
                     'app' => 'rivetmsp', 'audit_id' => (int) $r['audit_id'], 'event' => $r['event_type'], 'actor_user_id' => $r['actor_user_id'] === null ? null : (int) $r['actor_user_id'],
                     'entity_type' => $r['entity_type'], 'entity_id' => $r['entity_id'], 'action' => $r['action'], 'summary' => $r['summary'], 'metadata' => $meta,
-                    'ip' => $r['ip_address'], 'request_id' => $r['request_id'], 'prev_hash' => $r['prev_hash'], 'row_hash' => $r['row_hash'],
-                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+                    'ip' => $r['ip_address'], 'request_id' => $r['request_id'], 'sealed' => ($r['row_hash'] ?? null) !== null, 'prev_hash' => $r['prev_hash'] ?? null, 'row_hash' => $r['row_hash'] ?? null,
+                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_HEX_TAG | JSON_HEX_AMP);
             }
             if ($path !== '' && self::pathProblem($path, $appRoot) === null) {
                 @file_put_contents($path, implode("\n", $lines) . "\n", FILE_APPEND | LOCK_EX);

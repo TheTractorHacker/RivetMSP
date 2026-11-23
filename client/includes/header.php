@@ -47,7 +47,11 @@ foreach (headers_list() as $h) {
         $csp_sent = trim(substr($h, strlen('Content-Security-Policy:')));
     }
 }
-if ($csp_sent !== '' && stripos($csp_sent, 'script-src') === false) {
+if ($csp_sent === '') {
+    // MSP-DS-88: a page that queued no policy (ticket.php renders purified HTML) still gets one.
+    require_once __DIR__ . '/../../includes/csp_policies.php';
+    header('Content-Security-Policy: ' . portalFallbackCsp($csp_nonce));
+} elseif (stripos($csp_sent, 'script-src') === false) {
     // style-src-elem lets the nonced branding <style> below apply; style attributes stay blocked as before (style-src-attr still falls back to default-src)
     $style_elem = stripos($csp_sent, 'style-src-elem') === false ? "; style-src-elem 'self' 'nonce-$csp_nonce'" : '';
     header("Content-Security-Policy: $csp_sent; script-src 'self' 'nonce-$csp_nonce'$style_elem");

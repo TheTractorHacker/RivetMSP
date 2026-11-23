@@ -146,6 +146,7 @@ if (isset($_POST['save_accounting_settings'])) {
         $prior_provider = (string) ($integration['accounting_provider'] ?? 'quickbooks_online');
         $provider_changed_sql = '';
         if ($provider !== $prior_provider) {
+            accountingRememberConnection($mysqli, $prior_provider, $integration['accounting_realm_id'] ?? null);   // MSP-DS-115
             $provider_changed_sql = "accounting_realm_id = NULL, accounting_access_token = NULL, accounting_refresh_token = NULL, accounting_token_expires_at = NULL, accounting_enabled = 0, accounting_connected_at = NULL, ";
             $enabled = 0;
         }
@@ -178,6 +179,7 @@ if (isset($_GET['disconnect'])) {
     if ($integration) {
         $disc_accounting_id = intval($integration['accounting_id']);
         $disc_provider_label = ($integration['accounting_provider'] ?? 'quickbooks_online') === 'xero' ? 'Xero' : 'QuickBooks Online';
+        accountingRememberConnection($mysqli, (string) ($integration['accounting_provider'] ?? 'quickbooks_online'), $integration['accounting_realm_id'] ?? null);   // MSP-DS-115
         mysqli_query($mysqli, "UPDATE accounting_integrations SET
             accounting_realm_id = NULL,
             accounting_access_token = NULL,
@@ -662,6 +664,7 @@ if (isset($_POST['resync_all_unmapped'])) {
                     ON m.map_accounting_id = $accounting_id
                    AND m.map_local_type = 'invoice'
                    AND m.map_local_id = i.invoice_id
+                   " . accountingMapScopeSql($mysqli, $accounting_id, 'm.') . "
              WHERE i.invoice_archived_at IS NULL
                AND i.invoice_status NOT IN ($finalized_not_in)
                AND (m.map_remote_id IS NULL OR m.map_remote_id = '')
@@ -1495,7 +1498,7 @@ function ass_map_by_id(mysqli $mysqli, int $accounting_id, string $type): array 
         $mysqli,
         "SELECT map_local_id, map_remote_id, map_remote_name, map_last_synced_at
          FROM accounting_entity_map
-         WHERE map_accounting_id = $accounting_id AND map_local_type = '$type_esc'"
+         WHERE map_accounting_id = $accounting_id AND map_local_type = '$type_esc'" . accountingMapScopeSql($mysqli, $accounting_id)
     );
     while ($res && ($row = mysqli_fetch_assoc($res))) {
         $out[intval($row['map_local_id'])] = $row;

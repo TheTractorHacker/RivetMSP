@@ -19,6 +19,12 @@ enforceUserPermission('module_rmm');
 $action    = sanitizeInput($_POST['action'] ?? '');
 $policy_id = intval($_POST['policy_id'] ?? 0);
 
+// MSP-DS-62: check policies are global objects whose push/remove/save/delete reach the agents of every client. A user who is
+// restricted to some clients (user_client_permissions) may not run them; only admins and unrestricted users may.
+if (in_array($action, ['push_policy', 'remove_policy', 'save_policy', 'delete_policy'], true) && !$session_is_admin && !empty($client_access_string)) {
+    echo json_encode(['success' => false, 'error' => 'Check policies apply to every client; they cannot be changed by a client-restricted user']); exit;
+}
+
 // ---- Push policy to all matching agents in a given integration ----
 if ($action === 'push_policy') {
     // Bulk cross-client deployment - the blanket module_rmm check above only
@@ -215,7 +221,7 @@ if ($action === 'save_policy') {
 // ---- Delete policy ----
 if ($action === 'delete_policy') {
     // Changing or removing check policies affects every agent: needs modify rights, not just the blanket read check above (MSP-9).
-    enforceUserPermission('module_rmm', 2);
+    enforceUserPermission('module_rmm', 3);
     if (!$policy_id) { echo json_encode(['success' => false, 'error' => 'Missing policy_id']); exit; }
     mysqli_query($mysqli, "DELETE FROM rmm_check_deployments WHERE policy_id=$policy_id");
     mysqli_query($mysqli, "DELETE FROM rmm_check_policies WHERE id=$policy_id");

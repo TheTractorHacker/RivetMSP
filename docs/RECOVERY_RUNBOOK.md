@@ -93,7 +93,7 @@ GRANT ALL PRIVILEGES ON `drill\_%`.* TO 'rivet_drill'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-Then Admin > Backup > Restore drill: enter the user and password (the password is stored encrypted), tick **Enable**, Save, and press
+On a fresh install, setup does this for you: it creates the `rivet_drill` account, stores its password encrypted and turns the nightly drill on. If setup's database account may not create users, the drill stays off and setup prints the SQL to run. Otherwise, after running the grant, go to Admin > Backup > Restore drill: enter the user and password (the password is stored encrypted), tick **Enable**, Save, and press
 **Run drill now**. Until the account exists the page shows "Not set up" with these steps, and the drill reports `not configured`; it
 never fails silently. Needs the `mysql` or `mariadb` command-line client on the server and enough free disk in the temp directory for
 `db.sql` (and for `uploads.zip`, which is only opened for the sample check when there is room).

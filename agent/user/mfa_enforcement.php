@@ -19,6 +19,7 @@ $token = $_SESSION['mfa_token'];
 
 // Generate QR Code
 $data = "otpauth://totp/RivetMSP:$session_email?secret=$token";
+require_once __DIR__ . '/../../includes/qr_data_uri.php';
 
 ?>
 
@@ -144,12 +145,17 @@ $data = "otpauth://totp/RivetMSP:$session_email?secret=$token";
                     <form action="post.php" method="post" autocomplete="off">
                         <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token'] ?>">
 
-                        <img src='../../plugins/barcode/barcode.php?f=png&s=qr&d=<?php echo rawurlencode($data); ?>' data-bs-toggle="tooltip" title="Scan QR code into your MFA App">
+                        <img src='<?php echo qrPngDataUri($data); ?>' data-bs-toggle="tooltip" title="Scan QR code into your MFA App">
 
                         <p>
                             <small data-bs-toggle="tooltip" title="Can't Scan? Copy and paste this code into your app"><?php echo $token; ?></small>
                             <button type="button" class='btn btn-sm clipboardjs' data-clipboard-text='<?php echo $token; ?>'><i class='far fa-copy text-secondary'></i></button>
                         </p>
+
+                        <div class="input-group mb-3">
+                            <input type="password" class="form-control" name="current_password" placeholder="Your current password" autocomplete="current-password" required>
+                            <div class="input-group-append"><div class="input-group-text"><span class="fas fa-key"></span></div></div>
+                        </div>
 
                         <div class="input-group mb-3">
                             <input type="text" class="form-control" inputmode="numeric" pattern="[0-9]*" minlength="6" maxlength="6" name="verify_code" placeholder="Enter 6 digit code to verify MFA" required>

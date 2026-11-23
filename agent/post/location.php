@@ -22,7 +22,7 @@ if(isset($_POST['add_location'])){
         mkdir("../uploads/clients/$client_id");
     }
 
-    mysqli_query($mysqli,"INSERT INTO locations SET location_name = '$name', location_description = '$description', location_country = '$country', location_address = '$address', location_city = '$city', location_state = '$state', location_zip = '$zip', location_phone_country_code = '$phone_country_code', location_phone = '$phone', location_phone_extension = '$extension', location_fax_country_code = '$fax_country_code', location_fax = '$fax', location_hours = '$hours', location_notes = '$notes', location_contact_id = $contact, location_client_id = $client_id");
+    mysqli_query($mysqli,"INSERT INTO locations SET location_name = '$name', location_description = '$description', location_country = '$country', location_address = '$address', location_city = '$city', location_state = '$state', location_zip = '$zip', location_phone_country_code = '$phone_country_code', location_phone = '$phone', location_phone_extension = '$extension', location_fax_country_code = '$fax_country_code', location_fax = '$fax', location_hours = '$hours', location_wan_ip = '$wan_ip', location_notes = '$notes', location_contact_id = $contact, location_client_id = $client_id");
 
     $location_id = mysqli_insert_id($mysqli);
 
@@ -64,6 +64,41 @@ if(isset($_POST['add_location'])){
 
 }
 
+if (isset($_POST['use_seen_wan_ip'])) {
+
+    validateCSRFToken($_POST['csrf_token']);
+
+    enforceUserPermission('module_client', 2);
+
+    $location_id = intval($_POST['location_id'] ?? 0);
+    $seen_ip = trim((string) ($_POST['seen_ip'] ?? ''));
+
+    $loc = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT location_name, location_client_id, location_wan_ip FROM locations WHERE location_id = $location_id"));
+    if (!$loc) {
+        flash_alert("Location not found", 'error');
+        redirect();
+    }
+    $client_id = intval($loc['location_client_id']);
+    enforceClientAccess();
+
+    // Only an address the location's own devices really report can be adopted (not whatever the request says).
+    $seen_now = \RivetMSP\Assets\PublicIp::seenAtLocation($mysqli, $location_id);
+    if (!isset($seen_now[$seen_ip])) {
+        flash_alert("No device at this location reports that IP any more", 'error');
+        redirect();
+    }
+    $list = \RivetMSP\Assets\PublicIp::parseList((string) $loc['location_wan_ip']);
+    if (!in_array($seen_ip, $list, true)) { $list[] = $seen_ip; }
+    $new_value = sanitizeInput(implode(', ', $list));
+    $loc_name = sanitizeInput($loc['location_name']);
+
+    mysqli_query($mysqli, "UPDATE locations SET location_wan_ip = '$new_value' WHERE location_id = $location_id");
+    logAction("Location", "Edit", "$session_name added WAN IP $seen_ip to location $loc_name (reported by its devices)", $client_id, $location_id);
+    flash_alert("WAN IP <strong>" . htmlspecialchars($seen_ip) . "</strong> added to <strong>$loc_name</strong>");
+    redirect();
+
+}
+
 if(isset($_POST['edit_location'])){
 
     validateCSRFToken($_POST['csrf_token']);
@@ -86,7 +121,7 @@ if(isset($_POST['edit_location'])){
         mkdir("../uploads/clients/$client_id");
     }
 
-    mysqli_query($mysqli,"UPDATE locations SET location_name = '$name', location_description = '$description', location_country = '$country', location_address = '$address', location_city = '$city', location_state = '$state', location_zip = '$zip',  location_phone_country_code = '$phone_country_code', location_phone = '$phone', location_phone_extension = '$extension',  location_fax_country_code = '$fax_country_code', location_fax = '$fax', location_hours = '$hours', location_notes = '$notes', location_contact_id = $contact WHERE location_id = $location_id");
+    mysqli_query($mysqli,"UPDATE locations SET location_name = '$name', location_description = '$description', location_country = '$country', location_address = '$address', location_city = '$city', location_state = '$state', location_zip = '$zip',  location_phone_country_code = '$phone_country_code', location_phone = '$phone', location_phone_extension = '$extension',  location_fax_country_code = '$fax_country_code', location_fax = '$fax', location_hours = '$hours', location_wan_ip = '$wan_ip', location_notes = '$notes', location_contact_id = $contact WHERE location_id = $location_id");
 
     // Update Primay location in clients if primary location is checked
     if ($location_primary == 1) {
@@ -413,7 +448,7 @@ if(isset($_POST['export_locations_csv'])){
     if($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Locations-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -426,7 +461,7 @@ if(isset($_POST['export_locations_csv'])){
         //output each row of the data, format line as csv and write to file pointer
         while($row = $sql->fetch_assoc()){
             $lineData = array($row['location_name'], $row['location_description'], $row['location_address'], $row['location_city'], $row['location_state'], $row['location_zip'], $row['location_phone'], $row['location_hours']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file
@@ -481,7 +516,7 @@ if (isset($_POST["import_locations_csv"])) {
 
     //(Else)Check column count
     $f = fopen($file_name, "r");
-    $f_columns = fgetcsv($f, 1000, ",");
+    $f_columns = fgetcsv($f, 1000, ",", '"', '');
     if(!$error & count($f_columns) != 8) {
         $error = true;
         flash_alert("Bad column count.", 'error');
@@ -490,10 +525,10 @@ if (isset($_POST["import_locations_csv"])) {
     //Else, parse the file
     if(!$error){
         $file = fopen($file_name, "r");
-        fgetcsv($file, 1000, ","); // Skip first line
+        fgetcsv($file, 1000, ",", '"', ''); // Skip first line
         $row_count = 0;
         $duplicate_count = 0;
-        while(($column = fgetcsv($file, 1000, ",")) !== false){
+        while(($column = fgetcsv($file, 1000, ",", '"', '')) !== false){
             $duplicate_detect = 0;
             if(isset($column[0])){
                 $name = sanitizeInput($column[0]);
@@ -551,7 +586,7 @@ if(isset($_GET['download_locations_csv_template'])){
 
     $delimiter = ",";
     $enclosure = '"';
-    $escape    = '\\';
+    $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
     $filename = "Locations-Template.csv";
 
     //create a file pointer

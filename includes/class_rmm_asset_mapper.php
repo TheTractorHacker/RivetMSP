@@ -135,7 +135,7 @@ class RmmAssetMapper {
         }
 
         $message = (string) ($alert['message'] ?? $alert['description'] ?? $alert['alert_type'] ?? 'RMM Alert');
-        $message_esc  = mysqli_real_escape_string($m, substr($message, 0, 2000));
+        $message_esc  = mysqli_real_escape_string($m, mb_substr(mb_scrub($message, 'UTF-8'), 0, 2000, 'UTF-8'));
         $severity_esc = mysqli_real_escape_string($m, $severity);
         $raw_json_esc = mysqli_real_escape_string($m, json_encode($alert));
 
@@ -378,6 +378,13 @@ class RmmAssetMapper {
             $outcome = 'matched';
             $matched_row = mysqli_fetch_assoc(mysqli_query($m, "SELECT asset_client_id FROM assets WHERE asset_id=$asset_id"));
             $this->backfillClientId($asset_id, intval($matched_row['asset_client_id']), $resolved_client_id);
+        }
+
+        // The public (WAN) address the device reports (Tactical sends public_ip). Stored only when it really is a public address.
+        $public_ip = trim($str($agent['public_ip'] ?? ''));
+        if ($public_ip !== '' && \RivetMSP\Assets\PublicIp::isPublic($public_ip)) {
+            $public_ip_sql = mysqli_real_escape_string($m, $public_ip);
+            mysqli_query($m, "UPDATE assets SET asset_public_ip='$public_ip_sql' WHERE asset_id=$asset_id");
         }
 
         // ----- Step 4: Insert or update the link row -----
@@ -683,7 +690,7 @@ class RmmAssetMapper {
             }
 
             $name = preg_replace('/^\[\d+\]\s*/', '', $caption);
-            $name = mysqli_real_escape_string($m, substr($name, 0, 200));
+            $name = mysqli_real_escape_string($m, mb_substr(mb_scrub($name, 'UTF-8'), 0, 200, 'UTF-8'));
             $type_esc = mysqli_real_escape_string($m, $type);
             $mac_esc  = mysqli_real_escape_string($m, $mac);
             $ipv4_esc = mysqli_real_escape_string($m, $ipv4);

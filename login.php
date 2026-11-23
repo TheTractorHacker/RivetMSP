@@ -3,7 +3,6 @@
 // Unified login (Agent + Client) using one email & password
 
 $csp_nonce = base64_encode(random_bytes(16));
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$csp_nonce' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.foleyit.com; connect-src 'self' https://cloudflareinsights.com");
 header("X-Frame-Options: DENY");
 header("X-Content-Type-Options: nosniff");
 header("Referrer-Policy: strict-origin-when-cross-origin");
@@ -14,6 +13,10 @@ if (!file_exists('config.php')) {
 }
 
 require_once "config.php";
+// MSP-DS-183: installation-specific CSP sources come from config.php ($config_csp_img_src, $config_csp_cloudflare_insights)
+require_once __DIR__ . '/includes/csp_policies.php';
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$csp_nonce'" . cspCloudflareScript() . "; style-src 'self' 'unsafe-inline'; " . cspImgSrc() . "; connect-src 'self'" . cspCloudflareConnect());
+
 require_once "functions.php";
 require_once "plugins/totp/totp.php";
 require_once "includes/security_crypto.php";
@@ -185,8 +188,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                 Your MFA session expired. Please sign in again.
               </div>";
         } else {
-            $email = sanitizeInput($sess['email'] ?? '');
-            $role_choice = 'agent';
+            // MSP-DS-37: the code step is limited per account (and per pending sign-in), not only per IP. An attempt is reserved
+            // atomically before the code is checked (5 per 5 minutes per account, shared with the mobile API sign-in); a correct code
+            // resets it. A pending sign-in also dies after 5 wrong codes and keeps its original expiry (it used to slide forward).
+            $mfa_uid = intval($sess['agent_user_id'] ?? 0);
+            $mfa_reserved = false;
+            if ($mfa_uid > 0 && intval($sess['mfa_attempts'] ?? 0) < 5) {
+                mysqli_query($mysqli,
+                    "UPDATE users SET
+                        user_failed_login_count = IF(user_failed_login_at IS NULL OR user_failed_login_at <= UTC_TIMESTAMP() - INTERVAL 300 SECOND, 1, user_failed_login_count + 1),
+                        user_failed_login_at = UTC_TIMESTAMP()
+                     WHERE user_id = $mfa_uid
+                       AND (user_failed_login_count < 5 OR user_failed_login_at IS NULL OR user_failed_login_at <= UTC_TIMESTAMP() - INTERVAL 300 SECOND)"
+                );
+                $mfa_reserved = mysqli_affected_rows($mysqli) >= 1;
+            }
+            if (!$mfa_reserved) {
+                unset($_SESSION['pending_mfa_login']);
+                header("HTTP/1.1 429 Too Many Requests");
+                $response = "
+                  <div class='alert alert-danger'>
+                    Too many two-factor attempts. Please wait a few minutes and sign in again.
+                  </div>";
+            } else {
+                $email = sanitizeInput($sess['email'] ?? '');
+                $role_choice = 'agent';
+            }
         }
     }
 
@@ -242,6 +269,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                   )
         ");
 
+        // MSP-DS-178: an unknown email must cost the same password hash as a known one (same dummy as api/v1/auth.php),
+        // or response time tells an attacker which addresses are accounts.
+        if ($is_login_step && mysqli_num_rows($sql) === 0) {
+            password_verify((string) $password, '$argon2id$v=19$m=65536,t=3,p=1$N1VaRC5XUEdVbnU5Z2UubA$C4R2R3xEKv6O2YVS6Sq6jZL+L90lDoCQBl+nigKL/t8');
+        }
+
         $agentRow  = null;
         $clientRow = null;
 
@@ -263,6 +296,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
         while ($r = mysqli_fetch_assoc($sql)) {
 
             $ut = intval($r['user_type']);
+
+            // MSP-DS-120: the login key is checked BEFORE any agent password is verified, so a wrong key looks exactly like an unknown
+            // account (same 401) and cannot be used to test passwords.
+            if ($ut === 1 && $config_login_key_required
+                && (!isset($_GET['key']) || !is_string($_GET['key']) || !hash_equals((string) $config_login_key_secret, $_GET['key']))) {
+                continue;
+            }
 
             if ($is_login_step) {
                 // Only Step 1 checks password
@@ -390,7 +430,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                     $mfa_is_complete = false;
                     $extended_log    = '';
 
-                    if (empty($token)) {
+                    // MSP-DS-143: a stored second-factor seed that cannot be decrypted must not read as "no MFA configured".
+                    $mfa_seed_unreadable = empty($token) && trim((string) ($selectedRow['user_token'] ?? '')) !== '';
+                    if (empty($token) && !$mfa_seed_unreadable) {
                         $mfa_is_complete = true; // no MFA configured
                     }
 
@@ -428,7 +470,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                         $extended_log       = 'with a MFA recovery code';
                     }
 
-                    if ($mfa_is_complete) {
+                    if ($mfa_seed_unreadable) {
+                        header("HTTP/1.1 403 Forbidden");
+                        logAction("Login", "Failed", "$user_name was refused: the stored two-factor seed could not be read (MFA Failed)", 0, $user_id);
+                        unset($_SESSION['pending_mfa_login']);
+                        $response = "<div class='alert alert-danger'>Your two-factor setup could not be read. Ask an administrator to reset it.</div>";
+                    } elseif ($mfa_is_complete) {
 
                         // Remember me token creation
                         if (isset($_POST['remember_me'])) {
@@ -520,6 +567,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
 
                         if ($is_mfa_step) {
                             // Step 3: MFA submit
+                            mysqli_query($mysqli, "UPDATE users SET user_failed_login_count = 0 WHERE user_id = " . intval($user_id));   // MSP-DS-37: correct code
                             $sess = $pending_mfa ?? ($_SESSION['pending_mfa_login'] ?? null);
                             if ($sess && !empty($sess['agent_master_key'])) {
                                 $site_encryption_master_key = $sess['agent_master_key'];
@@ -634,7 +682,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                             'agent_user_id'    => $user_id,
                             'agent_master_key' => $agent_master_key, // may be null
                             'token'            => $pending_mfa_token,
-                            'created'          => time()
+                            // MSP-DS-37: a wrong code must not renew the pending sign-in's lifetime or reset its attempt count
+                            'created'          => $is_mfa_step ? intval($pending_mfa['created'] ?? ($_SESSION['pending_mfa_login']['created'] ?? time())) : time(),
+                            'mfa_attempts'     => $is_mfa_step ? intval($pending_mfa['mfa_attempts'] ?? ($_SESSION['pending_mfa_login']['mfa_attempts'] ?? 0)) + 1 : 0
                         ];
 
                         // Now that we've transferred what we need, it's safe to clear the dual-role pending session.
@@ -723,6 +773,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['login']) || isset($_
                             // Keep consistent with agent flow (helps any shared session checks)
                             $_SESSION['logged']     = true;
                             session_regenerate_id(true);
+                            secPortalSessionBegin($_SESSION, null, $mysqli, (int) $user_id);   // MSP-DS-145 (review R30/R31): start the idle/absolute clocks, drop a stale password fingerprint from an earlier sign-in in this browser
                             $_SESSION['csrf_token'] = randomString(32);
 
                             // Option B: set session_user_id BEFORE logAction()
@@ -1011,7 +1062,7 @@ $show_login_form = (!$show_role_choice && !$show_mfa_form);
                     <!-- STEP 1: Email + Password -->
                     <div class="input-group mb-3">
                         <input type="email" class="form-control"
-                            placeholder="<?php if ($config_login_key_required) { if (!isset($_GET['key']) || !hash_equals((string) $config_login_key_secret, (string) $_GET['key'])) { echo "Client "; } } echo "Email"; ?>"
+                            placeholder="Email"
                             name="email"
                             value="<?php echo htmlspecialchars($email ?? '', ENT_QUOTES); ?>"
                             required autofocus

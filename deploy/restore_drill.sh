@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Test-only hooks (RIVETMSP_TRUST_*, RIVETMSP_TEST_*, RIVETMSP_ETC_DIR) exist for unit tests of lib/common.sh functions; an entry script never
+# honours them from its environment, so nothing a caller (sudo from the web user included) puts there can relax a trust check.
+for _rv_v in $(compgen -v | grep -E '^(RIVETMSP_TRUST_|RIVETMSP_TEST_|RIVETMSP_ETC_DIR$)'); do unset "${_rv_v}"; done
+unset _rv_v
+
 # RivetMSP - restore drill for the root-only encrypted archives made by deploy/backup.sh.
 #
 # The nightly drill (cron/restore_drill.php, runs as www-data) can only read the in-app zips: the encrypted backup-*.tar.gz.enc is
@@ -59,11 +64,15 @@ for arg in "$@"; do
 done
 
 require_root "$@"
+require_trusted_tooling "${BASH_SOURCE[0]}"
 [[ -n "${APP_DIR}" && -d "${APP_DIR}" && -f "${APP_DIR}/cron/restore_drill.php" ]] || die "--app-dir must be a RivetMSP webroot containing cron/restore_drill.php."
 [[ -n "${PASSPHRASE_FILE}" && -f "${PASSPHRASE_FILE}" ]] || die "--passphrase-file is required and must exist."
 pf_perm="$(stat -c '%a' "${PASSPHRASE_FILE}")"
 [[ "${pf_perm: -2}" == "00" ]] || die "--passphrase-file has permissions ${pf_perm}; it must be owner-only (chmod 600)."
 [[ -n "${DEST}" ]] || DEST="${APP_DIR}/backups"
+# MSP-DS-34 (re-review RR1): resolve the web user from a root-controlled source BEFORE any work (and before drill_fail can run app code), so
+# nothing below can ever fall through to running application PHP as root; no web user = loud refusal.
+drill_owner="$(rivetmsp_web_user "${APP_DIR}")" || die "Refusing to run the restore drill: no non-root web user could be determined (see above)."
 
 touch "${LOG_FILE}" 2>/dev/null && chmod 640 "${LOG_FILE}" && exec > >(tee -a "${LOG_FILE}") 2>&1 || warn "cannot write ${LOG_FILE}; logging to the terminal only"
 
@@ -78,7 +87,7 @@ info "=== restore drill: ${NAME} ==="
 
 drill_fail() {   # record "this archive cannot be restored" as the drill result and stop
     error "$1"
-    "${PHP_BIN}" "${APP_DIR}/cron/restore_drill.php" --trigger=script --fail="$1" --source-name="${NAME}" || true
+    run_app_php "${APP_DIR}" "${APP_DIR}/cron/restore_drill.php" --trigger=script --fail="$1" --source-name="${NAME}" || true
     exit 1
 }
 
@@ -113,14 +122,35 @@ success "Decrypted and unpacked."
 
 # 4. the drill itself (PHP does the restore into the scratch database and every check)
 # The settings key travels apart from the archive (backup-<db>-<ts>.settings-key, see backup.sh); use it when it is next to the archive.
-[[ -n "${KEY_FILE}" ]] || { cand="${BACKUP_FILE%.tar.gz.enc}.settings-key"; [[ -f "${cand}" ]] && KEY_FILE="${cand}"; }
+# MSP-DS-34 (review R2): DEST is writable by the web user, so the auto-discovered sidecar is never read through a symlink or trusted unless it
+# is a root-owned 0600 regular file; root works on a private copy made from the checked descriptor. An explicit --settings-key-file is the
+# operator's own choice and is used as given.
+if [[ -z "${KEY_FILE}" ]]; then
+    cand="${BACKUP_FILE%.tar.gz.enc}.settings-key"
+    key_rc=0; auto_key="$(mktemp)"; register_tmpfile "${auto_key}"
+    key_why="$(copy_trusted_sidecar "${cand}" "${auto_key}" 2>&1)" || key_rc=$?
+    case "${key_rc}" in
+        0) KEY_FILE="${auto_key}" ;;
+        2) : ;;
+        *) refuse_untrusted_sidecar "${key_why}" ;;
+    esac
+fi
 KEY_ARGS=()
 if [[ -n "${KEY_FILE}" ]]; then
     [[ -f "${KEY_FILE}" ]] || die "--settings-key-file '${KEY_FILE}' does not exist."
     KEY_ARGS=(--settings-key-file="${KEY_FILE}")
 fi
+# MSP-DS-34: cron/restore_drill.php is app code the web user can change, so it runs as that user, never as root. It gets the unpacked
+# archive (and the settings-key file, if any) to read.
+chown -R "${drill_owner}" "${WORK}" 2>/dev/null || true
+if [[ -n "${KEY_FILE}" ]]; then
+    # Hand the web user a private copy (0400, deleted on exit) instead of loosening the original key file's mode.
+    drill_key_copy="$(mktemp)"; register_tmpfile "${drill_key_copy}"
+    install -m 0400 -o "${drill_owner}" "${KEY_FILE}" "${drill_key_copy}"
+    KEY_ARGS=(--settings-key-file="${drill_key_copy}")
+fi
 set +e
-"${PHP_BIN}" "${APP_DIR}/cron/restore_drill.php" --trigger=script --extracted-dir="${UNPACKED}" --source-name="${NAME}" --source-mtime="${MTIME}" "${KEY_ARGS[@]}"
+run_app_php "${APP_DIR}" "${APP_DIR}/cron/restore_drill.php" --trigger=script --extracted-dir="${UNPACKED}" --source-name="${NAME}" --source-mtime="${MTIME}" "${KEY_ARGS[@]}"
 rc=$?
 set -e
 exit "${rc}"

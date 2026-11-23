@@ -110,7 +110,7 @@ document.addEventListener('click', function (e) {
         if (j && j.ok) {
             wrap.textContent = j.value;
         } else {
-            wrap.textContent = 'Could not reveal this value.';
+            wrap.textContent = (j && j.message) ? j.message : 'Could not reveal this value.';
         }
     }).catch(function () {});
 });

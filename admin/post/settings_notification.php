@@ -63,8 +63,15 @@ if (isset($_POST['save_firebase_config'])) {
         redirect();
     }
 
-    $config_path = __DIR__ . '/../../config/firebase_service_account.json';
-    if (file_put_contents($config_path, json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)) === false) {
+    // MSP-DS-4: the private key must never be web-readable. The directory is 0750 with a deny-all .htaccess (Apache serves config/ otherwise),
+    // and the file is 0600.
+    $config_dir = __DIR__ . '/../../config';
+    if (!is_dir($config_dir)) { @mkdir($config_dir, 0750, true); }
+    if (!is_file($config_dir . '/.htaccess')) { @file_put_contents($config_dir . '/.htaccess', "Require all denied\n"); }
+    $config_path = $config_dir . '/firebase_service_account.json';
+    $fb_written = @file_put_contents($config_path, json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    if ($fb_written !== false) { @chmod($config_path, 0600); }
+    if ($fb_written === false) {
         flash_alert("Could not write configuration file — check server file permissions on config/.", "error");
         redirect();
     }

@@ -11,7 +11,9 @@ enforceUserPermission('module_kb');
 // Initialize the HTML Purifier to prevent XSS
 require "../plugins/htmlpurifier/HTMLPurifier.standalone.php";
 
+require_once __DIR__ . '/../plugins/htmlpurifier/rivet_html_policy.php';
 $purifier_config = HTMLPurifier_Config::createDefault();
+rivet_html_policy_apply($purifier_config, 'rich');
 $purifier_config->set('Cache.DefinitionImpl', null);
 $purifier_config->set('URI.AllowedSchemes', ['data' => true, 'src' => true, 'http' => true, 'https' => true]);
 $purifier = new HTMLPurifier($purifier_config);
@@ -247,7 +249,6 @@ $sql_embeds = mysqli_query(
 
 </div>
 
-<?php $rel_type = 'kb_article'; $rel_id = $kb_article_id; require __DIR__ . '/../includes/relationships_card.php'; ?>
 
 <?php
 require_once "../includes/footer.php";

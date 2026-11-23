@@ -140,13 +140,25 @@ if (!is_array($connections) || empty($connections[0]['tenantId'])) {
     redirect($settings_accounting_path);
 }
 
-$tenant_id   = (string) $connections[0]['tenantId'];
-$tenant_name = (string) ($connections[0]['tenantName'] ?? $tenant_id);
+// MSP-DS-115: /connections lists every organisation this user ever authorised, so $connections[0] may be an old one. Take the organisation THIS authorisation
+// granted (authEventId); several granted at once -> the one already bound to this install, otherwise ask to authorise one organisation at a time.
+$bound_marker = \RivetMSP\Platform\PlatformSettings::get($mysqli, 'accounting_map_connection', '');
+$bound_tenant = strpos($bound_marker, 'xero|') === 0 ? substr($bound_marker, 5) : '';
+$picked = accountingXeroPickTenant($connections, $access_token, $bound_tenant);
+if ($picked === null) {
+    flash_alert("Xero granted access to more than one organisation. Reconnect and authorise exactly one organisation, so the right one is bound.", 'error');
+    redirect($settings_accounting_path);
+}
+$tenant_id   = (string) $picked['tenantId'];
+$tenant_name = (string) ($picked['tenantName'] ?? $tenant_id);
 
 $tenant_id_esc     = mysqli_real_escape_string($mysqli, $tenant_id);
 $access_token_esc  = mysqli_real_escape_string($mysqli, encryptSetting($access_token));
 $refresh_token_esc = mysqli_real_escape_string($mysqli, encryptSetting($refresh_token));
 $expires_at_esc    = mysqli_real_escape_string($mysqli, $expires_at);
+
+$ds115_prior = function_exists('getAccountingIntegration') ? getAccountingIntegration($mysqli) : null;
+$ds115_dropped = accountingBindConnection($mysqli, $accounting_id, 'xero', $tenant_id, is_array($ds115_prior) ? $ds115_prior : null);
 
 mysqli_query($mysqli, "UPDATE accounting_integrations SET
     accounting_provider = 'xero',
@@ -160,6 +172,6 @@ mysqli_query($mysqli, "UPDATE accounting_integrations SET
 ");
 
 accountingLog($mysqli, $accounting_id, 'integration', $accounting_id, 'connected', "Connected to Xero organisation \"$tenant_name\" (tenant $tenant_id)");
-logAction("Settings", "Edit", "$session_name connected Xero (tenant $tenant_id)");
+logAction("Settings", "Edit", "$session_name connected Xero (tenant $tenant_id)" . ($ds115_dropped > 0 ? "; $ds115_dropped mappings of the previously connected organisation were dropped" : ''));
 flash_alert("Xero connected successfully. Organisation: " . nullable_htmlentities($tenant_name));
 redirect($settings_accounting_path);

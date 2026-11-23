@@ -12,6 +12,13 @@ require_once "includes/inc_all_admin.php";
 
             <h4>Client Portal SSO via Microsoft Entra</h4>
 
+            <?php $unpinned_azure_users = secPortalEntraUnpinnedAzureUsers($mysqli); if ($unpinned_azure_users > 0) { ?>
+            <div class="alert alert-warning">
+                <i class="fas fa-fw fa-exclamation-triangle me-1"></i>
+                <strong>No Entra tenant is set.</strong> <?php echo $unpinned_azure_users; ?> portal contact(s) sign in with Microsoft, and the portal accepts a Microsoft account from <em>any</em> work or school tenant whose sign-in name matches. Enter your tenant below to limit sign-in to it.
+            </div>
+            <?php } ?>
+
             <div class="form-group">
                 <label>Identity Provider <small class='text-secondary'>(Currently only works with Microsoft Entra ID/AAD)</small></label>
                 <div class="input-group">
@@ -47,6 +54,24 @@ require_once "includes/inc_all_admin.php";
                 </div>
                 <?php if ($config_azure_client_secret !== '') { ?><div class="form-text">A secret is saved. It is never shown again here; enter a new one only to replace it.</div><?php } ?>
             </div>
+
+            <div class="form-group">
+                <label>Entra tenant (ID or domain) for the client portal sign-in</label>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text"><i class="fa fa-fw fa-building"></i></span>
+                    </div>
+                    <input type="text" class="form-control" name="portal_entra_tenant" placeholder="contoso.onmicrosoft.com or a tenant GUID (blank = any work or school tenant)" value="<?php echo nullable_htmlentities(secSetting('portal_entra_tenant')); ?>">
+                </div>
+                <div class="form-text">Strongly recommended: with this blank any Entra tenant can reach the portal sign-in, and a contact is matched on the account's sign-in name alone. A single-tenant app registration needs its tenant here.</div>
+            </div>
+
+            <h4 class="mt-4">Mobile app passkey sign-in</h4>
+            <p class="mb-1">
+                User verification (PIN or biometric) is
+                <?php if (secMobilePasskeyUvRequired()) { ?><span class="badge bg-success">required</span><?php } else { ?><span class="badge bg-warning text-dark">not required (presence only)</span><?php } ?>
+            </p>
+            <div class="form-text">Set in config.php: <code>$config_passkey_mobile_require_uv = true;</code>. While it is off, a security key that only proves presence (no PIN) can sign in to the mobile app. Turn it on once every enrolled passkey supports user verification. This page only shows the state.</div>
 
             <hr>
 

@@ -4,6 +4,12 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+### Changed
+- **Relationships** are no longer a card at the bottom of every details page: they are a Relationships button in the Edit pop-up of assets, contacts, domains, certificates, documents, vendors and KB articles. The asset page has a Network card with the public (WAN) IP (copy button, source, whether it matches the location's WAN IP) and the LAN IP.
+
+### Added
+- **WAN IP on locations, and the public IP of devices.** A WAN IP field (one or more public IPs, comma separated, for example a primary and a backup line) in the Add and Edit Location forms and as a column on the Locations list. The RMM sync now saves the public IP Tactical reports for each device, the asset page shows it under Interfaces, and the Locations list flags an address its devices report that nobody entered ("Seen: x") with a Use button that adds it. A RivetMSP agent device counts by the address its last check-in came from. Private and reserved addresses are ignored. Needs database update 2.6.143.
+
 ## [26.10.53] - 2026-11-15
 
 No database version change (DB stays 2.6.137). Update Database now also catches up pending RivetCore migrations (0048/0049) on every run.

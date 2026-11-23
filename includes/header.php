@@ -10,7 +10,9 @@
 $csp_nonce = base64_encode(random_bytes(16));
 
 header("X-Frame-Options: DENY");
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$csp_nonce' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.foleyit.com; font-src 'self' data:; connect-src 'self' https://cloudflareinsights.com");
+// MSP-DS-183: installation-specific sources come from config.php ($config_csp_img_src, $config_csp_cloudflare_insights); strict by default
+require_once __DIR__ . '/csp_policies.php';
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$csp_nonce'" . cspCloudflareScript() . "; style-src 'self' 'unsafe-inline'; " . cspImgSrc() . "; font-src 'self' data:; connect-src 'self'" . cspCloudflareConnect());
 header("X-Content-Type-Options: nosniff");
 header("Referrer-Policy: strict-origin-when-cross-origin");
 

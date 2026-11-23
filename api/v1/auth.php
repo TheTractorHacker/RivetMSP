@@ -36,7 +36,7 @@ if ($method === 'GET') {
         'timeout'          => 60000,
         'rpId'             => wa_rp_id(),
         'allowCredentials' => [],
-        'userVerification' => 'preferred',
+        'userVerification' => !empty($config_passkey_mobile_require_uv) ? 'required' : 'preferred',   // MSP-DS-77 (config.php switch, off = shipped behaviour)
         'challengeToken'   => $challenge_token,
     ]);
 }
@@ -115,7 +115,7 @@ if (isset($body['passkey_response'], $body['challenge_token'])) {
             intval($pkRow['passkey_sign_count']),
             $row['challenge_b64u'],
             $androidOrigins,
-            false   // requireUV=false — we ask for 'preferred', not 'required'
+            !empty($config_passkey_mobile_require_uv)   // MSP-DS-77: true refuses presence-only assertions; default false keeps shipped apps working
         );
 
         $passkey_id = intval($pkRow['passkey_id']);
@@ -196,23 +196,29 @@ $sql      = mysqli_query($mysqli,
      AND user_type = 1
      AND user_status = 1
      AND user_archived_at IS NULL
-     LIMIT 1"
+     ORDER BY (user_email = '$esc_user') DESC, user_id ASC
+     LIMIT 1"   /* MSP-DS-141: a row whose email matches wins over one that merely carries the same display name */
 );
 $user = mysqli_fetch_assoc($sql);
 
 // ── Rate limiting (5 failures → 5-minute lockout) ────────────────────────────
+// MSP-DS-78 / MSP-DS-12: an attempt is RESERVED atomically before the password or TOTP is checked, so parallel requests cannot all pass a
+// check-then-increment, and the window is measured by the database in UTC (it used to compare UTC_TIMESTAMP() with strtotime() in PHP's
+// zone, shifting every lockout by the UTC offset). A correct sign-in resets the counter below.
+$api_reserved_uid = 0;
 if ($user) {
-    $fail_count = intval($user['user_failed_login_count'] ?? 0);
-    $fail_time  = strtotime($user['user_failed_login_at'] ?? '1970-01-01');
-    if ($fail_count >= 5 && (time() - $fail_time) < 300) {
+    $uid_rl = intval($user['user_id']);
+    mysqli_query($mysqli,
+        "UPDATE users SET
+            user_failed_login_count = IF(user_failed_login_at IS NULL OR user_failed_login_at <= UTC_TIMESTAMP() - INTERVAL 300 SECOND, 1, user_failed_login_count + 1),
+            user_failed_login_at = UTC_TIMESTAMP()
+         WHERE user_id = $uid_rl
+           AND (user_failed_login_count < 5 OR user_failed_login_at IS NULL OR user_failed_login_at <= UTC_TIMESTAMP() - INTERVAL 300 SECOND)"
+    );
+    if (mysqli_affected_rows($mysqli) < 1) {
         api_error(429, 'Too many failed attempts. Try again in 5 minutes.');
     }
-    if ($fail_count >= 5 && (time() - $fail_time) >= 300) {
-        // Reset after lockout window passes
-        $uid_rl = intval($user['user_id']);
-        mysqli_query($mysqli, "UPDATE users SET user_failed_login_count = 0 WHERE user_id = $uid_rl");
-        $user['user_failed_login_count'] = 0;
-    }
+    $api_reserved_uid = $uid_rl;
 }
 
 // ── Password verification (constant-time to prevent user enumeration) ─────────
@@ -232,16 +238,7 @@ $hash_to_check = $user ? $user['user_password'] : $dummy_hash;
 $password_ok = password_verify($password, $hash_to_check);
 
 if (!$user || !$password_ok) {
-    if ($user) {
-        $uid_fail = intval($user['user_id']);
-        mysqli_query($mysqli,
-            "UPDATE users SET
-                user_failed_login_count = user_failed_login_count + 1,
-                user_failed_login_at = UTC_TIMESTAMP()
-             WHERE user_id = $uid_fail"
-        );
-    }
-    api_error(401, 'Invalid credentials');
+    api_error(401, 'Invalid credentials');   // the attempt was already counted above
 }
 
 // ── 2FA (TOTP) ───────────────────────────────────────────────────────────────
@@ -252,8 +249,15 @@ $uid = intval($user['user_id']);
 require_once __DIR__ . '/../../includes/security_crypto.php';
 require_once __DIR__ . '/../../includes/security_policy.php';
 $totp_secret = secUserTotpSecret($user['user_token'] ?? '', $uid);   // wrapped or legacy plaintext
+// MSP-DS-143: a stored second-factor seed that cannot be decrypted must not read as "no 2FA": fail closed.
+if (empty($totp_secret) && trim((string) ($user['user_token'] ?? '')) !== '') {
+    logAction('Login', 'Failed', "{$user['user_name']} was refused a mobile API token: the stored two-factor seed could not be read (MFA Failed)");
+    api_error(403, 'Your two-factor setup could not be read. Ask an administrator to reset it.');
+}
 if (!empty($totp_secret)) {
     if (empty($totp)) {
+        // The password was right and the client now asks for the code: give this reservation back (the code step counts its own).
+        mysqli_query($mysqli, "UPDATE users SET user_failed_login_count = GREATEST(user_failed_login_count - 1, 0) WHERE user_id = $uid");
         api_response(200, ['requires_2fa' => true]);
     }
     // A single-use recovery code (xxxxx-xxxxx) is accepted in place of the six digit code.
@@ -264,13 +268,7 @@ if (!empty($totp_secret)) {
     }
     // +/-1 time step (30 s either side) instead of the web default of +/-3
     if (!$totp_via_recovery && !TokenAuth6238::verifyOnce($totp_secret, $totp, 1)) {
-        mysqli_query($mysqli,
-            "UPDATE users SET
-                user_failed_login_count = user_failed_login_count + 1,
-                user_failed_login_at = UTC_TIMESTAMP()
-             WHERE user_id = $uid"
-        );
-        logAction('Login', 'Failed', "{$user['user_name']} failed 2FA on mobile API login (MFA Failed)");
+        logAction('Login', 'Failed', "{$user['user_name']} failed 2FA on mobile API login (MFA Failed)");   // already counted above
         api_error(401, 'Invalid 2FA code');
     }
 }

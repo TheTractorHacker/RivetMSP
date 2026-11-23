@@ -244,6 +244,11 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                             </a>
                         </th>
                         <th>
+                            <a class="text-secondary" href="?<?php echo $url_query_strings_sort; ?>&sort=location_wan_ip&order=<?php echo $disp; ?>">
+                                WAN IP <?php if ($sort == 'location_wan_ip') { echo $order_icon; } ?>
+                            </a>
+                        </th>
+                        <th>
                             <a class="text-secondary" href="?<?php echo $url_query_strings_sort; ?>&sort=location_hours&order=<?php echo $disp; ?>">
                                 Hours <?php if ($sort == 'location_hours') { echo $order_icon; } ?>
                             </a>
@@ -286,6 +291,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                         } else {
                             $location_fax_display = '';
                         }
+                        $location_wan_ip_raw = (string) ($row['location_wan_ip'] ?? '');
                         $location_hours = nullable_htmlentities($row['location_hours']);
                         if (empty($location_hours)) {
                             $location_hours_display = "-";
@@ -357,6 +363,22 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                 <?php echo $location_phone_display; ?>
                                 <?php echo $location_fax_display; ?>
                             </td>
+                            <td class="text-nowrap"><?php
+                                $wan_list = \RivetMSP\Assets\PublicIp::parseList($location_wan_ip_raw);
+                                if ($wan_list) { foreach ($wan_list as $wan_one) { $wan_one = nullable_htmlentities($wan_one); echo "<div><code class='user-select-all'>$wan_one</code></div>"; } } else { echo '-'; }
+                                // What the devices at this location report as their public address, compared with what was entered.
+                                $wan_seen = \RivetMSP\Assets\PublicIp::seenAtLocation($mysqli, $location_id);
+                                $wan_new = array_values(array_diff(array_keys($wan_seen), $wan_list));
+                                foreach ($wan_new as $wan_n) {
+                                    $wan_n_h = nullable_htmlentities($wan_n);
+                                    $wan_tip = ($wan_list ? 'Devices here report a different public IP than the one entered' : 'Devices here report this public IP') . ' (' . intval($wan_seen[$wan_n]) . ' device(s))';
+                                    echo "<div class='small mt-1' title='" . nullable_htmlentities($wan_tip) . "'><span class='badge " . ($wan_list ? 'text-bg-warning' : 'text-bg-info') . "'><i class='fa fa-fw fa-satellite-dish me-1'></i>Seen: $wan_n_h</span>";
+                                    if (lookupUserPermission('module_client') >= 2) {
+                                        echo " <form action='post.php' method='post' class='d-inline'><input type='hidden' name='csrf_token' value='" . $_SESSION['csrf_token'] . "'><input type='hidden' name='location_id' value='$location_id'><input type='hidden' name='seen_ip' value='$wan_n_h'><button type='submit' name='use_seen_wan_ip' class='btn btn-link btn-sm p-0 align-baseline'>Use</button></form>";
+                                    }
+                                    echo '</div>';
+                                }
+                            ?></td>
                             <td><?php echo $location_hours_display; ?></td>
                             <?php if (!$client_url) { ?>
                             <td><a href="locations.php?client_id=<?php echo $client_id; ?>"><?php echo $client_name; ?></a></td>
@@ -373,7 +395,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                         <a class="dropdown-item ajax-modal" href="#" data-modal-url="modals/relationships/relationships.php?type=location&id=<?= $location_id ?>">
                                             <i class="fas fa-fw fa-project-diagram me-2"></i>Relationships
                                         </a>
-                                        <?php if ($session_user_role == 3 && $location_primary == 0) { ?>
+                                        <?php if ($session_is_admin && $location_primary == 0) { ?>
                                             <?php if ($location_archived_at) { ?>
                                             <div class="dropdown-divider"></div>
                                             <a class="dropdown-item text-info confirm-link" href="post.php?restore_location=<?= $location_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">

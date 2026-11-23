@@ -117,6 +117,12 @@ function automationExecuteAction($mysqli, array $action, array &$context, array 
         case 'assign_to':
             if (!$tid) return null;
             $uid = intval($aval);
+            // MSP-DS-167: automation never hands a ticket to someone who cannot work it (inactive, no module_support write, or restricted away from the client)
+            require_once __DIR__ . '/dispatch_functions.php';
+            if (!ticketAssigneeEligible($mysqli, $uid, intval(getFieldById('tickets', $tid, 'ticket_client_id')))) {
+                logAction("Automation", "Skipped", "Rule '$rule_name': did not assign ticket $tid to user $uid (cannot work this ticket)", $client_id, $tid);
+                return null;
+            }
             mysqli_query($mysqli, "UPDATE tickets SET ticket_assigned_to = $uid WHERE ticket_id = $tid");
             logAction("Automation", "Update", "Rule '$rule_name': assigned ticket $tid to user $uid", $client_id, $tid);
             return "assigned ticket #$tid to user $uid";
@@ -142,6 +148,12 @@ function automationExecuteAction($mysqli, array $action, array &$context, array 
             $parts   = explode(':', $aval);
             $esc_uid = intval(trim($parts[0] ?? ''));
             $esc_pri = strtolower(trim($parts[1] ?? ''));
+            // MSP-DS-167: the assignee part is dropped (priority still applies) when that user cannot work this ticket
+            require_once __DIR__ . '/dispatch_functions.php';
+            if ($esc_uid > 0 && !ticketAssigneeEligible($mysqli, $esc_uid, intval(getFieldById('tickets', $tid, 'ticket_client_id')))) {
+                logAction("Automation", "Skipped", "Rule '$rule_name': did not escalate ticket $tid to user $esc_uid (cannot work this ticket)", $client_id, $tid);
+                $esc_uid = 0;
+            }
             $sets = [];
             $bits = [];
             if ($esc_uid > 0) {
@@ -167,6 +179,11 @@ function automationExecuteAction($mysqli, array $action, array &$context, array 
             // app - match that here too instead of leaving the ticket stuck at
             // status 4 relying on the slow cron-based auto-close.
             $sid = resolveTicketStatusId(intval($aval));
+            // MSP-DS-66 (re-review MRR-15): same custody control as every other resolve/close path (unsigned outtake form, unfinalized outtake worksheet)
+            if (in_array($sid, [4, 5], true) && ($close_block = ticketCloseBlockReason($tid))) {
+                logAction("Automation", "Skipped", "Rule '$rule_name': did not set status=$sid on ticket $tid - $close_block", $client_id, $tid);
+                return null;
+            }
             if ($sid == 5) {
                 mysqli_query($mysqli, "UPDATE tickets SET ticket_status = 5, ticket_resolved_at = NOW(), ticket_closed_at = NOW() WHERE ticket_id = $tid");
             } else {
@@ -442,6 +459,11 @@ function automationExecuteAction($mysqli, array $action, array &$context, array 
             if (!$tid) return null;
             $assigned_to = intval($context['assigned_to'] ?? 0);
             $closer = $assigned_to > 0 ? $assigned_to : 1;
+            // MSP-DS-66 (re-review MRR-15): the custody control applies to automation too; a blocked close is skipped and logged
+            if ($close_block = ticketCloseBlockReason($tid)) {
+                logAction("Automation", "Skipped", "Rule '$rule_name': did not close ticket $tid - $close_block", $client_id, $tid);
+                return null;
+            }
             mysqli_query($mysqli,
                 "UPDATE tickets SET ticket_status = 5, ticket_closed_at = NOW(), ticket_closed_by = $closer
                  WHERE ticket_id = $tid AND ticket_resolved_at IS NULL"

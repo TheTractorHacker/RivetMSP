@@ -70,6 +70,22 @@ $pay_frequency_array = array(
                 <small class="form-text text-muted">Only used to pre-fill the "New Period" end date suggestion - you can always pick different dates.</small>
             </div>
 
+            <div class="form-group">
+                <label>Workweek</label>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text"><i class="fa fa-fw fa-calendar-week"></i></span>
+                    </div>
+                    <select class="form-control" name="workweek_start">
+                        <option value="period" <?php if ($config_payroll_workweek_start === 'period') { echo "selected"; } ?>>Restart at every pay period start (legacy)</option>
+                        <?php foreach (['sun' => 'Sunday', 'mon' => 'Monday', 'tue' => 'Tuesday', 'wed' => 'Wednesday', 'thu' => 'Thursday', 'fri' => 'Friday', 'sat' => 'Saturday'] as $wk_value => $wk_name) { ?>
+                            <option value="<?php echo $wk_value; ?>" <?php if ($config_payroll_workweek_start === $wk_value) { echo "selected"; } ?>>Fixed company workweek starting <?php echo $wk_name; ?></option>
+                        <?php } ?>
+                    </select>
+                </div>
+                <small class="form-text text-muted">Overtime is judged per workweek. With a fixed workweek, a week that crosses two pay periods (for example semimonthly, 15th/16th) is paid whole in the period it starts in and its overtime is counted once on the full week. The legacy setting restarts the week at every period start, so a week split by a period boundary can lose its overtime. Hours already entered are keyed by week start date; switch it between periods, not in the middle of one.</small>
+            </div>
+
             <hr>
 
             <button type="submit" name="edit_payroll_settings" class="btn btn-primary text-bold"><i class="fa fa-check me-2"></i>Save</button>

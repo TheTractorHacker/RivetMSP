@@ -42,6 +42,14 @@ if (isset($_POST['add_user'])) {
 
     require_once 'user_model.php';
 
+    // MSP-DS-121: creating another administrator needs the acting administrator's own password (a stolen session alone is not enough)
+    $new_role_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT role_is_admin FROM user_roles WHERE role_id = " . intval($role)));
+    if ($new_role_row && intval($new_role_row['role_is_admin']) === 1
+        && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert('Your current password is required (and must be correct) to create an administrator.', 'error');
+        redirect();
+    }
+
     // Reject a duplicate e-mail (logins look users up by e-mail) before inserting
     if (mysqli_num_rows(mysqli_query($mysqli, "SELECT user_id FROM users WHERE user_email = '$email' LIMIT 1")) > 0) {
         flash_alert("A user with the email <strong>$email</strong> already exists", 'error');
@@ -147,6 +155,38 @@ if (isset($_POST['edit_user'])) {
 
     $user_id = intval($_POST['user_id']);
     $new_password = trim($_POST['new_password']);
+
+    // MSP-DS-121 (review R22/R23): the acting administrator's current password is needed for every change that could hand an attacker with a
+    // stolen session a durable administrator account:
+    //  - changing your own sign-in email, role, password, two-factor or Force-MFA setting (like the profile page),
+    //  - promoting ANY user into an administrator role they did not already have,
+    //  - changing the email or password of an account that is already an administrator (that is an account takeover).
+    $target_now = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT u.user_email, u.user_role_id, r.role_is_admin AS cur_is_admin, COALESCE(s.user_config_force_mfa, 0) AS cur_force_mfa
+        FROM users u LEFT JOIN user_roles r ON r.role_id = u.user_role_id LEFT JOIN user_settings s ON s.user_id = u.user_id WHERE u.user_id = $user_id"));
+    $new_role_is_admin = intval(getFieldById('user_roles', intval($role), 'role_is_admin')) === 1;
+    $role_changed = $target_now && intval($target_now['user_role_id']) !== intval($role);
+    $email_differs = $target_now && strcasecmp((string) $target_now['user_email'], trim((string) ($_POST['email'] ?? ''))) !== 0;
+    // MSP-DS-121 (complete): the same applies to ANY target, not only administrators: a new password or sign-in email on a technician's account, or a
+    // role change, is an account takeover / privilege change a stolen admin session must not be able to make without the admin's password.
+    $reauth_needed = ($new_role_is_admin && $role_changed)
+        || $role_changed
+        || ($target_now && ($new_password !== '' || $email_differs))
+        // review RR12: removing ANYONE's second factor (TOTP seed, recovery codes, API tokens) or switching their Force MFA off is as sensitive as
+        // the separate disable_2fa form, which already asks for the password
+        || (($_POST['2fa'] ?? '') === 'disable')
+        || ($target_now && intval($target_now['cur_force_mfa']) === 1 && !$force_mfa);
+    if ($user_id === intval($session_user_id)) {
+        $reauth_needed = $reauth_needed
+            || $new_password !== ''
+            || (($_POST['2fa'] ?? '') === 'disable')
+            || $email_differs || $role_changed
+            || ($target_now && intval($target_now['cur_force_mfa']) !== ($force_mfa ? 1 : 0));
+    }
+    if ($reauth_needed && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert('Your current password is required (and must be correct) to change a user\'s role, sign-in email or password, to disable anyone\'s 2FA or Force MFA, or to change your own two-factor or Force MFA.', 'error');
+        redirect();
+    }
+
     if ($new_password !== '') {
         $policy_error = secPasswordPolicyError($new_password, ['name' => trim((string) ($_POST['name'] ?? '')), 'email' => trim((string) ($_POST['email'] ?? '')), 'username' => trim((string) ($_POST['email'] ?? ''))], $mysqli);
         if ($policy_error !== null) {
@@ -167,7 +207,9 @@ if (isset($_POST['edit_user'])) {
     }
 
     // Update Client Access
-    mysqli_query($mysqli,"DELETE FROM user_client_permissions WHERE user_id = $user_id");
+    // MSP-DS-5: the edit form only lists clients that are not archived, so only those rows can be changed from it. A row for an archived or
+    // deleted client is kept: dropping it could leave the user with no rows at all, which means "every client".
+    mysqli_query($mysqli,"DELETE FROM user_client_permissions WHERE user_id = $user_id AND client_id IN (SELECT client_id FROM clients WHERE client_archived_at IS NULL)");
     if (isset($_POST['clients'])) {
         foreach($_POST['clients'] as $client_id) {
             $client_id = intval($client_id);
@@ -219,6 +261,7 @@ if (isset($_POST['edit_user'])) {
         mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
     }
 
+    $new_password_was_set = !empty($new_password);
     if (!empty($new_password)) {
         $new_password = secPasswordHash($new_password);
         $user_specific_encryption_ciphertext = encryptUserSpecificKey(trim($_POST['new_password']), $user_id);
@@ -261,6 +304,16 @@ if (isset($_POST['edit_user'])) {
         // auditing never breaks the action
     }
 
+    // MSP-DS-121: the account's owner is told, at the address that was on file before this change, when an administrator changed their sign-in email, password, role or two-factor.
+    $account_changes = [];
+    if ($email_differs) { $account_changes[] = 'Your sign-in email was changed.'; }
+    if ($new_password_was_set) { $account_changes[] = 'Your password was changed and all your sessions were signed out.'; }
+    if ($role_changed) { $account_changes[] = 'Your role was changed.'; }
+    if (($_POST['2fa'] ?? '') === 'disable') { $account_changes[] = 'Your two-factor authentication was removed.'; }
+    if ($target_now && $user_id !== intval($session_user_id)) {
+        secNotifyAccountChange((string) $target_now['user_email'], (string) $name, $account_changes, (string) $session_name);
+    }
+
     flash_alert("User <strong>$name</strong> updated" . $extended_alert_description);
 
     redirect();
@@ -298,6 +351,9 @@ if (isset($_GET['disable_user'])) {
     // Tokens must not come back to life when the account is re-activated (nightly MSP-4)
     mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
 
+    // MSP-DS-42: remember-me cookies and live sessions must not come back when the account is re-activated
+    secSessionsOnPasswordChange($mysqli, $user_id, null);
+
     // Un-assign tickets
     mysqli_query($mysqli, "UPDATE tickets SET ticket_assigned_to = 0 WHERE ticket_assigned_to = $user_id AND ticket_closed_at IS NULL");
     mysqli_query($mysqli, "UPDATE recurring_tickets SET recurring_ticket_assigned_to = 0 WHERE recurring_ticket_assigned_to = $user_id");
@@ -310,9 +366,14 @@ if (isset($_GET['disable_user'])) {
 
 }
 
-if (isset($_GET['disable_2fa'])) {
-    validateCSRFToken($_GET['csrf_token']);
-    $user_id   = intval($_GET['disable_2fa']);
+// MSP-DS-121 (review R23): removing a second factor or a passkey is a POST with CSRF and the acting administrator's password (it used to be a GET link).
+if (isset($_POST['disable_2fa'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $user_id   = intval($_POST['disable_2fa']);
+    if (!secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert('Your current password is required (and must be correct) to disable two-factor authentication.', 'error');
+        redirect();
+    }
     $user_name = sanitizeInput(getFieldById('users', $user_id, 'user_name'));
     mysqli_query($mysqli, "UPDATE users SET user_token = NULL WHERE user_id = $user_id");
     mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
@@ -322,10 +383,14 @@ if (isset($_GET['disable_2fa'])) {
     redirect();
 }
 
-if (isset($_GET['delete_passkey'])) {
-    validateCSRFToken($_GET['csrf_token']);
-    $passkey_id = intval($_GET['delete_passkey']);
-    $user_id    = intval($_GET['user_id']);
+if (isset($_POST['delete_passkey'])) {
+    validateCSRFToken($_POST['csrf_token']);
+    $passkey_id = intval($_POST['delete_passkey']);
+    $user_id    = intval($_POST['user_id']);
+    if (!secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert('Your current password is required (and must be correct) to delete a passkey.', 'error');
+        redirect();
+    }
     $user_name  = sanitizeInput(getFieldById('users', $user_id, 'user_name'));
     mysqli_query($mysqli, "DELETE FROM user_passkeys WHERE passkey_id = $passkey_id AND passkey_user_id = $user_id");
     logAction("User", "Edit", "$session_name deleted a passkey for $user_name", 0, $user_id);
@@ -371,6 +436,9 @@ if (isset($_POST['archive_user'])) {
     // Revoke every API/mobile session for the archived user
     mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
 
+    // MSP-DS-42: remember-me cookies and live sessions of the archived user stop working for good
+    secSessionsOnPasswordChange($mysqli, $user_id, null);
+
     logAction("User", "Archive", "$session_name archived user $user_name", 0, $user_id);
 
     flash_alert("User <strong>$user_name</strong> archived", 'error');
@@ -390,15 +458,29 @@ if (isset($_POST['restore_user'])) {
     $user_name = getFieldById('users', $user_id, 'user_name');
     $user_name = sanitizeInput(str_replace(" (archived)", "", $user_name)); //Removed (archived) from user_name
 
-    // Restore user query
-    mysqli_query($mysqli, "UPDATE users SET user_name = '$user_name', user_status = 1, user_role_id = $role, user_archived_at = NULL WHERE user_id = $user_id");
+    // MSP-DS-121 (review R22): restoring an account into an administrator role needs the acting administrator's password
+    if ((intval(getFieldById('user_roles', $role, 'role_is_admin')) === 1 || $new_password !== '')
+        && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert('Your current password is required (and must be correct) to restore a user as an administrator or with a new password.', 'error');
+        redirect();
+    }
 
+    // MSP-DS-42: the password policy is checked before the account is reactivated
     if (!empty($new_password)) {
         $policy_error = secPasswordPolicyError($new_password, ['name' => $user_name, 'username' => $user_name], $mysqli);
         if ($policy_error !== null) {
             flash_alert($policy_error, 'error');
             redirect();
         }
+    }
+
+    // Restore user query
+    mysqli_query($mysqli, "UPDATE users SET user_name = '$user_name', user_status = 1, user_role_id = $role, user_archived_at = NULL WHERE user_id = $user_id");
+
+    // Cookies issued before the archive/disable never come back to life
+    secSessionsOnPasswordChange($mysqli, $user_id, null);
+
+    if (!empty($new_password)) {
         $new_password = secPasswordHash($new_password);
         $user_specific_encryption_ciphertext = encryptUserSpecificKey(trim($_POST['new_password']), $user_id);
         mysqli_query($mysqli, "UPDATE users SET user_password = '$new_password', user_specific_encryption_ciphertext = '$user_specific_encryption_ciphertext' WHERE user_id = $user_id");
@@ -428,7 +510,7 @@ if (isset($_POST['export_users_csv'])) {
     if ($count > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = "Users-" . date('Y-m-d') . ".csv";
 
         //create a file pointer
@@ -451,7 +533,7 @@ if (isset($_POST['export_users_csv'])) {
             }
 
             $lineData = array($row['user_name'], $row['user_email'], $row['role_name'], $user_status_display, $row['user_created_at']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file
@@ -478,17 +560,16 @@ if (isset($_POST['ir_reset_user_password'])) {
     validateCSRFToken($_POST['csrf_token']);
 
     // Confirm logged-in user password, for security
-    $admin_password = $_POST['admin_password'];
-    $sql = mysqli_query($mysqli, "SELECT * FROM users WHERE user_id = $session_user_id");
-    $userRow = mysqli_fetch_assoc($sql);
+    $admin_password = (string) ($_POST['admin_password'] ?? '');
 
-    if (!password_verify($admin_password, $userRow['user_password'])) {
+    // MSP-DS-116: counted and limited like every other password re-check
+    if (!secReauthPassword($mysqli, (int) $session_user_id, $admin_password)) {
         flash_alert("Incorrect password.", 'error');
         redirect();
     }
 
-    // Get agents/users, other than the current user
-    $sql_users = mysqli_query($mysqli, "SELECT * FROM users WHERE (user_archived_at IS NULL AND user_id != $session_user_id)");
+    // Get agents, other than the current user. MSP-DS-122: client-portal logins (user_type 2) are not agents and are left alone.
+    $sql_users = mysqli_query($mysqli, "SELECT * FROM users WHERE (user_archived_at IS NULL AND user_type = 1 AND user_id != $session_user_id)");
 
     // Reset passwords
     while ($row = mysqli_fetch_assoc($sql_users)) {
@@ -502,6 +583,7 @@ if (isset($_POST['ir_reset_user_password'])) {
 
         mysqli_query($mysqli, "UPDATE users SET user_password = '$new_password', user_specific_encryption_ciphertext = '$user_specific_encryption_ciphertext' WHERE user_id = $user_id");
         mysqli_query($mysqli, "DELETE FROM api_tokens WHERE token_user_id = $user_id");
+        // MSP-DS-140: a passkey enrolled by an intruder must not survive the reset (secSessionsOnPasswordChange below removes the passkeys)
         secSessionsOnPasswordChange($mysqli, $user_id, null);
 
         echo "<br><br>";

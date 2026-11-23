@@ -13,20 +13,30 @@ BACKUP_RESULT_FILE=""
 BACKUP_STATUS_SENT=0
 BACKUP_OFFSITE_RESULT=""
 
-# backup_make_snapshot <dest-file>: table snapshot (names + counts, no data) for the restore drill; silently absent on failure.
+# backup_make_snapshot <dest-file>: table snapshot (names + counts, no data) for the restore drill. <dest-file> is in a root-only staging
+# directory the web user cannot reach, so the snapshot script (app code, run as the web user) writes JSON to STDOUT and root redirects it
+# into the file. Returns non-zero (with a visible warning) when no snapshot could be made; the backup itself still proceeds.
 backup_make_snapshot() {
-    local out="$1"
+    local out="$1" rc=0
     : > "${out}"; chmod 600 "${out}"
-    php "${SCRIPT_DIR}/lib/table_snapshot.php" "${APP_DIR}" "${out}" || true
-    [[ -s "${out}" ]]
+    run_app_php "${APP_DIR}" "${SCRIPT_DIR}/lib/table_snapshot.php" "${APP_DIR}" - > "${out}" || rc=$?
+    if [[ "${rc}" -ne 0 || ! -s "${out}" ]]; then
+        warn "No table snapshot was produced (table_snapshot.php exit ${rc}, see above): this archive will carry no table-snapshot.json, so the restore drill cannot compare row counts for it."
+        : > "${out}"
+        return 1
+    fi
+    return 0
 }
 
 # backup_write_checksum <encrypted-file>: writes <file>.sha256 ("<hash>  <name>", readable by sha256sum -c) and prints the hash.
 backup_write_checksum() {
     local enc="$1" hash
     hash="$(sha256sum "${enc}" | awk '{print $1}')"
-    printf '%s  %s\n' "${hash}" "$(basename "${enc}")" > "${enc}.sha256"
-    chmod 600 "${enc}.sha256"; chown root:root "${enc}.sha256" 2>/dev/null || true
+    # MSP-DS-19: write to a private temp file and rename it in, so a symlink the web user planted at <file>.sha256 is replaced, not followed.
+    local tmp_sum; tmp_sum="$(mktemp)"
+    printf '%s  %s\n' "${hash}" "$(basename "${enc}")" > "${tmp_sum}"
+    chmod 600 "${tmp_sum}"; chown root:root "${tmp_sum}" 2>/dev/null || true
+    mv -fT "${tmp_sum}" "${enc}.sha256"
     printf '%s' "${hash}"
 }
 
@@ -52,7 +62,7 @@ backup_report_status() {
     fi
     [[ -n "${err}" ]] && args+=(--error="${err}")
     [[ -n "${BACKUP_OFFSITE_RESULT}" ]] && args+=(--offsite="${BACKUP_OFFSITE_RESULT}")
-    php "${SCRIPT_DIR}/lib/backup_status.php" "${args[@]}" >/dev/null 2>&1 || true
+    run_app_php "${APP_DIR}" "${SCRIPT_DIR}/lib/backup_status.php" "${args[@]}" >/dev/null 2>&1 || true
 }
 
 # backup_exit_hook <exit-code>: registered with register_exit_hook; reports a run that died before backup_post_steps finished.
