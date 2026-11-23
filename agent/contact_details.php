@@ -1249,7 +1249,6 @@ if (isset($_GET['contact_id'])) {
 
     </div>
 
-    <?php $rel_type = 'contact'; $rel_id = $contact_id; require __DIR__ . '/../includes/relationships_card.php'; ?>
 
     <?php
 
