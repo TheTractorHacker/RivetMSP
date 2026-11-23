@@ -8857,6 +8857,14 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.142'");
     }
 
+    if ($rivetit_db_version() == '2.6.142') {
+        // DB 2.6.143: WAN IP address(es) on locations (the site's public internet address, room for a backup line) and the public IP an RMM
+        // device reports (Tactical sends public_ip). Both optional; empty = not set.
+        mysqli_query($mysqli, "ALTER TABLE `locations` ADD COLUMN IF NOT EXISTS `location_wan_ip` varchar(255) DEFAULT NULL");
+        mysqli_query($mysqli, "ALTER TABLE `assets` ADD COLUMN IF NOT EXISTS `asset_public_ip` varchar(64) DEFAULT NULL");
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.143'");
+    }
+
 // Core migrations catch-up, on EVERY Update Database run (idempotent: MigrationRunner keeps its own state in rivet_core_migrations). The version steps above run Core's
 // migrations only when their number is reached, so a database that was moved to a newer edition number while the files on disk still had an older RivetCore (an update
 // that stopped half way) would otherwise never get the Core migrations the newer package brings (for example 0048/0049 with RivetCore rc.60).

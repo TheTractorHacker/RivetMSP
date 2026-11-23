@@ -204,6 +204,16 @@ ob_start();
                     </div>
                 </div>
 
+                <div class="form-group">
+                    <label>WAN IP address</label>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="fa fa-fw fa-globe"></i></span>
+                        </div>
+                        <input type="text" class="form-control" name="wan_ip" value="" placeholder="e.g. 203.0.113.10 (add a backup line after a comma)" maxlength="255">
+                    </div>
+                </div>
+
                 <label>Fax</label>
                 <div class="form-row">
                     <div class="col-9">

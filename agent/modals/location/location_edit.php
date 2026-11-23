@@ -20,6 +20,7 @@ $location_phone_country_code = nullable_htmlentities($row['location_phone_countr
 $location_phone = nullable_htmlentities(formatPhoneNumber($row['location_phone'], $location_phone_country_code));
 $location_extension = nullable_htmlentities($row['location_phone_extension'] ?? '');
 $location_fax_country_code = nullable_htmlentities($row['location_fax_country_code']);
+$location_wan_ip = nullable_htmlentities($row['location_wan_ip'] ?? '');
 $location_fax = nullable_htmlentities(formatPhoneNumber($row['location_fax'], $location_fax_country_code));
 $location_hours = nullable_htmlentities($row['location_hours']);
 $location_photo = nullable_htmlentities($row['location_photo']);
@@ -221,6 +222,16 @@ ob_start();
                         <div class="form-group">
                             <input type="text" class="form-control" name="extension" value="<?php echo $location_extension; ?>" placeholder="ext." maxlength="200">
                         </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>WAN IP address</label>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="fa fa-fw fa-globe"></i></span>
+                        </div>
+                        <input type="text" class="form-control" name="wan_ip" value="<?php echo $location_wan_ip; ?>" placeholder="e.g. 203.0.113.10 (add a backup line after a comma)" maxlength="255">
                     </div>
                 </div>
 

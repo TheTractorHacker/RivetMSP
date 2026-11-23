@@ -436,6 +436,7 @@ CREATE TABLE `assets` (
   `asset_location_id` int(11) NOT NULL DEFAULT 0,
   `asset_contact_id` int(11) NOT NULL DEFAULT 0,
   `asset_client_id` int(11) NOT NULL DEFAULT 0,
+  `asset_public_ip` varchar(64) DEFAULT NULL,
   PRIMARY KEY (`asset_id`),
   KEY `idx_assets_client_archived` (`asset_client_id`,`asset_archived_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -2682,6 +2683,7 @@ CREATE TABLE `locations` (
   `location_fax_country_code` varchar(10) DEFAULT NULL,
   `location_fax` varchar(200) DEFAULT NULL,
   `location_hours` varchar(200) DEFAULT NULL,
+  `location_wan_ip` varchar(255) DEFAULT NULL,
   `location_photo` varchar(200) DEFAULT NULL,
   `location_primary` tinyint(1) NOT NULL DEFAULT 0,
   `location_notes` text DEFAULT NULL,
