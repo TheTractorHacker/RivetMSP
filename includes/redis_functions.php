@@ -13,6 +13,42 @@ define('REDIS_HOST', '127.0.0.1');
 define('REDIS_PORT', 6380);
 
 /**
+ * MSP-DS-108: Redis pub/sub is server-wide and ignores the selected database index, so two installs on one Redis server would see each other's ticket chat
+ * and notification events. Every channel therefore carries a per-install prefix derived from the database host + name this install is connected to.
+ * Publishers and subscribers must build channel names ONLY through redisTicketChannel() / redisUserNotificationChannel() so they cannot drift.
+ */
+function redisInstallPrefixFor(string $dbhost, string $database): string {
+    return 'rivetmsp:' . substr(hash('sha256', $dbhost . '|' . $database), 0, 12) . ':';
+}
+
+function redisInstallPrefix(): string {
+    static $prefix = null;
+    if ($prefix === null) {
+        global $mysqli, $dbhost;
+        $db = '';
+        if (isset($mysqli) && $mysqli instanceof \mysqli) {
+            $res = @mysqli_query($mysqli, 'SELECT DATABASE()');
+            $row = $res ? mysqli_fetch_row($res) : null;
+            $db = (string) ($row[0] ?? '');
+        }
+        if ($db === '') {
+            // no database connection in this context: never cache (or publish under) a prefix that other processes would not compute
+            return redisInstallPrefixFor((string) ($dbhost ?? ''), '');
+        }
+        $prefix = redisInstallPrefixFor((string) ($dbhost ?? ''), $db);
+    }
+    return $prefix;
+}
+
+function redisTicketChannel(int $ticket_id): string {
+    return redisInstallPrefix() . "ticket.$ticket_id";
+}
+
+function redisUserNotificationChannel(int $user_id): string {
+    return redisInstallPrefix() . "user.$user_id.notifications";
+}
+
+/**
  * Lazily create (or reuse) a Predis client connected to the local Redis instance.
  *
  * Returns null if the connection fails, so live-update features degrade
@@ -65,7 +101,7 @@ function publishTicketEvent(int $ticket_id, string $type, array $payload = []): 
     ]));
 
     try {
-        $redis->publish("ticket.$ticket_id", $message);
+        $redis->publish(redisTicketChannel($ticket_id), $message);
         return true;
     } catch (\Throwable $e) {
         return false;
@@ -91,7 +127,7 @@ function publishUserNotification(int $user_id, array $payload): bool {
     ]));
 
     try {
-        $redis->publish("user.$user_id.notifications", $message);
+        $redis->publish(redisUserNotificationChannel($user_id), $message);
         return true;
     } catch (\Throwable $e) {
         return false;

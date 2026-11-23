@@ -92,7 +92,7 @@ function createTicketFromRmmAlert($mysqli, array $alert, int $created_by, string
     }
     if (!empty($alert['tactical_alert_id'])) { $details_lines[] = "Alert ID: " . $alert['tactical_alert_id']; }
 
-    $subject     = 'RMM Alert: ' . substr($alert['message'] ?? '', 0, 200);
+    $subject     = 'RMM Alert: ' . mb_substr(mb_scrub((string) ($alert['message'] ?? ''), 'UTF-8'), 0, 200, 'UTF-8');
     $subject_esc = mysqli_real_escape_string($mysqli, $subject);
     $details_esc = mysqli_real_escape_string($mysqli, implode("\n", $details_lines));
     $source_esc  = mysqli_real_escape_string($mysqli, $source);
@@ -113,7 +113,7 @@ function createTicketFromRmmAlert($mysqli, array $alert, int $created_by, string
     ");
     $number   = mysqli_insert_id($mysqli);
     $url_key  = randomString(32);
-    $resolved_assigned_to = resolveTicketAssignee(0);
+    $resolved_assigned_to = resolveTicketAssignee(0, intval($client_id));
     $ticket_status = $resolved_assigned_to > 0 ? 2 : 1;
 
     mysqli_query($mysqli,

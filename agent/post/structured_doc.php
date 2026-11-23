@@ -23,7 +23,8 @@ function structuredDocSaveValues(\mysqli $mysqli, int $docId, int $typeId, array
             if ($raw === null || $raw === '') {
                 continue;
             }
-            $enc = encryptSetting(sanitizeInput((string) $raw));
+            // MSP-DS-63: the secret itself is encrypted as typed - no tag stripping, trimming or SQL escaping inside the ciphertext's plaintext
+            $enc = encryptSetting((string) $raw);
             mysqli_query($mysqli, "INSERT INTO structured_document_values SET doc_id = $docId, field_id = $field_id, value_enc = '" . mysqli_real_escape_string($mysqli, $enc) . "', value_text = NULL, updated_by = $sessionUserId
                 ON DUPLICATE KEY UPDATE value_enc = '" . mysqli_real_escape_string($mysqli, $enc) . "', value_text = NULL, updated_by = $sessionUserId, updated_at = NOW()");
             continue;
@@ -32,7 +33,8 @@ function structuredDocSaveValues(\mysqli $mysqli, int $docId, int $typeId, array
         if ($kind === 'checkbox') {
             $value = !empty($raw) ? '1' : '0';
         } else {
-            $value = sanitizeInput((string) ($raw ?? ''));
+            // MSP-DS-63: escaped exactly once, below (sanitizeInput() already escapes, which doubled every quote and backslash)
+            $value = trim(strip_tags((string) ($raw ?? '')));
         }
         $value_sql = "'" . mysqli_real_escape_string($mysqli, $value) . "'";
         mysqli_query($mysqli, "INSERT INTO structured_document_values SET doc_id = $docId, field_id = $field_id, value_text = $value_sql, updated_by = $sessionUserId
@@ -120,6 +122,13 @@ if (isset($_POST['reveal_structured_doc_field'])) {
     header('Content-Type: application/json');
     header('Cache-Control: no-store, private');
 
+    // MSP-DS-133: disclosing a stored password also needs the Credentials module (Read), like the vault
+    if (lookupUserPermission('module_credential') < 1) {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'denied']);
+        exit;
+    }
+
     $doc_id = intval($_POST['doc_id'] ?? 0);
     $field_id = intval($_POST['field_id'] ?? 0);
     $doc = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT doc_client_id, doc_name FROM structured_documents WHERE doc_id = $doc_id"));
@@ -148,6 +157,15 @@ if (isset($_POST['reveal_structured_doc_field'])) {
     $v = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT sdv.value_enc, sdf.field_label FROM structured_document_values sdv JOIN structured_doc_fields sdf ON sdf.field_id = sdv.field_id WHERE sdv.doc_id = $doc_id AND sdv.field_id = $field_id AND sdf.field_kind = 'password' LIMIT 1"));
     if (!$v || empty($v['value_enc'])) {
         echo json_encode(['ok' => false, 'error' => 'not_set']);
+        exit;
+    }
+    // MSP-DS-133: the same per-user reveal limit as the vault (each reveal counts and is logged); no password step-up for a single field
+    require_once __DIR__ . '/../../includes/security_policy.php';
+    require_once __DIR__ . '/../../includes/vault_reveal.php';
+    $reveal_refusal = vaultDisclosureCheck($mysqli, 'structured doc field', 1, false, true);
+    if ($reveal_refusal !== null) {
+        http_response_code(429);
+        echo json_encode(['ok' => false, 'error' => 'limit', 'message' => $reveal_refusal]);
         exit;
     }
     $value = decryptSetting((string) $v['value_enc']);

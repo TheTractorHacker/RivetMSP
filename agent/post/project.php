@@ -157,7 +157,7 @@ if (isset($_POST['add_project'])) {
 
             $ticket_number = mysqli_insert_id($mysqli);
 
-            $resolved_assigned_to = resolveTicketAssignee(0);
+            $resolved_assigned_to = resolveTicketAssignee(0, intval($client_id));
             $ticket_status = $resolved_assigned_to > 0 ? 2 : 1;
 
             // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.

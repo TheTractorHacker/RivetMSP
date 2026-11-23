@@ -104,13 +104,16 @@ $cr = mysqli_query($mysqli, "SELECT category, COUNT(*) as c FROM rmm_scripts GRO
 while ($r = mysqli_fetch_assoc($cr)) { $cat_counts[$r['category']] = $r['c']; }
 $total_count = array_sum($cat_counts);
 
-// Online assets for "Run on Asset" modal
+// Online assets for "Run on Asset" modal. A client-restricted viewer only sees the assets (and runs on assets) of their own clients (MSP-DS-7).
+require_once dirname(__DIR__, 2) . '/includes/search_scope.php';
+$rs_asset_scope = searchClientScope((string) $client_access_string, (bool) $session_is_admin, 'a.asset_client_id');
 $sql_online_assets = mysqli_query($mysqli,
     "SELECT arl.id as link_id, arl.tactical_agent_id, arl.hostname, a.asset_name, a.asset_id, c.client_name
      FROM asset_rmm_links arl
      JOIN assets a ON a.asset_id = arl.asset_id
      LEFT JOIN clients c ON c.client_id = a.asset_client_id
      WHERE arl.rmm_status='online' AND arl.tactical_agent_id IS NOT NULL AND arl.tactical_agent_id != ''
+       $rs_asset_scope
      ORDER BY c.client_name, arl.hostname"
 );
 
@@ -121,6 +124,7 @@ $sql_runs = mysqli_query($mysqli,
      LEFT JOIN rmm_scripts s ON s.id = sr.script_id
      LEFT JOIN assets a ON a.asset_id = sr.asset_id
      LEFT JOIN users u ON u.user_id = sr.user_id
+     WHERE 1=1 $rs_asset_scope
      ORDER BY sr.started_at DESC LIMIT 25"
 );
 ?>

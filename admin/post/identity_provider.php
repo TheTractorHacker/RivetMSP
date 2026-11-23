@@ -22,6 +22,11 @@ if (isset($_POST['edit_identity_provider'])) {
     mysqli_stmt_execute($stmt);
     mysqli_stmt_close($stmt);
 
+    // MSP-DS-146: pin the client portal's Microsoft sign-in to one Entra tenant (blank = any work/school tenant, as before)
+    if (isset($_POST['portal_entra_tenant'])) {
+        secSettingSet($mysqli, 'portal_entra_tenant', (string) $_POST['portal_entra_tenant']);
+    }
+
     logAction("Settings", "Edit", "$session_name edited identity provider settings");
 
     flash_alert("Identity Provider Settings updated");

@@ -20,6 +20,15 @@ if ($currentUser !== $fileOwner) {
     exit(1);
 }
 
+// MSP-DS-34 (review R12): this script runs git (fetch, pull, reset, checkout) as the checkout owner. Never run hooks or an fsmonitor command
+// configured in the repository (the web user may be able to write .git); command-scope config wins over .git/config and is inherited by
+// every git started below. deploy/update.sh sets the same variables from the root-owned side.
+putenv('GIT_CONFIG_COUNT=2');
+putenv('GIT_CONFIG_KEY_0=core.hooksPath');
+putenv('GIT_CONFIG_VALUE_0=/dev/null');
+putenv('GIT_CONFIG_KEY_1=core.fsmonitor');
+putenv('GIT_CONFIG_VALUE_1=false');
+
 require_once "../config.php";
 require_once "../functions.php";
 
@@ -140,6 +149,10 @@ if (isset($options['update_db'])) {
     // Now include the update logic
     try {
         require_once "../admin/database_updates.php";
+    } catch (\DbUpdateRefusedException $e) {
+        // A migration step refused to run because data needs an admin decision first (nothing of that step was applied): print why, no stack trace.
+        fwrite(STDERR, "Database update stopped: " . $e->getMessage() . "\n");
+        exit(1);
     } catch (\RivetCore\Migration\MigrationInProgressException $e) {
         fwrite(STDERR, "Another database update is running (RivetCore migration lock). Wait for it to finish and run this again.\n");
         exit(1);

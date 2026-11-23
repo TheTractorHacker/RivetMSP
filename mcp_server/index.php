@@ -209,7 +209,7 @@ switch ($method) {
         // Write tools (propose-then-approve) are a separate class with their own scope + feature gate; a read tool name never
         // reaches it and a write tool name never reaches ReadTools.
         $envelope = McpWriteActions::isWriteTool($name)
-            ? (new WriteTools($mysqli))->call($name, $args, $userId, (string) ($who['client_id'] ?? ''), $who['scopes'] ?? [])
+            ? (new WriteTools($mysqli))->call($name, $args, $userId, (string) ($who['client_id'] ?? ''), $who['scopes'] ?? [], (int) ($who['grant_id'] ?? 0))
             : (new ReadTools($mysqli))->call($name, $args, $userId);
         echo json_encode(['jsonrpc' => '2.0', 'id' => $id, 'result' => [
             'content' => [['type' => 'text', 'text' => json_encode($envelope['data'] ?? $envelope['errors'], JSON_UNESCAPED_SLASHES)]],

@@ -18,7 +18,7 @@ $expense_vendor_id = intval($row['expense_vendor_id']);
 $expense_category_id = intval($row['expense_category_id']);
 $expense_account_id = intval($row['expense_account_id']);
 $expense_client_id = intval($row['expense_client_id']);
-enforceClientAccess($expense_client_id);
+if ($expense_client_id) { enforceClientAccess($expense_client_id); } // MSP-DS-55
 
 // Generate the HTML form content using output buffering.
 ob_start();

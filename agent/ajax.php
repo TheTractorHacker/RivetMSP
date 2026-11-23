@@ -11,6 +11,11 @@ require_once "../functions.php";
 require_once "../includes/check_login.php";
 require_once "../plugins/totp/totp.php";
 
+// IT-WEB-2 / MSP-DS-28: every branch is JSON unless it says otherwise. PHP defaults to text/html, which turned a stored value such as
+// <img onerror=...> into a reflected-XSS page on direct navigation. HTML-fragment branches send their own text/html header.
+header('Content-Type: application/json; charset=utf-8');
+header('X-Content-Type-Options: nosniff');
+
 /*
  * Leads board: move a lead to another pipeline stage (drag and drop). POST + CSRF, JSON response.
  * Moving a card to "Converted" turns the lead into a client, same as the Convert action on the list.
@@ -98,6 +103,10 @@ if (isset($_GET['global_search_live'])) {
     // sequence (a prefix starting with n/r/Z follows the backslash of \n, \r, \Z) and leave a bare backslash in the quoted literal.
     $ticket_num_query = sanitizeInput(str_replace((string) $config_ticket_prefix, '', cleanInput($raw_query)));
 
+    require_once dirname(__DIR__) . '/includes/search_scope.php';
+    $gs_deny_sales = searchModuleDeny(lookupUserPermission('module_sales'));
+    $gs_deny_support = searchModuleDeny(lookupUserPermission('module_support'));
+
     $groups = [];
 
     // Clients
@@ -157,6 +166,7 @@ if (isset($_GET['global_search_live'])) {
             OR ticket_details LIKE '%$query%'
             OR CONCAT(ticket_prefix,ticket_number) LIKE '%$query%'
             OR ticket_number = '$ticket_num_query')
+            $gs_deny_support
             $access_permission_query
         ORDER BY ticket_id DESC LIMIT 5"
     );
@@ -180,6 +190,7 @@ if (isset($_GET['global_search_live'])) {
         LEFT JOIN clients ON quote_client_id = client_id
         WHERE quote_archived_at IS NULL
             AND (CONCAT(quote_prefix,quote_number) LIKE '%$query%' OR quote_number LIKE '%$query%' OR quote_scope LIKE '%$query%')
+            $gs_deny_sales
             $access_permission_query
         ORDER BY quote_number DESC LIMIT 5"
     );
@@ -203,6 +214,7 @@ if (isset($_GET['global_search_live'])) {
         LEFT JOIN clients ON invoice_client_id = client_id
         WHERE invoice_archived_at IS NULL
             AND (CONCAT(invoice_prefix,invoice_number) LIKE '%$query%' OR invoice_number LIKE '%$query%' OR invoice_scope LIKE '%$query%')
+            $gs_deny_sales
             $access_permission_query
         ORDER BY invoice_number DESC LIMIT 5"
     );
@@ -530,7 +542,7 @@ if (isset($_GET['share_generate_link'])) {
         if ($item_expires_friendly == "never") {
             $subject = "$company_name secure link enclosed";
         }
-        $body = "Hello,<br><br>$session_name from $company_name sent you a time sensitive secure link regarding \"$item_name\".<br><br>The link will expire in <strong>$item_expires_friendly</strong>$item_view_limit_wording.<br><br><strong><a href=\'$url\'>Click here to access your secure content</a></strong><br><br>--<br>$company_name - Support<br>$config_ticket_from_email<br>$company_phone";
+        $body = "Hello,<br><br>$session_name from $company_name sent you a time sensitive secure link regarding \"$item_name\".<br><br>The link will expire in <strong>$item_expires_friendly</strong>$item_view_limit_wording.<br><br><strong><a href='$url'>Click here to access your secure content</a></strong><br><br>--<br>$company_name - Support<br>$config_ticket_from_email<br>$company_phone";
 
         // Add the intended recipient disclosure
         $body .= "<br><br><em>This email and any attachments are confidential and intended for the specified recipient(s) only. If you are not the intended recipient, please notify the sender and delete this email. Unauthorized use, disclosure, or distribution is prohibited.</em>";
@@ -799,8 +811,11 @@ if (isset($_POST['update_kanban_ticket'])) {
 
         // Client perms check
         $client_query = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_client_id FROM tickets WHERE ticket_id = $ticket_id"));
-        $client_id = intval($client_query['ticket_client_id']);
-        enforceClientAccess();
+        $client_id = intval($client_query['ticket_client_id'] ?? 0);
+        // MSP-DS-45: an internal ticket (client 0) has no client to check; enforceClientAccess() would end the whole request for a non-admin
+        if ($client_id) {
+            enforceClientAccess();
+        }
 
         $kanban = intval($position['ticket_order']); // ticket kanban position
         $status = intval($position['ticket_status']); // ticket statuses
@@ -836,6 +851,9 @@ if (isset($_POST['update_kanban_ticket'])) {
                 mysqli_query($mysqli, "UPDATE tickets SET " . ticketReopenSql() . "ticket_order = $kanban, ticket_status = $status, ticket_resolved_at = NULL, ticket_closed_at = NULL, ticket_closed_by = 0 WHERE ticket_id = $ticket_id");
                 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/sla_functions.php'; slaSyncPause($mysqli, $ticket_id);
                 customAction('ticket_update', $ticket_id);
+            } elseif ($status === $statuses['Resolved'] && ticketCloseBlockReason($ticket_id)) {
+                // MSP-DS-66: Resolved is an immediate close here - not while the outtake custody checks fail (the card stays put)
+                continue;
             } elseif ($status === $statuses['Resolved']) {
                 // Resolved is an immediate alias for Closed everywhere else in this
                 // app (reply form, quick-status, status dropdown, bulk reply) - match
@@ -976,7 +994,8 @@ if (isset($_POST['update_task_templates_order'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
-    enforceUserPermission('module_support', 2);
+    // MSP-DS-67: ticket template tasks are admin-managed
+    enforceAdminPermission();
 
     $positions = $_POST['positions'];
     $ticket_template_id = intval($_POST['ticket_template_id']);
@@ -1088,9 +1107,11 @@ if (isset($_GET['client_duplicate_check'])) {
     $response['message'] = ""; // default
 
     if (strlen($name) >= 5) {
+        // MSP-DS-67: only clients this user may access take part (a client-restricted technician must not enumerate the others)
         $sql_clients = mysqli_query($mysqli, "SELECT client_name FROM clients
         WHERE client_archived_at IS NULL
         AND client_name LIKE '%$name%'
+        $access_permission_query
         ORDER BY client_id DESC LIMIT 1"
         );
 
@@ -1115,7 +1136,8 @@ if (isset($_GET['contact_email_check'])) {
     if (strlen($email) >= 3) {
 
         // 1. Duplicate check
-        $sql_contacts = mysqli_query($mysqli, "SELECT contact_email FROM contacts WHERE contact_email = '$email' LIMIT 1");
+        // MSP-DS-67: only contacts of clients this user may access count (no cross-client existence oracle)
+        $sql_contacts = mysqli_query($mysqli, "SELECT contact_email FROM contacts LEFT JOIN clients ON clients.client_id = contact_client_id WHERE contact_email = '$email' $access_permission_query LIMIT 1");
         if (mysqli_num_rows($sql_contacts) > 0) {
             while ($row = mysqli_fetch_assoc($sql_contacts)) {
                 $response['message'] = "<i class='fas fa-fw fa-copy me-2'></i> Potential duplicate: <i>" . nullable_htmlentities($row['contact_email']) . "</i> already exists.";
@@ -1146,6 +1168,21 @@ if (isset($_GET['ai_reword'])) {
 
     validateCSRFToken($input['csrf_token'] ?? '');
 
+    // MSP-DS-46: honour the per-client AI opt-out. The client is the ticket's when a ticket id is sent, else the one the editor's form names.
+    $reword_client_id = intval($input['client_id'] ?? 0);
+    $reword_ticket_id = intval($input['ticket_id'] ?? 0);
+    if ($reword_ticket_id > 0) {
+        $reword_t = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_client_id FROM tickets WHERE ticket_id = $reword_ticket_id LIMIT 1"));
+        $reword_client_id = intval($reword_t['ticket_client_id'] ?? 0);
+    }
+    if ($reword_client_id > 0) {
+        enforceClientAccess($reword_client_id);
+        if (!aiEnabled($reword_client_id)) {
+            echo json_encode(['ok' => false, 'error' => 'AI is disabled for this client']);
+            exit;
+        }
+    }
+
     // The reword system prompt comes from the configured 'General' model.
     $promptText = '';
     $model_q = mysqli_query($mysqli, "SELECT ai_model_prompt FROM ai_models WHERE ai_model_use_case = 'General' LIMIT 1");
@@ -1161,7 +1198,7 @@ if (isset($_GET['ai_reword'])) {
     ];
 
     // Centralised call: gains timeout, input cap and max_tokens for free.
-    $ai = aiChat($messages, 'General', ['temperature' => 0.5]);
+    $ai = aiChat($messages, 'General', ['temperature' => 0.5, 'client_id' => $reword_client_id]);
 
     if ($ai['ok']) {
         // Get the response content.
@@ -1356,8 +1393,10 @@ if (isset($_GET['ai_ticket_summary'])) {
 
             if (!class_exists('HTMLPurifier')) {
                 require_once __DIR__ . '/../plugins/htmlpurifier/HTMLPurifier.standalone.php';
+                require_once __DIR__ . '/../plugins/htmlpurifier/rivet_html_policy.php';
             }
             $purifier_config = HTMLPurifier_Config::createDefault();
+            rivet_html_policy_apply($purifier_config, 'strict');
             $purifier_config->set('Cache.DefinitionImpl', null);
             $purifier_config->set('URI.AllowedSchemes', ['http' => true, 'https' => true]);
             $purifier = new HTMLPurifier($purifier_config);
@@ -1665,6 +1704,9 @@ if (isset($_GET['project_gantt'])) {
 
     $gantt = [];
 
+    // MSP-DS-70: a client-restricted user does not get tasks of tickets of clients they may not access
+    $gantt_task_scope = $access_permission_query !== '' ? "AND (tickets.ticket_id IS NULL OR tickets.ticket_client_id = 0 OR tickets.ticket_client_id IN ($client_access_string))" : '';
+
     // Dated tasks belonging to this project (directly, or via a project ticket).
     // LEFT JOIN mirrors project_details.php so project-only tasks are included.
     $sql_tasks = mysqli_query($mysqli,
@@ -1672,6 +1714,7 @@ if (isset($_GET['project_gantt'])) {
          FROM tasks
          LEFT JOIN tickets ON tickets.ticket_id = tasks.task_ticket_id
          WHERE (tasks.task_project_id = $project_id OR tickets.ticket_project_id = $project_id)
+         $gantt_task_scope
          AND tasks.task_start IS NOT NULL AND tasks.task_due IS NOT NULL
          ORDER BY tasks.task_start ASC, tasks.task_order ASC, tasks.task_id ASC");
 
@@ -1734,6 +1777,33 @@ if (isset($_GET['project_gantt'])) {
 }
 
 /*
+ * MSP-DS-47: the clients a task belongs to - the client of its ticket and the client of its project (a ticket task has no
+ * task_project_id of its own). Returns null for a task that belongs to neither a ticket nor a project, or does not exist.
+ */
+function ajaxTaskClientIds($task_id) {
+    global $mysqli;
+    $task_id = intval($task_id);
+    $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT tasks.task_ticket_id, tasks.task_project_id, tickets.ticket_client_id, tickets.ticket_project_id FROM tasks LEFT JOIN tickets ON tickets.ticket_id = tasks.task_ticket_id WHERE tasks.task_id = $task_id LIMIT 1"));
+    if (!$row) {
+        return null;
+    }
+    $has_ticket = intval($row['task_ticket_id']) > 0 && $row['ticket_client_id'] !== null;
+    $pid = intval($row['task_project_id']) ?: intval($row['ticket_project_id']);
+    if (!$has_ticket && !$pid) {
+        return null;
+    }
+    $ids = [];
+    if ($has_ticket) {
+        $ids[] = intval($row['ticket_client_id']);
+    }
+    if ($pid) {
+        $crow = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT project_client_id FROM projects WHERE project_id = $pid LIMIT 1"));
+        $ids[] = intval($crow['project_client_id'] ?? 0);
+    }
+    return array_values(array_unique(array_filter($ids)));
+}
+
+/*
  * PROJECTS - Persist a task's Gantt schedule (start / due / progress)
  * POST update_task_schedule
  * Called by the Gantt on_date_change / on_progress_change handlers.
@@ -1756,19 +1826,14 @@ if (isset($_POST['update_task_schedule'])) {
         exit;
     }
 
-    // Resolve owning project & enforce client access
-    $prow = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COALESCE(tasks.task_project_id, tickets.ticket_project_id) AS pid FROM tasks LEFT JOIN tickets ON tickets.ticket_id = tasks.task_ticket_id WHERE tasks.task_id = $task_id LIMIT 1"));
-    if (!$prow) {
+    // Resolve the owning client(s) via the task's ticket and project, and enforce client access
+    $task_clients = ajaxTaskClientIds($task_id);
+    if ($task_clients === null) {
         echo json_encode(['status' => 'error', 'message' => 'Task not found']);
         exit;
     }
-    $pid = intval($prow['pid']);
-    if ($pid) {
-        $crow = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT project_client_id FROM projects WHERE project_id = $pid LIMIT 1"));
-        $client_id = intval($crow['project_client_id'] ?? 0);
-        if ($client_id) {
-            enforceClientAccess($client_id);
-        }
+    foreach ($task_clients as $task_client_id) {
+        enforceClientAccess($task_client_id);
     }
 
     $start_raw = $_POST['start'] ?? '';
@@ -1816,18 +1881,18 @@ if (isset($_POST['update_project_task_kanban'])) {
             continue;
         }
 
-        // Resolve owning project & enforce client access
-        $prow = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COALESCE(tasks.task_project_id, tickets.ticket_project_id) AS pid FROM tasks LEFT JOIN tickets ON tickets.ticket_id = tasks.task_ticket_id WHERE tasks.task_id = $task_id LIMIT 1"));
-        if (!$prow) {
+        // Resolve the owning client(s) via the task's ticket and project, and enforce client access
+        $task_clients = ajaxTaskClientIds($task_id);
+        if ($task_clients === null) {
             continue;
         }
-        $pid = intval($prow['pid']);
-        if ($pid) {
-            $crow = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT project_client_id FROM projects WHERE project_id = $pid LIMIT 1"));
-            $client_id = intval($crow['project_client_id'] ?? 0);
-            if ($client_id) {
-                enforceClientAccess($client_id);
-            }
+        foreach ($task_clients as $task_client_id) {
+            enforceClientAccess($task_client_id);
+        }
+
+        // MSP-DS-64: the Done lane is a completion - not while an approval is pending or declined
+        if ($status_raw === 'Done' && taskApprovalBlocksCompletion($task_id)) {
+            continue;
         }
 
         $status_esc = mysqli_real_escape_string($mysqli, $status_raw);

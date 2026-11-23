@@ -243,8 +243,10 @@ if (!function_exists('pax8CreateBillingRecurringInvoice')) {
         ");
         $recurring_invoice_number = mysqli_insert_id($mysqli);
 
-        $prefix_sql   = mysqli_real_escape_string($mysqli, (string) ($config_recurring_invoice_prefix ?? ''));
-        $currency_sql = mysqli_real_escape_string($mysqli, (string) ($session_company_currency ?? 'USD'));
+        // MSP-DS-168: read the prefix and currency from the settings, not from web-session globals (cron has neither)
+        $cfg = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT config_recurring_invoice_prefix, company_currency FROM companies, settings WHERE companies.company_id = settings.company_id AND companies.company_id = 1 LIMIT 1"));
+        $prefix_sql   = mysqli_real_escape_string($mysqli, (string) ($cfg['config_recurring_invoice_prefix'] ?? $config_recurring_invoice_prefix ?? ''));
+        $currency_sql = mysqli_real_escape_string($mysqli, (string) (($cfg['company_currency'] ?? '') !== '' ? $cfg['company_currency'] : ($session_company_currency ?? 'USD')));
 
         mysqli_query($mysqli, "INSERT INTO recurring_invoices SET
             recurring_invoice_prefix = '$prefix_sql', recurring_invoice_number = $recurring_invoice_number,
@@ -292,14 +294,38 @@ if (!function_exists('pax8BillingSyncForClient')) {
 
         $rules = pax8BillingRules($mysqli);
 
-        $recurring_invoice_id = intval($map['recurring_invoice_id'] ?? 0);
-        // The stored invoice must still belong to the client being synced: a mapping that was re-pointed at a different
-        // client must never keep writing line items onto the previous client's invoice.
+        // MSP-DS-36: ONE recurring invoice per client, not per company row. Every map row of this client may hold one (the row chosen above can
+        // change after a re-map or a billing-off); adopt the oldest live one so a changed row never starts a second invoice that bills the same
+        // licences again, and archive the Pax8 lines on any other live invoice the client's rows still point at.
         $client_id_int = intval($client_id);
-        if ($recurring_invoice_id <= 0 || !mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT recurring_invoice_id FROM recurring_invoices WHERE recurring_invoice_id = $recurring_invoice_id AND recurring_invoice_client_id = $client_id_int AND recurring_invoice_archived_at IS NULL"))) {
-            $recurring_invoice_id = pax8CreateBillingRecurringInvoice($mysqli, $client_id);
-            mysqli_query($mysqli, "UPDATE pax8_client_map SET recurring_invoice_id = $recurring_invoice_id WHERE map_id = " . intval($map['map_id']));
+        $live_invoice_ids = [];
+        $own_invoice_id = intval($map['recurring_invoice_id'] ?? 0);
+        // ...plus any of the client's live invoices that still carry Pax8-managed lines although no map row points at them any more (the pre-fix leftover)
+        $rows_res = mysqli_query($mysqli, "SELECT recurring_invoice_id FROM (
+                SELECT recurring_invoice_id FROM pax8_client_map WHERE client_id = $client_id_int AND recurring_invoice_id IS NOT NULL
+                UNION
+                SELECT i.item_recurring_invoice_id FROM recurring_invoice_items i JOIN recurring_invoices r ON r.recurring_invoice_id = i.item_recurring_invoice_id
+                  WHERE r.recurring_invoice_client_id = $client_id_int AND i.item_pax8_subscription_id IS NOT NULL AND i.item_archived_at IS NULL
+            ) u ORDER BY (recurring_invoice_id = $own_invoice_id) DESC, recurring_invoice_id ASC");
+        while ($rows_res && ($r = mysqli_fetch_assoc($rows_res))) {
+            $cand = intval($r['recurring_invoice_id']);
+            // The stored invoice must still belong to the client being synced: a mapping that was re-pointed at a different
+            // client must never keep writing line items onto the previous client's invoice.
+            if ($cand > 0 && mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT recurring_invoice_id FROM recurring_invoices WHERE recurring_invoice_id = $cand AND recurring_invoice_client_id = $client_id_int AND recurring_invoice_archived_at IS NULL"))) {
+                $live_invoice_ids[] = $cand;
+            }
         }
+        $recurring_invoice_id = $live_invoice_ids[0] ?? 0;
+        if ($recurring_invoice_id <= 0) {
+            $recurring_invoice_id = pax8CreateBillingRecurringInvoice($mysqli, $client_id);
+        }
+        foreach (array_slice($live_invoice_ids, 1) as $dup_invoice_id) {
+            if ($dup_invoice_id === $recurring_invoice_id) { continue; }
+            mysqli_query($mysqli, "UPDATE recurring_invoice_items SET item_archived_at = NOW() WHERE item_recurring_invoice_id = $dup_invoice_id AND item_archived_at IS NULL AND item_pax8_subscription_id IS NOT NULL");
+            pax8RecalcRecurringInvoiceAmount($mysqli, $dup_invoice_id);
+            logAction("Pax8", "Edit", "Pax8 billing sync archived the Pax8 lines on a duplicate recurring invoice (one invoice per client; kept ID $recurring_invoice_id)", $client_id, $dup_invoice_id);
+        }
+        mysqli_query($mysqli, "UPDATE pax8_client_map SET recurring_invoice_id = $recurring_invoice_id WHERE client_id = $client_id_int AND billing_sync_enabled = 1");
 
         $added = 0; $updated = 0; $archived = 0; $skipped_no_rule = 0;
         $seen_subscription_ids = [];

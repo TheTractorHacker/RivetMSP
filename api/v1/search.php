@@ -16,9 +16,14 @@ $like = '%' . $q_raw . '%';
 // Client-scope restriction, mirroring tickets.php/appointments.php, applied per-table below.
 $scope_clause_for = fn(string $client_id_col) => api_client_scope_sql($client_id_col);
 
+// MSP-DS-84: each section answers only to the module the matching list endpoint requires (tickets/assets: module_support, clients: module_client);
+// a section the role may not read comes back empty rather than failing the whole search.
+$can_support = api_module_permission_ok($mysqli, intval($uid), 'module_support');
+$can_client  = api_module_permission_ok($mysqli, intval($uid), 'module_client');
+
 // Tickets
 $tickets = [];
-$rows = api_q(
+$rows = !$can_support ? [] : api_q(
     "SELECT t.ticket_id, t.ticket_number, t.ticket_subject, t.ticket_priority,
             ts.ticket_status_name, c.client_name
      FROM tickets t
@@ -44,7 +49,7 @@ foreach ($rows as $row) {
 
 // Clients
 $clients = [];
-$rows = api_q(
+$rows = !$can_client ? [] : api_q(
     "SELECT c.client_id, c.client_name, l.location_phone
      FROM clients c
      LEFT JOIN locations l ON l.location_client_id = c.client_id AND l.location_primary = 1
@@ -64,7 +69,7 @@ foreach ($rows as $row) {
 
 // Assets
 $assets = [];
-$rows = api_q(
+$rows = !$can_support ? [] : api_q(
     "SELECT a.asset_id, a.asset_name, a.asset_tag, a.asset_serial, a.asset_make, a.asset_model, c.client_name
      FROM assets a LEFT JOIN clients c ON a.asset_client_id = c.client_id
      WHERE a.asset_archived_at IS NULL

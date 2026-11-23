@@ -37,14 +37,14 @@ rivetCronGuard('outlook_schedule_sync', 600);
 require_once "../includes/load_global_settings.php";
 
 // System temp directory & lock
-$temp_dir = sys_get_temp_dir();
-$lock_file_path = "{$temp_dir}/itflow_outlook_schedule_sync_{$installation_id}.lock";
+require_once dirname(__DIR__) . '/includes/cron_lock.php';
+$temp_dir = rivetCronLockDir();
+$lock_file_path = $temp_dir . '/' . rivetCronLockName('outlook_schedule_sync', (string) $installation_id);
 
 if (file_exists($lock_file_path)) {
-    $file_age = time() - filemtime($lock_file_path);
-    if ($file_age > 300) {
-        unlink($lock_file_path);
-        logApp("Cron-Outlook-Schedule-Sync", "warning", "Cron Outlook Schedule Sync detected a lock file was present but was over 5 minutes old so it removed it.");
+    if (!rivetCronLockIsLive($lock_file_path, 300)) {
+        @unlink($lock_file_path);
+        logApp("Cron-Outlook-Schedule-Sync", "warning", "Cron Outlook Schedule Sync detected a lock file was present but was stale (over 5 minutes old, dated in the future or not ours) so it removed it.");
     } else {
         exit("Script is already running. Exiting.");
     }

@@ -156,6 +156,7 @@ $config_module_enable_payroll = intval($row['config_module_enable_payroll'] ?? 0
 $config_payroll_overtime_threshold_hours = floatval($row['config_payroll_overtime_threshold_hours'] ?? 40.00);
 $config_payroll_overtime_multiplier = floatval($row['config_payroll_overtime_multiplier'] ?? 1.50);
 $config_payroll_default_pay_frequency = (string) ($row['config_payroll_default_pay_frequency'] ?? 'biweekly');
+$config_payroll_workweek_start = (string) ($row['config_payroll_workweek_start'] ?? 'period');   // MSP-DS-39: 'period' (legacy) or sun..sat
 $config_client_portal_enable = intval($row['config_client_portal_enable']);
 
 // RMM Integration (Syncro-Beta)

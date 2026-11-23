@@ -562,7 +562,7 @@ if (isset($_GET['contact_id'])) {
                                                     class="btn btn-secondary btn-sm" title="Unlink">
                                                     <i class="fas fa-fw fa-unlink me-2"></i>Unlink
                                                 </a>
-                                                <?php if ($session_user_role == 3) { ?>
+                                                <?php if ($session_is_admin) { ?>
                                                     <div class="dropdown-divider"></div>
                                                     <a class="dropdown-item text-danger" href="post.php?archive_asset=<?= $asset_id ?>&csrf_token=<?php echo $_SESSION['csrf_token'] ?>">
                                                         <i class="fas fa-fw fa-archive me-2"></i>Archive
@@ -625,10 +625,10 @@ if (isset($_GET['contact_id'])) {
                                 if (empty($credential_uri)) {
                                     $credential_uri_display = "-";
                                 } else {
-                                    $credential_uri_display = "$credential_uri<button class='btn btn-sm clipboardjs' data-clipboard-text='$credential_uri'><i class='far fa-copy text-secondary'></i></button><a href='$credential_uri' target='_blank'><i class='fa fa-external-link-alt text-secondary'></i></a>";
+                                    $credential_uri_display = "$credential_uri<button class='btn btn-sm clipboardjs' data-clipboard-text='$credential_uri'><i class='far fa-copy text-secondary'></i></button><a href='" . sanitize_url($row['credential_uri']) . "' target='_blank'><i class='fa fa-external-link-alt text-secondary'></i></a>";
                                 }
                                 $credential_uri_2 = nullable_htmlentities($row['credential_uri_2']);
-                                vaultGate('contact page');
+                                if (!vaultGateRow('contact page')) { echo vaultRowDeniedHtml($credential_name, 6); continue; }   // R9: mask the row, never die mid-table
                                 $credential_username = nullable_htmlentities(decryptCredentialEntry($row['credential_username'], ($row['credentials_credential_id'] ?? $row['credential_id'] ?? null), 'username'));
                                 if (empty($credential_username)) {
                                     $credential_username_display = "-";
@@ -705,7 +705,7 @@ if (isset($_GET['contact_id'])) {
                                                     class="btn btn-secondary btn-sm" title="Unlink">
                                                     <i class="fas fa-fw fa-unlink me-2"></i>Unlink
                                                 </a>
-                                                <?php if ($session_user_role == 3) { ?>
+                                                <?php if ($session_is_admin) { ?>
                                                     <div class="dropdown-divider"></div>
                                                     <a class="dropdown-item text-danger text-bold" href="post.php?delete_credential=<?php echo $credential_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                         <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -863,7 +863,7 @@ if (isset($_GET['contact_id'])) {
                                                     <i class="fa fa-fw fa-paper-plane text-secondary me-2"></i>Force Reoccur
                                                 </a>
                                                 <?php
-                                                if ($session_user_role == 3) { ?>
+                                                if ($session_is_admin) { ?>
                                                 <div class="dropdown-divider"></div>
                                                 <a class="dropdown-item text-danger text-bold confirm-link" href="post.php?delete_recurring_ticket=<?php echo $recurring_ticket_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                     <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -1222,7 +1222,7 @@ if (isset($_GET['contact_id'])) {
                                                 <a class="dropdown-item text-danger" href="post.php?archive_contact_note=<?php echo $contact_note_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                     <i class="fas fa-fw fa-archive me-2"></i>Archive
                                                 </a>
-                                                <?php if ($session_user_role == 3) { ?>
+                                                <?php if ($session_is_admin) { ?>
                                                     <div class="dropdown-divider"></div>
                                                     <a class="dropdown-item text-danger text-bold" href="post.php?delete_contact_note=<?php echo $contact_note_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                         <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -1380,7 +1380,7 @@ if (isset($_GET['contact_id'])) {
                 },
                 function(data) {
                     //If we get a response from post.php, parse it as JSON
-                    const password = JSON.parse(data);
+                    const password = data; // jQuery already parsed the application/json response (review RR5)
 
                     // Set the password value to the correct modal, based on the type
                     if (type == "add") {

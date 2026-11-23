@@ -202,17 +202,11 @@ $render_check = static function (array $chk) use ($h, $pill, $check_kind, $check
             </div>
 
             <?php if ($db_update_pending || $app_update_pending) { ?>
-                <div class="alert alert-danger upd-backup mt-3 mb-0" role="note">
-                    <div class="d-flex align-items-start gap-2">
-                        <i class="fas fa-fw fa-exclamation-triangle mt-1" aria-hidden="true"></i>
-                        <div>
-                            <strong>Do NOT run updates without first taking a backup.</strong>
-                            VM Snapshots are highly recommended over other methods - see the <a href="https://docs.itflow.org/backups" class="alert-link" target="_blank">docs</a>.
-                            Review the <a href="https://github.com/itflow-org/itflow/blob/master/CHANGELOG.md" class="alert-link" target="_blank">changelog</a> for breaking changes that may require manual remediation.
-                            <span class="fw-bold">Ignore this warning at your own risk.</span>
-                        </div>
-                    </div>
-                </div>
+                <p class="small text-muted mt-3 mb-2">
+                    An update changes files and, for a database update, the database structure, and it cannot be undone automatically.
+                    Read the <a href="https://github.com/TheTractorHacker/RivetMSP/blob/master/CHANGELOG.md" target="_blank" rel="noopener">changelog</a> for breaking changes that may need manual fixes.
+                    A VM snapshot is the safest rollback if you can take one.
+                </p>
 
                 <?php
                 $upd_last_backup = 0;
@@ -221,21 +215,29 @@ $render_check = static function (array $chk) use ($h, $pill, $check_kind, $check
                 }
                 $upd_backup_stale = !$upd_last_backup || $upd_last_backup < time() - 86400;
                 ?>
-                <div class="d-flex flex-wrap align-items-center gap-3 mt-3 upd-backup-row">
-                    <a class="btn btn-outline-primary" href="backup.php"><i class="fas fa-fw fa-save me-2" aria-hidden="true"></i>Take a backup now</a>
-                    <span class="small <?= $upd_backup_stale ? 'text-warning' : 'text-muted' ?>">
-                        <?= $upd_last_backup ? 'Last backup saved on this server: ' . $h(date('Y-m-d H:i', $upd_last_backup)) . ($upd_backup_stale ? ' (more than a day ago)' : '') : 'No backup is saved on this server yet.' ?>
-                        Open Backups, make one, then come back and run the update.
+                <label class="alert alert-secondary upd-backup mb-0 d-flex flex-nowrap align-items-start gap-2" for="updBackup">
+                    <input type="checkbox" class="form-check-input mt-1 flex-shrink-0" id="updBackup" checked>
+                    <span class="min-w-0">
+                        <strong>Back up first</strong> <span class="badge text-bg-success ms-1">Recommended</span>
+                        <span class="d-block text-muted small mt-1 upd-wrap">
+                            Saves a full backup (database and uploads) to the server's backups folder before anything changes<?= !empty($config_backup_s3_enabled) ? ', and uploads it to remote storage' : '' ?>.
+                            If the backup fails the update does not run. The backup can take a few minutes on large installs.
+                        </span>
+                        <span class="d-block small mt-1 <?= $upd_backup_stale ? 'text-warning' : 'text-muted' ?>">
+                            <i class="fas fa-fw fa-history me-1" aria-hidden="true"></i>
+                            <?= $upd_last_backup ? 'Last backup on this server: ' . $h(timeAgo(date('Y-m-d H:i:s', $upd_last_backup))) : 'No backup is stored on this server yet' ?>
+                            &middot; <a href="backup.php">Manage backups</a>
+                        </span>
                     </span>
-                </div>
+                </label>
 
                 <div class="upd-actions mt-3">
                     <?php if ($db_update_pending) { ?>
-                        <a class="btn btn-primary" href="post.php?update_db&csrf_token=<?php echo $csrf_url; ?>" data-upd-action="database"><i class="fas fa-fw fa-database me-2" aria-hidden="true"></i>Update Database</a>
+                        <a class="btn btn-primary confirm-link" href="post.php?update_db&csrf_token=<?php echo $csrf_url; ?>" data-upd data-upd-what="database" data-upd-action="database"><i class="fas fa-fw fa-database me-2" aria-hidden="true"></i>Update Database</a>
                         <span class="small text-muted"><?= $h($db_current) ?> &rarr; <?= $h($db_latest) ?></span>
                     <?php } else { ?>
-                        <a class="btn btn-primary confirm-link" href="post.php?update&csrf_token=<?php echo $csrf_url; ?>" data-upd-action="app"><i class="fas fa-fw fa-download me-2" aria-hidden="true"></i>Update App</a>
-                        <a class="btn btn-outline-danger confirm-link" href="post.php?update&force_update=1&csrf_token=<?php echo $csrf_url; ?>" data-upd-action="app"><i class="fas fa-fw fa-hammer me-2" aria-hidden="true"></i>FORCE Update App</a>
+                        <a class="btn btn-primary confirm-link" href="post.php?update&csrf_token=<?php echo $csrf_url; ?>" data-upd data-upd-what="app" data-upd-action="app"><i class="fas fa-fw fa-download me-2" aria-hidden="true"></i>Update App</a>
+                        <a class="btn btn-outline-danger confirm-link" href="post.php?update&force_update=1&csrf_token=<?php echo $csrf_url; ?>" data-upd data-upd-what="force" data-upd-action="app"><i class="fas fa-fw fa-hammer me-2" aria-hidden="true"></i>FORCE Update App</a>
                         <span class="small text-muted upd-wrap">FORCE discards files changed by hand on this server.</span>
                     <?php } ?>
                 </div>
@@ -254,6 +256,7 @@ $render_check = static function (array $chk) use ($h, $pill, $check_kind, $check
                 </div>
                 <p class="small text-muted mt-2 mb-2">Keep this page open. It reloads by itself with the result when the server finishes; the server runs these steps in order:</p>
                 <ol class="small mb-0 upd-steps" data-upd-steps="app" hidden>
+                    <li data-upd-backup-step>Take a full backup first (unless "Back up first" is switched off).</li>
                     <li>Check that this server can update itself (git, folder permissions).</li>
                     <li>Download the latest code from the <?= $h($channel_label) ?> channel.</li>
                     <li>Move onto the channel's branch if the channel was changed.</li>
@@ -261,6 +264,7 @@ $render_check = static function (array $chk) use ($h, $pill, $check_kind, $check
                     <li>Come back here with the result.</li>
                 </ol>
                 <ol class="small mb-0 upd-steps" data-upd-steps="database" hidden>
+                    <li data-upd-backup-step>Take a full backup first (unless "Back up first" is switched off).</li>
                     <li>Make sure no other database update is running.</li>
                     <li>Apply each database step from <?= $h($db_current) ?> to <?= $h($db_latest) ?>, in order.</li>
                     <li>Come back here with the result.</li>
@@ -427,6 +431,36 @@ $render_check = static function (array $chk) use ($h, $pill, $check_kind, $check
     </section>
 
 </div>
+
+<script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
+// "Back up first": the update links carry no_backup=1 when it is switched off, and the confirmation modal says what will happen.
+// Progress and the result banner are js/admin_update.js.
+(function () {
+    var box = document.getElementById('updBackup');
+    var links = document.querySelectorAll('a[data-upd]');
+    if (!links.length) { return; }
+    function backupOn() { return !box || box.checked; }
+    function syncLinks() {
+        links.forEach(function (a) {
+            var base = a.getAttribute('href').replace(/&no_backup=1/, '');
+            a.setAttribute('href', backupOn() ? base : base + '&no_backup=1');
+        });
+        document.querySelectorAll('[data-upd-backup-step]').forEach(function (li) { li.hidden = !backupOn(); });
+    }
+    if (box) { box.addEventListener('change', syncLinks); }
+    syncLinks();
+    var messages = {
+        database: 'update the database structure',
+        app: 'download and install the update',
+        force: 'discard local file changes and force the update'
+    };
+    document.addEventListener('click', function (e) {
+        var a = e.target.closest('a[data-upd]');
+        if (!a) { return; }
+        a.setAttribute('data-confirm', (backupOn() ? 'Take a backup, then ' : 'Skip the backup and ') + (messages[a.getAttribute('data-upd-what')] || 'run the update') + '?');
+    }, true);
+})();
+</script>
 
 <script src="/js/admin_update.js?v=<?= (int) @filemtime(__DIR__ . '/../js/admin_update.js') ?>" defer></script>
 

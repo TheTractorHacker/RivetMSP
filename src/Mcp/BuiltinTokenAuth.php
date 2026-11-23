@@ -34,7 +34,7 @@ final class BuiltinTokenAuth
     }
 
     /**
-     * @return array{user_id:int, scopes:list<string>, client_id:string}|null null means: respond 401 invalid_token.
+     * @return array{user_id:int, scopes:list<string>, client_id:string, grant_id:int}|null null means: respond 401 invalid_token.
      */
     public function validate(string $accessToken): ?array
     {
@@ -69,6 +69,6 @@ final class BuiltinTokenAuth
         } catch (\Throwable) { /* bookkeeping only */
         }
 
-        return ['user_id' => (int) $row['user_id'], 'scopes' => $scopes, 'client_id' => (string) $row['client_id']];
+        return ['user_id' => (int) $row['user_id'], 'scopes' => $scopes, 'client_id' => (string) $row['client_id'], 'grant_id' => (int) $row['grant_id']];
     }
 }

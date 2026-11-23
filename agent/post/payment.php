@@ -130,7 +130,7 @@ if (isset($_POST['add_payment'])) {
             if ($email_receipt == 1) {
 
                 $subject = "Payment Received - Invoice $invoice_prefix$invoice_number";
-                $body = "Hello $contact_name,<br><br>We have received your payment in full for the amount of " . numfmt_format_currency($currency_format, $amount, $invoice_currency_code) . " for invoice <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $amount, $invoice_currency_code) . "<br>Payment Method: $payment_method<br>Payment Reference: $reference<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
+                $body = "Hello $contact_name,<br><br>We have received your payment in full for the amount of " . numfmt_format_currency($currency_format, $amount, $invoice_currency_code) . " for invoice <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $amount, $invoice_currency_code) . "<br>Payment Method: $payment_method<br>Payment Reference: $reference<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
 
                 // Queue Mail
                 $email = [
@@ -165,7 +165,7 @@ if (isset($_POST['add_payment'])) {
             if ($email_receipt == 1) {
 
                 $subject = "Partial Payment Received - Invoice $invoice_prefix$invoice_number";
-                $body = "Hello $contact_name,<br><br>We have received partial payment in the amount of " . numfmt_format_currency($currency_format, $amount, $invoice_currency_code) . " and it has been applied to invoice <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $amount, $invoice_currency_code) . "<br>Payment Method: $payment_method<br>Payment Reference: $reference<br>Invoice Balance: " . numfmt_format_currency($currency_format, $invoice_balance, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>~<br>$company_name - Billing<br>$config_invoice_from_email<br>$company_phone";
+                $body = "Hello $contact_name,<br><br>We have received partial payment in the amount of " . numfmt_format_currency($currency_format, $amount, $invoice_currency_code) . " and it has been applied to invoice <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $amount, $invoice_currency_code) . "<br>Payment Method: $payment_method<br>Payment Reference: $reference<br>Invoice Balance: " . numfmt_format_currency($currency_format, $invoice_balance, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>~<br>$company_name - Billing<br>$config_invoice_from_email<br>$company_phone";
 
                 // Queue Mail
                 $email = [
@@ -490,21 +490,20 @@ if (isset($_POST['add_payment_stripe'])) {
     require_once __DIR__ . '/../../includes/payment_provider_factory.php';
     $provider = getPaymentProvider($provider_id);
 
-    $balance_to_pay = invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount);   // MSP-INJ-26(a): the balance, not the invoice total
-    if ($balance_to_pay <= 0) {
-        flash_alert('Nothing left to charge on this invoice', 'error');
+    // MSP-DS-166 / MSP-DS-32: claim the charge (row-locked invoice, balance read under the lock, one shared idempotency key) BEFORE Stripe is called
+    $charge_claim = chargeAttemptClaim($mysqli, $invoice_id, 'agent', $saved_payment_id, chargeAttemptProviderLookup($provider));   // M3-1: an open guest-page intent is canceled first
+    if (!$charge_claim['ok']) {
+        flash_alert($charge_claim['message'], $charge_claim['reason'] === 'nothing_due' ? 'error' : 'warning');
         redirect();
     }
+    $balance_to_pay = $charge_claim['balance'];   // MSP-INJ-26(a): the balance, not the invoice total
+    $charge_attempt_id = $charge_claim['attempt_id'];
     $pi_description = "RivetMSP: $client_name payment of $invoice_currency_code $balance_to_pay for $invoice_prefix$invoice_number";
 
-    // Charge the saved payment method (off-session). The idempotency key is stable for
-    // one minute so a double-click/browser-retry of this same submission collapses into
-    // a single Stripe charge instead of billing the card twice; a genuinely new attempt
-    // after that window (e.g. retried later after fixing something) gets a fresh key.
-    $idempotency_key = md5("agent_pay_stripe_{$invoice_id}_{$saved_payment_id}_" . intdiv(time(), 60));
+    // Charge the saved payment method (off-session) with the claim's idempotency key (same scheme as portal, guest and autopay).
     try {
-        $payment_intent = $provider->chargeSavedMethod([
-            'amount' => intval(round($balance_to_pay * 100)), // Times by 100 as Stripe expects values in cents - round before truncating so float representation error can't undercharge by a cent
+        $payment_intent = chargeAttemptSend(fn (array $charge_params) => $provider->chargeSavedMethod($charge_params, $charge_claim['key']), [   // M5-7: one shared send (takeover idempotency conflicts)
+            'amount' => stripeAmountToMinor($balance_to_pay, $invoice_currency_code), // Times by 100 as Stripe expects values in cents - round before truncating so float representation error can't undercharge by a cent
             'currency' => $invoice_currency_code,
             'customer' => $payment_provider_client,
             'payment_method' => $saved_payment_method,
@@ -516,26 +515,32 @@ if (isset($_POST['add_payment_stripe'])) {
                 'itflow_client_name' => $client_name,
                 'itflow_invoice_number' => $invoice_prefix . $invoice_number,
                 'itflow_invoice_id' => $invoice_id,
+                'itflow_install' => stripeInstallMarker(),
+                'rivet_attempt_key' => $charge_claim['key'],
             ]
-        ], $idempotency_key);
+        ], !empty($charge_claim['reused']));
 
         // Get details from PI
         $pi_id = sanitizeInput($payment_intent->id);
         $pi_date = date('Y-m-d', $payment_intent->created);
-        $pi_amount_paid = floatval(($payment_intent->amount_received / 100));
+        $pi_amount_paid = stripeAmountFromMinor($payment_intent->amount_received, $payment_intent->currency);
         $pi_currency = strtoupper(sanitizeInput($payment_intent->currency));
         $pi_livemode = $payment_intent->livemode;
+        chargeAttemptStoreResult($mysqli, $charge_attempt_id, $payment_intent->status, $pi_id);   // MSP-DS-166: pending (ACH) / failed / succeeded-not-yet-recorded
 
     } catch (Exception $e) {
+        $payment_intent = null;
+        chargeAttemptStoreException($mysqli, $charge_attempt_id, $e);   // a timeout keeps the attempt (and its key) claimed
         $error = $e->getMessage();
         error_log("Stripe payment error - encountered exception during payment intent for invoice ID $invoice_id / $invoice_prefix$invoice_number: $error");
         logApp("Stripe", "error", "Exception during PI for invoice ID $invoice_id: $error");
     }
 
-    if ($payment_intent->status == "succeeded" && moneyToCents($balance_to_pay) === moneyToCents($pi_amount_paid)) {
+    if ($payment_intent && $payment_intent->status == "succeeded" && moneyToCents($balance_to_pay) === moneyToCents($pi_amount_paid)) {
 
         // Record the payment first, exactly once per PaymentIntent (the webhook may have recorded it already)
         $stripe_payment_id = insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $account_id, 'Stripe', $pi_id, $invoice_id);
+        chargeAttemptFinish($mysqli, $charge_attempt_id, 'succeeded');
         if (!$stripe_payment_id) {
             flash_alert("Payment already recorded", 'info');
             redirect();
@@ -551,7 +556,7 @@ if (isset($_POST['add_payment_stripe'])) {
         // Email receipt
         if ((!empty($config_smtp_host) || !empty($config_smtp_provider))) {
             $subject = "Payment Received - Invoice $invoice_prefix$invoice_number";
-            $body = "Hello $contact_name,<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . " for invoice <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
+            $body = "Hello $contact_name,<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . " for invoice <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
 
             // Queue Mail
             $data = [
@@ -568,7 +573,7 @@ if (isset($_POST['add_payment_stripe'])) {
             // Email the internal notification address too
             if (!empty($config_invoice_paid_notification_email)) {
                 $subject = "Payment Received - $client_name - Invoice $invoice_prefix$invoice_number";
-                $body = "Hello, <br><br>This is a notification that an invoice has been paid in RivetMSP. Below is a copy of the receipt sent to the client:-<br><br>--------<br><br>Hello $contact_name,<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . " for invoice <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
+                $body = "Hello, <br><br>This is a notification that an invoice has been paid in RivetMSP. Below is a copy of the receipt sent to the client:-<br><br>--------<br><br>Hello $contact_name,<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . " for invoice <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
 
                 $data[] = [
                     'from' => $config_invoice_from_email,
@@ -609,7 +614,21 @@ if (isset($_POST['add_payment_stripe'])) {
 
         redirect();
 
+    } elseif ($payment_intent && $payment_intent->status == 'processing') {
+        // MSP-DS-32: a bank (ACH) debit is accepted and settles days later: not a failure, and the attempt stays 'pending' so nobody charges it again;
+        // the webhook records the payment (or fails the attempt) when Stripe reports the result.
+        mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Payment pending', history_description = 'Bank payment submitted and processing (not yet settled). Stripe PaymentIntent $pi_id', history_invoice_id = $invoice_id");
+        logAction("Invoice", "Payment", "Bank payment for invoice $invoice_prefix$invoice_number submitted and processing - $pi_id", $client_id, $invoice_id);
+        flash_alert("Bank payment submitted. It is processing and will be recorded when it clears; do not pay this invoice again", 'info');
+
+        redirect();
+
     } else {
+        if ($payment_intent && $payment_intent->status == 'succeeded') {
+            // money was taken but the amount differs from the balance claimed: keep the attempt closed (no second charge) and flag it
+            chargeAttemptFinish($mysqli, $charge_attempt_id, 'succeeded', 'amount received differs from the balance charged');
+            appNotify("Invoice Payment Needs Review", "Stripe took a payment for invoice $invoice_prefix$invoice_number ($pi_id) whose amount differs from the balance; it was not recorded. Check it in Stripe.", "/agent/invoice.php?invoice_id=$invoice_id", $client_id);
+        }
         mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Payment failed', history_description = 'Stripe pay failed due to payment error', history_invoice_id = $invoice_id");
 
         logAction("Invoice", "Payment", "Failed online payment amount of invoice $invoice_prefix$invoice_number due to Stripe payment error", $client_id, $invoice_id);
@@ -690,17 +709,20 @@ if (isset($_GET['add_payment_stripe'])) {
     require_once __DIR__ . '/../plugins/stripe-php/init.php';
     $stripe = new \Stripe\StripeClient($config_stripe_secret);
 
-    $balance_to_pay = invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount);   // MSP-INJ-26(a): the balance, not the invoice total
-    if ($balance_to_pay <= 0) {
-        flash_alert('Nothing left to charge on this invoice', 'error');
+    // MSP-DS-166 / MSP-DS-32: claim the charge (row-locked invoice, balance read under the lock, one shared idempotency key) BEFORE Stripe is called
+    $charge_claim = chargeAttemptClaim($mysqli, $invoice_id, 'agent', 0, chargeAttemptStripeLookup($stripe));
+    if (!$charge_claim['ok']) {
+        flash_alert($charge_claim['message'], $charge_claim['reason'] === 'nothing_due' ? 'error' : 'warning');
         redirect();
     }
+    $balance_to_pay = $charge_claim['balance'];   // MSP-INJ-26(a): the balance, not the invoice total
+    $charge_attempt_id = $charge_claim['attempt_id'];
     $pi_description = "RivetMSP: $client_name payment of $invoice_currency_code $balance_to_pay for $invoice_prefix$invoice_number";
 
     // Create a payment intent
     try {
-        $payment_intent = $stripe->paymentIntents->create([
-            'amount' => intval(round($balance_to_pay * 100)), // Times by 100 as Stripe expects values in cents - round before truncating so float representation error can't undercharge by a cent
+        $payment_intent = chargeAttemptSend(fn (array $charge_params) => $stripe->paymentIntents->create($charge_params, ['idempotency_key' => $charge_claim['key']]), [   // M5-7
+            'amount' => stripeAmountToMinor($balance_to_pay, $invoice_currency_code), // Times by 100 as Stripe expects values in cents - round before truncating so float representation error can't undercharge by a cent
             'currency' => $invoice_currency_code,
             'customer' => $stripe_id,
             'payment_method' => $stripe_pm,
@@ -712,26 +734,33 @@ if (isset($_GET['add_payment_stripe'])) {
                 'itflow_client_name' => $client_name,
                 'itflow_invoice_number' => $invoice_prefix . $invoice_number,
                 'itflow_invoice_id' => $invoice_id,
+                'itflow_install' => stripeInstallMarker(),
+                'rivet_attempt_key' => $charge_claim['key'],
             ]
-        ], ['idempotency_key' => stripeChargeIdempotencyKey($invoice_id, $balance_to_pay, 0)]);
+        ], !empty($charge_claim['reused']));
 
         // Get details from PI
         $pi_id = sanitizeInput($payment_intent->id);
         $pi_date = date('Y-m-d', $payment_intent->created);
-        $pi_amount_paid = floatval(($payment_intent->amount_received / 100));
+        $pi_amount_paid = stripeAmountFromMinor($payment_intent->amount_received, $payment_intent->currency);
         $pi_currency = strtoupper(sanitizeInput($payment_intent->currency));
         $pi_livemode = $payment_intent->livemode;
+        chargeAttemptStoreResult($mysqli, $charge_attempt_id, $payment_intent->status, $pi_id);   // MSP-DS-166: pending (ACH) / failed / succeeded-not-yet-recorded
 
     } catch (Exception $e) {
+        $payment_intent = null;
+        chargeAttemptStoreException($mysqli, $charge_attempt_id, $e);   // a timeout keeps the attempt (and its key) claimed
         $error = $e->getMessage();
         error_log("Stripe payment error - encountered exception during payment intent for invoice ID $invoice_id / $invoice_prefix$invoice_number: $error");
         logApp("Stripe", "error", "Exception during PI for invoice ID $invoice_id: $error");
     }
 
-    if ($payment_intent->status == "succeeded" && moneyToCents($balance_to_pay) === moneyToCents($pi_amount_paid)) {
+    if ($payment_intent && $payment_intent->status == "succeeded" && moneyToCents($balance_to_pay) === moneyToCents($pi_amount_paid)) {
 
         // Record the payment first, exactly once per PaymentIntent (the webhook may have recorded it already)
-        if (!insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $config_stripe_account, 'Stripe', $pi_id, $invoice_id)) {
+        $stripe_payment_recorded = insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $config_stripe_account, 'Stripe', $pi_id, $invoice_id);
+        chargeAttemptFinish($mysqli, $charge_attempt_id, 'succeeded');
+        if (!$stripe_payment_recorded) {
             flash_alert("Payment already recorded", 'info');
             redirect();
         }
@@ -743,7 +772,7 @@ if (isset($_GET['add_payment_stripe'])) {
         // Email receipt
         if ((!empty($config_smtp_host) || !empty($config_smtp_provider))) {
             $subject = "Payment Received - Invoice $invoice_prefix$invoice_number";
-            $body = "Hello $contact_name,<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . " for invoice <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
+            $body = "Hello $contact_name,<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . " for invoice <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
 
             // Queue Mail
             $data = [
@@ -760,7 +789,7 @@ if (isset($_GET['add_payment_stripe'])) {
             // Email the internal notification address too
             if (!empty($config_invoice_paid_notification_email)) {
                 $subject = "Payment Received - $client_name - Invoice $invoice_prefix$invoice_number";
-                $body = "Hello, <br><br>This is a notification that an invoice has been paid in RivetMSP. Below is a copy of the receipt sent to the client:-<br><br>--------<br><br>Hello $contact_name,<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . " for invoice <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
+                $body = "Hello, <br><br>This is a notification that an invoice has been paid in RivetMSP. Below is a copy of the receipt sent to the client:-<br><br>--------<br><br>Hello $contact_name,<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . " for invoice <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
 
                 $data[] = [
                     'from' => $config_invoice_from_email,
@@ -904,7 +933,7 @@ if (isset($_POST['add_bulk_payment'])) {
         mysqli_query($mysqli, "INSERT INTO history (history_status, history_description, history_invoice_id) VALUES ('{$invoice_status}', 'Payment added', {$invoice_id})");
 
         // Add to Email Body Invoice Portion
-        $email_body_invoices .= "<br>Invoice <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\'>$invoice_prefix$invoice_number</a> - Outstanding Amount: " . numfmt_format_currency($currency_format, $invoice_balance, $currency_code) . " - Payment Applied: " . numfmt_format_currency($currency_format, $payment_amount, $currency_code) . " - New Balance: " . numfmt_format_currency($currency_format, $remaining_invoice_balance, $currency_code);
+        $email_body_invoices .= "<br>Invoice <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>$invoice_prefix$invoice_number</a> - Outstanding Amount: " . numfmt_format_currency($currency_format, $invoice_balance, $currency_code) . " - Payment Applied: " . numfmt_format_currency($currency_format, $payment_amount, $currency_code) . " - New Balance: " . numfmt_format_currency($currency_format, $remaining_invoice_balance, $currency_code);
 
         $applied_payment_ids[] = [$invoice_id, $payment_id];
 
@@ -1061,7 +1090,7 @@ if (isset($_POST['export_payments_csv'])) {
     if ($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Payments-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -1074,7 +1103,7 @@ if (isset($_POST['export_payments_csv'])) {
         //output each row of the data, format line as csv and write to file pointer
         while($row = $sql->fetch_assoc()){
             $lineData = array($row['payment_date'], $row['invoice_date'], $row['invoice_prefix'] . $row['invoice_number'], $row['invoice_amount'], $row['payment_amount'], $row['payment_method'], $row['payment_reference']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file

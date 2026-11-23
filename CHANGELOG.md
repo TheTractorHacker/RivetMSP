@@ -4,6 +4,9 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+### Changed
+- **Update page: "Back up first".** Same as RivetIT: a switch (on by default) that saves a full backup to the server (and remote storage when set up) before Update App or Update Database runs, and stops the update if the backup fails. The old red "do not update without a backup" box and the "Take a backup now" button are replaced by it, with the last-backup age. Update App now also checks it can fast-forward before touching any file (a diverged checkout is refused with nothing changed), and is rate limited. The confirmation pop-up says what will happen (with or without the backup). When the root update helper is installed it still does its own backup.
+
 ## [26.10.53] - 2026-11-15
 
 No database version change (DB stays 2.6.137). Update Database now also catches up pending RivetCore migrations (0048/0049) on every run.

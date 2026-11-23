@@ -190,7 +190,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                         <a class="dropdown-item ajax-modal" href="#" data-modal-url="modals/printer/printer_edit.php?id=<?= $printer_id ?>">
                                             <i class="fas fa-fw fa-edit me-2"></i>Edit
                                         </a>
-                                        <?php if ($session_user_role == 3) { ?>
+                                        <?php if ($session_is_admin) { ?>
                                             <?php if ($printer_archived_at) { ?>
                                             <div class="dropdown-divider"></div>
                                             <a class="dropdown-item text-info confirm-link" href="post.php?restore_printer=<?= $printer_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">

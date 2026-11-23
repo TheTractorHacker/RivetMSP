@@ -61,6 +61,16 @@ Decrypted credential secrets (`GET /credentials/{id}`) require more than a beare
 
 This is the same challenge mechanism used for passkey login completion — `GET /auth` is the one place a challenge originates from, whether you're about to complete a passkey login or about to prove device possession to unseal a credential.
 
+### Mobile passkey sign-in: user verification
+
+`POST /api/v1/auth` with a passkey assertion accepts a presence-only assertion (UP=1, UV=0) unless `config.php` sets
+
+```php
+$config_passkey_mobile_require_uv = true;
+```
+
+When set, `GET /auth` advertises `userVerification: required` and the assertion is refused unless the authenticator verified the user (PIN or biometric). The default is off so that already-enrolled keys and shipped app builds keep working. The state is shown on Admin > Identity Providers ("Mobile app passkey sign-in"). Turn it on only after every enrolled passkey supports user verification.
+
 ---
 
 ## Conventions

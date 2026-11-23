@@ -94,6 +94,23 @@ if (isset($_POST['establish_canonical_vault_key'])) {
 
 }
 
+// MSP-DS-49 (re-review MRR-9): end the legacy calendar-feed links (HMAC of user id and installation id) for everyone now. One-way.
+if (isset($_POST['end_calendar_legacy_links'])) {
+
+    validateCSRFToken($_POST['csrf_token']);
+    enforceAdminPermission();
+
+    require_once __DIR__ . '/../../includes/security_policy.php';
+    secSettingSet($mysqli, 'calendar_legacy_links', 0);
+    mysqli_query($mysqli, "UPDATE users SET user_calendar_legacy_until = NULL WHERE user_calendar_legacy_until IS NOT NULL");
+    $ended = mysqli_affected_rows($mysqli);
+
+    logAction("Settings", "Edit", "$session_name ended the legacy calendar feed links ($ended user(s) had one open)");
+    secAudit('settings.calendar_legacy_links_ended', $session_user_id, 'settings', 'calendar_legacy_links', 'edit', "$session_name ended the legacy calendar feed links", ['users_affected' => $ended]);
+    flash_alert('Legacy calendar feed links ended. Staff who had not generated a new link must do so on the Calendar page.');
+    redirect();
+}
+
 if (isset($_POST['edit_security_policy'])) {
 
     validateCSRFToken($_POST['csrf_token']);
@@ -154,6 +171,13 @@ if (isset($_POST['edit_security_settings'])) {
         && \RivetCore\Compliance\RetentionPolicy::isBelowFloor((string) $compliance_row['config_compliance_profile'], $config_log_retention)) {
         $config_log_retention = \RivetCore\Compliance\RetentionPolicy::floorDays((string) $compliance_row['config_compliance_profile']);
         $security_retention_raised = true;
+    }
+
+    // MSP-DS-120: a login key is a secret, not a hint: at least 16 characters, letters/digits/underscore only (it travels in a URL)
+    $posted_login_key = trim(strip_tags((string) ($_POST['config_login_key_secret'] ?? '')));
+    if ($posted_login_key !== '' && !preg_match('/^\w{16,99}$/', $posted_login_key)) {
+        flash_alert('The login key must be 16 to 99 characters (letters, digits and underscore). Security settings were not saved.', 'error');
+        redirect();
     }
 
     // Disallow turning on login key without a secret

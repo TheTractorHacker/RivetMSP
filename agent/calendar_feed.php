@@ -1,8 +1,7 @@
 <?php
 /**
  * iCal subscription feed for Outlook / Apple Calendar / Google Calendar.
- * URL: /agent/calendar_feed.php?token=HMAC_TOKEN
- * Token = hash_hmac('sha256', user_id, installation_id)
+ * URL: /agent/calendar_feed.php?token=TOKEN (per-user random token, see includes/calendar_feed_token.php)
  */
 
 require_once $_SERVER['DOCUMENT_ROOT'] . '/config.php';
@@ -19,22 +18,11 @@ if (!$token || strlen($token) < 32) {
     exit('Unauthorized');
 }
 
-// Verify HMAC token against all active users
-$users_result = mysqli_query($mysqli,
-    "SELECT user_id, user_name FROM users
-     WHERE user_status = 1 AND user_archived_at IS NULL AND user_type = 1"
-);
-
-$user_id   = 0;
-$user_name = '';
-while ($u = mysqli_fetch_assoc($users_result)) {
-    $expected = hash_hmac('sha256', intval($u['user_id']), $installation_id);
-    if (hash_equals($expected, $token)) {
-        $user_id   = intval($u['user_id']);
-        $user_name = $u['user_name'];
-        break;
-    }
-}
+// MSP-DS-49: per-user random token (hashed in the database); the old HMAC links work only inside their grace period
+require_once dirname(__DIR__) . '/includes/calendar_feed_token.php';
+$resolved  = calendarFeedTokenResolve($mysqli, $token, (string) $installation_id);
+$user_id   = $resolved ? $resolved['user_id'] : 0;
+$user_name = $resolved ? $resolved['user_name'] : '';
 
 if (!$user_id) {
     http_response_code(401);
@@ -66,6 +54,8 @@ function ical_dt($sql_dt) {
 }
 
 function ical_escape($str) {
+    // MSP-DS-176: a bare CR would split the content line; CRLF/CR become one newline before escaping
+    $str = str_replace(["\r\n", "\r"], "\n", (string) $str);
     $str = str_replace('\\', '\\\\', $str);
     $str = str_replace(',',  '\,',   $str);
     $str = str_replace(';',  '\;',   $str);
@@ -76,8 +66,13 @@ function ical_escape($str) {
 function ical_fold($line) {
     $out = '';
     while (strlen($line) > 75) {
-        $out .= substr($line, 0, 75) . "\r\n ";
-        $line = substr($line, 75);
+        // MSP-DS-176: fold on character boundaries (RFC 5545 3.1), never inside a multi-byte sequence
+        $chunk = mb_strcut($line, 0, 75, 'UTF-8');
+        if ($chunk === '') {
+            $chunk = substr($line, 0, 75);
+        }
+        $out .= $chunk . "\r\n ";
+        $line = substr($line, strlen($chunk));
     }
     return $out . $line . "\r\n";
 }
@@ -103,7 +98,7 @@ while ($row = mysqli_fetch_assoc($result)) {
     if ($row['client_name']) $summary .= ' - ' . $row['client_name'];
 
     $url  = 'https://' . $config_base_url . '/agent/ticket.php?ticket_id=' . $tid;
-    $desc = ($row['ticket_appointment_notes'] ? $row['ticket_appointment_notes'] . '\n' : '') . $url;
+    $desc = ($row['ticket_appointment_notes'] ? $row['ticket_appointment_notes'] . "\n" : '') . $url;
     $loc  = $row['location_address'] ?: ($row['ticket_onsite'] ? 'Onsite' : 'Remote');
 
     $ical .= "BEGIN:VEVENT\r\n";
@@ -151,7 +146,7 @@ while ($row = mysqli_fetch_assoc($result_ts)) {
     if ($row['client_name']) $summary .= ' - ' . $row['client_name'];
 
     $url  = 'https://' . $config_base_url . '/agent/ticket.php?ticket_id=' . $tid;
-    $desc = ($row['schedule_notes'] ? $row['schedule_notes'] . '\n' : '') . $url;
+    $desc = ($row['schedule_notes'] ? $row['schedule_notes'] . "\n" : '') . $url;
     $loc  = $row['location_address'] ?: ($row['schedule_onsite'] ? 'Onsite' : 'Remote');
 
     $ical .= "BEGIN:VEVENT\r\n";

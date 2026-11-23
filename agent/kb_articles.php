@@ -22,6 +22,11 @@ if (isset($_GET['client_id'])) {
 
 enforceUserPermission('module_kb');
 
+// A client-restricted agent lists global articles (client 0) and those of their own clients only; this also bounds a ?filter_client_id= and
+// the full-text search below (MSP-DS-29)
+require_once dirname(__DIR__) . '/includes/search_scope.php';
+$kb_scope_query .= ' ' . searchClientScope((string) $client_access_string, (bool) $session_is_admin, 'kb_article_client_id', true);
+
 if (isset($_GET['filter_category_id']) && $_GET['filter_category_id'] !== '') {
     $filter_category_id = intval($_GET['filter_category_id']);
     $kb_category_filter_query = "AND kb_article_category_id = $filter_category_id";

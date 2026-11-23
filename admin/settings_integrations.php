@@ -390,8 +390,9 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
         <div class="card-body p-0">
             <?php
             $sql_rmm_log = mysqli_query($mysqli,
-                "SELECT l.*, i.name as integration_name, i.type as integration_type
+                "SELECT l.*, i.name as integration_name, i.type as integration_type, u.user_name AS triggered_name
                  FROM rmm_sync_log l
+                 LEFT JOIN users u ON u.user_id = l.triggered_by AND l.triggered_by > 0
                  LEFT JOIN rmm_integrations i ON i.id = l.integration_id
                  WHERE i.type IN ('tactical_rmm','level','action1') OR i.id IS NULL
                  ORDER BY l.id DESC LIMIT 20"
@@ -405,6 +406,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                     <tr>
                         <th class="ps-3">Integration</th>
                         <th>Started</th>
+                        <th>Run</th>
                         <th>Status</th>
                         <th>Created</th>
                         <th>Updated</th>
@@ -425,6 +427,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                         <?php endif; ?>
                     </td>
                     <td class="text-muted small"><?= nullable_htmlentities(rivetRmmTime($lr['started_at'], false, true, 'Y-m-d H:i', (string) $lr['started_at'])) ?></td>
+                    <td class="small"><?= intval($lr['triggered_by'] ?? 0) > 0 ? '<span class="badge text-bg-light border" title="Started by ' . nullable_htmlentities($lr['triggered_name'] ?? 'a user') . '">Manual</span>' : '<span class="badge text-bg-info">Auto</span>' ?></td>
                     <td><span class="badge <?= $badge[$lr['status']] ?? 'text-bg-secondary' ?>"><?= htmlspecialchars($lr['status']) ?></span></td>
                     <td><?= intval($lr['assets_created']) ?></td>
                     <td><?= intval($lr['assets_updated']) ?></td>
@@ -865,8 +868,9 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
         <div class="card-body p-0">
             <?php
             $sql_fw_log = mysqli_query($mysqli,
-                "SELECT l.*, i.name as integration_name
+                "SELECT l.*, i.name as integration_name, u.user_name AS triggered_name
                  FROM rmm_sync_log l
+                 LEFT JOIN users u ON u.user_id = l.triggered_by AND l.triggered_by > 0
                  INNER JOIN rmm_integrations i ON i.id = l.integration_id AND i.type = 'sophos_central'
                  ORDER BY l.id DESC LIMIT 20"
             );
@@ -879,6 +883,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                     <tr>
                         <th class="ps-3">Connection</th>
                         <th>Started</th>
+                        <th>Run</th>
                         <th>Status</th>
                         <th>Created</th>
                         <th>Updated</th>
@@ -894,6 +899,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                 <tr>
                     <td class="ps-3"><?= nullable_htmlentities($lr['integration_name']) ?></td>
                     <td class="text-muted small"><?= nullable_htmlentities(rivetRmmTime($lr['started_at'], false, true, 'Y-m-d H:i', (string) $lr['started_at'])) ?></td>
+                    <td class="small"><?= intval($lr['triggered_by'] ?? 0) > 0 ? '<span class="badge text-bg-light border" title="Started by ' . nullable_htmlentities($lr['triggered_name'] ?? 'a user') . '">Manual</span>' : '<span class="badge text-bg-info">Auto</span>' ?></td>
                     <td><span class="badge <?= $badge[$lr['status']] ?? 'text-bg-secondary' ?>"><?= htmlspecialchars($lr['status']) ?></span></td>
                     <td><?= intval($lr['assets_created']) ?></td>
                     <td><?= intval($lr['assets_updated']) ?></td>
@@ -1123,8 +1129,9 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
         <div class="card-body p-0">
             <?php
             $sql_unifi_log = mysqli_query($mysqli,
-                "SELECT l.*, i.name as integration_name
+                "SELECT l.*, i.name as integration_name, u.user_name AS triggered_name
                  FROM unifi_sync_log l
+                 LEFT JOIN users u ON u.user_id = l.triggered_by AND l.triggered_by > 0
                  LEFT JOIN unifi_integrations i ON i.id = l.integration_id
                  ORDER BY l.id DESC LIMIT 20"
             );
@@ -1137,6 +1144,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                     <tr>
                         <th class="ps-3">Controller</th>
                         <th>Started</th>
+                        <th>Run</th>
                         <th>Status</th>
                         <th>Devices</th>
                         <th>Wi-Fi</th>
@@ -1151,6 +1159,7 @@ while ($sm = mysqli_fetch_assoc($sql_unifi_site_maps)) {
                 <tr>
                     <td class="ps-3"><?= nullable_htmlentities($lr['integration_name']) ?></td>
                     <td class="text-muted small"><?= nullable_htmlentities(rivetRmmTime($lr['started_at'], false, true, 'Y-m-d H:i', (string) $lr['started_at'])) ?></td>
+                    <td class="small"><?= intval($lr['triggered_by'] ?? 0) > 0 ? '<span class="badge text-bg-light border" title="Started by ' . nullable_htmlentities($lr['triggered_name'] ?? 'a user') . '">Manual</span>' : '<span class="badge text-bg-info">Auto</span>' ?></td>
                     <td><span class="badge <?= $badge[$lr['status']] ?? 'text-bg-secondary' ?>"><?= htmlspecialchars($lr['status']) ?></span></td>
                     <td class="text-muted small">+<?= intval($lr['devices_created']) ?> / ~<?= intval($lr['devices_updated']) ?> / -<?= intval($lr['devices_skipped']) ?></td>
                     <td class="text-muted small">+<?= intval($lr['wifi_created']) ?> / ~<?= intval($lr['wifi_updated']) ?> / -<?= intval($lr['wifi_skipped']) ?></td>

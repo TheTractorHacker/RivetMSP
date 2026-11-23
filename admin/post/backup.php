@@ -21,6 +21,26 @@ function fwrite_ln($fh, string $s): void {
     fwrite($fh, $s . PHP_EOL);
 }
 
+/**
+ * MSP-DS-141/DS-39 (re-review MRR1): names of STORED/VIRTUAL generated columns of a table. A generated column accepts only DEFAULT in
+ * an INSERT (MariaDB 1906 / MySQL 3105 in strict mode), so the dump must leave it out; the CREATE TABLE recomputes it on restore.
+ * Detected generically from information_schema (never a hard-coded list). MySQL's DEFAULT_GENERATED (an expression DEFAULT) is a
+ * normal insertable column and is NOT matched.
+ *
+ * @return string[]
+ */
+function backup_generated_columns(mysqli $mysqli, string $table): array {
+    $out = [];
+    $t = $mysqli->real_escape_string($table);
+    $r = $mysqli->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$t'
+        AND (EXTRA LIKE '%VIRTUAL GENERATED%' OR EXTRA LIKE '%STORED GENERATED%' OR (GENERATION_EXPRESSION IS NOT NULL AND GENERATION_EXPRESSION <> ''))");
+    if ($r) {
+        while ($c = $r->fetch_row()) { $out[] = $c[0]; }
+        $r->close();
+    }
+    return $out;
+}
+
 function dump_database_streaming(mysqli $mysqli, string $sqlFile): void {
     $fh = fopen($sqlFile, 'wb');
     if (!$fh) { http_response_code(500); exit("Cannot open dump file"); }
@@ -47,9 +67,12 @@ function dump_database_streaming(mysqli $mysqli, string $sqlFile): void {
         fwrite_ln($fh, "DROP TABLE IF EXISTS `{$table}`;");
         fwrite_ln($fh, $createSQL . ";");
         fwrite_ln($fh, "");
+        $generated = array_flip(backup_generated_columns($mysqli, $table));
         $dr = $mysqli->query("SELECT * FROM `{$mysqli->real_escape_string($table)}`", MYSQLI_USE_RESULT);
         if ($dr) {
             while ($row = $dr->fetch_assoc()) {
+                if ($generated) { $row = array_diff_key($row, $generated); }
+                if (!$row) { continue; }
                 $cols = array_map(fn($c) => '`' . $mysqli->real_escape_string($c) . '`', array_keys($row));
                 $vals = array_map(fn($v) => is_null($v) ? 'NULL' : "'" . $mysqli->real_escape_string($v) . "'", array_values($row));
                 fwrite_ln($fh, "INSERT INTO `{$table}` (" . implode(', ', $cols) . ") VALUES (" . implode(', ', $vals) . ");");
@@ -264,7 +287,6 @@ function build_backup_manifest(mysqli $mysqli, string $baseName, ?string $passph
 function build_backup(mysqli $mysqli, string $type, string $backupDir): array {
     // Refuse before any temp file or dump is created. Throws BackupPassphraseRequired or BackupUnencryptedNotAllowed.
     $passphrase   = backup_require_passphrase();
-    backup_require_unencrypted_override();
     // Status record (Recovery): a failed or interrupted run is alerted, see src/Recovery/BackupStatus.php.
     $statusId     = \RivetMSP\Recovery\BackupStatus::begin($mysqli, $type === 'auto' ? 'app_auto' : 'app_manual');
     $timestamp    = date('YmdHis');
@@ -351,6 +373,16 @@ function build_backup(mysqli $mysqli, string $type, string $backupDir): array {
     $final->addFile($manifest['path'], $manifest['name']);
     if ($rmmPgDump !== null) { $final->addFile($rmmPgDump, 'rmm-postgres.dump'); }
     $snapshotFile = \RivetMSP\Recovery\TableSnapshot::attach($final, $mysqli, $baseName);   // restore-drill row counts (no secrets)
+    // Encrypt EVERY entry (db.sql, uploads.zip, version.txt, manifest, snapshot, pg dump) with the backup passphrase: zip AES-256.
+    // A zip that cannot be fully encrypted is never written (the same refusal as a missing passphrase), so no plain backup ever lands on disk.
+    for ($i = 0; $i < $final->numFiles; $i++) {
+        if (!$final->setEncryptionIndex($i, ZipArchive::EM_AES_256, $passphrase)) {
+            @$final->close();
+            @unlink($finalZip);
+            foreach ([$sqlFile, $uploadsZip, $versionFile, $manifest['path'], $rmmPgDump, $snapshotFile] as $tmp) { if ($tmp) { @unlink($tmp); } }
+            throw new RuntimeException('Could not encrypt the backup zip (AES-256); no backup was written.');
+        }
+    }
     $zipClosed = $final->close();
     @chmod($finalZip, 0640);
 
@@ -528,9 +560,7 @@ if (isset($_POST['save_backup_settings'])) {
     $auto    = isset($_POST['config_backup_auto_enabled']) ? 1 : 0;
     $freq    = in_array($_POST['config_backup_frequency'] ?? '', ['daily','weekly']) ? $_POST['config_backup_frequency'] : 'daily';
     $retain  = max(1, min(90, intval($_POST['config_backup_retain_count'] ?? 7)));
-    // rc.53 GAP-11: audit-logged admin opt-in (see BackupUnencryptedNotAllowed's doc comment).
-    $allow_unencrypted = isset($_POST['config_backup_allow_unencrypted_override']) ? 1 : 0;
-    $set = "config_backup_auto_enabled = $auto, config_backup_frequency = '$freq', config_backup_retain_count = $retain, config_backup_allow_unencrypted_override = $allow_unencrypted";
+    $set = "config_backup_auto_enabled = $auto, config_backup_frequency = '$freq', config_backup_retain_count = $retain";
     // Blank = keep whatever is already saved (same convention as the S3 secret key below it on this form).
     if (trim($_POST['config_backup_passphrase'] ?? '') !== '') {
         $new_passphrase = trim($_POST['config_backup_passphrase']);
@@ -541,10 +571,8 @@ if (isset($_POST['save_backup_settings'])) {
         $passphrase = mysqli_real_escape_string($mysqli, encryptSetting($new_passphrase));
         $set .= ", config_backup_passphrase = '$passphrase'";
     }
-    $unencrypted_changed = $allow_unencrypted !== (int) ($GLOBALS['config_backup_allow_unencrypted_override'] ?? 0);
     mysqli_query($mysqli, "UPDATE settings SET $set WHERE company_id = 1");
-    logAction('Settings', 'Edit', "$session_name updated backup settings"
-        . ($unencrypted_changed ? ($allow_unencrypted ? ' (turned ON \'allow unencrypted in-app backups\')' : ' (turned OFF \'allow unencrypted in-app backups\')') : ''));
+    logAction('Settings', 'Edit', "$session_name updated backup settings");
     flash_alert('Backup settings saved');
     redirect();
 }
@@ -617,14 +645,25 @@ require_once __DIR__ . '/backup_recovery.php';
 // ── Master key reveal ─────────────────────────────────────────────────────────
 if (isset($_POST['backup_master_key'])) {
     validateCSRFToken($_POST['csrf_token']);
-    $password = $_POST['password'];
+    $password = (string) ($_POST['password'] ?? '');
     $sql = mysqli_query($mysqli, "SELECT * FROM users WHERE user_id = $session_user_id");
     $row = mysqli_fetch_assoc($sql);
-    if (password_verify($password, $row['user_password'])) {
-        $site_encryption_master_key = decryptUserSpecificKey($row['user_specific_encryption_ciphertext'], $password);
+    // MSP-DS-116: counted and limited like every other password re-check (5 per 5 minutes per account, audited).
+    if (secReauthPassword($mysqli, (int) $session_user_id, $password) && $row) {
+        // MSP-DS-117: a vw3 wrap needs the vault v3 resolver; the legacy decrypt returns false for it.
+        $wrap = (string) $row['user_specific_encryption_ciphertext'];
+        $site_encryption_master_key = str_starts_with($wrap, 'vw3:')
+            ? vaultLoginMasterKey($mysqli, (int) $session_user_id, $wrap, $password)
+            : decryptUserSpecificKey($wrap, $password);
+        if (!is_string($site_encryption_master_key) || $site_encryption_master_key === '') {
+            logAction('Master Key', 'Download', "$session_name could not retrieve the master encryption key (no readable key for this account)");
+            flash_alert('The master key could not be read for your account. Nothing was shown.', 'error');
+            redirect();
+        }
         logAction('Master Key', 'Download', "$session_name retrieved the master encryption key");
         appNotify('Master Key', "$session_name retrieved the master encryption key");
-        echo "<div class='alert alert-warning mt-2'><strong>Master Encryption Key:</strong><br><code>$site_encryption_master_key</code></div>";
+        echo "<div class='alert alert-warning mt-2'><strong>Master Encryption Key:</strong><br><code>" . nullable_htmlentities($site_encryption_master_key) . "</code></div>";
+        exit;
     } else {
         logAction('Master Key', 'Download', "$session_name failed to retrieve the master encryption key");
         flash_alert('Incorrect password.', 'error');

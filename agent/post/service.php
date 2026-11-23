@@ -22,6 +22,12 @@ if (isset($_POST['add_service'])) {
 
     enforceClientAccess();
 
+    // Every linked record must belong to the service's client (MSP-DS-30 / MSP-INJ-12)
+    require_once dirname(__DIR__, 2) . '/includes/same_client.php';
+    foreach (['contact' => 'contacts', 'vendor' => 'vendors', 'document' => 'documents', 'asset' => 'assets', 'credential' => 'credentials', 'domain' => 'domains', 'certificate' => 'certificates'] as $svc_kind => $svc_field) {
+        assertSameClient($svc_kind, $_POST[$svc_field] ?? [], $client_id);
+    }
+
     // Create Service
     mysqli_query($mysqli, "INSERT INTO services SET service_name = '$service_name', service_description = '$service_description', service_category = '$service_category', service_importance = '$service_importance', service_backup = '$service_backup', service_notes = '$service_notes', service_client_id = $client_id");
 
@@ -103,6 +109,12 @@ if (isset($_POST['edit_service'])) {
     $client_id = intval(getFieldById('services', $service_id, 'service_client_id'));
 
     enforceClientAccess();
+
+    // Every linked record must belong to the service's client (MSP-DS-30 / MSP-INJ-12)
+    require_once dirname(__DIR__, 2) . '/includes/same_client.php';
+    foreach (['contact' => 'contacts', 'vendor' => 'vendors', 'document' => 'documents', 'asset' => 'assets', 'credential' => 'credentials', 'domain' => 'domains', 'certificate' => 'certificates'] as $svc_kind => $svc_field) {
+        assertSameClient($svc_kind, $_POST[$svc_field] ?? [], $client_id);
+    }
 
     // Update main service details
     mysqli_query($mysqli, "UPDATE services SET service_name = '$service_name', service_description = '$service_description', service_category = '$service_category', service_importance = '$service_importance', service_backup = '$service_backup', service_notes = '$service_notes' WHERE service_id = $service_id");

@@ -44,7 +44,7 @@ if (!$link) {
     exit;
 }
 
-if ($link['asset_client_id']) { enforceClientAccess(intval($link['asset_client_id'])); }
+enforceClientAccess(intval($link['asset_client_id']));   // MSP-DS-132: client 0 (unassigned) is refused for restricted users, like rmm_action.php
 
 // Create run record in pending state
 $asset_id = intval($link['asset_id']);

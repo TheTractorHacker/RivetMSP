@@ -8,10 +8,13 @@ if (isset($_GET['client_id'])) {
     $client_url = "&client_id=$client_id";
 } else {
     require_once "includes/inc_all.php";
-    $client_event_query = '';
+    // MSP-DS-124: a client-restricted tech only sees events of their clients (and the general ones, client 0)
+    $client_event_query = ($client_access_string && !$session_is_admin) ? "WHERE (event_client_id = 0 OR event_client_id IN ($client_access_string))" : '';
     $client_query = 'WHERE 1 = 1';
     $client_url = '';
 }
+
+enforceUserPermission('module_support');   // MSP-DS-124 (the modal map already treats the calendar as module_support)
 
 if (isset($_GET['calendar_id'])) {
     $calendar_selected_id = intval($_GET['calendar_id']);
@@ -56,7 +59,7 @@ if (isset($_GET['calendar_id'])) {
                                 data-modal-url="modals/calendar/calendar_edit.php?id=<?= $calendar_id ?>">
                                 <i class="fas fa-fw fa-pencil-alt me-2"></i>Rename
                             </a>
-                            <?php if ($session_user_role == 3) { ?>
+                            <?php if ($session_is_admin) { ?>
                                 <div class="dropdown-divider"></div>
                                 <a class="dropdown-item text-danger text-bold confirm-link" href="post.php?delete_calendar=<?= $calendar_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                     <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -113,10 +116,14 @@ if (isset($_GET['calendar_id'])) {
 
         <!-- Outlook / Calendar Sync -->
         <?php
-        // Stable per-user calendar token — HMAC of user_id with installation_id as key
-        $cal_token  = hash_hmac('sha256', $session_user_id, $installation_id);
-        $feed_url   = "https://$config_base_url/agent/calendar_feed.php?token=$cal_token";
-        $webcal_url = "webcal://$config_base_url/agent/calendar_feed.php?token=$cal_token";
+        // MSP-DS-49: a per-user random token, shown once right after it is generated (only its hash is stored)
+        $cal_token = $_SESSION['calendar_feed_new_token'] ?? '';
+        unset($_SESSION['calendar_feed_new_token']);
+        $cal_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_calendar_token_hash, user_calendar_legacy_until FROM users WHERE user_id = " . intval($session_user_id)));
+        $cal_has_token = !empty($cal_row['user_calendar_token_hash']);
+        $cal_legacy_until = (!$cal_has_token && !empty($cal_row['user_calendar_legacy_until']) && strtotime($cal_row['user_calendar_legacy_until']) > time()) ? $cal_row['user_calendar_legacy_until'] : '';
+        $feed_url   = $cal_token ? "https://$config_base_url/agent/calendar_feed.php?token=$cal_token" : '';
+        $webcal_url = $cal_token ? "webcal://$config_base_url/agent/calendar_feed.php?token=$cal_token" : '';
         ?>
         <div class="card">
             <div class="card-header">
@@ -125,6 +132,8 @@ if (isset($_GET['calendar_id'])) {
             <div class="card-body p-3">
                 <p class="text-muted mb-3" style="font-size:.85rem;">Subscribe to your scheduled tickets in any calendar app. Refreshes automatically.</p>
 
+                <?php if ($cal_token) { ?>
+                <div class="alert alert-warning py-2" style="font-size:.85rem;">Copy your link now. For security it is shown only once.</div>
                 <!-- Outlook Classic -->
                 <p class="mb-1"><strong><i class="fas fa-envelope me-1"></i>Outlook (Classic)</strong></p>
                 <div class="input-group input-group-sm mb-1">
@@ -150,6 +159,19 @@ if (isset($_GET['calendar_id'])) {
                     </div>
                 </div>
                 <p class="text-muted mb-0" style="font-size:.8rem;">Settings &rarr; Add calendar &rarr; From URL &rarr; paste above</p>
+                <?php } else { ?>
+                <p class="text-muted mb-2" style="font-size:.85rem;">
+                    <?php if ($cal_has_token) { ?>You have a personal feed link. It cannot be shown again; generate a new one to replace it.
+                    <?php } elseif ($cal_legacy_until) { ?>Your existing link keeps working until <strong><?= htmlspecialchars($cal_legacy_until, ENT_QUOTES) ?></strong>. Generate a new personal link before then.
+                    <?php } else { ?>You do not have a feed link yet.<?php } ?>
+                </p>
+                <?php } ?>
+                <form action="post.php" method="post" class="mt-2">
+                    <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                    <button type="submit" name="regenerate_calendar_feed_token" value="1" class="btn btn-sm btn-outline-secondary btn-block">
+                        <i class="fas fa-sync-alt me-1"></i><?= $cal_has_token || $cal_legacy_until ? 'Generate a new link' : 'Generate my link' ?>
+                    </button>
+                </form>
             </div>
         </div>
     </div>
@@ -272,9 +294,9 @@ while ($row = mysqli_fetch_assoc($sql)) {
                 echo "{ id: $event_id, title: $event_title, start: $event_start, end: $event_end, color: $calendar_color },";
             }
 
-            // Invoices Created
-            $sql = mysqli_query($mysqli, "SELECT * FROM clients LEFT JOIN invoices ON client_id = invoice_client_id $client_query $access_permission_query");
-            while ($row = mysqli_fetch_assoc($sql)) {
+            // Invoices Created (MSP-DS-124: only for roles with the sales module)
+            $sql = lookupUserPermission('module_sales') >= 1 ? mysqli_query($mysqli, "SELECT * FROM clients LEFT JOIN invoices ON client_id = invoice_client_id $client_query $access_permission_query") : false;
+            while ($sql && ($row = mysqli_fetch_assoc($sql))) {
                 $event_id = intval($row['invoice_id']);
                 $scope = strval($row['invoice_scope']);
                 if (empty($scope)) {
@@ -287,9 +309,9 @@ while ($row = mysqli_fetch_assoc($sql)) {
                 echo "{ id: $event_id, title: $event_title, start: $event_start, display: 'list-item', color: 'blue', url: 'invoice.php?invoice_id=$event_id$client_url' },";
             }
 
-            // Quotes Created
-            $sql = mysqli_query($mysqli, "SELECT * FROM clients LEFT JOIN quotes ON client_id = quote_client_id $client_query $access_permission_query");
-            while ($row = mysqli_fetch_assoc($sql)) {
+            // Quotes Created (MSP-DS-124: only for roles with the sales module)
+            $sql = lookupUserPermission('module_sales') >= 1 ? mysqli_query($mysqli, "SELECT * FROM clients LEFT JOIN quotes ON client_id = quote_client_id $client_query $access_permission_query") : false;
+            while ($sql && ($row = mysqli_fetch_assoc($sql))) {
                 $event_id = intval($row['quote_id']);
                 $event_title = json_encode($row['quote_prefix'] . $row['quote_number'] . " " . $row['quote_scope']);
                 $event_start = json_encode($row['quote_date']);
@@ -430,7 +452,7 @@ while ($row = mysqli_fetch_assoc($sql)) {
 
             if (!isset($_GET['client_id'])) {
                 //Clients Added
-                $sql = mysqli_query($mysqli, "SELECT * FROM clients");
+                $sql = mysqli_query($mysqli, "SELECT client_id, client_name, client_created_at FROM clients WHERE client_archived_at IS NULL $access_permission_query");   // review R17: client-scoped, no archived
                 while ($row = mysqli_fetch_assoc($sql)) {
                     $event_id = intval($row['client_id']);
                     $event_title = json_encode("Client: '" . $row['client_name'] . "' created");

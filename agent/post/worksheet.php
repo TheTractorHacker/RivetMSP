@@ -10,7 +10,10 @@ function worksheetOwnedOrStop($mysqli, int $worksheet_id): array
         redirect();
         exit;
     }
-    enforceClientAccess((int) $ws['ticket_client_id']);
+    // MSP-DS-137: an internal ticket has client 0; enforceClientAccess(0) denies every non-admin, so it is only called for a real client.
+    if ((int) $ws['ticket_client_id'] > 0) {
+        enforceClientAccess((int) $ws['ticket_client_id']);
+    }
 
     return $ws;
 }
@@ -27,9 +30,16 @@ if (isset($_POST['add_ticket_worksheet'])) {
 
     $sql_ticket = mysqli_query($mysqli, "SELECT ticket_client_id, ticket_prefix, ticket_number FROM tickets WHERE ticket_id = $ticket_id LIMIT 1");
     $t = mysqli_fetch_assoc($sql_ticket);
+    if (!$t) {
+        flash_alert('Ticket not found', 'error');
+        redirect();
+        exit;
+    }
     $client_id = intval($t['ticket_client_id']);
 
-    enforceClientAccess();
+    if ($client_id > 0) {   // MSP-DS-137: internal tickets (client 0) have no client to check
+        enforceClientAccess();
+    }
 
     mysqli_query($mysqli, "INSERT INTO ticket_worksheets SET worksheet_ticket_id = $ticket_id, worksheet_template_id = $template_id, worksheet_is_outtake = $is_outtake, worksheet_sign_token = $token_sql, worksheet_created_by = $session_user_id");
 

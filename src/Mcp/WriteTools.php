@@ -40,7 +40,7 @@ final class WriteTools
      * @param array<string,mixed> $args
      * @param list<string> $scopes the token's scopes
      */
-    public function call(string $name, array $args, ?int $userId, string $oauthClientId, array $scopes): array
+    public function call(string $name, array $args, ?int $userId, string $oauthClientId, array $scopes, int $grantId = 0): array
     {
         if (!McpWriteActions::isWriteTool($name) || !WriteConfig::enabled($this->db)) {
             return ToolPipeline::envelope('req_' . bin2hex(random_bytes(8)), null, 'NOT_FOUND', "Unknown tool \"$name\".");
@@ -62,12 +62,12 @@ final class WriteTools
         }
 
         $invalid = null;
-        $envelope = $pipeline->run($userId, $name, $this->safeArgs($args), $allow, function (int $uid) use ($name, $args, $oauthClientId, &$invalid) {
+        $envelope = $pipeline->run($userId, $name, $this->safeArgs($args), $allow, function (int $uid) use ($name, $args, $oauthClientId, $grantId, &$invalid) {
             try {
                 $v = McpWriteActions::validate($name, $args);
                 $target = McpWriteActions::resolveTarget($this->db, $uid, $name, $v['args']);
                 $queued = (new PendingActions($this->db))->queue($uid, $oauthClientId, $name, $v['args'], $target['client_id'],
-                    $target['ticket'] ? (int) $target['ticket']['ticket_id'] : null, $v['key']);
+                    $target['ticket'] ? (int) $target['ticket']['ticket_id'] : null, $v['key'], $grantId);
             } catch (McpActionRefused $e) {
                 $invalid = $e->getMessage();
 

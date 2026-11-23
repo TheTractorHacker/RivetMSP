@@ -202,6 +202,7 @@ if (isset($_POST['add_client'])) {
             $query = mysqli_prepare(
                 $mysqli,
                 "INSERT INTO domains SET
+                domain_route_mail = ?,
                 domain_name = ?,
                 domain_registrar = 0,
                 domain_webhost = 0,
@@ -212,7 +213,9 @@ if (isset($_POST['add_client'])) {
                 domain_raw_whois = ?,
                 domain_client_id = ?"
             );
-            mysqli_stmt_bind_param($query, "ssssssi", $website, $expire, $a, $ns, $mx, $whois, $client_id);
+            // MSP-DS-16/33: the website domain of a client created by an administrator keeps routing inbound mail; one created by anyone else does not until an admin switches it on
+            $route_mail = $session_is_admin ? 1 : 0;
+            mysqli_stmt_bind_param($query, "issssssi", $route_mail, $website, $expire, $a, $ns, $mx, $whois, $client_id);
             mysqli_stmt_execute($query);
             $extended_log_description .= ", domain $website added";
         } catch (Exception $e) {
@@ -558,7 +561,7 @@ if (isset($_POST['export_clients_csv'])) {
     if ($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($session_company_name . "-Clients-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -571,7 +574,7 @@ if (isset($_POST['export_clients_csv'])) {
         //output each row of the data, format line as csv and write to file pointer
         while($row = $sql->fetch_assoc()) {
             $lineData = array($row['client_name'], $row['client_type'], $row['client_referral'], $row['client_website'], $row['location_name'], formatPhoneNumber($row['location_phone']), $row['location_address'], $row['location_city'], $row['location_state'], $row['location_zip'], $row['location_country'], $row['contact_name'], $row['contact_title'], formatPhoneNumber($row['contact_phone']), $row['contact_extension'], formatPhoneNumber($row['contact_mobile']), $row['contact_email'], $row['client_rate'], $row['client_currency_code'], $row['client_net_terms'], $row['client_tax_id_number'], $row['client_abbreviation']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file
@@ -622,7 +625,7 @@ if (isset($_POST["import_clients_csv"])) {
 
     //(Else)Check column count
     $f = fopen($file_name, "r");
-    $f_columns = fgetcsv($f, 1000, ",");
+    $f_columns = fgetcsv($f, 1000, ",", '"', '');
     if (!$error & count($f_columns) != 22) {
         $error = true;
         flash_alert("Bad column count.", 'error');
@@ -631,10 +634,10 @@ if (isset($_POST["import_clients_csv"])) {
     //Else, parse the file
     if (!$error) {
         $file = fopen($file_name, "r");
-        fgetcsv($file, 1000, ","); // Skip first line
+        fgetcsv($file, 1000, ",", '"', ''); // Skip first line
         $row_count = 0;
         $duplicate_count = 0;
-        while(($column = fgetcsv($file, 1000, ",")) !== false) {
+        while(($column = fgetcsv($file, 1000, ",", '"', '')) !== false) {
             $duplicate_detect = 0;
             if (isset($column[0])) {
                 $name = sanitizeInput($column[0]);
@@ -804,7 +807,7 @@ if (isset($_GET['download_clients_csv_template'])) {
 
     $delimiter = ",";
     $enclosure = '"';
-    $escape    = '\\';   // backsla
+    $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
     $filename = "Clients-Template.csv";
 
     //create a file pointer
@@ -922,6 +925,8 @@ if (isset($_POST['bulk_add_client_ticket'])) {
             // Add Tasks from Template if Template was selected
             if($ticket_template_id) {
                 if (mysqli_num_rows($sql_task_templates) > 0) {
+                    // MSP-DS-52: the result set is shared by every ticket of the bulk run - rewind it for each one
+                    mysqli_data_seek($sql_task_templates, 0);
                     while ($row = mysqli_fetch_assoc($sql_task_templates)) {
                         $task_order = intval($row['task_template_order']);
                         $task_name = sanitizeInput($row['task_template_name']);
@@ -1140,9 +1145,10 @@ if (isset($_POST['bulk_send_client_email']) && isset($_POST['client_ids'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
-    enforceUserPermission('module_client', 1);
+    // Sending mail to every contact of the selected clients is a write-level action (MSP-DS-9 / MSP-INJ-14)
+    enforceUserPermission('module_client', 2);
 
-    $client_ids = array_map('intval', $_POST['client_ids']);
+    $client_ids = array_map('intval', (array) $_POST['client_ids']);
     $count = count($client_ids);
 
     foreach ($client_ids as $bulk_email_client_id) {
@@ -1150,6 +1156,11 @@ if (isset($_POST['bulk_send_client_email']) && isset($_POST['client_ids'])) {
     }
 
     // Email metadata
+    require_once dirname(__DIR__, 2) . '/includes/bulk_mail_scope.php';
+    if (!bulkMailFromAllowed((string) ($_POST['mail_from'] ?? ''), [$config_mail_from_email, $config_invoice_from_email, $config_quote_from_email, $config_ticket_from_email])) {
+        flash_alert("Choose one of the configured From addresses", 'error');
+        redirect();
+    }
     $mail_from = sanitizeInput($_POST['mail_from']);
     $mail_from_name = sanitizeInput($_POST['mail_from_name']);
     $subject = sanitizeInput($_POST['subject']);
@@ -1683,13 +1694,14 @@ if (isset($_POST["export_client_pdf"])) {
             </tr>
           </thead>
           <tbody>";
+        // ONE bulk gate per request, with the full row count, before any row is decrypted (review RR6)
+        vaultGate('client pdf', max(1, mysqli_num_rows($sql_credentials)), true);
         while ($row = mysqli_fetch_assoc($sql_credentials)) {
             $credential_name = nullable_htmlentities($row["credential_name"]);
             $credential_description = getFallback(nullable_htmlentities($row["credential_description"]));
-            vaultGate('client pdf', max(1, mysqli_num_rows($sql_credentials)), true);
             $credential_username = nullable_htmlentities(decryptCredentialEntry($row['credential_username'], $row['credential_id'] ?? null, 'username'));
             $credential_password = nullable_htmlentities(decryptCredentialEntry($row['credential_password'], $row['credential_id'] ?? null, 'password'));
-            $credential_totp_secret = getFallback(nullable_htmlentities($row['credential_otp_secret']));
+            $credential_totp_secret = getFallback(nullable_htmlentities(decryptOtpSecret((string) ($row['credential_otp_secret'] ?? ''), $row['credential_id'] ?? null)));   // MSP-DS-127: the stored value is ciphertext
             $credential_uri = getFallback(nullable_htmlentities($row["credential_uri"]));
             $html .= "
             <tr>

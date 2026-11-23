@@ -57,7 +57,7 @@ if (isset($_POST['accept_quote'], $_POST['url_key'])) {
 
         if (!empty($config_smtp_host) && !empty($config_quote_notification_email)) {
             $subject = "Quote Accepted - $client_name - Quote $quote_prefix$quote_number";
-            $body = "Hello, <br><br>This is a notification that a quote has been accepted in RivetMSP. <br><br>Client: $client_name<br>Quote: <a href=\'https://$config_base_url/quote.php?quote_id=$quote_id\'>$quote_prefix$quote_number</a><br><br>~<br>$company_name - Billing<br>$config_quote_from_email";
+            $body = "Hello, <br><br>This is a notification that a quote has been accepted in RivetMSP. <br><br>Client: $client_name<br>Quote: <a href='https://$config_base_url/agent/quote.php?quote_id=$quote_id'>$quote_prefix$quote_number</a><br><br>~<br>$company_name - Billing<br>$config_quote_from_email";
 
             $data[] = [
                 'from' => $config_quote_from_email,
@@ -128,7 +128,7 @@ if (isset($_POST['decline_quote'], $_POST['url_key'])) {
 
         if (!empty($config_smtp_host) && !empty($config_quote_notification_email)) {
             $subject = "Quote Declined - $client_name - Quote $quote_prefix$quote_number";
-            $body = "Hello, <br><br>This is a notification that a quote has been declined in RivetMSP. <br><br>Client: $client_name<br>Quote: <a href=\'https://$config_base_url/quote.php?quote_id=$quote_id\'>$quote_prefix$quote_number</a><br><br>~<br>$company_name - Billing<br>$config_quote_from_email";
+            $body = "Hello, <br><br>This is a notification that a quote has been declined in RivetMSP. <br><br>Client: $client_name<br>Quote: <a href='https://$config_base_url/agent/quote.php?quote_id=$quote_id'>$quote_prefix$quote_number</a><br><br>~<br>$company_name - Billing<br>$config_quote_from_email";
 
             $data[] = [
                 'from' => $config_quote_from_email,
@@ -171,7 +171,7 @@ if (isset($_POST['approve_change'], $_POST['url_key'])) {
             redirect();
         }
 
-        mysqli_query($mysqli, "UPDATE changes SET client_decision = 'approved', client_decided_at = NOW() WHERE change_id = $change_id");
+        mysqli_query($mysqli, "UPDATE changes SET client_decision = 'approved', client_decided_at = NOW(), client_approval_requested_at = COALESCE(client_approval_requested_at, NOW()) WHERE change_id = $change_id");
 
         appNotify("Change Approved", "Change \"$change_title\" has been approved by $client_name", "/agent/change_details.php?id=$change_id", $client_id);
         logAction("Support", "Edit", "$client_name approved change \"$change_title\" via guest link", $client_id, $change_id);
@@ -203,7 +203,7 @@ if (isset($_POST['reject_change'], $_POST['url_key'])) {
             redirect();
         }
 
-        mysqli_query($mysqli, "UPDATE changes SET client_decision = 'rejected', client_decided_at = NOW() WHERE change_id = $change_id");
+        mysqli_query($mysqli, "UPDATE changes SET client_decision = 'rejected', client_decided_at = NOW(), client_rejected_at = NOW(), client_approval_requested_at = COALESCE(client_approval_requested_at, NOW()) WHERE change_id = $change_id");
 
         appNotify("Change Rejected", "Change \"$change_title\" has been rejected by $client_name", "/agent/change_details.php?id=$change_id", $client_id);
         logAction("Support", "Edit", "$client_name rejected change \"$change_title\" via guest link", $client_id, $change_id);
@@ -803,8 +803,40 @@ if (isset($_POST['guest_quote_upload_file'])) {
     $quote_id = intval($_POST['quote_id']);
     $url_key = sanitizeInput($_POST['url_key']);
 
+    // MSP-DS-162 (complete): a per-address request limit (10 upload requests per 10 minutes, Redis bucket when Redis is configured AND a count of
+    // the attempts recorded in logs, so it also holds without Redis). Over the limit nothing is read, stored or notified.
+    $upload_ip = (string) getIP();
+    require_once __DIR__ . '/../includes/redis_guards.php';
+    $upload_throttled = !rivetRateLimit('guest-quote-upload:ip:' . $upload_ip, 10, 600)['allowed'];
+    if (!$upload_throttled) {
+        $upload_ip_esc = mysqli_real_escape_string($mysqli, $upload_ip);
+        $upload_recent = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM logs WHERE log_type = 'Guest' AND log_action = 'Quote Upload Attempt' AND log_ip = '$upload_ip_esc' AND log_created_at > (NOW() - INTERVAL 10 MINUTE)"));
+        if ($upload_recent && intval($upload_recent[0]) >= 10) {
+            $upload_throttled = true;
+        } else {
+            mysqli_query($mysqli, "INSERT INTO logs SET log_type = 'Guest', log_action = 'Quote Upload Attempt', log_description = 'Guest quote upload request', log_ip = '$upload_ip_esc', log_user_agent = '', log_client_id = 0, log_user_id = 0, log_entity_id = $quote_id");
+        }
+    }
+    if ($upload_throttled) {
+        flash_alert('Too many uploads from your address. Please wait a few minutes and try again.', 'error');
+        redirect();
+    }
+
     // Select only the necessary fields
-    $sql = mysqli_query($mysqli, "SELECT quote_prefix, quote_number, client_id FROM quotes LEFT JOIN clients ON quote_client_id = client_id WHERE quote_id = $quote_id AND quote_url_key = '$url_key'");
+    $sql = mysqli_query($mysqli, "SELECT quote_prefix, quote_number, quote_status, quote_expire, client_id FROM quotes LEFT JOIN clients ON quote_client_id = client_id WHERE quote_id = $quote_id AND quote_url_key = '$url_key'");
+
+    // MSP-DS-162: uploads only while the quote is open (Sent/Viewed, not expired) or accepted; at most 5 files per request and 20 per quote
+    $upload_row = mysqli_num_rows($sql) == 1 ? mysqli_fetch_assoc($sql) : null;
+    $upload_open = $upload_row
+        && in_array($upload_row['quote_status'], ['Sent', 'Viewed', 'Accepted'], true)
+        && ($upload_row['quote_status'] === 'Accepted' || empty($upload_row['quote_expire']) || $upload_row['quote_expire'] >= date('Y-m-d'));
+    if ($upload_row && !$upload_open) {
+        flash_alert('This quote is no longer accepting uploads.', 'error');
+        redirect();
+    }
+    $upload_existing = $upload_row ? intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM quote_files WHERE quote_id = $quote_id"))[0]) : 0;
+    $upload_batch_ok = 0;
+    mysqli_data_seek($sql, 0);
 
     if (mysqli_num_rows($sql) == 1) {
         $row = mysqli_fetch_assoc($sql);
@@ -819,7 +851,7 @@ if (isset($_POST['guest_quote_upload_file'])) {
         // Store attached any file
         if (!empty($_FILES)) {
 
-            for ($i = 0; $i < count($_FILES['file']['name']); $i++) {
+            for ($i = 0; $i < count($_FILES['file']['name']) && $i < 5 && $upload_existing + $i < 20; $i++) {
                 // Extract file details for this iteration
                 $single_file = [
                     'name' => $_FILES['file']['name'][$i],
@@ -870,7 +902,7 @@ if (isset($_POST['guest_quote_upload_file'])) {
                     // Logging & feedback
                     flash_alert('File uploaded!');
 
-                    appNotify("Quote File", "$file_name was uploaded to quote $quote_prefix$quote_number", "/agent/quote.php?quote_id=$quote_id", $client_id);
+                    $upload_batch_ok++;
 
                     mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Upload', history_description = 'Client uploaded file $file_name', history_quote_id = $quote_id");
 
@@ -882,6 +914,11 @@ if (isset($_POST['guest_quote_upload_file'])) {
                     logApp("Guest", "error", "Error uploading file to invoice");
                 }
 
+            }
+
+            // One notification per upload batch, without the visitor's file name in the text
+            if ($upload_batch_ok > 0) {
+                appNotify("Quote File", "$upload_batch_ok file(s) were uploaded to quote $quote_prefix$quote_number", "/agent/quote.php?quote_id=$quote_id", $client_id);
             }
         }
 

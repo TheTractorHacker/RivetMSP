@@ -27,7 +27,7 @@ if (!$redis) {
     exit;
 }
 
-$channel = "ticket.$id";
+$channel = redisTicketChannel((int) $id);   // MSP-DS-108: per-install prefix
 
 $pubsub = $redis->pubSubLoop();
 $pubsub->subscribe($channel);

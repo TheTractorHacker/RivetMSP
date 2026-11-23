@@ -27,6 +27,10 @@ if (isset($_POST['add_ticket'])) {
         $category = getDefaultClientTicketCategoryId($mysqli);
     }
     $asset = intval($_POST['asset'] ?? 0);
+    // MSP-DS-90: only an active asset of this portal user's own client can be attached to the ticket (anything else is dropped, as for 'no asset')
+    if ($asset > 0 && !mysqli_fetch_row(mysqli_query($mysqli, "SELECT 1 FROM assets WHERE asset_id = $asset AND asset_client_id = " . intval($session_client_id) . " AND asset_archived_at IS NULL LIMIT 1"))) {
+        $asset = 0;
+    }
     // Roadmap #6 (Service Catalog): re-read the active item server-side - only its own requires_approval flag at
     // the moment of submission decides whether to hold the ticket, never anything the client posted about it.
     $catalog_item_id = intval($_POST['catalog_item_id'] ?? 0);
@@ -64,7 +68,7 @@ if (isset($_POST['add_ticket'])) {
 
     $ticket_number = mysqli_insert_id($mysqli);
 
-    $resolved_assigned_to = resolveTicketAssignee(0);
+    $resolved_assigned_to = resolveTicketAssignee(0, intval($session_client_id));
     $ticket_status = $resolved_assigned_to > 0 ? 2 : 1;
 
     $delivery_method = getTicketDeliveryMethodForCategory($mysqli, $category);
@@ -98,7 +102,10 @@ if (isset($_POST['add_ticket'])) {
         $details = removeEmoji($details);
 
         $email_subject = "RivetMSP - New Ticket - $client_name: $subject";
-        $email_body = "Hello, <br><br>This is a notification that a new ticket has been raised in RivetMSP. <br>Client: $client_name<br>Priority: $priority<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$ticket_id&client_id=$session_client_id <br><br><b>$subject</b><br>$details";
+        // MSP-DS-149: the portal user's text is plain text in this email (no links, forms or images of their own)
+        $subject_safe = nullable_htmlentities(trim($_POST['subject'] ?? ''));
+        $details_safe = nl2br(nullable_htmlentities(removeEmoji(trim(strip_tags($_POST['details'] ?? '')))));
+        $email_body = "Hello, <br><br>This is a notification that a new ticket has been raised in RivetMSP. <br>Client: $client_name<br>Priority: $priority<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$ticket_id&client_id=$session_client_id <br><br><b>$subject_safe</b><br>$details_safe";
 
         // Queue Mail
         $data = [
@@ -505,8 +512,18 @@ if (isset($_POST['edit_profile'])) {
     $new_password = $_POST['new_password'];
 
     if (!empty($new_password)) {
+        // MSP-DS-150: a changed portal password needs the current one (same as the agent profile)
+        // MSP-DS-150 (complete): the check is counted and limited (5 wrong guesses per 5 minutes per account, atomic), so a stolen portal cookie cannot guess the password here
+        require_once __DIR__ . '/../includes/security_policy.php';
+        if (!secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['current_password'] ?? ''), 2)) {
+            logAction("Contact", "Edit", "Client contact $session_contact_name entered a wrong current password when changing their portal password", $session_client_id, $session_contact_id);
+            flash_alert("Current password is incorrect", 'danger');
+            redirect('profile.php');
+        }
         $password_hash = password_hash($new_password, PASSWORD_DEFAULT);
         mysqli_query($mysqli, "UPDATE users SET user_password = '$password_hash' WHERE user_id = $session_user_id");
+        $_SESSION['portal_sv'] = secPortalSessionsRevoke($mysqli, (int) $session_user_id);   // MSP-DS-145: every other portal session of this account ends, this browser stays
+        $_SESSION['portal_pw_fp'] = hash('sha256', (string) mysqli_fetch_row(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $session_user_id"))[0]);   // MSP-DS-145: this browser stays signed in, the others do not
 
         // Logging
         logAction("Contact", "Edit", "Client contact $session_contact_name edited their profile/password in the client portal", $session_client_id, $session_contact_id);
@@ -526,6 +543,7 @@ if (isset($_POST['add_contact'])) {
 
     $contact_name = sanitizeInput($_POST['contact_name']);
     $contact_email = sanitizeInput($_POST['contact_email']);
+    $contact_email_raw = trim(strip_tags((string) ($_POST['contact_email'] ?? '')));   // unescaped, for helpers that escape for themselves (review R33)
     $contact_technical = intval($_POST['contact_technical'] ?? 0);
     $contact_billing = intval($_POST['contact_billing'] ?? 0);
     $contact_auth_method = sanitizeInput($_POST['contact_auth_method']);
@@ -540,10 +558,28 @@ if (isset($_POST['add_contact'])) {
         $contact_billing = 0;
     }
 
+    // MSP-DS-91: every refusal below is logged, and a portal client that collects 5 refusals in an hour is refused outright (with the same
+    // generic message), so the form cannot be used to probe which addresses exist as staff logins or other clients' contacts.
+    require_once dirname(__DIR__) . '/includes/inbound_routing.php';
+    if (portalContactProbeLimited($mysqli, intval($session_client_id))) {
+        flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');
+        redirect('contact_add.php');
+    }
+
     // Check the email isn't already in use
     $sql = mysqli_query($mysqli, "SELECT user_id FROM users WHERE user_email = '$contact_email'");
     if ($sql && mysqli_num_rows($sql) > 0) {
-        flash_alert("Cannot add contact as that email address is already in use", 'danger');
+        logAction('Client Portal', 'Contact Address Refused', 'A portal contact tried to add an address that is already a login', $session_client_id, 0);
+        flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');   // MSP-DS-16/91 (review R32): one answer for every refusal reason, so this form is no existence oracle
+        redirect('contact_add.php');
+    }
+
+    // An address that belongs to another client (a contact of theirs, or on a domain they list) cannot be claimed here: inbound
+    // support mail from it would be filed under this client (MSP-DS-16)
+    require_once dirname(__DIR__) . '/includes/inbound_routing.php';
+    if ($contact_email !== '' && portalContactEmailConflict($mysqli, $contact_email_raw, $session_client_id) !== '') {
+        logAction('Client Portal', 'Contact Address Refused', 'A portal contact tried to add an address that belongs to another client', $session_client_id, 0);
+        flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');   // MSP-DS-16/91 (review R32): one answer for every refusal reason, so this form is no existence oracle
         redirect('contact_add.php');
     }
 
@@ -586,6 +622,7 @@ if (isset($_POST['edit_contact'])) {
     $contact_id = intval($_POST['contact_id']);
     $contact_name = sanitizeInput($_POST['contact_name']);
     $contact_email = sanitizeInput($_POST['contact_email']);
+    $contact_email_raw = trim(strip_tags((string) ($_POST['contact_email'] ?? '')));   // unescaped, for helpers that escape for themselves (review R33)
     $contact_technical = intval($_POST['contact_technical'] ?? 0);
     $contact_billing = intval($_POST['contact_billing'] ?? 0);
     $contact_auth_method = sanitizeInput($_POST['contact_auth_method']);
@@ -626,16 +663,42 @@ if (isset($_POST['edit_contact'])) {
         $contact_billing = intval($row['contact_billing']);
     }
 
+    // MSP-DS-91: refusals are logged and rate-limited (see add_contact)
+    require_once dirname(__DIR__) . '/includes/inbound_routing.php';
+    if (portalContactProbeLimited($mysqli, intval($session_client_id))) {
+        flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');
+        redirect('contact_edit.php?id=' . $contact_id);
+    }
+
     // Check the email isn't already in use
     $sql = mysqli_query($mysqli, "SELECT user_id FROM users WHERE user_email = '$contact_email' AND user_id != $contact_user_id");
     if ($sql && mysqli_num_rows($sql) > 0) {
-        flash_alert("Cannot update contact as that email address is already in use", 'danger');
+        logAction('Client Portal', 'Contact Address Refused', 'A portal contact tried to set an address that is already a login', $session_client_id, 0);
+        flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');   // MSP-DS-16/91 (review R32): one answer for every refusal reason
+        redirect('contact_edit.php?id=' . $contact_id);
+    }
+
+    // Same claim check as add_contact (MSP-DS-16)
+    require_once dirname(__DIR__) . '/includes/inbound_routing.php';
+    if ($contact_email !== '' && portalContactEmailConflict($mysqli, $contact_email_raw, $session_client_id, $contact_id) !== '') {
+        logAction('Client Portal', 'Contact Address Refused', 'A portal contact tried to set an address that belongs to another client', $session_client_id, 0);
+        flash_alert("This email address cannot be used for a portal contact. Please contact support if you need help.", 'danger');   // MSP-DS-16/91 (review R32): one answer for every refusal reason
         redirect('contact_edit.php?id=' . $contact_id);
     }
 
     // Update Existing User
     if ($contact_user_id > 0) {
+        // MSP-DS-145 (re-review MRR-11): decided in SQL, with the same escaped values the UPDATE writes, before the row changes
+        $contact_login_changed = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT (user_email <> '$contact_email' OR user_auth_method <> '$contact_auth_method') AS changed FROM users WHERE user_id = $contact_user_id AND user_type = 2 LIMIT 1"));
         mysqli_query($mysqli, "UPDATE users SET user_name = '$contact_name', user_email = '$contact_email', user_auth_method = '$contact_auth_method' WHERE user_id = $contact_user_id AND user_type = 2");
+        // A changed sign-in email or login method ends that contact's open portal sessions (same rule as agent/post/contact.php)
+        if ($contact_login_changed && !empty($contact_login_changed['changed'])) {
+            require_once dirname(__DIR__) . '/includes/security_sessions.php';
+            $new_sv = secPortalSessionsRevoke($mysqli, $contact_user_id);
+            if ($contact_user_id === (int) $session_user_id) {
+                $_SESSION['portal_sv'] = $new_sv;   // a contact editing their own record keeps this browser
+            }
+        }
 
     // Else, create New User
     } elseif ($contact_user_id == 0 && $contact_name && $contact_email && $contact_auth_method) {
@@ -745,23 +808,29 @@ if (isset($_GET['add_payment_by_provider'])) {
     } elseif ($invoice_amount == 0) {
         flash_alert("Invalid invoice amount", 'error');
         redirect();
+    } elseif (!cardPaymentAllowedForInvoice($mysqli, $invoice_amount)) {   // MSP-DS-102
+        flash_alert("This invoice cannot be paid by card", 'error');
+        redirect();
     }
 
     // Initialize Stripe
     require_once __DIR__ . '/../plugins/stripe-php/init.php';
     $stripe = new \Stripe\StripeClient($private_key);
 
-    $balance_to_pay = invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount);   // MSP-INJ-26(a): the balance, not the invoice total
-    if ($balance_to_pay <= 0) {
-        flash_alert('Nothing left to charge on this invoice', 'error');
+    // MSP-DS-166 / MSP-DS-32: claim the charge (row-locked invoice, balance read under the lock, one shared idempotency key) BEFORE Stripe is called
+    $charge_claim = chargeAttemptClaim($mysqli, $invoice_id, 'portal', $saved_payment_id, chargeAttemptStripeLookup($stripe));
+    if (!$charge_claim['ok']) {
+        flash_alert($charge_claim['message'], $charge_claim['reason'] === 'nothing_due' ? 'error' : 'warning');
         redirect();
     }
+    $balance_to_pay = $charge_claim['balance'];   // MSP-INJ-26(a): the balance, not the invoice total
+    $charge_attempt_id = $charge_claim['attempt_id'];
     $pi_description = "RivetMSP: $client_name payment of $invoice_currency_code $balance_to_pay for $invoice_prefix$invoice_number";
 
     // Create a payment intent
     try {
-        $payment_intent = $stripe->paymentIntents->create([
-            'amount' => moneyToCents($balance_to_pay), // Times by 100 as Stripe expects values in cents
+        $payment_intent = chargeAttemptSend(fn (array $charge_params) => $stripe->paymentIntents->create($charge_params, ['idempotency_key' => $charge_claim['key']]), [   // M5-7
+            'amount' => stripeAmountToMinor($balance_to_pay, $invoice_currency_code), // MSP-DS-161: the currency's minor unit (JPY x1, KWD x1000), same helper as the agent/guest/cron sites
             'currency' => $invoice_currency_code,
             'customer' => $payment_provider_client,
             'payment_method' => $saved_payment_method,
@@ -773,26 +842,33 @@ if (isset($_GET['add_payment_by_provider'])) {
                 'itflow_client_name' => $client_name,
                 'itflow_invoice_number' => $invoice_prefix . $invoice_number,
                 'itflow_invoice_id' => $invoice_id,
+                'itflow_install' => stripeInstallMarker(),
+                'rivet_attempt_key' => $charge_claim['key'],
             ]
-        ], ['idempotency_key' => stripeChargeIdempotencyKey($invoice_id, $balance_to_pay, $saved_payment_id)]);
+        ], !empty($charge_claim['reused']));
 
         // Get details from PI
         $pi_id = sanitizeInput($payment_intent->id);
         $pi_date = date('Y-m-d', $payment_intent->created);
-        $pi_amount_paid = floatval(($payment_intent->amount_received / 100));
+        $pi_amount_paid = stripeAmountFromMinor($payment_intent->amount_received, $payment_intent->currency);
         $pi_currency = strtoupper(sanitizeInput($payment_intent->currency));
         $pi_livemode = $payment_intent->livemode;
+        chargeAttemptStoreResult($mysqli, $charge_attempt_id, $payment_intent->status, $pi_id);   // MSP-DS-166: pending (ACH) / failed / succeeded-not-yet-recorded
 
     } catch (Exception $e) {
+        $payment_intent = null;
+        chargeAttemptStoreException($mysqli, $charge_attempt_id, $e);   // a timeout keeps the attempt (and its key) claimed
         $error = $e->getMessage();
         error_log("Stripe payment error - encountered exception during payment intent for invoice ID $invoice_id / $invoice_prefix$invoice_number: $error");
         logApp("Stripe", "error", "Exception during PI for invoice ID $invoice_id: $error");
     }
 
-    if ($payment_intent->status == "succeeded" && moneyToCents($balance_to_pay) === moneyToCents($pi_amount_paid)) {
+    if ($payment_intent && $payment_intent->status == "succeeded" && stripeAmountToMinor($balance_to_pay, $invoice_currency_code) === intval($payment_intent->amount_received)) {
 
         // Record the payment first, exactly once per PaymentIntent (the webhook may have recorded it already)
-        if (!insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $account_id, 'Stripe', $pi_id, $invoice_id)) {
+        $stripe_payment_recorded = insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $account_id, 'Stripe', $pi_id, $invoice_id);
+        chargeAttemptFinish($mysqli, $charge_attempt_id, 'succeeded');
+        if (!$stripe_payment_recorded) {
             flash_alert("Payment already recorded", 'info');
             redirect();
         }
@@ -804,7 +880,7 @@ if (isset($_GET['add_payment_by_provider'])) {
         // Email receipt
         if (!empty($config_smtp_host)) {
             $subject = "Payment Received - Invoice $invoice_prefix$invoice_number";
-            $body = "Hello $contact_name,<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . " for invoice <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
+            $body = "Hello $contact_name,<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . " for invoice <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
 
             // Queue Mail
             $data = [
@@ -821,7 +897,7 @@ if (isset($_GET['add_payment_by_provider'])) {
             // Email the internal notification address too
             if (!empty($config_invoice_paid_notification_email)) {
                 $subject = "Payment Received - $client_name - Invoice $invoice_prefix$invoice_number";
-                $body = "Hello, <br><br>This is a notification that an invoice has been paid in RivetMSP. Below is a copy of the receipt sent to the client:-<br><br>--------<br><br>Hello $contact_name,<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . " for invoice <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
+                $body = "Hello, <br><br>This is a notification that an invoice has been paid in RivetMSP. Below is a copy of the receipt sent to the client:-<br><br>--------<br><br>Hello $contact_name,<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . " for invoice <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
 
                 $data[] = [
                     'from' => $config_invoice_from_email,
@@ -862,7 +938,21 @@ if (isset($_GET['add_payment_by_provider'])) {
 
         redirect();
 
+    } elseif ($payment_intent && $payment_intent->status == 'processing') {
+        // MSP-DS-32: a bank (ACH) debit is accepted and settles days later: not a failure, and the attempt stays 'pending' so nobody charges it again;
+        // the webhook records the payment (or fails the attempt) when Stripe reports the result.
+        mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Payment pending', history_description = 'Bank payment submitted and processing (not yet settled). Stripe PaymentIntent $pi_id', history_invoice_id = $invoice_id");
+        logAction("Invoice", "Payment", "Bank payment for invoice $invoice_prefix$invoice_number submitted and processing - $pi_id", $client_id, $invoice_id);
+        flash_alert("Bank payment submitted. It is processing and will be recorded when it clears; do not pay this invoice again", 'info');
+
+        redirect();
+
     } else {
+        if ($payment_intent && $payment_intent->status == 'succeeded') {
+            // money was taken but the amount differs from the balance claimed: keep the attempt closed (no second charge) and flag it
+            chargeAttemptFinish($mysqli, $charge_attempt_id, 'succeeded', 'amount received differs from the balance charged');
+            appNotify("Invoice Payment Needs Review", "Stripe took a payment for invoice $invoice_prefix$invoice_number ($pi_id) whose amount differs from the balance; it was not recorded. Check it in Stripe.", "/agent/invoice.php?invoice_id=$invoice_id", $client_id);
+        }
         mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Payment failed', history_description = 'Stripe pay failed due to payment error', history_invoice_id = $invoice_id");
 
         logAction("Invoice", "Payment", "Failed online payment amount of invoice $invoice_prefix$invoice_number due to Stripe payment error", $client_id, $invoice_id);
@@ -1305,6 +1395,12 @@ if (isset($_POST['set_recurring_payment'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
+    // Switching autopay on or off is a billing action: primary or billing contacts only (as the other billing handlers, MSP-DS-17)
+    if ($session_contact_primary != 1 && !$session_contact_is_billing_contact) {
+        flash_alert("You do not have permission to change automatic payments", 'danger');
+        redirect();
+    }
+
     $recurring_invoice_id = intval($_POST['recurring_invoice_id']);
     $saved_payment_id = intval($_POST['saved_payment_id']);
 
@@ -1336,6 +1432,12 @@ if (isset($_POST['set_recurring_payment'])) {
         ");
 
         $row = mysqli_fetch_assoc($sql);
+
+        // The saved card must be this client's own, on an active provider: no row, no autopay (MSP-DS-17)
+        if (!$row) {
+            flash_alert("Saved payment method not found", 'error');
+            redirect();
+        }
 
         $provider_id = intval($row['payment_provider_id']);
         $provider_name = sanitizeInput($row['payment_provider_name']);
@@ -1390,6 +1492,9 @@ if (isset($_POST['client_add_document'])) {
 
     $processed_content = mysqli_escape_string(
         $mysqli,
+        // Store what the contact wrote (data: images become local files). The PDF allow-list rivetPdfSafeHtml() is applied at RENDER time
+        // (agent/post/document.php export_document) and the portal/guest pages render through HTMLPurifier, so saving does not strip legitimate
+        // structure (dl/dt/dd, del, caption/col, ids, /uploads links) for good (review RR9).
         saveBase64Images(
             $_POST['document_content'],
             $_SERVER['DOCUMENT_ROOT'] . "/uploads/documents/",
@@ -1504,8 +1609,12 @@ if (isset($_GET['client_serve_contract_doc'])) {
     $doc = mysqli_fetch_assoc(mysqli_query($mysqli,
         "SELECT d.*, c.contract_client_id FROM contract_documents d
          JOIN contracts c ON d.doc_contract_id = c.contract_id
-         WHERE d.doc_id = $doc_id LIMIT 1"
+         WHERE d.doc_id = $doc_id AND c.contract_archived_at IS NULL LIMIT 1"
     ));
+    // MSP-DS-152: same gate as the contracts page (primary or technical contact), no archived contracts
+    if ($session_contact_primary == 0 && !$session_contact_is_technical_contact) {
+        http_response_code(403); exit('Access denied');
+    }
     if (!$doc || intval($doc['contract_client_id']) !== intval($session_client_id)) {
         http_response_code(403); exit('Access denied');
     }

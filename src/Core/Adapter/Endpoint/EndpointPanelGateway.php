@@ -70,7 +70,7 @@ final class EndpointPanelGateway implements PanelTicketGatewayInterface
     {
         $this->mysqli->begin_transaction();
         try {
-            $assignedTo = \resolveTicketAssignee(0);
+            $assignedTo = \resolveTicketAssignee(0, $clientId);
             $status = \resolveTicketCreationStatus($assignedTo);
             $category = \resolveTicketCategory($categoryId ?? 0);
 

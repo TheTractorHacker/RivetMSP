@@ -7,12 +7,22 @@ defined('FROM_API') || die();
  * lacks at least $min_level access to $module_name. Admin roles always pass.
  */
 function api_require_module_permission(mysqli $mysqli, int $api_user_id, string $module_name, int $min_level = 1): void {
+    if (!api_module_permission_ok($mysqli, $api_user_id, $module_name, $min_level)) {
+        api_error(403, 'Insufficient permissions');
+    }
+}
+
+/**
+ * Non-terminating form of api_require_module_permission(): true when the API user's role grants at least $min_level on $module_name
+ * (admin roles always pass). MSP-DS-84: lets one endpoint answer per section instead of refusing the whole request.
+ */
+function api_module_permission_ok(mysqli $mysqli, int $api_user_id, string $module_name, int $min_level = 1): bool {
     $role = mysqli_fetch_assoc(mysqli_query($mysqli,
         "SELECT u.user_role_id, r.role_is_admin
          FROM users u LEFT JOIN user_roles r ON r.role_id = u.user_role_id
          WHERE u.user_id = $api_user_id LIMIT 1"
     ));
-    if ($role && $role['role_is_admin']) return;
+    if ($role && $role['role_is_admin']) return true;
 
     $module_esc = mysqli_real_escape_string($mysqli, $module_name);
     $has_perm = $role ? mysqli_fetch_assoc(mysqli_query($mysqli,
@@ -25,9 +35,7 @@ function api_require_module_permission(mysqli $mysqli, int $api_user_id, string 
          LIMIT 1"
     )) : null;
 
-    if (!$has_perm) {
-        api_error(403, 'Insufficient permissions');
-    }
+    return (bool) $has_perm;
 }
 
 /**
@@ -76,4 +84,31 @@ function api_client_scope_ok(int $client_id): bool {
             NOT EXISTS (SELECT 1 FROM user_client_permissions WHERE user_id = $uid LIMIT 1)
             OR EXISTS (SELECT 1 FROM user_client_permissions WHERE user_id = $uid AND client_id = $client_id LIMIT 1)"
     ));
+}
+
+// Decrypt a credential field using the token's stored master key
+if (!function_exists('_api_decrypt')) {
+function _api_decrypt(string $ciphertext, string $raw_token, array $token_row, $credential_id = null, string $field = 'password'): string {
+    if (!$ciphertext) return '';
+    // v3 field (credential vault v3): opened with the data key wrapped into this token at sign-in (api_tokens.token_enc_dek).
+    if (\RivetMSP\Crypto\VaultV3::isV3Field($ciphertext)) {
+        $dek = \RivetMSP\Crypto\VaultV3::unwrapFromToken($token_row['token_enc_dek'] ?? null, $raw_token);
+        if ($dek === null || $credential_id === null) return '';
+        $plain = \RivetMSP\Crypto\VaultV3::openField($ciphertext, $dek, $credential_id, $field);
+        return $plain === false ? '' : $plain;
+    }
+    // MSP-DS-80: legacy OTP seeds are stored as 'enc:' . iv . ciphertext; an unprefixed value is a legacy plaintext seed.
+    if ($field === 'otp') {
+        if (!str_starts_with($ciphertext, 'enc:')) return $ciphertext;
+        $ciphertext = substr($ciphertext, 4);
+    }
+    if (empty($token_row['token_enc_master_key'])) return '';
+    $enc_key    = substr(hash('sha256', $raw_token . 'itflow_enc', true), 0, 16);
+    $enc_iv     = hex2bin($token_row['token_enc_master_iv']);
+    $master_key = openssl_decrypt($token_row['token_enc_master_key'], 'aes-128-cbc', $enc_key, 0, $enc_iv);
+    if (!$master_key) return '';
+    $cred_iv    = substr($ciphertext, 0, 16);
+    $cred_ct    = substr($ciphertext, 16);
+    return openssl_decrypt($cred_ct, 'aes-128-cbc', $master_key, 0, $cred_iv) ?: '';
+}
 }

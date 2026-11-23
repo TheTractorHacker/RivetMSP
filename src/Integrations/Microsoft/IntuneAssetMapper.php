@@ -63,7 +63,7 @@ class IntuneAssetMapper
         $client_id = $this->clientId;
 
         $intune_device_id = trim((string) ($device['id'] ?? ''));
-        $device_name = trim((string) ($device['deviceName'] ?? ''));
+        $device_name = \RivetMSP\Security\PlainText::clean($device['deviceName'] ?? '');
 
         if ($intune_device_id === '' || $device_name === '' || $client_id < 1) {
             return 'skipped';
@@ -73,17 +73,17 @@ class IntuneAssetMapper
         $azure_ad_device_id = trim((string) ($device['azureADDeviceId'] ?? ''));
         $azure_ad_device_id_esc = mysqli_real_escape_string($m, $azure_ad_device_id);
         $hostname_esc = mysqli_real_escape_string($m, $device_name);
-        $serial = trim((string) ($device['serialNumber'] ?? ''));
+        $serial = \RivetMSP\Security\PlainText::clean($device['serialNumber'] ?? '');
         $serial_esc = mysqli_real_escape_string($m, $serial);
-        $os_name = trim((string) ($device['operatingSystem'] ?? ''));
+        $os_name = \RivetMSP\Security\PlainText::clean($device['operatingSystem'] ?? '');
         $os_name_esc = mysqli_real_escape_string($m, $os_name);
-        $os_version = trim((string) ($device['osVersion'] ?? ''));
-        $manufacturer = trim((string) ($device['manufacturer'] ?? ''));
+        $os_version = \RivetMSP\Security\PlainText::clean($device['osVersion'] ?? '');
+        $manufacturer = \RivetMSP\Security\PlainText::clean($device['manufacturer'] ?? '');
         $manufacturer_esc = mysqli_real_escape_string($m, $manufacturer);
-        $model = trim((string) ($device['model'] ?? ''));
+        $model = \RivetMSP\Security\PlainText::clean($device['model'] ?? '');
         $model_esc = mysqli_real_escape_string($m, $model);
-        $management_agent_esc = mysqli_real_escape_string($m, trim((string) ($device['managementAgent'] ?? '')));
-        $compliance_state_esc = mysqli_real_escape_string($m, trim((string) ($device['complianceState'] ?? '')));
+        $management_agent_esc = mysqli_real_escape_string($m, \RivetMSP\Security\PlainText::clean($device['managementAgent'] ?? ''));
+        $compliance_state_esc = mysqli_real_escape_string($m, \RivetMSP\Security\PlainText::clean($device['complianceState'] ?? ''));
         $is_encrypted = !empty($device['isEncrypted']) ? 1 : 0;
         $primary_user_upn = trim((string) ($device['userPrincipalName'] ?? ''));
         $primary_user_upn_esc = mysqli_real_escape_string($m, $primary_user_upn);
@@ -111,9 +111,15 @@ class IntuneAssetMapper
 
         // ----- Step 1: already linked for THIS integration (and therefore this client) -----
         $existing = mysqli_fetch_assoc(mysqli_query($m,
-            "SELECT id, asset_id FROM asset_intune_links
-             WHERE microsoft_integration_id=$intg_id AND intune_device_id='$intune_device_id_esc' LIMIT 1"
+            "SELECT l.id, l.asset_id, a.asset_client_id FROM asset_intune_links l
+             LEFT JOIN assets a ON a.asset_id = l.asset_id
+             WHERE l.microsoft_integration_id=$intg_id AND l.intune_device_id='$intune_device_id_esc' LIMIT 1"
         ));
+
+        // MSP-DS-174: an asset that was moved to another client is no longer this tenant's to update; leave it (and the stale link) alone
+        if ($existing && (int) ($existing['asset_client_id'] ?? 0) !== $client_id) {
+            return 'skipped';
+        }
 
         if ($existing) {
             mysqli_query($m, "UPDATE asset_intune_links SET $link_fields_sql WHERE id=" . intval($existing['id']));

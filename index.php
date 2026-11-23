@@ -14,15 +14,16 @@ if (file_exists("config.php")) {
     require_once "functions.php";
     require_once "includes/session_init.php";
 
-    // If user is an agent
-    if (isset($_SESSION['logged'])) {
-        require_once "includes/load_global_settings.php";
-        header("Location: /agent/$config_start_page");
+    // If user is a client. MSP-DS-110: checked first, because a portal login also sets $_SESSION['logged'] (login.php) and would otherwise be bounced into
+    // /agent/ (which registers a session row for the client user and then logs them out).
+    if (isset($_SESSION['client_logged_in'])) {
+        header("Location: /client/");
         exit();
 
-    // If user is a client
-    } elseif (isset($_SESSION['client_logged_in'])) {
-        header("Location: /client/");
+    // If user is an agent
+    } elseif (isset($_SESSION['logged'])) {
+        require_once "includes/load_global_settings.php";
+        header("Location: /agent/$config_start_page");
         exit();
 
     // Not logged in

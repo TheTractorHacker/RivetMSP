@@ -22,8 +22,9 @@ interface PaymentProviderInterface
      * gateway's smallest currency unit, currency, description, metadata,
      * payment_method_types, ...). Returns the gateway intent object; the caller
      * reads e.g. ->client_secret. Throws on gateway error (caller catches).
+     * $options are gateway request options, e.g. ['idempotency_key' => '...'].
      */
-    public function createCheckout(array $params);
+    public function createCheckout(array $params, array $options = []);
 
     /*
      * Retrieve/verify the result of a checkout by its gateway reference (e.g. a

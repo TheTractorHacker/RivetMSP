@@ -20,6 +20,18 @@
  * provider-specific translation work contained inside that provider's own client class.
  */
 
+/**
+ * MSP-DS-165: a create payload may carry '_request_key' (stable per local document, built by accountingRequestKey()). The client removes it
+ * from the payload and sends it as the provider's idempotency token (QBO ?requestid=, Xero Idempotency-Key header), so a create whose response
+ * was lost (timeout, 5xx after commit) and is retried by the queue returns the first result instead of creating a second invoice/estimate/payment.
+ * Only [A-Za-z0-9._-] survive and the length is capped (QBO allows 50 characters).
+ */
+function accountingTakeRequestKey(array &$payload): string {
+    $key = (string) ($payload['_request_key'] ?? '');
+    unset($payload['_request_key']);
+    return substr((string) preg_replace('/[^A-Za-z0-9._-]/', '', $key), 0, 50);
+}
+
 interface AccountingClientInterface {
 
     /** Return a valid access token, refreshing (and persisting) if needed. */

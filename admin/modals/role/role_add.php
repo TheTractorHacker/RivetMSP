@@ -162,7 +162,8 @@ ob_start();
 
     </div>
 
-    <div class="modal-footer">
+    <div class="modal-footer flex-wrap">
+        <input type="password" class="form-control mb-2" name="admin_current_password" placeholder="Your password (required when this role is an administrator role)" autocomplete="current-password">
         <button type="submit" name="add_role" class="btn btn-primary text-bold">
             <i class="fas fa-check me-2"></i>Create
         </button>

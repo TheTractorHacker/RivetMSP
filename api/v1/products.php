@@ -1,7 +1,13 @@
 <?php
 // GET /api/v1/products   - list products/services for charge selection
 defined('FROM_API') || die();
+require_once __DIR__ . '/includes/api_permissions.php';
 if ($method !== 'GET') api_error(405, 'Method not allowed');
+
+// MSP-DS-84: the product list is the charge picker for tickets, so it needs ticket (module_support) or sales (module_sales) access.
+if (!api_module_permission_ok($mysqli, intval($api_user_id), 'module_support') && !api_module_permission_ok($mysqli, intval($api_user_id), 'module_sales')) {
+    api_error(403, 'Insufficient permissions');
+}
 
 $type   = mysqli_real_escape_string($mysqli, $_GET['type'] ?? '');
 $search = mysqli_real_escape_string($mysqli, $_GET['search'] ?? '');

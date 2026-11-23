@@ -10,7 +10,18 @@ require_once $_SERVER['DOCUMENT_ROOT'] . '/config.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/functions.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/check_login.php';
 
-enforceUserPermission('module_kb');
+// Writing a file is a write-level action, and a cross-site page must not be able to trigger it with the agent's cookie (MSP-DS-29).
+// TinyMCE posts the file itself and cannot add the form token, so the request must come from this site (Sec-Fetch-Site / Origin).
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/request_origin.php';
+if (!requestIsSameOrigin($_SERVER)) {
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode(['error' => ['message' => 'Cross-site upload refused']]);
+    exit;
+}
+
+enforceEditorImageUploadPermission();   // review R20: shared by every .tinymce editor, so Write on KB, support or client work
+validateCSRFToken($_POST['csrf_token'] ?? null);   // MSP-DS-50: the editor sends it (js/app.js)
 
 header('Content-Type: application/json');
 
@@ -25,6 +36,14 @@ if (empty($_FILES['file'])) {
 $ref_name = checkFileUpload($_FILES['file'], $allowed);
 
 if (!is_string($ref_name) || !preg_match('/^[a-zA-Z0-9]+\.[a-zA-Z0-9]+$/', $ref_name)) {
+    http_response_code(400);
+    echo json_encode(['error' => ['message' => 'Invalid or disallowed file']]);
+    exit;
+}
+
+// The bytes must really be an image, not just carry an image extension
+$image_info = @getimagesize($_FILES['file']['tmp_name']);
+if ($image_info === false || !in_array($image_info[2] ?? 0, [IMAGETYPE_JPEG, IMAGETYPE_GIF, IMAGETYPE_PNG, IMAGETYPE_WEBP], true)) {
     http_response_code(400);
     echo json_encode(['error' => ['message' => 'Invalid or disallowed file']]);
     exit;

@@ -41,7 +41,7 @@ if ($id === null) {
             'date'     => $row['quote_date'],
             'total'    => floatval($row['quote_amount']),
             'client'   => $row['client_name'],
-            'guest_url'=> $row['quote_url_key'] ? '/quote.php?key=' . $row['quote_url_key'] : null,
+            'guest_url'=> $row['quote_url_key'] ? '/guest/guest_view_quote.php?quote_id=' . intval($row['quote_id']) . '&url_key=' . $row['quote_url_key'] : null,
         ];
     }
     api_response(200, ['data' => $quotes, 'total' => $total]);
@@ -61,7 +61,9 @@ $isql  = mysqli_query($mysqli,
      LEFT JOIN products p ON qi.item_product_id = p.product_id
      WHERE qi.item_quote_id = $id ORDER BY qi.item_order ASC"
 );
+$sum_subtotal = 0.0; $sum_tax = 0.0;   // MSP-DS-181: real subtotal and tax from the line items
 while ($item = mysqli_fetch_assoc($isql)) {
+    $sum_subtotal += floatval($item['item_subtotal']); $sum_tax += floatval($item['item_tax']);
     $items[] = [
         'description' => $item['item_description'],
         'quantity'    => floatval($item['item_quantity']),
@@ -77,11 +79,11 @@ api_response(200, [
     'subject'      => $row['quote_scope'],
     'status'       => $row['quote_status'],
     'date'         => $row['quote_date'],
-    'subtotal'     => floatval($row['quote_amount']),
-    'tax'          => 0.0,
+    'subtotal'     => round($sum_subtotal, 2),
+    'tax'          => round($sum_tax, 2),
     'total'        => floatval($row['quote_amount']),
     'client'       => $row['client_name'],
     'notes'        => $row['quote_note'] ?? '',
-    'guest_url'    => $row['quote_url_key'] ? '/quote.php?key=' . $row['quote_url_key'] : null,
+    'guest_url'    => $row['quote_url_key'] ? '/guest/guest_view_quote.php?quote_id=' . intval($row['quote_id']) . '&url_key=' . $row['quote_url_key'] : null,
     'items'        => $items,
 ]);

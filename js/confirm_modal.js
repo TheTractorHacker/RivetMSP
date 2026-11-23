@@ -11,6 +11,10 @@ document.addEventListener('DOMContentLoaded', function () {
         var href = link.getAttribute('href');
         var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
 
+        // A link may carry its own question (data-confirm); every other confirm-link gets the default wording back.
+        var confirmBody = modalEl.querySelector('.modal-body');
+        if (confirmBody) { confirmBody.textContent = link.getAttribute('data-confirm') || 'Are you sure?'; }
+
         var confirmBtn = document.getElementById('confirmSubmitBtn');
         if (confirmBtn) {
             // Replace the node to clear any previously-bound handler

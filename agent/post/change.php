@@ -76,7 +76,7 @@ if (isset($_POST['edit_change'])) {
     $implementation_plan = sanitizeInput($_POST['implementation_plan'] ?? '');
     $rollback_plan = sanitizeInput($_POST['rollback_plan'] ?? '');
 
-    $existing = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT client_id, requires_client_approval, url_key FROM changes WHERE change_id = $change_id"));
+    $existing = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT client_id, requires_client_approval, url_key, status, client_decision, client_approval_requested_at, client_rejected_at FROM changes WHERE change_id = $change_id"));
     if (!$existing) {
         flash_alert('Change not found.', 'error');
         redirect();
@@ -90,9 +90,36 @@ if (isset($_POST['edit_change'])) {
         enforceClientAccess($change_client_id);
     }
     $requires_client_approval = !empty($_POST['requires_client_approval']) && $change_client_id > 0 ? 1 : 0;
+    // MSP-DS-67 (re-review MRR-14): once the approval has started (the change left 'draft', or the client already decided), a technician cannot switch
+    // "requires client approval" off - that would also satisfy the status gate for a change the client rejected. Only an administrator can, and the
+    // reason is mandatory and goes to the audit log. (M3-5 / M4-1: "started" is judged from the durable changes.client_approval_requested_at and
+    // client_rejected_at columns - never the action log, which is pruned and truncated - because sending the change back to draft and editing its
+    // content resets the decision to pending and would otherwise hide a rejection.)
+    $approval_override_reason = '';
+    if (!empty($existing['requires_client_approval']) && !$requires_client_approval
+        && ($existing['status'] !== 'draft' || changeClientApprovalEverStarted($change_id, $existing))) {
+        $approval_override_reason = trim(strip_tags((string) ($_POST['approval_override_reason'] ?? '')));
+        if (empty($session_is_admin) || $approval_override_reason === '') {
+            flash_alert('Client approval has already started for this change. Only an administrator can remove the requirement, and a reason is required.', 'error');
+            redirect("change_details.php?id=$change_id");
+        }
+    }
     // A link, once generated, is never rotated just because the checkbox is re-saved - a guest link already shared
     // with the client must keep working. Only the first time client approval is actually turned on is a key made.
     $change_url_key = $requires_client_approval && empty($existing['url_key']) ? randomString(32) : $existing['url_key'];
+
+    // MSP-DS-51: a client's decision belongs to the change they were shown. Moving the change to another client rotates the guest
+    // link (the first client's emailed link stops working) and every decision is reset to pending whenever the client or any of
+    // the content they approve (title, risk, reason, impact, plans) changes. Compared byte for byte in SQL, before the update.
+    if ($change_client_id !== $old_client_id) {
+        $change_url_key = $requires_client_approval ? randomString(32) : null;
+    }
+    $reset = $mysqli->prepare(
+        "UPDATE changes SET client_decision = 'pending', client_decided_at = NULL WHERE change_id = ? AND client_decision <> 'pending' AND (client_id <> ? OR BINARY title <> BINARY ? OR risk <> ? OR NOT (BINARY reason <=> BINARY ?) OR NOT (BINARY impact <=> BINARY ?) OR NOT (BINARY implementation_plan <=> BINARY ?) OR NOT (BINARY rollback_plan <=> BINARY ?))"
+    );
+    $reset->bind_param('iissssss', $change_id, $change_client_id, $title, $risk, $reason, $impact, $implementation_plan, $rollback_plan);
+    $reset->execute();
+    $reset->close();
 
     $stmt = $mysqli->prepare(
         "UPDATE changes SET title = ?, risk = ?, reason = ?, impact = ?, implementation_plan = ?, rollback_plan = ?, client_id = ?, requires_client_approval = ?, url_key = ? WHERE change_id = ?"
@@ -102,6 +129,11 @@ if (isset($_POST['edit_change'])) {
     $stmt->close();
 
     logAction("Support", "Edit", "$session_name edited change \"$title\"", $change_client_id, $change_id);
+    if ($approval_override_reason !== '') {
+        $approval_override_log = sanitizeInput("$session_name removed the client approval requirement from change #$change_id (status {$existing['status']}, client decision {$existing['client_decision']}). Reason: $approval_override_reason");
+        logAction("Support", "Edit", $approval_override_log, $change_client_id, $change_id);
+        rivetAudit('change.client_approval_removed', $session_user_id, 'change', $change_id, 'client_approval_removed', "$session_name removed the client approval requirement from change #$change_id", ['reason' => $approval_override_reason, 'status' => $existing['status'], 'client_decision' => $existing['client_decision']]);
+    }
 
     flash_alert("Change <strong>" . nullable_htmlentities($title) . "</strong> updated");
     redirect("change_details.php?id=$change_id");
@@ -118,6 +150,12 @@ if (isset($_POST['set_change_status'])) {
     $change_client_id = (int) getFieldById('changes', $change_id, 'client_id');
     if ($change_client_id > 0) {
         enforceClientAccess($change_client_id);
+    }
+
+    // MSP-DS-67: a change that needs the client's approval cannot be moved past 'awaiting_approval' by a technician until the client has approved it (a rejection stands too)
+    if (in_array($status, ['approved', 'scheduled', 'in_progress'], true) && !changeClientApprovalSatisfied($change_id)) {
+        flash_alert('This change requires the client\'s approval first. It has not been approved by the client.', 'error');
+        redirect("change_details.php?id=$change_id");
     }
 
     try {
@@ -209,6 +247,12 @@ if (isset($_POST['send_change_approval_request'])) {
         'body'           => $body,
         'email_override' => true,   // not a ticket - the per-ticket "Send email notifications" switch does not apply
     ]]);
+
+    // M4-1: remember, durably, that the request was sent; set once, never cleared (COALESCE keeps the first time)
+    $stmt = $mysqli->prepare('UPDATE changes SET client_approval_requested_at = COALESCE(client_approval_requested_at, NOW()) WHERE change_id = ?');
+    $stmt->bind_param('i', $change_id);
+    $stmt->execute();
+    $stmt->close();
 
     logAction("Support", "Edit", "$session_name sent a client approval request for change \"" . $change['title'] . "\"", $change_client_id, $change_id);
     rivetAudit('change.client_approval_requested', $session_user_id, 'change', $change_id, 'client_approval_requested', "$session_name sent a client approval request for change \"" . $change['title'] . "\"");

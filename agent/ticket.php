@@ -26,8 +26,11 @@ require_once "../includes/sla_functions.php";
 
 // Initialize the HTML Purifier to prevent XSS
 require_once "../plugins/htmlpurifier/HTMLPurifier.standalone.php";
+require_once "../plugins/htmlpurifier/rivet_html_policy.php";
 
 $purifier_config = HTMLPurifier_Config::createDefault();
+
+rivet_html_policy_apply($purifier_config, 'strict');
 $purifier_config->set('Cache.DefinitionImpl', null); // Disable cache by setting a non-existent directory or an invalid one
 $purifier_config->set('URI.AllowedSchemes', ['data' => true, 'src' => true, 'http' => true, 'https' => true]);
 $purifier = new HTMLPurifier($purifier_config);
@@ -2903,9 +2906,10 @@ $(document).on('click', '#ai-draft-reply-btn', function(e) {
 });
 
 // Reply status split-button: pick a status and auto-submit the reply form
-$(document).on('click', '.reply-status-submit', function(e) {
+$(document).on('click', 'a.reply-status-submit[data-status-id]', function(e) {   // MSP-DS-139: only the real items (reply HTML cannot carry data-* attributes)
     e.preventDefault();
     var sid   = $(this).data('status-id');
+    if (sid === undefined || sid === '') { return; }
     var sname = $(this).data('status-name');
     $('#reply_status_val').val(sid);
     $('#reply_submit_label').text('Submit & ' + sname);

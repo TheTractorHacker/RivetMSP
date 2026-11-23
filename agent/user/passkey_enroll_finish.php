@@ -32,6 +32,11 @@ $session_name = $userRow['user_name'];
 
 $body = json_decode(file_get_contents('php://input'), true);
 if (!$body) { echo json_encode(['ok' => false, 'error' => 'Invalid JSON']); exit; }
+// MSP-DS-140: a cross-site page must not be able to drive the password check or the enrolment: the CSRF token travels in the body.
+if (empty($_SESSION['csrf_token']) || !hash_equals((string) $_SESSION['csrf_token'], (string) ($body['csrf_token'] ?? ''))) {
+    echo json_encode(['ok' => false, 'error' => 'Invalid request, reload the page and try again']);
+    exit;
+}
 if (!secReauthPassword($mysqli, (int) $_SESSION['user_id'], (string) ($body['current_password'] ?? ''))) {
     unset($_SESSION['passkey_register_challenge']);
     echo json_encode(['ok' => false, 'error' => 'Current password is incorrect']);
@@ -70,6 +75,10 @@ try {
     ");
 
     logAction("Passkey", "Register", "$session_name registered passkey $name", 0, $uid);
+
+    // MSP-DS-140: the account owner is emailed on every passkey registration
+    $own_mail = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_email FROM users WHERE user_id = $uid LIMIT 1"));
+    secNotifyAccountChange((string) ($own_mail['user_email'] ?? ''), (string) $session_name, ['A new passkey was added to your account: ' . (string) ($body['passkeyName'] ?? 'Passkey')], '');
 
     // Seed the passkey-stored encryption key from this (password-authenticated)
     // session's true master key, so the first passkey login never needs to self-heal.

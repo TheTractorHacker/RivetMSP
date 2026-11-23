@@ -108,7 +108,12 @@ if (isset($_POST['edit_contact'])) {
 
     // Update Existing User
     if ($contact_user_id > 0) {
+        $contact_before = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_email, user_auth_method FROM users WHERE user_id = $contact_user_id LIMIT 1"));
         mysqli_query($mysqli, "UPDATE users SET user_name = '$name', user_email = '$email', user_auth_method = '$auth_method' WHERE user_id = $contact_user_id");
+        // MSP-DS-145: a changed sign-in email, login method or password ends the contact's open portal sessions
+        if (!$contact_before || strcasecmp((string) $contact_before['user_email'], (string) $email) !== 0 || (string) $contact_before['user_auth_method'] !== (string) $auth_method || !empty($_POST['contact_password'])) {
+            secPortalSessionsRevoke($mysqli, $contact_user_id);
+        }
 
         // Set password
         if ($_POST['contact_password']) {
@@ -570,11 +575,18 @@ if (isset($_POST['send_bulk_mail_now'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
-    enforceUserPermission('module_client');
+    // Sending mail to a list of contacts is a write-level action (MSP-DS-9 / MSP-INJ-14)
+    enforceUserPermission('module_client', 2);
 
-    if (isset($_POST['contact_ids'])) {
+    if (isset($_POST['contact_ids']) && is_array($_POST['contact_ids'])) {
 
         $count = count($_POST['contact_ids']);
+
+        require_once dirname(__DIR__, 2) . '/includes/bulk_mail_scope.php';
+        if (!bulkMailFromAllowed((string) ($_POST['mail_from'] ?? ''), [$config_mail_from_email, $config_invoice_from_email, $config_quote_from_email, $config_ticket_from_email])) {
+            flash_alert("Choose one of the configured From addresses", 'error');
+            redirect();
+        }
 
         $mail_from = sanitizeInput($_POST['mail_from']);
         $mail_from_name = sanitizeInput($_POST['mail_from_name']);
@@ -588,11 +600,14 @@ if (isset($_POST['send_bulk_mail_now'])) {
 
             $sql = mysqli_query($mysqli,"SELECT * FROM contacts WHERE contact_id = $contact_id");
             $row = mysqli_fetch_assoc($sql);
+            if (!$row) {
+                continue;
+            }
             $contact_name = sanitizeInput($row['contact_name']);
             $contact_email = sanitizeInput($row['contact_email']);
             $client_id = intval($row['contact_client_id']);
 
-            enforceClientAccess();
+            enforceClientAccess($client_id);
 
             // Queue Mail
             $data[] = [
@@ -940,17 +955,21 @@ if (isset($_GET['delete_contact'])) {
     $contact_id = intval($_GET['delete_contact']);
 
     // Get Contact Name and Client ID for logging and alert message
-    $sql = mysqli_query($mysqli,"SELECT contact_name, contact_client_id FROM contacts WHERE contact_id = $contact_id");
+    $sql = mysqli_query($mysqli,"SELECT contact_name, contact_client_id, contact_user_id FROM contacts WHERE contact_id = $contact_id");
     $row = mysqli_fetch_assoc($sql);
+    if (!$row) {
+        flash_alert("Contact not found", 'error');
+        redirect();
+    }
     $contact_name = sanitizeInput($row['contact_name']);
     $client_id = intval($row['contact_client_id']);
     $contact_user_id = intval($row['contact_user_id']);
 
     enforceClientAccess();
 
-    // Delete User
+    // Delete the portal user too, so a deleted contact keeps no live portal login (MSP-DS-15); only a portal (type 2) account
     if ($contact_user_id > 0) {
-        mysqli_query($mysqli,"DELETE FROM users WHERE user_id = $contact_user_id");
+        mysqli_query($mysqli,"DELETE FROM users WHERE user_id = $contact_user_id AND user_type = 2");
     }
 
     mysqli_query($mysqli,"DELETE FROM contacts WHERE contact_id = $contact_id");
@@ -995,7 +1014,7 @@ if (isset($_POST['link_contact_to_asset'])) {
 
 if (isset($_GET['unlink_asset_from_contact'])) {
 
-    validateCSRFToken($_POST['csrf_token']);
+    validateCSRFToken($_GET['csrf_token']); // MSP-DS-53: a GET link carries its token in the query string
 
     enforceUserPermission('module_client', 2);
 
@@ -1055,7 +1074,7 @@ if (isset($_POST['link_software_to_contact'])) {
 
 if (isset($_GET['unlink_software_from_contact'])) {
 
-    validateCSRFToken($_POST['csrf_token']);
+    validateCSRFToken($_GET['csrf_token']); // MSP-DS-53
 
     enforceUserPermission('module_client', 2);
 
@@ -1288,7 +1307,7 @@ if (isset($_POST['export_contacts_csv'])) {
     if ($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Contacts-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -1301,7 +1320,7 @@ if (isset($_POST['export_contacts_csv'])) {
         //output each row of the data, format line as csv and write to file pointer
         while($row = $sql->fetch_assoc()) {
             $lineData = array($row['contact_name'], $row['contact_title'], $row['contact_department'], $row['contact_email'], formatPhoneNumber($row['contact_phone']), $row['contact_extension'], formatPhoneNumber($row['contact_mobile']), $row['location_name']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file
@@ -1357,7 +1376,7 @@ if (isset($_POST["import_contacts_csv"])) {
 
     //(Else)Check column count
     $f = fopen($file_name, "r");
-    $f_columns = fgetcsv($f, 1000, ",");
+    $f_columns = fgetcsv($f, 1000, ",", '"', '');
     if (!$error & count($f_columns) != 8) {
         $error = true;
         flash_alert("Bad column count.", 'error');
@@ -1366,10 +1385,10 @@ if (isset($_POST["import_contacts_csv"])) {
     //Else, parse the file
     if (!$error) {
         $file = fopen($file_name, "r");
-        fgetcsv($file, 1000, ","); // Skip first line
+        fgetcsv($file, 1000, ",", '"', ''); // Skip first line
         $row_count = 0;
         $duplicate_count = 0;
-        while(($column = fgetcsv($file, 1000, ",")) !== false) {
+        while(($column = fgetcsv($file, 1000, ",", '"', '')) !== false) {
             $duplicate_detect = 0;
             if (isset($column[0])) {
                 $name = sanitizeInput($column[0]);
@@ -1433,7 +1452,7 @@ if (isset($_GET['download_contacts_csv_template'])) {
 
     $delimiter = ",";
     $enclosure = '"';
-    $escape    = '\\';
+    $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
     $filename = "Contacts-Template.csv";
 
     //create a file pointer

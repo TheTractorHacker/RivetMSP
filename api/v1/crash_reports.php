@@ -18,15 +18,20 @@ if ($stack_trace === '') {
 }
 $stack_trace = substr($stack_trace, 0, 20000);
 
-$platform          = substr(trim((string) ($body['platform'] ?? 'android')), 0, 20);
-$app_version_name  = substr(trim((string) ($body['app_version_name'] ?? '')), 0, 20);
+// MSP-DS-79: one-line metadata fields cannot carry CR/LF or other control characters (they would forge 'Caller:' / 'Fatal:' lines in the admin App Logs view).
+$crash_oneline = static function (string $v): string {
+    return trim((string) preg_replace('/[\x00-\x1F\x7F]+/', ' ', $v));
+};
+
+$platform          = substr($crash_oneline((string) ($body['platform'] ?? 'android')), 0, 20);
+$app_version_name  = substr($crash_oneline((string) ($body['app_version_name'] ?? '')), 0, 20);
 $app_version_code  = intval($body['app_version_code'] ?? 0);
-$device_model      = substr(trim((string) ($body['device_model'] ?? '')), 0, 100);
-$os_version        = substr(trim((string) ($body['os_version'] ?? '')), 0, 20);
+$device_model      = substr($crash_oneline((string) ($body['device_model'] ?? '')), 0, 100);
+$os_version        = substr($crash_oneline((string) ($body['os_version'] ?? '')), 0, 20);
 $sdk_int           = intval($body['sdk_int'] ?? 0);
-$thread_name       = substr(trim((string) ($body['thread_name'] ?? '')), 0, 50);
+$thread_name       = substr($crash_oneline((string) ($body['thread_name'] ?? '')), 0, 50);
 $is_fatal          = !empty($body['is_fatal']);
-$occurred_at       = substr(trim((string) ($body['occurred_at'] ?? '')), 0, 40);
+$occurred_at       = substr($crash_oneline((string) ($body['occurred_at'] ?? '')), 0, 40);
 
 $who = $api_user_id ? ('user #' . intval($api_user_id)) : 'unauthenticated';
 
