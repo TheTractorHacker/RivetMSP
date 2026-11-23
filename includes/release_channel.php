@@ -179,3 +179,55 @@ function releaseChannelEnsureBranch(string $dir, string $channel): array
 
     return ['ok' => true, 'switched' => true, 'message' => 'Switched to the ' . $st['branch'] . ' branch.'];
 }
+
+/**
+ * Update the code from the release channel. Order matters:
+ *
+ *   1. fetch, move onto the channel's branch (forward only)
+ *   2. unless $force: fast-forward check; a diverged checkout is refused BEFORE anything is touched
+ *   3. only then restore the generated vendor files and `git pull --ff-only` (or reset --hard when $force)
+ *
+ * (vendor/ is tracked in RivetMSP, so unlike RivetIT there is no composer step: the pull brings the packages.)
+ *
+ * @return array{ok:bool, switched:bool, message:string, git_message:string}
+ */
+function releaseApplyUpdate(string $dir, string $channel, bool $force): array
+{
+    $res = ['ok' => false, 'switched' => false, 'message' => '', 'git_message' => ''];
+    $branch = releaseChannelBranch($channel);
+    $ref = RELEASE_REMOTE . '/' . $branch;
+    releaseGit($dir, ['fetch', RELEASE_REMOTE]);
+
+    $ensure = releaseChannelEnsureBranch($dir, $channel);
+    if (!$ensure['ok']) {
+        $res['message'] = $ensure['message'];
+        return $res;
+    }
+    $res['switched'] = $ensure['switched'];
+
+    $st = releaseChannelStatus($dir, $channel);
+    if (!$st['ref_exists']) {
+        $res['message'] = $st['reason'];
+        return $res;
+    }
+    if (!$force && $st['ahead'] > 0 && $st['behind'] > 0) {
+        // Diverged: not a fast-forward, pulling would need a merge. Refuse without touching any file.
+        $res['message'] = "This server has {$st['ahead']} commit(s) that $ref does not have and $ref has {$st['behind']} that it does not, so the update cannot fast-forward. Nothing was changed. Merge or push those commits first, or use Advanced: force update to discard them.";
+        return $res;
+    }
+
+    releaseResetGeneratedFiles($dir);
+    if ($force) {
+        [$code, $out] = releaseGit($dir, ['reset', '--hard', $ref]);
+    } else {
+        [$code, $out] = releaseGit($dir, ['pull', '--ff-only', RELEASE_REMOTE, $branch]);
+    }
+    $res['git_message'] = trim(implode("\n", $out));
+    if ($code !== 0) {
+        $res['message'] = trim(implode(' ', array_slice(array_filter(array_map('trim', $out)), 0, 2)));
+        return $res;
+    }
+    $res['ok'] = true;
+    return $res;
+}
+
