@@ -756,7 +756,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                                 </div>
                                             </td>
                                             <td>
-                                                <a href="<?php echo "../uploads/clients/$client_id/$file_reference_name"; ?>" target="_blank">
+                                                <a href="<?php echo $file_icon === 'file-pdf' ? 'pdf_view.php?type=file&id=' . intval($file_id) : "../uploads/clients/$client_id/$file_reference_name"; ?>" target="_blank">
                                                     <div class="media">
                                                         <i class="fa fa-fw fa-2x fa-<?php echo $file_icon; ?> text-dark me-3"></i>
                                                         <div class="media-body">

@@ -1267,7 +1267,7 @@ if (isset($_GET['ticket_id'])) {
                             while ($ticket_attachment = mysqli_fetch_assoc($sql_ticket_reply_attachments)) {
                                 $name = nullable_htmlentities($ticket_attachment['ticket_attachment_name']);
                                 $ref_name = nullable_htmlentities($ticket_attachment['ticket_attachment_reference_name']);
-                                echo "<hr><i class='fas fa-fw fa-paperclip text-secondary me-1'></i>$name | <a href='../uploads/tickets/$ticket_id/$ref_name' download='$name'><i class='fas fa-fw fa-download me-1'></i>Download</a> | <a target='_blank' href='../uploads/tickets/$ticket_id/$ref_name'><i class='fas fa-fw fa-external-link-alt me-1'></i>View</a>";
+                                echo "<hr><i class='fas fa-fw fa-paperclip text-secondary me-1'></i>$name | <a href='../uploads/tickets/$ticket_id/$ref_name' download='$name'><i class='fas fa-fw fa-download me-1'></i>Download</a> | <a target='_blank' href='" . (strtolower(pathinfo($ticket_attachment['ticket_attachment_reference_name'], PATHINFO_EXTENSION)) === 'pdf' ? 'pdf_view.php?type=ticket&id=' . intval($ticket_attachment['ticket_attachment_id']) : "../uploads/tickets/$ticket_id/$ref_name") . "'><i class='fas fa-fw fa-external-link-alt me-1'></i>View</a>";
                             }
                             ?>
                         </div>
@@ -2231,7 +2231,7 @@ if (isset($_GET['ticket_id'])) {
                         <div class="border-bottom px-3 py-2 d-flex align-items-center">
                             <i class="fas fa-file text-secondary me-2"></i>
                             <span class="flex-grow-1">
-                                <a target="_blank" href="../uploads/tickets/<?= $ticket_id ?>/<?= $att_ref ?>"><?= $att_name ?></a> <small class="text-secondary"><?= $att_date ?></small>
+                                <a target="_blank" href="<?= strtolower(pathinfo($att['ticket_attachment_reference_name'], PATHINFO_EXTENSION)) === 'pdf' ? "pdf_view.php?type=ticket&id=$att_id" : "../uploads/tickets/$ticket_id/$att_ref" ?>"><?= $att_name ?></a> <small class="text-secondary"><?= $att_date ?></small>
                             </span>
                             <div class="ms-2 dropdown dropleft text-center">
                                 <button class="btn btn-secondary btn-sm" type="button" data-bs-toggle="dropdown">
