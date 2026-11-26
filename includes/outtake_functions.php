@@ -12,6 +12,7 @@
 // or ['ok' => false, 'error' => '...'] on failure.
 function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
     $outtake_id = intval($outtake_id);
+    $signed_name_raw = sanitizeInputRaw($signed_name);   // for display (PDF, ticket note, log): the SQL-escaped copy below would print O\'Brien
     $signed_name = sanitizeInput($signed_name);
 
     if (empty($signed_name)) {
@@ -175,7 +176,7 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
 
     // Build right-column lines and calculate needed height
     $sig_lines = [
-        ['B', 'Signed by:'], ['', $signed_name],
+        ['B', 'Signed by:'], ['', $signed_name_raw],
         ['B', 'Date:'],      ['', $signed_at_str],
     ];
     if ($client_name) { $sig_lines[] = ['B', 'Client:']; $sig_lines[] = ['', $client_name]; }
@@ -253,7 +254,7 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
     $file_id = mysqli_insert_id($mysqli);
 
     // Add internal ticket reply noting PDF is attached
-    $reply_msg = mysqli_real_escape_string($mysqli, "Outtake form signed by $signed_name on $signed_at_str. PDF saved to client files: $pdf_name");
+    $reply_msg = mysqli_real_escape_string($mysqli, "Outtake form signed by $signed_name_raw on $signed_at_str. PDF saved to client files: $pdf_name");
     mysqli_query($mysqli, "INSERT INTO ticket_replies SET ticket_reply = '$reply_msg', ticket_reply_type = 'Internal', ticket_reply_by = 0, ticket_reply_ticket_id = $ticket_id");
 
     // Also copy the signed PDF into the ticket's attachments
@@ -267,7 +268,7 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
     $att_name_esc = mysqli_real_escape_string($mysqli, $pdf_name);
     mysqli_query($mysqli, "INSERT INTO ticket_attachments SET ticket_attachment_name='$att_name_esc', ticket_attachment_reference_name='$att_ref', ticket_attachment_reply_id=NULL, ticket_attachment_ticket_id=$ticket_id");
 
-    logAction("Outtake", "Sign", "Outtake form signed by $signed_name — PDF attached ($pdf_name)", $client_id, $ticket_id);
+    logAction("Outtake", "Sign", "Outtake form signed by $signed_name_raw — PDF attached ($pdf_name)", $client_id, $ticket_id);
 
     return [
         'ok'          => true,
@@ -275,7 +276,7 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
         'client_id'   => $client_id,
         'pdf_name'    => $pdf_name,
         'file_id'     => $file_id,
-        'signed_name' => $signed_name,
+        'signed_name' => $signed_name_raw,
         'signed_at'   => $signed_at_str,
     ];
 }

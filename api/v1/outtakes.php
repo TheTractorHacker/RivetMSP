@@ -109,8 +109,7 @@ if ($resource === 'outtakes' && $id !== null && $sub === null && $method === 'GE
 // Sign an outtake
 if ($resource === 'outtakes' && $id !== null && $sub === 'sign' && $method === 'POST') {
     $body        = json_decode(file_get_contents('php://input'), true) ?? [];
-    $signed_name_raw = trim((string) ($body['signed_name'] ?? ''));
-    $signed_name = mysqli_real_escape_string($mysqli, $signed_name_raw);
+    $signed_name = trim((string) ($body['signed_name'] ?? ''));   // raw: signOuttakeForm() sanitises it itself (escaping here would double-escape an apostrophe)
     $signature   = $body['signature'] ?? '';
 
     if (empty($signed_name)) api_error(400, 'signed_name required');
@@ -120,27 +119,14 @@ if ($resource === 'outtakes' && $id !== null && $sub === 'sign' && $method === '
         api_error(400, 'Invalid signature format');
     }
 
-    $esc_sig = $signature ? "outtake_signature = '" . mysqli_real_escape_string($mysqli, $signature) . "'," : '';
-
-    mysqli_query($mysqli,
-        "UPDATE ticket_outtake_forms SET
-            outtake_signed_name = '$signed_name',
-            outtake_signed_at   = NOW(),
-            $esc_sig
-            outtake_id          = outtake_id
-         WHERE outtake_id = $id AND outtake_signed_at IS NULL"   // MSP-DS-86: a signed outtake can never be re-signed
-    );
-    if (mysqli_affected_rows($mysqli) < 1) api_error(409, 'Outtake form is already signed');
-
-    $ot = mysqli_fetch_assoc(mysqli_query($mysqli,
-        "SELECT outtake_ticket_id FROM ticket_outtake_forms WHERE outtake_id = $id"));
-    if ($ot) {
-        $ticket_id = intval($ot['outtake_ticket_id']);
-        $msg = mysqli_real_escape_string($mysqli, "Outtake form signed by $signed_name_raw");
-        mysqli_query($mysqli,
-            "INSERT INTO ticket_replies (ticket_reply, ticket_reply_type, ticket_reply_by, ticket_reply_ticket_id)
-             VALUES ('$msg', 'Internal', $uid, $ticket_id)"
-        );
+    // The phone signs through the SAME routine as the web (agent/post/outtake.php, guest/guest_post.php): it marks the form signed (once, atomically), builds
+    // the signed PDF, files it under the client's "Outtake Forms" folder, attaches it to the ticket and adds the Internal ticket note. The old inline
+    // UPDATE + one-line reply did none of that, so a form signed on the phone left no signed PDF or attachment on the ticket in the web portal (TCK-144).
+    require_once __DIR__ . '/../../includes/outtake_functions.php';
+    $result = signOuttakeForm($mysqli, $id, $signed_name, $signature);
+    if (empty($result['ok'])) {
+        $err = (string) ($result['error'] ?? 'Could not sign the outtake form');
+        api_error(str_contains($err, 'already been signed') ? 409 : 400, $err);   // MSP-DS-86: a signed outtake can never be re-signed
     }
 
     api_response(200, ['ok' => true]);
