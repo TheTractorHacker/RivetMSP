@@ -261,6 +261,12 @@ if ($method === 'POST' && $id !== null && $sub === 'reply') {
     }
     $reply_raw  = trim($body['reply'] ?? '');
     $time_w_raw = trim($body['time_worked'] ?? '');
+    // MSP-DS-65 (review R16): same range/sign check as the web handlers (HH:MM:SS, 0..838h); empty stays "no time"
+    if ($time_w_raw !== '') {
+        $time_w_parsed = parseTimeWorked($time_w_raw);
+        if ($time_w_parsed === null) api_error(400, 'time_worked must be HH:MM:SS between 00:00:00 and 838:59:59');
+        $time_w_raw = $time_w_parsed;
+    }
     $reply      = mysqli_real_escape_string($mysqli, $reply_raw);
     $time_w     = mysqli_real_escape_string($mysqli, $time_w_raw);
     $onsite     = isset($body['onsite']) ? intval($body['onsite']) : 0;
@@ -302,6 +308,12 @@ if ($method === 'POST' && $id !== null && $sub === 'reply') {
          FROM tickets WHERE ticket_id = $id LIMIT 1"));
     if (!$ticket_row) api_error(404, 'Ticket not found');
 
+    // MSP-DS-66: a reply that resolves/closes the ticket honours the same close preconditions as the web app (checked before anything is written).
+    // Same {error: "..."} shape as the other refusals of this endpoint.
+    if ($status_id_check && in_array($status_id_check['ticket_status_name'], ['Resolved', 'Closed'], true) && ($close_block = ticketCloseBlockReason($id))) {
+        api_error(400, "Cannot close ticket - $close_block");
+    }
+
     $t_prefix     = $ticket_row['ticket_prefix'];
     $t_number     = $ticket_row['ticket_number'];
     $t_subject    = $ticket_row['ticket_subject'];
@@ -328,6 +340,10 @@ if ($method === 'POST' && $id !== null && $sub === 'reply') {
         }
     }
 
+    // MSP-DS-14: the web app stores an agent's reply as 'Public'; the portal and guest views list only 'Public' and 'Client' rows, so a
+    // literal 'reply' row was never shown to the customer. $type stays 'reply' for the status logic and the unchanged API response.
+    $stored_reply_type = $type === 'reply' ? 'Public' : $type;
+
     // Prepared statement: $reply is user-supplied free text. Bind the raw
     // (unescaped) values so the stored bytes match the previous escaped-then-
     // interpolated INSERT exactly. Empty time_worked binds as SQL NULL.
@@ -336,7 +352,7 @@ if ($method === 'POST' && $id !== null && $sub === 'reply') {
         "INSERT INTO ticket_replies (ticket_reply, ticket_reply_type, ticket_reply_time_worked, ticket_reply_onsite, ticket_reply_by, ticket_reply_ticket_id, ticket_reply_created_at)
          VALUES (?, ?, ?, ?, ?, ?, NOW())",
         'sssiii',
-        [$reply_raw, $type, $time_param, $onsite, $reply_by, $id]
+        [$reply_raw, $stored_reply_type, $time_param, $onsite, $reply_by, $id]
     );
     mysqli_query($mysqli, "UPDATE tickets SET ticket_updated_at = NOW() WHERE ticket_id = $id");
 
@@ -455,10 +471,10 @@ if ($method === 'DELETE' && $id !== null && $sub === 'reply') {
 // LOG TIME
 if ($method === 'POST' && $id !== null && $sub === 'time') {
     $body       = json_decode(file_get_contents('php://input'), true) ?? [];
-    $time_worked = mysqli_real_escape_string($mysqli, trim($body['time_worked'] ?? ''));
+    $time_worked = parseTimeWorked(trim((string) ($body['time_worked'] ?? '')));   // MSP-DS-65 (review R16): no negative / out-of-range TIME
     $note        = mysqli_real_escape_string($mysqli, trim($body['note'] ?? 'Time logged via mobile app'));
 
-    if (!$time_worked) api_error(400, 'time_worked required (HH:MM:SS)');
+    if ($time_worked === null) api_error(400, 'time_worked required (HH:MM:SS, 00:00:00 to 838:59:59)');
 
     mysqli_query($mysqli,
         "INSERT INTO ticket_replies (ticket_reply, ticket_reply_type, ticket_reply_time_worked, ticket_reply_by, ticket_reply_ticket_id, ticket_reply_created_at)
@@ -609,7 +625,7 @@ if ($method === 'POST' && $id === null) {
     $priority_in = strtolower(trim($body['priority'] ?? ''));
     $priority = in_array($priority_in, ['low','medium','high','critical'])
                 ? ucfirst($priority_in) : 'Low';
-    $assigned = resolveTicketAssignee(isset($body['assigned_to']) ? intval($body['assigned_to']) : 0);
+    $assigned = resolveTicketAssignee(isset($body['assigned_to']) ? intval($body['assigned_to']) : 0, $client);
     $contact  = isset($body['contact_id']) ? intval($body['contact_id']) : 0;
     $contract = isset($body['contract_id']) ? intval($body['contract_id']) : 0;
     $category = isset($body['category_id']) ? intval($body['category_id']) : 0;
@@ -756,9 +772,9 @@ if ($method === 'POST' && $id === null) {
     global $config_ticket_prefix;
     $client_uri = $client ? "&client_id=$client" : '';
     if ($assigned != 0 && $assigned != $uid) {
-        notifyUser($assigned, 'Ticket', "New ticket {$config_ticket_prefix}$next_num - $subject has been assigned to you", "/agent/ticket.php?ticket_id=$new_id$client_uri", $client, $new_id);
+        notifyUser($assigned, 'Ticket', "New ticket {$config_ticket_prefix}$next_num - $subject_raw has been assigned to you", "/agent/ticket.php?ticket_id=$new_id$client_uri", $client, $new_id);
     } elseif ($assigned == 0) {
-        appNotify('Ticket', "New ticket {$config_ticket_prefix}$next_num - $subject has been created via API", "/agent/ticket.php?ticket_id=$new_id$client_uri", $client, $new_id);
+        appNotify('Ticket', "New ticket {$config_ticket_prefix}$next_num - $subject_raw has been created via API", "/agent/ticket.php?ticket_id=$new_id$client_uri", $client, $new_id);
     }
 
     // Fire the outbound webhook (mirrors agent/post/ticket.php's create handler).
@@ -803,6 +819,11 @@ if ($method === 'POST' && $id !== null && $sub === 'status') {
 
     $status_name_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_status_name FROM ticket_statuses WHERE ticket_status_id = $status"));
     if (!$status_name_row) api_error(400, 'invalid status_id');
+
+    // MSP-DS-66: same close preconditions as the web app's close paths (existing {error} shape)
+    if ($status_name_row['ticket_status_name'] === 'Closed' && ($close_block = ticketCloseBlockReason($id))) {
+        api_error(400, "Cannot close ticket - $close_block");
+    }
 
     // Mirror the web app's close-ticket behavior exactly (ticket_status +
     // ticket_resolved_at + ticket_closed_at + ticket_closed_by all together) -

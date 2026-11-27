@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Test-only hooks (RIVETMSP_TRUST_*, RIVETMSP_TEST_*, RIVETMSP_ETC_DIR) exist for unit tests of lib/common.sh functions; an entry script never
+# honours them from its environment, so nothing a caller (sudo from the web user included) puts there can relax a trust check.
+for _rv_v in $(compgen -v | grep -E '^(RIVETMSP_TRUST_|RIVETMSP_TEST_|RIVETMSP_ETC_DIR$)'); do unset "${_rv_v}"; done
+unset _rv_v
+
 # RivetMSP — restore an encrypted deploy/backup.sh archive.
 #
 # The counterpart backup.sh never had: decrypts a backup-*.tar.gz.enc
@@ -249,7 +254,7 @@ decrypt_and_extract() {
     register_tmpfile "${EXTRACT_DIR}"
 
     info "Extracting archive..."
-    if ! tar -xzf "${combined}" -C "${EXTRACT_DIR}"; then
+    if ! tar -xzf "${combined}" -C "${EXTRACT_DIR}" --no-same-owner; then
         die "tar extraction failed. ${BACKUP_FILE} may be corrupt, or --passphrase-file decrypted it into garbage (wrong passphrase can produce a file that 'looks' decrypted but isn't valid gzip)."
     fi
 
@@ -309,7 +314,9 @@ install_key_file() {
     local src="$1" dest="$2"
     [[ -f "${src}" ]] || die "--key-file '${src}' does not exist."
     local kids
-    kids="$(php -r 'require $argv[1] . "/vendor/autoload.php"; try { $r = RivetCore\Crypto\KeyFile::ringFromJson((string) file_get_contents($argv[2])); echo implode(",", $r->kids()), " active=", $r->activeKid(); } catch (Throwable $e) { fwrite(STDERR, $e->getMessage()); exit(1); }' -- "${APP_DIR}" "${src}")" \
+    # MSP-DS-34 (review R3): vendor/autoload.php is web-writable, so the validation runs as the web user (run_app_php); the key file reaches it
+    # on STDIN, opened by root, so the web user needs no read access to --key-file.
+    kids="$(run_app_php "${APP_DIR}" -r 'require $argv[1] . "/vendor/autoload.php"; try { $r = RivetCore\Crypto\KeyFile::ringFromJson((string) stream_get_contents(STDIN)); echo implode(",", $r->kids()), " active=", $r->activeKid(); } catch (Throwable $e) { fwrite(STDERR, $e->getMessage()); exit(1); }' -- "${APP_DIR}" < "${src}")" \
         || die "${src} is not a usable key file."
     if [[ -f "${dest}" ]] && ! cmp -s "${src}" "${dest}"; then
         local keep="${dest}.pre-restore-$(date +%Y%m%d%H%M%S)"
@@ -341,7 +348,8 @@ load_settings_key_file() {
     [[ "${key}" =~ ^[0-9a-fA-F]{32,128}$ ]] || die "${path} does not contain a hex settings-encryption key."
     if [[ -n "${want_fp}" ]]; then
         local got_fp
-        got_fp="$(php -r 'echo substr(hash("sha256", "rivetit-settings-key-fingerprint|v1|" . $argv[1]), 0, 16);' -- "${key}")"
+        # MSP-DS-95: the key goes in the environment, not on argv
+        got_fp="$(RIVETMSP_SK="${key}" php -r 'echo substr(hash("sha256", "rivetit-settings-key-fingerprint|v1|" . getenv("RIVETMSP_SK")), 0, 16);')"
         [[ "${got_fp}" == "${want_fp}" ]] || die "The key in ${path} (fingerprint ${got_fp}) does not match this backup (fingerprint ${want_fp}). Refusing to apply it."
     fi
     MANIFEST_SETTINGS_ENC_KEY="${key}"
@@ -384,6 +392,26 @@ EOF
     success "Database import complete."
 }
 
+# set_genesis_anchor_aside(): M5-5. install.sh --restore-from, the Docker entrypoint and an existing instance all run setup (which writes a
+# genesis audit-chain anchor signed with a placeholder key) BEFORE this restore replaces the database. That anchor then describes nothing: verify
+# would call the restored chain tampering. Rename a genesis anchor (id 0, zero hash) to <file>.pre-restore-<timestamp> so the state is plainly
+# "anchor missing", which the audit trail page answers with Re-anchor. Any other anchor, or a symlink, is left alone.
+set_genesis_anchor_aside() {
+    local f="${AUDIT_ANCHOR_FILE:-${APP_DIR}/config/audit_chain_head.json}" to
+    [[ -f "${f}" && ! -L "${f}" ]] || return 0
+    if ! grep -Eq '"id":0[,}]' "${f}" || ! grep -Eq '"hash":"0{64}"' "${f}" || ! grep -Eq '"from":0[,}]' "${f}"; then
+        return 0
+    fi
+    to="${f}.pre-restore-$(date -u +%Y%m%d%H%M%S)"
+    while [[ -e "${to}" ]]; do to="${to}-1"; done
+    if mv -- "${f}" "${to}"; then
+        warn "Moved the setup audit-chain anchor aside to ${to}: after this restore use Re-anchor on Administration > Audit trail (the chain is 'anchor missing' until then)."
+        log "AUDIT ANCHOR MOVED ${f} -> ${to}"
+    else
+        warn "Could not move the setup audit-chain anchor ${f} aside; verify will report it until it is removed and Re-anchor is used."
+    fi
+}
+
 restore_uploads() {
     local src_uploads="${EXTRACT_DIR}/uploads"
     if [[ ! -d "${src_uploads}" ]]; then
@@ -391,19 +419,30 @@ restore_uploads() {
         return 0
     fi
 
+    # MSP-DS-34 (re-review RR4): APP_DIR is owned by the web user, which can swap uploads/ for a symlink (ln -s /etc/profile.d uploads) before an
+    # operator restores; a root rsync --delete through it would delete in, and write the archive's files into, the symlink's target. So:
+    # (1) refuse a symlinked or non-directory destination, (2) the existing uploads/ must belong to the web user (root mode), and
+    # (3) the copy itself runs AS the web user (run_app_exec), so even a symlink planted between the check and the copy can only reach what the
+    # web user could already reach. The archive's uploads/ is staged in a private directory handed to the web user, and the tar is extracted
+    # --no-same-owner, so nothing in it keeps an attacker-chosen owner; links inside the archive are skipped (--no-links).
+    local dest="${APP_DIR}/uploads" web=""
+    if [[ -L "${dest}" ]]; then die "${dest} is a symbolic link; refusing to restore uploads through it as root. Remove the link (and inspect where it pointed), then re-run."; fi
+    if [[ -e "${dest}" && ! -d "${dest}" ]]; then die "${dest} exists and is not a directory; refusing to replace it."; fi
+    web="$(_app_exec_user "${APP_DIR}")" || die "Refusing to restore uploads: no non-root web user could be determined."
+    if [[ -n "${web}" && -d "${dest}" && "$(stat -c '%U' -- "${dest}")" != "${web}" ]]; then
+        die "${dest} is owned by '$(stat -c '%U' -- "${dest}")', not the web user '${web}'; refusing to write into it as root. Fix the ownership (chown -R ${web} '${dest}') and re-run."
+    fi
+    local stage; stage="$(mktemp -d)"; register_tmpfile "${stage}"
+    mv -- "${src_uploads}" "${stage}/uploads"
+    if [[ -n "${web}" ]]; then chown -R -h "${web}" "${stage}"; fi
+    chmod 700 "${stage}"
+
     announce "Replacing ${APP_DIR}/uploads with the backup's uploads/ (rsync --delete — anything added since the backup that isn't in it will be removed)."
-    mkdir -p "${APP_DIR}/uploads"
-    if ! rsync -a --delete "${src_uploads}/" "${APP_DIR}/uploads/"; then
+    run_app_exec "${APP_DIR}" mkdir -p -- "${dest}"
+    # D770/F660 = what install.sh leaves (750/640 widened by u+rwX,g+rwX); the files belong to the web user because the web user wrote them.
+    if ! run_app_exec "${APP_DIR}" rsync -a --delete --no-links --chmod=D770,F660 "${stage}/uploads/" "${dest}/"; then
         die "rsync failed while restoring uploads/. The database has already been imported at this point — investigate the uploads/ mismatch manually."
     fi
-
-    info "Restoring ownership (www-data:www-data) and permissions under ${APP_DIR}/uploads..."
-    chown -R www-data:www-data "${APP_DIR}/uploads"
-    find "${APP_DIR}/uploads" -type d -exec chmod 750 {} +
-    find "${APP_DIR}/uploads" -type f -exec chmod 640 {} +
-    # Same widening install.sh applies: uploads/ needs to stay writable by
-    # the www-data group for the app to save new files into it.
-    chmod -R u+rwX,g+rwX "${APP_DIR}/uploads"
     success "uploads/ restored."
 }
 
@@ -426,10 +465,19 @@ apply_settings_enc_key() {
     fi
 
     announce "Updating ${APP_DIR}/config.php's \$config_settings_enc_key to match ${BACKUP_FILE} so restored encrypted settings decrypt correctly."
-    if ! php -r '
+    # MSP-DS-34 (re-review RR4): config.php is in the web user's directory. As root, file_put_contents + chmod + chown would follow a symlink
+    # swapped in during the minutes of DB import (-> /etc/shadow becomes web-owned). So: refuse a symlink, and do the edit AS the web user
+    # (run_app_php), writing a temp file in the same directory and rename()ing it over config.php (a rename replaces the name, it never
+    # follows it). No root chown/chmod of a path is left.
+    if [[ -L "${APP_DIR}/config.php" ]]; then die "${APP_DIR}/config.php is a symbolic link; refusing to rewrite it as root."; fi
+    # MSP-DS-95: the new key is passed in the environment (runuser keeps it), not on argv
+    if ! RIVETMSP_SK="${MANIFEST_SETTINGS_ENC_KEY}" run_app_php "${APP_DIR}" -r '
         $path = $argv[1];
-        $key  = $argv[2];
+        $key  = (string) getenv("RIVETMSP_SK");
         $lines = file($path, FILE_IGNORE_NEW_LINES);
+        if ($lines === false) {
+            exit(1);
+        }
         $line = "\$config_settings_enc_key = " . var_export($key, true) . ";";
         $found = false;
         foreach ($lines as $i => $l) {
@@ -442,14 +490,14 @@ apply_settings_enc_key() {
         if (!$found) {
             $lines[] = $line;
         }
-        if (file_put_contents($path, implode("\n", $lines) . "\n") === false) {
+        $tmp = tempnam(dirname($path), ".config.php.");
+        if ($tmp === false || file_put_contents($tmp, implode("\n", $lines) . "\n") === false || !chmod($tmp, 0640) || !rename($tmp, $path)) {
+            if ($tmp !== false) { @unlink($tmp); }
             exit(1);
         }
-    ' -- "${APP_DIR}/config.php" "${MANIFEST_SETTINGS_ENC_KEY}"; then
+    ' -- "${APP_DIR}/config.php"; then
         die "Failed to update \$config_settings_enc_key in ${APP_DIR}/config.php. The database and uploads/ have already been restored — fix config.php by hand (see backup-manifest.json's settings_enc_key inside the extracted archive, already shredded now — re-run with the same --backup to recover it again if needed)."
     fi
-    chmod 640 "${APP_DIR}/config.php"
-    chown www-data:www-data "${APP_DIR}/config.php"
     success "config_settings_enc_key updated."
 }
 
@@ -473,25 +521,21 @@ restore_rmm_postgres() {
     fi
 
     announce "Restoring the RMM PostgreSQL store from ${dump}..."
-    local pg_passfile
-    pg_passfile="$(mktemp)"
-    chmod 600 "${pg_passfile}"
-    register_tmpfile "${pg_passfile}"
-    local pg_env pg_rc=0
-    pg_env="$(php "${APP_DIR}/scripts/rmm_postgres_backup_env.php" --app-dir="${APP_DIR}" --passfile="${pg_passfile}")" || pg_rc=$?
-    if [[ "${pg_rc}" -ne 0 || -z "${pg_env}" ]]; then
+    # MSP-DS-34: the app script runs as the web user; root builds its own password file from what it wrote (see rmm_pg_prepare).
+    local pg_rc=0
+    rmm_pg_prepare "${APP_DIR}" || pg_rc=$?
+    if [[ "${pg_rc}" -ne 0 || "${RMM_PG_READY}" != "1" ]]; then
         die "Could not read the RMM PostgreSQL connection to restore into (scripts/rmm_postgres_backup_env.php exited ${pg_rc}). The control database and uploads/ are already restored; fix the connection in Administration > RMM > Data store, then restore ${dump} by hand with vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh."
     fi
-    eval "${pg_env}"
     info "Restoring into PostgreSQL database '${RIVETCORE_PG_DATABASE}' (RMM_PG_RESTORE_CLEAN=1: an existing schema there is replaced)..."
-    if ! RMM_PG_RESTORE_CLEAN=1 "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh" < "${dump}"; then
+    if ! RMM_PG_RESTORE_CLEAN=1 run_rmm_pg_script "${APP_DIR}" "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-postgres-restore.sh" < "${dump}"; then
         die "rmm-postgres-restore.sh failed. The control database and uploads/ are already restored; the PostgreSQL store may be partially restored — investigate before opening the site (docs/rmm/POSTGRES.md section 8.6)."
     fi
     success "RMM PostgreSQL store restored."
 
     announce "Reconciling the control database against the restored RMM store (read-only)..."
     local verify_rc=0
-    php "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-store-verify.php" --bootstrap="${APP_DIR}/scripts/rmm_store_bootstrap.php" || verify_rc=$?
+    run_app_php "${APP_DIR}" "${APP_DIR}/vendor/rivet/rivet-core/scripts/rmm-store-verify.php" --bootstrap="${APP_DIR}/scripts/rmm_store_bootstrap.php" || verify_rc=$?
     if [[ "${verify_rc}" -eq 0 ]]; then
         success "rmm-store-verify.php: clean — the control database and the RMM store agree."
     else
@@ -503,20 +547,30 @@ main() {
     parse_args "$@"
     require_root "$@"
     validate_args
+    require_trusted_tooling "${BASH_SOURCE[0]}"
     setup_logging
 
     info "=== RivetMSP restore starting: ${BACKUP_FILE} -> ${APP_DIR} ==="
 
     read_app_config "${APP_DIR}"
     # The key file backup.sh writes next to the archive is used automatically unless one was named.
-    if [[ -z "${SETTINGS_KEY_FILE}" && -f "${BACKUP_FILE%.tar.gz.enc}.settings-key" ]]; then
-        SETTINGS_KEY_FILE="${BACKUP_FILE%.tar.gz.enc}.settings-key"
-        info "Found the settings-key file next to the archive: ${SETTINGS_KEY_FILE}"
+    # MSP-DS-34 (review R2): the archive's directory is writable by the web user; accept the sidecar only as a root-owned 0600 regular file,
+    # and work on a private copy (never follow a planted symlink).
+    if [[ -z "${SETTINGS_KEY_FILE}" ]]; then
+        local sidecar="${BACKUP_FILE%.tar.gz.enc}.settings-key" sc_rc=0 sc_copy sc_why
+        sc_copy="$(mktemp)"; register_tmpfile "${sc_copy}"
+        sc_why="$(copy_trusted_sidecar "${sidecar}" "${sc_copy}" 2>&1)" || sc_rc=$?
+        case "${sc_rc}" in
+            0) SETTINGS_KEY_FILE="${sc_copy}"; info "Found the settings-key file next to the archive: ${sidecar}" ;;
+            2) : ;;
+            *) refuse_untrusted_sidecar "${sc_why}" ;;
+        esac
     fi
     run_pre_restore_backup
     decrypt_and_extract
     read_manifest
     import_database
+    set_genesis_anchor_aside
     restore_uploads
     apply_settings_enc_key
     if [[ -n "${KEY_FILE_RESTORE}" ]]; then

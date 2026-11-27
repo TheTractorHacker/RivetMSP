@@ -73,9 +73,9 @@ class StripePaymentProvider implements PaymentProviderInterface
      * Mirrors guest/guest_ajax.php (stripe_create_pi). Exceptions propagate so
      * the caller's try/catch handles them exactly as before.
      */
-    public function createCheckout(array $params)
+    public function createCheckout(array $params, array $options = [])
     {
-        return $this->client()->paymentIntents->create($params);
+        return $this->client()->paymentIntents->create($params, $options);
     }
 
     /*
@@ -86,6 +86,17 @@ class StripePaymentProvider implements PaymentProviderInterface
     public function verifyCheckoutResult(string $reference)
     {
         return $this->client()->paymentIntents->retrieve($reference, []);
+    }
+
+    /*
+     * M4-3: PaymentIntents whose metadata carries this charge-attempt key (every intent this install creates does), so an attempt whose
+     * response was lost can be told apart from one that never reached Stripe. Search is eventually consistent (under a minute): callers
+     * only use it on attempts at least 15 minutes old.
+     */
+    public function searchCheckoutByAttemptKey(string $key): array
+    {
+        $key = preg_replace('/[^A-Za-z0-9_-]/', '', $key);
+        return $this->client()->paymentIntents->search(['query' => "metadata['rivet_attempt_key']:'" . $key . "'", 'limit' => 5])->data;
     }
 
     /*
@@ -147,7 +158,10 @@ class StripePaymentProvider implements PaymentProviderInterface
     {
         $params = ['payment_intent' => $reference];
         if ($amount !== null) {
-            $params['amount'] = intval(round($amount * 100)); // Stripe expects cents
+            // MSP-DS-161 (review R10): Stripe wants the currency's minor unit (JPY x1, KWD x1000), not always cents
+            require_once __DIR__ . '/billing_guards.php';
+            $pi = $this->client()->paymentIntents->retrieve($reference, []);
+            $params['amount'] = stripeAmountToMinor($amount, $pi->currency);
         }
         return $this->client()->refunds->create($params);
     }

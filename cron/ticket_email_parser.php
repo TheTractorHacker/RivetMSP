@@ -23,6 +23,7 @@ require_once "../config.php";
 
 // Set Timezone
 require_once "../includes/inc_set_timezone.php";
+require_once dirname(__DIR__) . "/includes/inbound_routing.php";
 require_once "../functions.php";
 
 // Only one copy at a time (Redis lock through RivetCore; skipped if Redis is down).
@@ -49,8 +50,10 @@ use RivetMSP\Mail\MessageNormalizer;
 use RivetMSP\Mail\QuotedTextStripper;
 use RivetMSP\Mail\RawHeaders;
 
-$config_ticket_prefix = sanitizeInput($config_ticket_prefix);
-$config_ticket_from_name = sanitizeInput($config_ticket_from_name);
+// MSP-DS-93: the prefix is put into a regex below, so keep the quoted raw value (the sanitizeInput() copy is SQL-escaped and would double-escape).
+$config_ticket_prefix_re = preg_quote((string) $config_ticket_prefix, '/');
+$config_ticket_prefix = sanitizeInputRaw($config_ticket_prefix);
+$config_ticket_from_name = sanitizeInputRaw($config_ticket_from_name);
 // NOTE: unknown-sender parsing is now a per-mailbox setting (mailbox_parse_unknown_senders),
 // not a global one - see pollMailbox() below.
 
@@ -61,14 +64,14 @@ if ($config_ticket_email_parse == 0) {
 }
 
 // System temp directory & lock
-$temp_dir = sys_get_temp_dir();
-$lock_file_path = "{$temp_dir}/itflow_email_parser_{$installation_id}.lock";
+require_once dirname(__DIR__) . '/includes/cron_lock.php';
+$temp_dir = rivetCronLockDir();
+$lock_file_path = $temp_dir . '/' . rivetCronLockName('email_parser', (string) $installation_id);
 
 if (file_exists($lock_file_path)) {
-    $file_age = time() - filemtime($lock_file_path);
-    if ($file_age > 300) {
-        unlink($lock_file_path);
-        logApp("Cron-Email-Parser", "warning", "Cron Email Parser detected a lock file was present but was over 5 minutes old so it removed it.");
+    if (!rivetCronLockIsLive($lock_file_path, 300)) {
+        @unlink($lock_file_path);
+        logApp("Cron-Email-Parser", "warning", "Cron Email Parser detected a lock file was present but was stale (over 5 minutes old, dated in the future or not ours) so it removed it.");
     } else {
         logApp("Cron-Email-Parser", "warning", "Lock file present. Cron Email Parser attempted to execute but was already executing, so instead it terminated.");
         exit("Script is already running. Exiting.");
@@ -289,7 +292,7 @@ function processInboundMessage(
     string $original_message_file,
     array $intake = []
 ): bool {
-    global $mysqli, $config_ticket_prefix;
+    global $mysqli, $config_ticket_prefix, $config_ticket_prefix_re;
 
     $email_processed = false;
 
@@ -305,7 +308,7 @@ function processInboundMessage(
     $mail_message_id = (string) ($norm['message_id'] ?? '');
 
     $from_domain = explode("@", $from_email);
-    $from_domain = sanitizeInput(end($from_domain));
+    $from_domain = sanitizeInputRaw(end($from_domain));
 
     // Body used when the message is a reply: quoted history removed (text part preferred), never emptied.
     $reply_body = $message_body;
@@ -381,7 +384,7 @@ function processInboundMessage(
     }
 
     // 1. Reply to existing ticket with the number in subject
-    if (!$email_processed && preg_match("/\[$config_ticket_prefix(\d+)\]/", $subject, $ticket_number_matches)) {
+    if (!$email_processed && preg_match("/\[$config_ticket_prefix_re(\d+)\]/", $subject, $ticket_number_matches)) {
         $ticket_number = intval($ticket_number_matches[1]);
         $email_processed = $reply_to($ticket_number, "Matched ticket #$ticket_number by subject tag");
     }
@@ -392,22 +395,15 @@ function processInboundMessage(
         $client_id  = 0;
 
         // First: check if sender is a registered contact
-        $from_email_esc = mysqli_real_escape_string($mysqli, $from_email);
-        $contact_sql = mysqli_query($mysqli, "SELECT * FROM contacts WHERE contact_email = '$from_email_esc' AND contact_archived_at IS NULL LIMIT 1");
-        $contact_row = mysqli_fetch_assoc($contact_sql);
+        // (a contact or domain claim only counts when it is unambiguous, see includes/inbound_routing.php: MSP-DS-33)
+        $contact_row = inboundTrustedContact($mysqli, $from_email);
 
         if ($contact_row) {
             $contact_id = intval($contact_row['contact_id']);
             $client_id  = intval($contact_row['contact_client_id']);
         } else {
-            // Else: check if sender domain is registered
-            $from_domain_esc = mysqli_real_escape_string($mysqli, $from_domain);
-            $domain_sql = mysqli_query($mysqli, "SELECT * FROM domains WHERE domain_name = '$from_domain_esc' AND domain_archived_at IS NULL LIMIT 1");
-            $domain_row = mysqli_fetch_assoc($domain_sql);
-
-            if ($domain_row && $from_domain == $domain_row['domain_name']) {
-                $client_id = intval($domain_row['domain_client_id']);
-            }
+            // Else: check if sender domain is registered to exactly one client
+            $client_id = inboundDomainOwnerClient($mysqli, $from_domain, true); // MSP-DS-16/33: only a domain an admin switched 'route inbound mail' on for
         }
 
         // If we found either a contact or a domain, check recent tickets for a matching subject
@@ -437,14 +433,12 @@ function processInboundMessage(
 
     // 3. A known, registered contact?
     if (!$email_processed) {
-        $from_email_esc = mysqli_real_escape_string($mysqli, $from_email);
-        $any_contact_sql = mysqli_query($mysqli, "SELECT * FROM contacts WHERE contact_email = '$from_email_esc' AND contact_archived_at IS NULL LIMIT 1");
-        $rowc = mysqli_fetch_assoc($any_contact_sql);
+        $rowc = inboundTrustedContact($mysqli, $from_email);
 
         if ($rowc) {
-            $contact_name  = sanitizeInput($rowc['contact_name']);
+            $contact_name  = (string) $rowc['contact_name'];   // raw DB values: addTicket() escapes once (MSP-DS-159)
             $contact_id    = intval($rowc['contact_id']);
-            $contact_email = sanitizeInput($rowc['contact_email']);
+            $contact_email = (string) $rowc['contact_email'];
             $client_id     = intval($rowc['contact_client_id']);
 
             $email_processed = addTicket($contact_id, $contact_name, $contact_email, $client_id, $date, $subject, $message_body, $attachments, $original_message_file, $ccs, $mailbox_id, $mail_message_id);
@@ -458,12 +452,12 @@ function processInboundMessage(
 
     // 4. A known domain?
     if (!$email_processed) {
-        $from_domain_esc = mysqli_real_escape_string($mysqli, $from_domain);
-        $domain_sql = mysqli_query($mysqli, "SELECT * FROM domains WHERE domain_name = '$from_domain_esc' AND domain_archived_at IS NULL LIMIT 1");
-        $rowd = mysqli_fetch_assoc($domain_sql);
+        // Only a domain that exactly one client lists, and that is not a public mailbox provider, files mail without review (MSP-DS-33);
+        // everything else falls through to the unknown-sender review queue
+        $domain_owner_client_id = inboundDomainOwnerClient($mysqli, $from_domain, true); // MSP-DS-16/33: admin-set per-domain 'route inbound mail' flag
 
-        if ($rowd && $from_domain == $rowd['domain_name']) {
-            $client_id = intval($rowd['domain_client_id']);
+        if ($domain_owner_client_id > 0) {
+            $client_id = $domain_owner_client_id;
 
             // Create a new contact
             $contact_name  = $from_name;
@@ -523,12 +517,13 @@ function processInboundMessage(
  * original message belonged to. Never creates a ticket and never sends anything. Returns the detail line for the mail log.
  */
 function handleInboundNdr(array $raw_parts, string $subject, string $message_body_text, string $from_email, int $mailbox_id): string {
-    global $mysqli, $config_ticket_prefix;
+    global $mysqli, $config_ticket_prefix, $config_ticket_prefix_re;
 
     $failed_recipient  = null;
     $diagnostic_code   = null;
     $status_code       = null;
     $original_subject  = null;
+    $original_message_id = '';
 
     // DSN info shows up as regular attachment/part entries, not the visible body
     foreach ($raw_parts as $attachment) {
@@ -540,15 +535,15 @@ function handleInboundNdr(array $raw_parts, string $subject, string $message_bod
         if (strpos($ctype, 'delivery-status') !== false) {
 
             if (preg_match('/Final-Recipient:\s*rfc822;\s*(.+)/i', $body, $m)) {
-                $failed_recipient = sanitizeInput(trim($m[1]));
+                $failed_recipient = sanitizeInputRaw(trim($m[1]));
             }
 
             if (preg_match('/Diagnostic-Code:\s*(.+)/i', $body, $m)) {
-                $diagnostic_code = sanitizeInput(trim($m[1]));
+                $diagnostic_code = sanitizeInputRaw(trim($m[1]));
             }
 
             if (preg_match('/Status:\s*([0-9\.]+)/i', $body, $m)) {
-                $status_code = sanitizeInput(trim($m[1]));
+                $status_code = sanitizeInputRaw(trim($m[1]));
             }
         }
 
@@ -556,7 +551,10 @@ function handleInboundNdr(array $raw_parts, string $subject, string $message_bod
         if (strpos($ctype, 'message/rfc822') !== false || strpos($ctype, 'text/rfc822-headers') !== false) {
 
             if (preg_match('/^Subject:\s*(.+)$/mi', $body, $m)) {
-                $original_subject = sanitizeInput(trim($m[1]));
+                $original_subject = sanitizeInputRaw(trim($m[1]));
+            }
+            if ($original_message_id === '' && preg_match('/^Message-ID:\s*(.+)$/mi', $body, $m)) {
+                $original_message_id = MessageId::normalize(trim($m[1]));
             }
         }
     }
@@ -565,7 +563,7 @@ function handleInboundNdr(array $raw_parts, string $subject, string $message_bod
     if (!$diagnostic_code) {
         // Exim puts diagnostics on an indented line
         if (preg_match('/\n\s{2,}(.+)/', $message_body_text, $m)) {
-            $diagnostic_code = sanitizeInput(trim($m[1]));
+            $diagnostic_code = sanitizeInputRaw(trim($m[1]));
         }
     }
 
@@ -575,21 +573,42 @@ function handleInboundNdr(array $raw_parts, string $subject, string $message_bod
     $status_code      = $status_code ?: 'unknown status code';
     $original_subject = $original_subject ?: $subject;
 
-    appNotify(
-        "Ticket",
-        "Email parser NDR: Message to $failed_recipient bounced. Subject: $original_subject Diagnostics: $status_code / $diagnostic_code - check the mailbox's processed folder to see the email",
-        "",
-        0
-    );
-
-    // If the original subject has a ticket, leave a system note there (not a client reply: the sender is a mail server)
-    if (preg_match("/\[$config_ticket_prefix(\d+)\]/", $original_subject, $ticket_number_matches)) {
-        $ticket_number = intval($ticket_number_matches[1]);
-        $t = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_id FROM tickets WHERE ticket_number = $ticket_number LIMIT 1"));
+    // MSP-DS-94: a bounce is tied to a ticket only when it quotes the Message-ID of a mail THIS server queued for that ticket
+    // (email_queue.email_message_id / email_ticket_id). A '[PREFIX123]' in an attacker-supplied subject proves nothing.
+    $ndr_ticket_id = 0;
+    $ndr_client_id = 0;
+    if ($original_message_id !== '') {
+        $mid_esc = mysqli_real_escape_string($mysqli, $original_message_id);
+        $q = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT email_ticket_id FROM email_queue WHERE email_message_id = '$mid_esc' AND email_ticket_id IS NOT NULL LIMIT 1"));
+        $t = $q ? mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_id, ticket_client_id FROM tickets WHERE ticket_id = " . intval($q['email_ticket_id']) . " LIMIT 1")) : null;
         if ($t) {
-            $note = mysqli_real_escape_string($mysqli, "Email delivery failed.<br>Recipient: $failed_recipient<br>Status: $status_code<br>Diagnostic: $diagnostic_code");
-            mysqli_query($mysqli, "INSERT INTO ticket_replies SET ticket_reply = '$note', ticket_reply_type = 'System', ticket_reply_time_worked = '00:00:00', ticket_reply_by = 0, ticket_reply_ticket_id = " . intval($t['ticket_id']));
+            $ndr_ticket_id = intval($t['ticket_id']);
+            $ndr_client_id = intval($t['ticket_client_id']);
         }
+    }
+
+    // MSP-DS-105: the recipient address and subject belong to a client. With a matched ticket the alert goes only to agents who may see that client;
+    // without one it carries no recipient or subject (they stay in the mail log) instead of being broadcast to every agent.
+    if ($ndr_client_id > 0) {
+        appNotify(
+            "Ticket",
+            "Email parser NDR: Message to $failed_recipient bounced. Subject: $original_subject Diagnostics: $status_code / $diagnostic_code - check the mailbox's processed folder to see the email",
+            "",
+            $ndr_client_id
+        );
+    } else {
+        appNotify(
+            "Ticket",
+            "Email parser NDR: a message bounced (status $status_code) - see the mail log and the mailbox's processed folder for the recipient and subject",
+            "",
+            0
+        );
+    }
+
+    // The sender is a mail server, so a matched bounce is a System note on the ticket, not a client reply.
+    if ($ndr_ticket_id > 0) {
+        $note = mysqli_real_escape_string($mysqli, "Email delivery failed.<br>Recipient: $failed_recipient<br>Status: $status_code<br>Diagnostic: $diagnostic_code");
+        mysqli_query($mysqli, "INSERT INTO ticket_replies SET ticket_reply = '$note', ticket_reply_type = 'System', ticket_reply_time_worked = '00:00:00', ticket_reply_by = 0, ticket_reply_ticket_id = $ndr_ticket_id");
     }
 
     return "Bounce for $failed_recipient - $status_code / $diagnostic_code";
@@ -627,10 +646,13 @@ function mailIntakeLimits(): array {
 // Normalise + prepare one fetched message, give it a stand-in Message-ID when it has none, and run processInboundMessage().
 // Returns whether it was handled. Throws on a genuine failure (the caller counts it toward quarantine).
 function intakeHandleNormalized(int $mailbox_id, int $default_client_id, int $parse_unknown, array $norm, string $original_message_file): bool {
-    $subject = sanitizeInput($norm['subject']);
-    $from_email = sanitizeInput($norm['from_email']);
-    $from_name = sanitizeInput($norm['from_name']);
-    $date = sanitizeInput($norm['date']);
+    // MSP-DS-159: RAW text (tags stripped, trimmed, not SQL-escaped). Every consumer below (inboundTrustedContact, logMailEvent,
+    // createMailRequestFromInbound, addTicket, addReply, the contact INSERT) escapes or binds exactly once itself; escaping here as well
+    // stored "Can\'t print" and made an address with an apostrophe unmatchable.
+    $subject = sanitizeInputRaw($norm['subject']);
+    $from_email = sanitizeInputRaw($norm['from_email']);
+    $from_name = sanitizeInputRaw($norm['from_name']);
+    $date = sanitizeInputRaw($norm['date']);
 
     $prep = InboundPreparer::prepare($norm, mailIntakeLimits());
     if ($norm['message_id'] === '') {

@@ -319,7 +319,7 @@ async function passkeyDoRegister() {
         if (options.excludeCredentials)
             options.excludeCredentials = options.excludeCredentials.map(c => ({...c, id: b64u_to_buf(c.id)}));
         const credential = await navigator.credentials.create({ publicKey: options });
-        const body = { passkeyName, current_password: document.getElementById('passkeyPasswordInput').value, id: credential.id, type: credential.type,
+        const body = { passkeyName, csrf_token: '<?= $_SESSION["csrf_token"] ?>', current_password: document.getElementById('passkeyPasswordInput').value, id: credential.id, type: credential.type,
             response: {
                 clientDataJSON:    buf_to_b64u(credential.response.clientDataJSON),
                 attestationObject: buf_to_b64u(credential.response.attestationObject),

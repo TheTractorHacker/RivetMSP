@@ -157,16 +157,92 @@ function getUserAgent() {
     return $_SERVER['HTTP_USER_AGENT'];
 }
 
+// MSP-DS-158: is $ip inside any of the CIDR blocks / plain addresses in $list (IPv4 and IPv6)?
+function ipInTrustedList(string $ip, array $list): bool {
+    $bin = @inet_pton($ip);
+    if ($bin === false) { return false; }
+    foreach ($list as $entry) {
+        $entry = trim((string) $entry);
+        if ($entry === '') { continue; }
+        [$net, $bits] = array_pad(explode('/', $entry, 2), 2, null);
+        $nbin = @inet_pton($net);
+        if ($nbin === false || strlen($nbin) !== strlen($bin)) { continue; }
+        // M3-3: a prefix length must be plain digits within range for the address family; '1.2.3.4/abc' used to count as /0 and trust everyone
+        if ($bits === null) { $bits = strlen($bin) * 8; }
+        elseif (!ctype_digit($bits) || strlen($bits) > 3 || (int) $bits > strlen($bin) * 8) { continue; }
+        else { $bits = (int) $bits; }
+        $bytes = intdiv($bits, 8); $rem = $bits % 8;
+        if ($bytes > 0 && substr($bin, 0, $bytes) !== substr($nbin, 0, $bytes)) { continue; }
+        if ($rem > 0) {
+            $mask = (0xFF << (8 - $rem)) & 0xFF;
+            if ((ord($bin[$bytes]) & $mask) !== (ord($nbin[$bytes]) & $mask)) { continue; }
+        }
+        return true;
+    }
+    return false;
+}
+
+// MSP-DS-158: the client address from an X-Forwarded-For chain, given the immediate peer ($remote) and the trusted proxy list. The header is
+// only believed when the peer itself is a trusted proxy; then the chain is read from the RIGHT, skipping trusted hops, and the first
+// untrusted address is the client (the left-most entry is whatever the client typed, so it is never used).
+function clientIpFromForwardedFor(string $remote, string $xff, array $trusted): string {
+    if (!$trusted || !ipInTrustedList($remote, $trusted)) { return $remote; }
+    $hops = array_reverse(array_map('trim', explode(',', $xff)));
+    foreach ($hops as $hop) {
+        if ($hop === '' || !filter_var($hop, FILTER_VALIDATE_IP)) { return $remote; }   // malformed chain: do not guess
+        if (!ipInTrustedList($hop, $trusted)) { return $hop; }
+    }
+    return $remote;
+}
+
+// MSP-DS-158 (re-review MRR-10, M3-3, M3-4): the proxy lists in effect for HTTP_CF_CONNECTING_IP mode: [CONST_TRUSTED_PROXIES, Cloudflare ranges].
+// CONST_CLOUDFLARE_RANGES (array or comma list) replaces the built-in list in includes/cloudflare_ranges.php, which is Cloudflare's published v4/v6 set.
+function rivetCloudflareIpConfig(): array {
+    $trusted = defined('CONST_TRUSTED_PROXIES') ? CONST_TRUSTED_PROXIES : [];
+    if (is_string($trusted)) { $trusted = explode(',', $trusted); }
+    if (defined('CONST_CLOUDFLARE_RANGES')) {
+        $cf = CONST_CLOUDFLARE_RANGES;
+        if (is_string($cf)) { $cf = explode(',', $cf); }
+    } else {
+        $cf = require __DIR__ . '/includes/cloudflare_ranges.php';
+    }
+    return [(array) $trusted, (array) $cf];
+}
+
+// M3-3: is the immediate peer one the CF-Connecting-IP header may be believed from?
+function cloudflarePeerTrusted(string $remote, array $trusted, array $cfRanges): bool {
+    $peer = stripos($remote, '::ffff:') === 0 ? substr($remote, 7) : $remote;
+    $all = array_merge($trusted, $cfRanges);
+    return ipInTrustedList($remote, $all) || ipInTrustedList($peer, $all);
+}
+
+// The client address from a CF-Connecting-IP header, given the immediate peer ($remote). The header is a plain request header any client can
+// send, so it is only believed when the peer is in CONST_TRUSTED_PROXIES or in the Cloudflare ranges. There is NO private/loopback fallback
+// (M3-3): a local proxy that is reachable directly would let anyone spoof the header. A local proxy (nginx, Zoraxy) must be listed in
+// CONST_TRUSTED_PROXIES and must overwrite CF-Connecting-IP itself. Anything else gets the peer address.
+function clientIpFromCloudflare(string $remote, string $cf, array $trusted, array $cfRanges): string {
+    $cf = trim($cf);
+    if ($cf === '' || !filter_var($cf, FILTER_VALIDATE_IP)) { return $remote; }
+    return cloudflarePeerTrusted($remote, $trusted, $cfRanges) ? $cf : $remote;
+}
+
 function getIP() {
 
     // Default way to get IP
     $ip = $_SERVER['REMOTE_ADDR'];
 
     // Allow overrides via config.php in-case we use a proxy - https://docs.itflow.org/config_php
+    // HTTP_X_FORWARDED_FOR is only honoured together with CONST_TRUSTED_PROXIES (array or comma list of proxy addresses/CIDRs); without it the
+    // header is ignored because any client can send it (MSP-DS-158). With nginx real_ip configured (deploy --trusted-proxy), REMOTE_ADDR is
+    // already the client and neither is needed.
     if (defined("CONST_GET_IP_METHOD") && CONST_GET_IP_METHOD == "HTTP_X_FORWARDED_FOR") {
-        $ip = explode(',', getenv('HTTP_X_FORWARDED_FOR'))[0] ?? $_SERVER['REMOTE_ADDR'];
+        $trusted = defined('CONST_TRUSTED_PROXIES') ? CONST_TRUSTED_PROXIES : [];
+        if (is_string($trusted)) { $trusted = explode(',', $trusted); }
+        $ip = clientIpFromForwardedFor((string) $_SERVER['REMOTE_ADDR'], (string) getenv('HTTP_X_FORWARDED_FOR'), (array) $trusted);
     } elseif (defined("CONST_GET_IP_METHOD") && CONST_GET_IP_METHOD == "HTTP_CF_CONNECTING_IP") {
-        $ip = $_SERVER["HTTP_CF_CONNECTING_IP"] ?? $_SERVER['REMOTE_ADDR'];
+        // MSP-DS-158: only a peer in CONST_TRUSTED_PROXIES or the Cloudflare ranges (built in, overridable by CONST_CLOUDFLARE_RANGES) is believed.
+        [$trusted, $cf_ranges] = rivetCloudflareIpConfig();
+        $ip = clientIpFromCloudflare((string) $_SERVER['REMOTE_ADDR'], (string) ($_SERVER['HTTP_CF_CONNECTING_IP'] ?? ''), (array) $trusted, (array) $cf_ranges);
     }
 
     // Abort if something isn't right
@@ -559,6 +635,40 @@ function encryptUserSpecificKey($user_password, $target_user_id = null, $old_pas
     return 'V2:' . $salt . $iv . $ciphertext;
 }
 
+/**
+ * MSP-DS-13: the vault wrap to store when a user changes their password WITHOUT a browser session (the mobile API). vw3 wraps are re-wrapped under
+ * the new password from the old one; a legacy wrap is opened with the old password and sealed again (V2 format) under the new one. Returns null
+ * when there is nothing to re-wrap or the old password does not open it (the caller then leaves the stored wrap as it was).
+ */
+function rewrapUserKeyForPasswordChange($mysqli, int $user_id, string $old_password, string $new_password)
+{
+    $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_specific_encryption_ciphertext AS w FROM users WHERE user_id = $user_id LIMIT 1"));
+    $stored = (string) ($row['w'] ?? '');
+    if ($stored === '') {
+        return null;
+    }
+    if (str_starts_with($stored, 'vw3:')) {
+        if (!class_exists(\RivetMSP\Crypto\VaultV3::class)) {
+            return null;
+        }
+        try {
+            return \RivetMSP\Crypto\VaultV3::wrapForPasswordChange($mysqli, $user_id, $new_password, $old_password);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+    $master = decryptUserSpecificKey($stored, $old_password);
+    if ($master === false || $master === '') {
+        return null;
+    }
+    $iv = randomString();
+    $salt = randomString();
+    $key = hash_pbkdf2('sha256', $new_password, $salt, 100000, 16, true);
+    $ciphertext = openssl_encrypt($master, 'aes-128-cbc', $key, 0, $iv);
+
+    return $ciphertext === false ? null : 'V2:' . $salt . $iv . $ciphertext;
+}
+
 // Given a ciphertext (incl. IV) and the user's (or API key) password, returns the site master key
 // Ran at login, to facilitate generateUserSessionKey
 function decryptUserSpecificKey($user_encryption_ciphertext, $user_password)
@@ -653,11 +763,21 @@ function storePasskeyEncKey($mysqli, int $user_id, string $master_key, bool $htt
     $esc_iv = mysqli_real_escape_string($mysqli, base64_encode($iv));
     mysqli_query($mysqli, "UPDATE users SET user_passkey_enc_ciphertext='$esc_ct', user_passkey_enc_iv='$esc_iv', user_passkey_bootstrap_key=NULL WHERE user_id=$user_id");
     $expires = time() + $lifetime;
-    if ($https_only) {
-        setcookie('user_passkey_enc_key', $enc_key, ['expires' => $expires, 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'None']);
-    } else {
-        setcookie('user_passkey_enc_key', $enc_key, $expires, '/');
+    // MSP-DS-97: HttpOnly and SameSite=Strict in both modes (the cookie is only ever read server-side on a same-site sign-in request); Secure when HTTPS is enforced.
+    setcookie('user_passkey_enc_key', $enc_key, ['expires' => $expires, 'path' => '/', 'secure' => (bool) $https_only, 'httponly' => true, 'samesite' => 'Strict']);
+}
+
+/**
+ * MSP-DS-97: expire the passkey vault-key cookie in this browser (sign-out, sign-out-everywhere, idle/absolute expiry). A later passkey
+ * sign-in still opens the vault (it falls back to the canonical key and sets a fresh cookie); a shared browser just no longer keeps the unwrap key.
+ * Same attributes as storePasskeyEncKey() so every browser removes it.
+ */
+function clearPasskeyEncKeyCookie(): void {
+    if (!headers_sent()) {
+        $https = isset($GLOBALS['config_https_only']) ? (bool) $GLOBALS['config_https_only'] : !empty($_SERVER['HTTPS']);
+        setcookie('user_passkey_enc_key', '', ['expires' => time() - 3600, 'path' => '/', 'secure' => $https, 'httponly' => true, 'samesite' => 'Strict']);
     }
+    unset($_COOKIE['user_passkey_enc_key']);
 }
 
 // Attempts to recover the real site master key from the passkey-wrapped copy
@@ -731,18 +851,31 @@ function decryptCredentialEntry($credential_password_ciphertext, $credential_id 
     return openssl_decrypt($credential_ciphertext, 'aes-128-cbc', $site_encryption_master_key, 0, $credential_iv);
 }
 
+// MSP-DS-21: the vault master key of this browser session, or a refusal. Without the vault-key cookie (a remember-me restored session, a browser restart
+// inside the session lifetime) openssl_decrypt() returned false and openssl_encrypt() then silently used an all-zero key, storing the value in
+// plaintext-equivalent form. A locked vault now stops the write with a message instead.
+function vaultSessionMasterKeyOrStop(): string
+{
+    $ct  = $_SESSION['user_encryption_session_ciphertext'] ?? '';
+    $iv  = $_SESSION['user_encryption_session_iv'] ?? '';
+    $key = $_COOKIE['user_encryption_session_key'] ?? '';
+    $master = ($ct !== '' && $iv !== '' && $key !== '') ? openssl_decrypt($ct, 'aes-128-cbc', $key, 0, $iv) : false;
+    if (!is_string($master) || $master === '') {
+        if (PHP_SAPI === 'cli' || !function_exists('redirect')) {
+            throw new RuntimeException('The credential vault is locked for this session.');
+        }
+        flash_alert('The credential vault is locked for this session. Sign out and sign in again with your password, then retry; nothing was saved.', 'error');
+        redirect();
+        exit;
+    }
+    return $master;
+}
+
 // Encrypts a website/asset credential password
 function encryptCredentialEntry($credential_password_cleartext)
 {
     $iv = randomString();
-
-    // Get the user session info.
-    $user_encryption_session_ciphertext = $_SESSION['user_encryption_session_ciphertext'];
-    $user_encryption_session_iv =  $_SESSION['user_encryption_session_iv'];
-    $user_encryption_session_key = $_COOKIE['user_encryption_session_key'];
-
-    //Decrypt the session key to get the master key
-    $site_encryption_master_key = openssl_decrypt($user_encryption_session_ciphertext, 'aes-128-cbc', $user_encryption_session_key, 0, $user_encryption_session_iv);
+    $site_encryption_master_key = vaultSessionMasterKeyOrStop();
 
     //Encrypt the website/asset credential using the master key
     $ciphertext = openssl_encrypt($credential_password_cleartext, 'aes-128-cbc', $site_encryption_master_key, 0, $iv);
@@ -810,10 +943,7 @@ function apiEncryptCredentialEntry(#[\SensitiveParameter]$credential_cleartext, 
 function encryptOtpSecret(string $otp_plain): string {
     if (empty($otp_plain)) return '';
     $iv = randomString();
-    $user_encryption_session_ciphertext = $_SESSION['user_encryption_session_ciphertext'];
-    $user_encryption_session_iv = $_SESSION['user_encryption_session_iv'];
-    $user_encryption_session_key = $_COOKIE['user_encryption_session_key'];
-    $master_key = openssl_decrypt($user_encryption_session_ciphertext, 'aes-128-cbc', $user_encryption_session_key, 0, $user_encryption_session_iv);
+    $master_key = vaultSessionMasterKeyOrStop();
     $ct = openssl_encrypt($otp_plain, 'aes-128-cbc', $master_key, 0, $iv);
     return 'enc:' . $iv . $ct;
 }
@@ -935,7 +1065,9 @@ function getSSL($full_name)
     }
 
     // Refuse hosts that resolve to loopback/private/reserved ranges (this runs server-side for any agent: no port-probing the LAN)
-    if (!hostResolvesOnlyToPublicIps($name)) {
+    // MSP-DS-107: connect to the address that was vetted, not to the name (a second lookup could answer differently: DNS rebinding); the name stays the TLS SNI.
+    $vetted_ips = publicIpsForHost($name);
+    if (!$vetted_ips) {
         $certificate['expire'] = '';
         $certificate['issued_by'] = '';
         $certificate['public_key'] = '';
@@ -943,8 +1075,9 @@ function getSSL($full_name)
     }
 
     // Get SSL/TSL certificate (using verify peer false to allow for self-signed certs) for domain on default port
-    $socket = "ssl://$name:$port";
-    $get = stream_context_create(array("ssl" => array("capture_peer_cert" => true, "verify_peer" => false,)));
+    $connect_ip = $vetted_ips[0];
+    $socket = "ssl://" . (str_contains($connect_ip, ':') ? "[$connect_ip]" : $connect_ip) . ":$port";
+    $get = stream_context_create(array("ssl" => array("capture_peer_cert" => true, "verify_peer" => false, "peer_name" => $name, "SNI_enabled" => true, "SNI_server_name" => $name)));
     $read = stream_socket_client($socket, $errno, $errstr, 5, STREAM_CLIENT_CONNECT, $get);
 
     // If the socket connected
@@ -995,8 +1128,9 @@ function validateCSRFToken($token)
  */
 
 function validateAdminRole() {
-    global $session_user_role;
-    if (!isset($session_user_role) || $session_user_role != 3) {
+    // MSP-DS-98: administrator means the role's role_is_admin flag (as in admin/post.php), not the hard-coded role id 3
+    global $session_is_admin;
+    if (empty($session_is_admin)) {
         $_SESSION['alert_type'] = "danger";
         $_SESSION['alert_message'] = WORDING_ROLECHECK_FAILED;
         header("Location: " . $_SERVER["HTTP_REFERER"]);
@@ -1097,7 +1231,7 @@ function report_send_csv(string $filename, array $header, array $rows)
             return $v;
         }
         $v = (string) ($v ?? '');
-        if ($v !== '' && !is_numeric($v) && in_array($v[0], ['=', '+', '-', '@'], true)) {
+        if ($v !== '' && !is_numeric($v) && in_array($v[0], ['=', '+', '-', '@', "\t", "\r", '|'], true)) {
             $v = "'" . $v;
         }
         return $v;
@@ -1107,10 +1241,11 @@ function report_send_csv(string $filename, array $header, array $rows)
     // UTF-8 BOM so Excel opens accented characters correctly.
     fwrite($out, "\xEF\xBB\xBF");
     if (!empty($header)) {
-        fputcsv($out, array_map($sanitize, $header));
+        fputcsv($out, array_map($sanitize, $header), ',', '"', '');
     }
     foreach ($rows as $row) {
-        fputcsv($out, array_map($sanitize, (array) $row));
+        // MSP-DS-99: empty escape character = plain RFC 4180 quoting; PHP's default '\\' leaves a quote after a backslash undoubled, which ends the cell early
+        fputcsv($out, array_map($sanitize, (array) $row), ',', '"', '');
     }
     fclose($out);
     exit;
@@ -2653,7 +2788,8 @@ function checkFileUpload($file, $allowed_extensions)
     $hashedContent = hash('md5', $fileContent);
 
     // Generate a secure filename using the hashed content
-    $secureFilename = $hashedContent . randomString(2) . '.' . $extension;
+    // MSP-DS-71: an alphanumeric suffix (randomString() is base64url and added '-'/'_' to ~6% of names, which every caller then rejected)
+    $secureFilename = $hashedContent . bin2hex(random_bytes(1)) . '.' . $extension;
 
     return $secureFilename;
 }
@@ -2679,6 +2815,15 @@ function sanitizeInput($input) {
     $input = mysqli_real_escape_string($mysqli, $input);
 
     return $input;
+}
+
+// MSP-DS-159: sanitizeInput() without the SQL escape, for values that are handed to code which escapes or binds them itself
+// (the inbound mail pipeline: addTicket/addReply/createMailRequestFromInbound/logMailEvent). Escaping twice stored literal backslashes.
+function sanitizeInputRaw($input) {
+    if (!empty($input) && !mb_check_encoding($input, 'UTF-8')) {
+        $input = mb_convert_encoding($input, 'UTF-8', 'Windows-1252');
+    }
+    return trim(strip_tags((string) $input));
 }
 
 function cleanInput($input) {
@@ -2908,6 +3053,145 @@ function getTotalTax($tax_name, $year, $mysqli)
     return $row['total_tax'] ?? 0;
 }
 
+/**
+ * MSP-DS-59: the one frequency -> interval map for recurring tickets (the forms offer every key). Returns null for anything else.
+ */
+function recurringTicketIntervalSpec($frequency): ?string {
+    $map = [
+        'three days' => '3 days',
+        'weekly'     => '1 week',
+        'biweekly'   => '2 weeks',
+        'monthly'    => '1 month',
+        'quarterly'  => '3 months',
+        'biannually' => '6 months',
+        'annually'   => '12 months',
+    ];
+    return $map[strtolower(trim((string) $frequency))] ?? null;
+}
+
+/**
+ * MSP-DS-64: a task whose approval is still pending or was declined cannot be completed (server side, not only a hidden button).
+ */
+function taskApprovalBlocksCompletion($task_id): bool {
+    global $mysqli;
+    $task_id = intval($task_id);
+    $r = mysqli_query($mysqli, "SELECT 1 FROM task_approvals WHERE approval_task_id = $task_id AND approval_status IN ('pending','declined') LIMIT 1");
+    return $r && mysqli_num_rows($r) > 0;
+}
+
+/**
+ * MSP-DS-65: a logged-time string for a TIME column - strictly H:MM:SS .. HHH:MM:SS, 0 to 838 hours, never negative.
+ * Returns the normalised HH:MM:SS string, or null when the input is not acceptable.
+ */
+function parseTimeWorked($input): ?string {
+    if (!is_string($input) || !preg_match('/^(\d{1,3}):([0-5]\d):([0-5]\d)$/', trim($input), $m)) {
+        return null;
+    }
+    $hours = intval($m[1]);
+    if ($hours > 838) {
+        return null;
+    }
+    return sprintf('%02d:%02d:%02d', $hours, intval($m[2]), intval($m[3]));
+}
+
+/**
+ * MSP-DS-66: why a ticket may not be resolved/closed yet, or null when it may. The single set of close preconditions shared by every
+ * path that resolves/closes a ticket (resolve/close, status dropdown, quick status, reply-with-status, bulk reply/resolve, Kanban,
+ * merge, bulk merge, api/v1). Always: the customer-signed outtake custody control. With $with_tasks: open tasks too.
+ */
+function ticketCloseBlockReason($ticket_id, bool $with_tasks = false): ?string {
+    global $mysqli;
+    $ticket_id = intval($ticket_id);
+    $r = mysqli_query($mysqli, "SELECT COUNT(*) FROM ticket_outtake_forms WHERE outtake_ticket_id = $ticket_id AND outtake_signed_at IS NULL");
+    if ($r && intval(mysqli_fetch_row($r)[0]) > 0) {
+        return "there is an unsigned outtake form. Have the customer sign it first.";
+    }
+    $r = mysqli_query($mysqli, "SELECT COUNT(*) FROM ticket_worksheets WHERE worksheet_ticket_id = $ticket_id AND worksheet_is_outtake = 1 AND worksheet_completed_at IS NULL");
+    if ($r && intval(mysqli_fetch_row($r)[0]) > 0) {
+        return "there is an unfinalized outtake worksheet. Finalize it first.";
+    }
+    if ($with_tasks) {
+        $r = mysqli_query($mysqli, "SELECT COUNT(*) FROM tasks WHERE task_completed_at IS NULL AND task_ticket_id = $ticket_id");
+        if ($r && intval(mysqli_fetch_row($r)[0]) > 0) {
+            return "there are open tasks. Complete them first.";
+        }
+    }
+    return null;
+}
+
+/**
+ * MSP-DS-67 (re-review M4-1): has a client approval ever been requested for / decided on this change? Judged from durable columns on the
+ * change itself, never from the action log (log retention deletes old rows, and logAction() cuts long descriptions): client_approval_requested_at
+ * is set once when the request is first sent (or the client first decides) and never cleared; client_rejected_at records a client rejection and is
+ * not cleared by the DS-51 reset that puts client_decision back to 'pending'. $row may carry the columns when the caller already loaded them.
+ */
+function changeClientApprovalEverStarted($change_id, ?array $row = null): bool {
+    global $mysqli;
+    if ($row === null || !array_key_exists('client_approval_requested_at', $row) || !array_key_exists('client_rejected_at', $row)) {
+        $change_id = intval($change_id);
+        $r = mysqli_query($mysqli, "SELECT client_approval_requested_at, client_rejected_at, client_decision FROM changes WHERE change_id = $change_id");
+        $row = $r ? mysqli_fetch_assoc($r) : null;
+    }
+    if (!$row) {
+        return false;
+    }
+    return !empty($row['client_approval_requested_at']) || !empty($row['client_rejected_at']) || (($row['client_decision'] ?? 'pending') !== 'pending');
+}
+
+/**
+ * MSP-DS-67: true when the change does not need the client's approval or the client has approved it.
+ * The agent-side status buttons must not push a change that requires client approval past 'awaiting_approval' otherwise.
+ * (M4-1) The approval must also be NEWER than the latest client rejection and not older than the first request, so a rejection
+ * that the DS-51 reset has turned back into 'pending' is only ever satisfied by a fresh client approval.
+ */
+function changeClientApprovalSatisfied($change_id): bool {
+    global $mysqli;
+    $change_id = intval($change_id);
+    $r = mysqli_query($mysqli, "SELECT requires_client_approval, client_decision, client_decided_at, client_approval_requested_at, client_rejected_at FROM changes WHERE change_id = $change_id");
+    $row = $r ? mysqli_fetch_assoc($r) : null;
+    if (!$row) {
+        return true; // not found: let setStatus() report it
+    }
+    if (!intval($row['requires_client_approval'])) {
+        return true;
+    }
+    if ($row['client_decision'] !== 'approved') {
+        return false;
+    }
+    $decided = (string) $row['client_decided_at'];
+    foreach (['client_rejected_at', 'client_approval_requested_at'] as $c) {
+        if (!empty($row[$c]) && ($decided === '' || strcmp($decided, (string) $row[$c]) < 0)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * MSP-DS-69: neutralise spreadsheet formula injection in one CSV data row. Text cells that begin with = + - @ | TAB or CR get a
+ * leading apostrophe; numbers (including genuine negatives) are written as they are. Use it on every row handed to fputcsv(),
+ * and write with an EMPTY escape character (fputcsv($f, $row, ',', '"', '')): with PHP's default backslash escape a value such as
+ * x\",=2+5,y is split by RFC 4180 readers into a formula cell that this first-character check never saw (review R21).
+ * $rawColumns lists 0-based columns that are written untouched. Only the credential export uses it, for the username / password /
+ * TOTP columns: that export is a vault-gated secret dump whose format is also the import format (and what people copy from),
+ * so an apostrophe there silently corrupts every secret that starts with - + = @ (review R7).
+ */
+function csvSafeRow($row, array $rawColumns = []): array {
+    $out = [];
+    foreach ((array) $row as $i => $v) {
+        if (in_array($i, $rawColumns, true) || is_int($v) || is_float($v) || $v === null) {
+            $out[$i] = $v;
+            continue;
+        }
+        $v = (string) $v;
+        if ($v !== '' && !is_numeric($v) && in_array($v[0], ['=', '+', '-', '@', '|', "\t", "\r"], true)) {
+            $v = "'" . $v;
+        }
+        $out[$i] = $v;
+    }
+    return $out;
+}
+
 function generateReadablePassword($security_level)
 {
     // Cap security level at 5
@@ -2922,16 +3206,16 @@ function generateReadablePassword($security_level)
     $adverbs = ['Quickly', 'Slowly', 'Gracefully', 'Wildly', 'Loudly', 'Silently', 'Cheerfully', 'Eagerly', 'Gently', 'Happily', 'Jovially', 'Kindly', 'Lazily', 'Merrily', 'Neatly', 'Politely', 'Quietly', 'Rapidly', 'Smoothly', 'Tightly', 'Swiftly', 'Securely', 'Efficiently', 'Rapidly', 'Smoothly', 'Reliably', 'Safely', 'Wirelessly', 'Instantly', 'Silently', 'Automatically', 'Seamlessly', 'Digitally', 'Virtually', 'Continuously', 'Regularly', 'Intelligently', 'Logically'];
 
     // Randomly select words from arrays
-    $adj = $adjectives[array_rand($adjectives)];
-    $noun = $nouns[array_rand($nouns)];
-    $verb = $verbs[array_rand($verbs)];
-    $adv = $adverbs[array_rand($adverbs)];
+    $adj = $adjectives[random_int(0, count($adjectives) - 1)];
+    $noun = $nouns[random_int(0, count($nouns) - 1)];
+    $verb = $verbs[random_int(0, count($verbs) - 1)];
+    $adv = $adverbs[random_int(0, count($adverbs) - 1)];
 
     // Combine to create a base password
     $password = $adj . $noun . $verb . $adv;
 
     // Select an article randomly
-    $article = $articles[array_rand($articles)];
+    $article = $articles[random_int(0, count($articles) - 1)];
 
     // Determine if we should use 'An' instead of 'A'
     if ($article == 'A' && preg_match('/^[aeiouAEIOU]/', $adj)) {
@@ -2954,8 +3238,11 @@ function generateReadablePassword($security_level)
 
     // Generate an array of indices based on the password length
     $indices = range(0, strlen($password) - 1);
-    // Randomly shuffle the indices
-    shuffle($indices);
+    // Randomly shuffle the indices (MSP-DS-44: Fisher-Yates over random_int(), not the Mt19937 PHP built-in)
+    for ($k = count($indices) - 1; $k > 0; $k--) {
+        $swap = random_int(0, $k);
+        [$indices[$k], $indices[$swap]] = [$indices[$swap], $indices[$k]];
+    }
 
     // Iterate through the shuffled indices and replace characters based on the security level
     for ($i = 0; $i < min($security_level, strlen($password)); $i++) {
@@ -2967,10 +3254,16 @@ function generateReadablePassword($security_level)
         }
     }
 
-    // Add as many random numbers as the security level
-    $password .= rand(pow(10, $security_level - 1), pow(10, $security_level) - 1);
+    // Add random digits: as many as the security level, never fewer than six (MSP-DS-44: CSPRNG, longer suffix)
+    $digits = max(6, $security_level);
+    $password .= random_int(10 ** ($digits - 1), 10 ** $digits - 1);
 
     return $password;
+}
+
+/** MSP-DS-6: undo the backslash-apostrophe a caller's SQL escaping left in text that is bound, not interpolated, into email_queue. */
+function mailQueueUnescape($text) {
+    return str_replace(["\\'", '\\"'], ["'", '"'], strval($text));
 }
 
 /**
@@ -2995,8 +3288,12 @@ function addToMailQueue($data) {
         $from_name = strval($email['from_name']);
         $recipient = strval($email['recipient']);
         $recipient_name = strval($email['recipient_name']);
-        $subject = strval($email['subject']);
-        $body = strval($email['body']);
+        // MSP-DS-6: the queue binds its values, so the SQL escaping some callers still apply (sanitizeInput() on names and subjects:
+        // O'Brien -> O\'Brien) would be sent as-is. Remove exactly that, a backslash before an apostrophe or double quote, from every text field.
+        $from_name = mailQueueUnescape($from_name);
+        $recipient_name = mailQueueUnescape($recipient_name);
+        $subject = mailQueueUnescape($email['subject']);
+        $body = mailQueueUnescape($email['body']);
         $cal_str = isset($email['cal_str']) ? strval($email['cal_str']) : '';
 
         // Every queued message gets its own Message-ID (stored, and sent as the Message-ID header by cron/mail_queue.php) so a
@@ -3713,6 +4010,21 @@ function enforceUserPermission($module, $check_access_level = 1) {
 }
 
 /**
+ * Review R20 (MSP-DS-50): agent/kb_article_upload.php is the image upload behind EVERY .tinymce editor (KB articles, documents,
+ * tickets/replies/recurring tickets, client and contact bulk email), not just the KB. Saving an image is a write-level action, so
+ * it needs Write on the module of any editor that posts to it, not on module_kb specifically. Read-only roles stay refused.
+ */
+function enforceEditorImageUploadPermission(): void {
+    foreach (['module_kb', 'module_support', 'module_client'] as $module) {
+        $level = lookupUserPermission($module);
+        if ($level && $level >= 2) {
+            return;
+        }
+    }
+    enforceUserPermission('module_kb', 2); // refuses with the usual message
+}
+
+/**
  * MSP-WEB-1: call once before decrypting credential values anywhere other than the reveal endpoint (see includes/vault_reveal.php, vaultDisclosureCheck()).
  * Refuses and stops when the reveal limit is used up or, for $bulk exports/PDFs, when the password step-up is due.
  */
@@ -3721,6 +4033,25 @@ function vaultGate(string $path, int $values = 1, bool $bulk = false, bool $coun
     require_once __DIR__ . '/includes/security_policy.php';
     require_once __DIR__ . '/includes/vault_reveal.php';
     vaultDisclosureRequire($mysqli, $path, $values, $bulk, $countsAsReveal);
+}
+
+/**
+ * MSP-DS-26 (review R9): the soft variant of vaultGate() for LIST pages that decrypt one credential per row while already printing HTML.
+ * Still counted per credential against the reveal limit, but returns false (the caller renders that row masked) instead of denyAccess()+exit
+ * in the middle of a table. See vaultDisclosureRow() in includes/vault_reveal.php.
+ */
+function vaultGateRow(string $path, int $values = 1): bool {
+    global $mysqli;
+    require_once __DIR__ . '/includes/security_policy.php';
+    require_once __DIR__ . '/includes/vault_reveal.php';
+
+    return vaultDisclosureRow($mysqli, $path, $values);
+}
+
+/** The masked table row printed for a credential vaultGateRow() refused. $escapedName must already be HTML-escaped. */
+function vaultRowDeniedHtml(string $escapedName, int $colspan = 4): string {
+    return '<tr><td><i class="fa fa-fw fa-key text-secondary me-2"></i>' . $escapedName . '</td><td colspan="' . max(1, $colspan - 1)
+        . '" class="text-muted small"><i class="fas fa-lock me-1"></i>Hidden: you reached the credential reveal limit. Wait a few minutes and reload, or open the credential from the Credentials page.</td></tr>';
 }
 
 function enforceClientAccess($client_id = null) {
@@ -3806,8 +4137,8 @@ function appNotify($type, $details, $action = null, $client_id = 0, $entity_id =
 
     $push_action = $action;
 
-    $type    = substr($type, 0, 200);
-    $details = substr($details, 0, 1000);
+    $type    = mb_substr($type, 0, 200, 'UTF-8');
+    $details = mb_substr($details, 0, 1000, 'UTF-8');
     $type_esc    = mysqli_real_escape_string($mysqli, $type);
     $details_esc = mysqli_real_escape_string($mysqli, $details);
     $client_id = intval($client_id);
@@ -3815,7 +4146,7 @@ function appNotify($type, $details, $action = null, $client_id = 0, $entity_id =
 
     $action_sql = is_null($action)
         ? "NULL"
-        : "'" . mysqli_real_escape_string($mysqli, substr($action, 0, 250)) . "'";
+        : "'" . mysqli_real_escape_string($mysqli, mb_substr($action, 0, 250, 'UTF-8')) . "'";
 
     // MSP-INJ-11: a notification about one client goes only to the agents who may see that client: administrators, users with no client
     // restriction, and users whose restriction list includes it. Notifications that are not about a client (client_id 0) still go to every agent.
@@ -3869,16 +4200,16 @@ function notifyUser($user_id, $type, $details, $action = null, $client_id = 0, $
     }
 
     // This user muted the category (Preferences > In-app notifications): nothing is created, published or pushed.
-    if (!inapp_notification_allowed_for_user($user_id, substr((string) $type, 0, 200))) {
+    if (!inapp_notification_allowed_for_user($user_id, mb_substr((string) $type, 0, 200, 'UTF-8'))) {
         return;
     }
 
     $client_id = intval($client_id);
     $entity_id = intval($entity_id);
 
-    $action_sql = is_null($action) ? "NULL" : "'" . mysqli_real_escape_string($mysqli, substr($action, 0, 250)) . "'";
-    $type_esc = mysqli_real_escape_string($mysqli, substr($type, 0, 200));
-    $details_esc = mysqli_real_escape_string($mysqli, substr($details, 0, 1000));
+    $action_sql = is_null($action) ? "NULL" : "'" . mysqli_real_escape_string($mysqli, mb_substr($action, 0, 250, 'UTF-8')) . "'";
+    $type_esc = mysqli_real_escape_string($mysqli, mb_substr($type, 0, 200, 'UTF-8'));
+    $details_esc = mysqli_real_escape_string($mysqli, mb_substr($details, 0, 1000, 'UTF-8'));
 
     mysqli_query($mysqli, "INSERT INTO notifications SET notification_type = '$type_esc', notification = '$details_esc', notification_action = $action_sql, notification_client_id = $client_id, notification_entity_id = $entity_id, notification_user_id = $user_id");
 
@@ -3914,9 +4245,10 @@ function logAction($type, $action, $description, $client_id = 0, $entity_id = 0)
     $raw_log_type = (string) $type;
     $raw_log_action = (string) $action;
     $raw_log_description = (string) $description;
-    $type = substr($raw_log_type, 0, 200);
-    $action = substr($raw_log_action, 0, 255);
-    $description = substr($raw_log_description, 0, 1000);
+    // mb_strcut cuts on a byte budget but never inside a multibyte character: a plain substr() left half an emoji, which strict sql_mode rejects (the INSERT failed).
+    $type = mb_strcut($raw_log_type, 0, 200, 'UTF-8');
+    $action = mb_strcut($raw_log_action, 0, 255, 'UTF-8');
+    $description = mb_strcut($raw_log_description, 0, 1000, 'UTF-8');
     $log_ip = (string) $session_ip;
     $log_user_agent = (string) $session_user_agent;
 
@@ -3952,7 +4284,7 @@ function applyCsatRating(mysqli $mysqli, int $ticket_id, int $rating, string $co
 {
     $ticket_id = intval($ticket_id);
     $rating = max(1, min(5, $rating));
-    $comment = substr(trim($comment), 0, 1000);
+    $comment = mb_strcut(trim($comment), 0, 1000, 'UTF-8');
     $comment_esc = mysqli_real_escape_string($mysqli, $comment);
     $comment_sql = $comment !== '' ? "'$comment_esc'" : 'NULL';
 
@@ -4087,7 +4419,7 @@ function logMailEvent(?int $mailbox_id, ?string $from_email, ?string $from_name,
 // Allow-list for saved ticket/mail-request attachments. Anything else is blocked
 // and logged rather than saved to disk.
 function ticketAttachmentAllowedExtensions(): array {
-    return ['jpg', 'jpeg', 'gif', 'png', 'webp', 'svg', 'pdf', 'txt', 'md', 'doc', 'docx', 'csv', 'xls', 'xlsx', 'xlsm', 'zip', 'tar', 'gz'];
+    return ['jpg', 'jpeg', 'gif', 'png', 'webp', 'pdf', 'txt', 'md', 'doc', 'docx', 'csv', 'xls', 'xlsx', 'xlsm', 'zip', 'tar', 'gz'];
 }
 
 // Cached per-request; used in ticket notification emails.
@@ -4117,12 +4449,21 @@ function getCompanyNameAndPhone(): array {
 // sites that have them wired up and can reassign from here - this is only
 // the fallback used at INSERT time, one tier below an explicit pick and one
 // tier above staying unassigned.
-function resolveTicketAssignee(int $explicit_assigned_to): int {
-    global $config_ticket_default_technician_id;
+function resolveTicketAssignee(int $explicit_assigned_to, int $client_id = 0): int {
+    global $config_ticket_default_technician_id, $mysqli;
     if ($explicit_assigned_to > 0) {
         return $explicit_assigned_to;
     }
-    return intval($config_ticket_default_technician_id ?? 0);
+    $default_tech = intval($config_ticket_default_technician_id ?? 0);
+    if ($default_tech > 0) {
+        // MSP-DS-167: the default technician is only used when they can actually work a ticket of this client
+        // (an unrestricted account, or one allowed this client). $client_id 0 means no/unknown client: unrestricted accounts only.
+        require_once __DIR__ . '/includes/dispatch_functions.php';
+        if (!ticketAssigneeEligible($mysqli, $default_tech, $client_id)) {
+            return 0;
+        }
+    }
+    return $default_tech;
 }
 
 // Resolves a ticket's category at creation time for every creation path
@@ -4324,6 +4665,23 @@ function getAvgResolutionTimeHours($mysqli, int $year, string $extra_where = '')
     return floatval($row['avg_h'] ?? 0);
 }
 
+// MSP-DS-159/160: addToMailQueue() binds its values, so a body or subject that was run through mysqli_real_escape_string()
+// reaches the recipient with literal backslashes. Values that callers already SQL-escaped are turned back into text here.
+function rivetUnescapeSql($value): string {
+    return (string) preg_replace_callback('/\\\\([0nrZ\\\\\'"])/', function ($m) {
+        return ['0' => "\0", 'n' => "\n", 'r' => "\r", 'Z' => "\x1a"][$m[1]] ?? $m[1];
+    }, (string) $value);
+}
+
+// MSP-DS-160: staff notification emails carry the sender's text, never the sender's HTML (links, forms, tracking pixels).
+function rivetMailSafeExcerpt($html, int $max = 3000): string {
+    $text = preg_replace('/<(br|\/p|\/div|\/li)\b[^>]*>/i', "\n", (string) $html);
+    $text = preg_replace('#<(script|style)\b.*?</\1>#is', '', $text);
+    $text = html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = trim(preg_replace("/[ \t]+/", ' ', preg_replace("/\n{3,}/", "\n\n", $text)));
+    return nl2br(nullable_htmlentities(mb_substr($text, 0, $max)));
+}
+
 function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date, $subject, $message, $attachments, $original_message_file, $ccs, $mailbox_id = null, $mail_message_id = null) {
     global $mysqli, $config_app_name, $config_ticket_prefix, $config_ticket_client_general_notifications, $config_ticket_new_ticket_notification_email, $config_base_url, $config_ticket_from_name, $config_ticket_from_email, $config_ticket_default_billable;
     $company = getCompanyNameAndPhone();
@@ -4358,6 +4716,7 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
 
     // Clean up the message
     $message = trim($message);
+    $message_notify = rivetMailSafeExcerpt($message);   // MSP-DS-160: text-only copy for the staff notification
     // Remove DOCTYPE and meta tags
     $message = preg_replace('/<!DOCTYPE[^>]*>/i', '', $message);
     $message = preg_replace('/<meta[^>]*>/i', '', $message);
@@ -4368,7 +4727,7 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
     // Convert newlines to <br>
     $message = nl2br($message);
     // Wrap final formatted message
-    $message = "<i>Email from: <b>$contact_name</b> &lt;$contact_email&gt; at $date:-</i> <br><br><div style='line-height:1.5;'>$message</div>";
+    $message = "<i>Email from: <b>" . nullable_htmlentities($contact_name) . "</b> &lt;" . nullable_htmlentities($contact_email) . "&gt; at " . nullable_htmlentities($date) . ":-</i> <br><br><div style='line-height:1.5;'>$message</div>";
 
     $ticket_prefix_esc = mysqli_real_escape_string($mysqli, $config_ticket_prefix);
     $message_esc = mysqli_real_escape_string($mysqli, $message);
@@ -4378,7 +4737,7 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
 
     $url_key = randomString(32);
     $ticket_mailbox_id_sql = ($mailbox_id !== null && $mailbox_id !== '') ? intval($mailbox_id) : 'NULL';
-    $resolved_assigned_to = resolveTicketAssignee(0);
+    $resolved_assigned_to = resolveTicketAssignee(0, $client_id);
     $ticket_status = resolveTicketCreationStatus($resolved_assigned_to);
     $category_id = resolveTicketCategory(0);
 
@@ -4399,13 +4758,13 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
     ticketCategoryApplyOnCreate($mysqli, $id, $category_id);
 
     // Logging
-    logAction("Ticket", "Create", "Email parser: Client contact $contact_email_esc created ticket $ticket_prefix_esc$ticket_number ($subject) ($id)", $client_id, $id);
+    logAction("Ticket", "Create", "Email parser: Client contact $contact_email created ticket $config_ticket_prefix$ticket_number ($subject) ($id)", $client_id, $id);
 
     // Broadcast to active agents so the mobile app gets a push for it too,
     // even when the default-technician setting (Admin > Settings > Tickets)
     // assigned it - that setting only sets the fallback assignee, it doesn't
     // change who gets notified about new tickets.
-    appNotify("Ticket", "Email parser: $contact_email_esc raised a new ticket $ticket_prefix_esc$ticket_number - $subject", "/agent/ticket.php?ticket_id=$id" . ($client_id ? "&client_id=$client_id" : ''), $client_id, $id);
+    appNotify("Ticket", "Email parser: $contact_email raised a new ticket $config_ticket_prefix$ticket_number - $subject", "/agent/ticket.php?ticket_id=$id" . ($client_id ? "&client_id=$client_id" : ''), $client_id, $id);
 
     mkdirMissing(__DIR__ . '/uploads/tickets/');
     $att_dir = __DIR__ . '/uploads/tickets/' . $id . '/';
@@ -4433,15 +4792,14 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
             $att_saved_path = $att_dir . $att_saved_filename;
             file_put_contents($att_saved_path, $attachment['content']);
 
-            $ticket_attachment_name = sanitizeInput($att_name);
-            $ticket_attachment_reference_name = sanitizeInput($att_saved_filename);
+            $ticket_attachment_name = sanitizeInputRaw($att_name);   // escaped once, below (MSP-DS-159)
+            $ticket_attachment_reference_name = sanitizeInputRaw($att_saved_filename);
 
             $ticket_attachment_name_esc = mysqli_real_escape_string($mysqli, $ticket_attachment_name);
             $ticket_attachment_reference_name_esc = mysqli_real_escape_string($mysqli, $ticket_attachment_reference_name);
             mysqli_query($mysqli, "INSERT INTO ticket_attachments SET ticket_attachment_name = '$ticket_attachment_name_esc', ticket_attachment_reference_name = '$ticket_attachment_reference_name_esc', ticket_attachment_ticket_id = $id");
         } else {
-            $ticket_attachment_name_esc = mysqli_real_escape_string($mysqli, $att_name);
-            logAction("Ticket", "Edit", "Email parser: Blocked attachment $ticket_attachment_name_esc from Client contact $contact_email_esc for ticket $ticket_prefix_esc$ticket_number", $client_id, $id);
+            logAction("Ticket", "Edit", "Email parser: Blocked attachment $att_name from Client contact $contact_email for ticket $config_ticket_prefix$ticket_number", $client_id, $id);
         }
     }
 
@@ -4496,8 +4854,9 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
             $client_name = sanitizeInput($client_row['client_name']);
             $client_uri = "&client_id=$client_id";
         }
-        $email_subject = "$config_app_name - New Ticket - $client_name: $subject";
-        $email_body = "Hello, <br><br>This is a notification that a new ticket has been raised in RivetMSP. <br>Client: $client_name<br>Priority: Low (email parsed)<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$id$client_uri <br><br>--------------------------------<br><br><b>$subject</b><br>$message";
+        $client_name_txt = rivetUnescapeSql($client_name);   // $client_name came from sanitizeInput() above; $subject is raw
+        $email_subject = "$config_app_name - New Ticket - $client_name_txt: " . $subject;
+        $email_body = "Hello, <br><br>This is a notification that a new ticket has been raised in RivetMSP. <br>Client: " . nullable_htmlentities($client_name_txt) . "<br>Priority: Low (email parsed)<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$id$client_uri <br><br>--------------------------------<br><br><b>" . nullable_htmlentities($subject) . "</b><br>$message_notify";
 
         $data[] = [
             'from' => $from_email,
@@ -4506,7 +4865,7 @@ function addTicket($contact_id, $contact_name, $contact_email, $client_id, $date
             'recipient_name' => $from_name,
             'subject' => $email_subject,
             'ticket_id' => intval($id),   // per-ticket "Send email notifications" switch (enforced in addToMailQueue)
-            'body' => mysqli_real_escape_string($mysqli, $email_body)
+            'body' => $email_body
         ];
     }
 
@@ -4572,7 +4931,7 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
     $message = nl2br($message);
 
     // 3) Final wrapper
-    $message = "<i>Email from: $from_email at $date:-</i><br><br><div style='line-height:1.5;'>$message</div>";
+    $message = "<i>Email from: " . nullable_htmlentities($from_email) . " at " . nullable_htmlentities($date) . ":-</i><br><br><div style='line-height:1.5;'>$message</div>";
 
     $ticket_number_esc = intval($ticket_number);
     $message_esc = mysqli_real_escape_string($mysqli, $message);
@@ -4589,7 +4948,7 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
         $ticket_subject = sanitizeInput($row['ticket_subject']);
         $ticket_status = sanitizeInput($row['ticket_status']);
         $ticket_reply_contact = intval($row['ticket_contact_id']);
-        $ticket_contact_email = sanitizeInput($row['contact_email']);
+        $ticket_contact_email = (string) $row['contact_email'];   // raw: compared with the raw $from_email below (MSP-DS-159)
         $client_id = intval($row['ticket_client_id']);
         if ($client_id) {
             $client_uri = "&client_id=$client_id";
@@ -4599,7 +4958,7 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
         $client_name = sanitizeInput($row['client_name']);
 
         if ($ticket_status == 5) {
-            $config_ticket_prefix_esc = mysqli_real_escape_string($mysqli, $config_ticket_prefix);
+            $config_ticket_prefix_esc = $config_ticket_prefix;   // appNotify() escapes once itself
             $ticket_number_esc2 = mysqli_real_escape_string($mysqli, $ticket_number);
 
             appNotify("Ticket", "Email parser: $from_email attempted to re-open ticket $config_ticket_prefix_esc$ticket_number_esc2 (ID $ticket_id) - check inbox manually to see email", "/agent/ticket.php?ticket_id=$ticket_id$client_uri", $client_id);
@@ -4614,7 +4973,7 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
                     'recipient' => $from_email,
                     'recipient_name' => $from_email,
                     'subject' => $email_subject,
-                    'body' => mysqli_real_escape_string($mysqli, $email_body),
+                    'body' => $email_body,
                     'ticket_id' => $ticket_id
                 ]
             ];
@@ -4686,15 +5045,14 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
                 $att_saved_path = $ticket_dir . $att_saved_filename;
                 file_put_contents($att_saved_path, $attachment['content']);
 
-                $ticket_attachment_name = sanitizeInput($att_name);
-                $ticket_attachment_reference_name = sanitizeInput($att_saved_filename);
+                $ticket_attachment_name = sanitizeInputRaw($att_name);   // escaped once, below (MSP-DS-159)
+                $ticket_attachment_reference_name = sanitizeInputRaw($att_saved_filename);
 
                 $ticket_attachment_name_esc = mysqli_real_escape_string($mysqli, $ticket_attachment_name);
                 $ticket_attachment_reference_name_esc = mysqli_real_escape_string($mysqli, $ticket_attachment_reference_name);
                 mysqli_query($mysqli, "INSERT INTO ticket_attachments SET ticket_attachment_name = '$ticket_attachment_name_esc', ticket_attachment_reference_name = '$ticket_attachment_reference_name_esc', ticket_attachment_reply_id = $reply_id, ticket_attachment_ticket_id = $ticket_id");
             } else {
-                $ticket_attachment_name_esc = mysqli_real_escape_string($mysqli, $att_name);
-                logAction("Ticket", "Edit", "Email parser: Blocked attachment $ticket_attachment_name_esc from Client contact $from_email_esc for ticket $config_ticket_prefix$ticket_number_esc", $client_id, $ticket_id);
+                logAction("Ticket", "Edit", "Email parser: Blocked attachment $att_name from Client contact $from_email for ticket $config_ticket_prefix$ticket_number_esc", $client_id, $ticket_id);
             }
         }
 
@@ -4706,20 +5064,20 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
             if ($ticket_assigned_to) {
                 $tech_sql = mysqli_query($mysqli, "SELECT user_email, user_name FROM users WHERE user_id = $ticket_assigned_to LIMIT 1");
                 $tech_row = mysqli_fetch_assoc($tech_sql);
-                $tech_email = sanitizeInput($tech_row['user_email']);
+                $tech_email = (string) $tech_row['user_email'];   // raw: addToMailQueue() binds it (MSP-DS-159)
                 $tech_name = sanitizeInput($tech_row['user_name']);
 
-                $email_subject = "$config_app_name - Ticket updated - [$config_ticket_prefix$ticket_number] $ticket_subject";
-                $email_body    = "Hello $tech_name,<br><br>A new reply has been added to the below ticket.<br><br>Client: $client_name<br>Ticket: $config_ticket_prefix$ticket_number<br>Subject: $ticket_subject<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$ticket_id$client_uri<br><br>--------------------------------<br>$message_esc";
+                $email_subject = "$config_app_name - Ticket updated - [$config_ticket_prefix$ticket_number] " . rivetUnescapeSql($ticket_subject);
+                $email_body    = "Hello " . nullable_htmlentities(rivetUnescapeSql($tech_name)) . ",<br><br>A new reply has been added to the below ticket.<br><br>Client: " . nullable_htmlentities(rivetUnescapeSql($client_name)) . "<br>Ticket: $config_ticket_prefix$ticket_number<br>Subject: " . nullable_htmlentities(rivetUnescapeSql($ticket_subject)) . "<br>Link: https://$config_base_url/agent/ticket.php?ticket_id=$ticket_id$client_uri<br><br>--------------------------------<br>" . rivetMailSafeExcerpt($message);   // MSP-DS-159/160
 
                 $data = [
                     [
                         'from' => $outbound_from_email,
                         'from_name' => $outbound_from_name,
                         'recipient' => $tech_email,
-                        'recipient_name' => $tech_name,
-                        'subject' => mysqli_real_escape_string($mysqli, $email_subject),
-                        'body' => mysqli_real_escape_string($mysqli, $email_body),
+                        'recipient_name' => rivetUnescapeSql($tech_name),
+                        'subject' => $email_subject,
+                        'body' => $email_body,
                         'ticket_id' => $ticket_id
                     ]
                 ];
@@ -4729,7 +5087,7 @@ function addReply($from_email, $date, $subject, $ticket_number, $message, $attac
 
         mysqli_query($mysqli, "UPDATE tickets SET " . ticketReopenSql() . "ticket_status = 2, ticket_resolved_at = NULL WHERE ticket_id = $ticket_id AND ticket_client_id = $client_id LIMIT 1");
 
-        logAction("Ticket", "Edit", "Email parser: Client contact $from_email_esc updated ticket $config_ticket_prefix$ticket_number_esc ($subject)", $client_id, $ticket_id);
+        logAction("Ticket", "Edit", "Email parser: Client contact $from_email updated ticket $config_ticket_prefix$ticket_number_esc ($subject)", $client_id, $ticket_id);
         customAction('ticket_reply_client', $ticket_id);
         $meta['outcome'] = 'reply_added';
         $meta['ticket_id'] = $ticket_id;
@@ -4805,7 +5163,7 @@ function createMailRequestFromInbound(int $mailbox_id, string $from_email, strin
         $att_saved_filename = md5(uniqid(rand(), true)) . '.bin';
         file_put_contents($holding_dir . $att_saved_filename, $attachment['content']);
 
-        $att_name_esc = mysqli_real_escape_string($mysqli, sanitizeInput($att_name));
+        $att_name_esc = mysqli_real_escape_string($mysqli, sanitizeInputRaw($att_name));   // one escape (MSP-DS-159)
         $att_saved_filename_esc = mysqli_real_escape_string($mysqli, $att_saved_filename);
         mysqli_query($mysqli, "INSERT INTO mail_request_attachments SET
             mail_request_attachment_name = '$att_name_esc',
@@ -4814,9 +5172,9 @@ function createMailRequestFromInbound(int $mailbox_id, string $from_email, strin
         ");
     }
 
-    logAction("Mail Request", "Create", "Email parser: " . ($reason === 'rate_limited' ? "sender $from_email_esc over the hourly message cap" : "unknown sender $from_email_esc") . " queued as a request ($subject_esc)", 0, $mail_request_id);
+    logAction("Mail Request", "Create", "Email parser: " . ($reason === 'rate_limited' ? "sender $from_email over the hourly message cap" : "unknown sender $from_email") . " queued as a request ($subject)", 0, $mail_request_id);
     if ($reason !== 'rate_limited') { // a flood is announced once, by the rate-limit alert, not once per message
-        appNotify("Ticket", "Email parser: " . ($reason === 'sender_mismatch' ? "$from_email_esc replied to a ticket they are not the contact of" : "unknown sender $from_email_esc sent an email") . " - review it on the Requests page", "/admin/mail_requests.php", 0);
+        appNotify("Ticket", "Email parser: " . ($reason === 'sender_mismatch' ? "$from_email replied to a ticket they are not the contact of" : "unknown sender $from_email sent an email") . " - review it on the Requests page", "/admin/mail_requests.php", 0);
     }
 
     return $mail_request_id;
@@ -4861,7 +5219,7 @@ function convertMailRequestToTicket(int $mail_request_id, int $client_id): ?int 
             mysqli_query($mysqli, "INSERT INTO contacts SET contact_name = '$contact_name_esc', contact_email = '$from_email_esc', contact_notes = 'Added automatically via email parsing.', contact_client_id = $client_id");
             $contact_id = mysqli_insert_id($mysqli);
 
-            logAction("Contact", "Create", "$session_name created contact $contact_name_esc", $client_id, $contact_id);
+            logAction("Contact", "Create", "$session_name created contact $contact_name", $client_id, $contact_id);
             customAction('contact_create', $contact_id);
         }
     }
@@ -5059,8 +5417,20 @@ function display_folder_options($parent_folder_id, $client_id, $indent = 0) {
 
 function sanitize_url($url) {
     $allowed = ['http', 'https', 'file', 'ftp', 'ftps', 'sftp', 'dav', 'webdav', 'caldav', 'carddav',  'ssh', 'telnet', 'smb', 'rdp', 'vnc', 'rustdesk', 'anydesk', 'connectwise', 'splashtop', 'sip', 'sips', 'ldap', 'ldaps'];
-    $parts = parse_url($url ?? '');
-    if (isset($parts['scheme']) && !in_array(strtolower($parts['scheme']), $allowed)) {
+    // MSP-DS-101: decide the scheme on what a browser will actually parse. Browsers drop tabs/newlines/C0 bytes inside a URL and trim leading
+    // control characters and spaces, so 'java\tscript:' and "\x01javascript:" must be judged as 'javascript:'. A URL parse_url() cannot parse is
+    // judged by its leading scheme token instead of being passed through.
+    $url = ltrim((string) preg_replace('/[\x00-\x1F\x7F]+/', '', (string) ($url ?? '')), " ");
+    $parts = parse_url($url);
+    $scheme = is_array($parts) && isset($parts['scheme']) ? $parts['scheme'] : null;
+    if ($scheme === null && preg_match('/^([A-Za-z][A-Za-z0-9+.\-]*):/', $url, $sm)) {
+        $scheme = $sm[1];
+    }
+    if ($scheme === null && $parts === false) {
+        // unparseable and no recognisable scheme: never emit it as a link target
+        return htmlspecialchars('unsupported://' . ltrim($url, '/'), ENT_QUOTES, 'UTF-8');
+    }
+    if ($scheme !== null && !in_array(strtolower($scheme), $allowed)) {
         // Remove the scheme and colon
         $pos = strpos($url, ':');
         $without_scheme = $url;
@@ -5073,7 +5443,7 @@ function sanitize_url($url) {
     }
 
     // Safe schemes: return escaped original URL
-    return htmlspecialchars($url ?? '', ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
 }
 
 // Redirect Function
@@ -5148,6 +5518,117 @@ function sanitize_filename($filename, $strict = false) {
     return $filename;
 }
 
+// MSP-DS-151 (review R8/R28): TCPDF fetches every http(s) <img src>, <link> stylesheet and url() it finds, and reads local paths. HTML that a
+// portal contact (or anyone else) wrote is therefore parsed and REBUILT from a strict tag/attribute allow-list: TCPDF only ever sees what this
+// function wrote (one validated src per image, no <link>/<style>/<svg>/<object>, no url() in style, hrefs limited to a few schemes).
+function rivetPdfSafeHtml(string $html): string {
+    if (trim($html) === '') {
+        return '';
+    }
+    static $tags = ['p' => 1, 'br' => 1, 'b' => 1, 'strong' => 1, 'i' => 1, 'em' => 1, 'u' => 1, 's' => 1, 'sub' => 1, 'sup' => 1, 'small' => 1, 'span' => 1, 'div' => 1,
+        'h1' => 1, 'h2' => 1, 'h3' => 1, 'h4' => 1, 'h5' => 1, 'h6' => 1, 'ul' => 1, 'ol' => 1, 'li' => 1, 'blockquote' => 1, 'pre' => 1, 'code' => 1, 'hr' => 1,
+        'table' => 1, 'thead' => 1, 'tbody' => 1, 'tfoot' => 1, 'tr' => 1, 'td' => 1, 'th' => 1, 'a' => 1, 'img' => 1, 'font' => 1];
+    static $drop = ['script' => 1, 'style' => 1, 'link' => 1, 'svg' => 1, 'object' => 1, 'embed' => 1, 'iframe' => 1, 'frame' => 1, 'frameset' => 1, 'form' => 1,
+        'input' => 1, 'button' => 1, 'textarea' => 1, 'select' => 1, 'head' => 1, 'title' => 1, 'meta' => 1, 'base' => 1, 'math' => 1, 'audio' => 1, 'video' => 1,
+        'source' => 1, 'track' => 1, 'canvas' => 1, 'template' => 1, 'noscript' => 1, 'applet' => 1];
+    static $attrs = ['colspan' => 1, 'rowspan' => 1, 'width' => 1, 'height' => 1, 'align' => 1, 'valign' => 1, 'border' => 1, 'cellpadding' => 1, 'cellspacing' => 1,
+        'color' => 1, 'size' => 1, 'face' => 1, 'alt' => 1, 'title' => 1];
+    $safeStyle = static function (string $style): string {
+        $style = trim($style);
+        if ($style === '' || preg_match('/url\s*\(|@import|expression\s*\(|\\\\|javascript:|behaviou?r\s*:|-moz-binding|[<>]/i', $style)) {
+            return '';
+        }
+        return $style;
+    };
+    $clean = static function (DOMNode $parent, DOMDocument $dom) use (&$clean, $tags, $drop, $attrs, $safeStyle): void {
+        foreach (iterator_to_array($parent->childNodes) as $node) {
+            if ($node->nodeType === XML_COMMENT_NODE || $node->nodeType === XML_PI_NODE || $node->nodeType === XML_CDATA_SECTION_NODE) {
+                $parent->removeChild($node);
+                continue;
+            }
+            if (!($node instanceof DOMElement)) {
+                continue;
+            }
+            $name = strtolower($node->nodeName);
+            if (isset($drop[$name])) {
+                $parent->removeChild($node);
+                continue;
+            }
+            $clean($node, $dom);
+            if (!isset($tags[$name])) {
+                // unknown tag: keep its (already cleaned) children, lose the tag
+                while ($node->firstChild) {
+                    $parent->insertBefore($node->firstChild, $node);
+                }
+                $parent->removeChild($node);
+                continue;
+            }
+            $keep = [];
+            foreach (iterator_to_array($node->attributes) as $at) {
+                $an = strtolower($at->nodeName);
+                $av = $at->nodeValue;
+                if ($an === 'style') {
+                    $v = $safeStyle($av);
+                    if ($v !== '') { $keep['style'] = $v; }
+                } elseif ($an === 'src' && $name === 'img' && !isset($keep['src'])) {
+                    $src = preg_replace('/[\x00-\x20]+/', '', trim($av));
+                    if (preg_match('#^data:image/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$#i', $src)
+                        || (preg_match('#^/?uploads/[A-Za-z0-9_./-]+$#', $src) && strpos($src, '..') === false)) {
+                        $keep['src'] = $src;
+                    }
+                } elseif ($an === 'href' && $name === 'a') {
+                    $h = preg_replace('/[\x00-\x20]+/', '', trim($av));
+                    if (preg_match('#^(https?://|mailto:|tel:|\#)#i', $h)) {
+                        // libxml does not escape < and > in URI attributes, and TCPDF's regex pre-pass (<style>, <cssarray>, <link>) ignores
+                        // quoting: percent-encode every character that could open or close markup or start a url() (review RR8).
+                        $keep['href'] = strtr($h, ['<' => '%3C', '>' => '%3E', '"' => '%22', "'" => '%27', '`' => '%60', '(' => '%28', ')' => '%29', '\\' => '%5C']);
+                    }
+                } elseif (isset($attrs[$an]) && !preg_match('/url\s*\(|javascript:|[<>]/i', $av)) {
+                    $keep[$an] = $av;
+                }
+            }
+            if ($name === 'img' && !isset($keep['src'])) {
+                $parent->removeChild($node);
+                continue;
+            }
+            foreach (iterator_to_array($node->attributes) as $at) { $node->removeAttributeNode($at); }
+            foreach ($keep as $k => $v) { $node->setAttribute($k, $v); }
+        }
+    };
+    $prev = libxml_use_internal_errors(true);
+    $dom = new DOMDocument('1.0', 'UTF-8');
+    // The fragment lives inside <body>, which user markup cannot close early (a stray </div> used to end a wrapper <div> and silently
+    // drop everything after it, review RR7). Everything the parser put in <body>, plus anything it left after it inside <html>, is kept.
+    // Stray </body>, </html> (or a second <html>/<body>/<head>) would end the document early too; the allow-list rebuild below makes dropping them safe.
+    $html = preg_replace('#</?(?:html|body|head)\b[^>]*>#i', '', $html);
+    $dom->loadHTML('<?xml encoding="utf-8" ?><html><body>' . $html . '</body></html>', LIBXML_HTML_NODEFDTD);
+    libxml_clear_errors();
+    libxml_use_internal_errors($prev);
+    $htmlEl = $dom->getElementsByTagName('html')->item(0);
+    if (!$htmlEl) {
+        return '';
+    }
+    $holder = $dom->createElement('div');   // detached collector: the allow-list walk needs one parent
+    foreach (iterator_to_array($htmlEl->childNodes) as $top) {
+        if ($top instanceof DOMElement && strtolower($top->nodeName) === 'head') {
+            continue;   // title/meta/style/link the parser hoisted into <head> are dropped
+        }
+        if ($top instanceof DOMElement && strtolower($top->nodeName) === 'body') {
+            while ($top->firstChild) { $holder->appendChild($top->firstChild); }
+        } else {
+            $holder->appendChild($top);
+        }
+    }
+    $clean($holder, $dom);
+    $out = '';
+    foreach ($holder->childNodes as $child) {
+        $out .= $dom->saveHTML($child);
+    }
+    // Last line of defence: TCPDF's regex pre-pass must never see a style/cssarray/link/script opener or a url()/@import in anything we wrote.
+    $out = preg_replace('/<(\s*\/?\s*(?:style|cssarray|link|script)\b)/i', '&lt;$1', $out);
+    return $out;
+}
+
 function saveBase64Images(string $html, string $baseFsPath, string $baseWebPath, int $ownerId): string {
     // Normalize paths
     $baseFsPath  = rtrim($baseFsPath, '/\\') . '/';
@@ -5184,20 +5665,20 @@ function saveBase64Images(string $html, string $baseFsPath, string $baseWebPath,
             $mimeType = strtolower($matches[1]);
             $base64   = $matches[2];
 
-            $binary = base64_decode($base64);
-            if ($binary === false) {
+            $binary = base64_decode($base64, true);
+            if ($binary === false || $binary === '') {
                 continue;
             }
 
-            // Extension mapping
-            switch ($mimeType) {
-                case 'jpeg':
-                case 'jpg': $ext = 'jpg'; break;
-                case 'png': $ext = 'png'; break;
-                case 'gif': $ext = 'gif'; break;
-                case 'webp': $ext = 'webp'; break;
-                default: $ext = 'png';
+            // MSP-DS-22: the bytes must really be a raster image of the declared type. Otherwise a JSON/script body would be stored
+            // under the app origin as img_*.png for the ajax-modal gadget to fetch.
+            $detected = @getimagesizefromstring($binary);
+            $detectedExt = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_GIF => 'gif', IMAGETYPE_WEBP => 'webp'][$detected[2] ?? 0] ?? null;
+            if ($detectedExt === null) {
+                $img->setAttribute('src', '');
+                continue;
             }
+            $ext = $detectedExt;
 
             // Secure random filename
             $uid = bin2hex(random_bytes(16));

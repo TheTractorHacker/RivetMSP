@@ -74,7 +74,7 @@ if ($client_url) {
     }
 
     // Unfiltered counts (active + archived) so we don't offer to delete a folder that still has archived credentials in it
-    if ($session_user_role == 3) {
+    if ($session_is_admin) {
         $sql_folder_total_counts = mysqli_query($mysqli, "SELECT credential_folder_id, COUNT(*) AS num FROM credentials WHERE credential_client_id = $client_id GROUP BY credential_folder_id");
         while ($row = mysqli_fetch_assoc($sql_folder_total_counts)) {
             $credential_folder_total_counts[intval($row['credential_folder_id'])] = intval($row['num']);
@@ -416,7 +416,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                 <i class="fas fa-fw fa-edit me-2"></i>Rename Folder
                             </a>
                             <?php
-                            $folder_is_empty = ($session_user_role == 3)
+                            $folder_is_empty = ($session_is_admin)
                                 && (($credential_folder_total_counts[$active_child_id] ?? 0) == 0)
                                 && empty($credential_folder_children[$active_child_id]);
                             if ($folder_is_empty) { ?>

@@ -103,6 +103,15 @@ function quoteCanBeAnswered($status, $expire, ?int $now = null): bool
  * A quote may only be turned into an invoice once the client (or an agent) accepted it.
  * Re-invoicing an already Invoiced quote is refused.
  */
+/**
+ * MSP-DS-57: a quote's items, discount and dates are editable only while the client has not answered it. Accepted, Declined and
+ * Invoiced quotes are read-only (the invoice must match what the client accepted).
+ */
+function quoteContentEditable($status): bool
+{
+    return !in_array((string) $status, ['Accepted', 'Declined', 'Invoiced'], true);
+}
+
 function quoteCanBeInvoiced($status): bool
 {
     return (string) $status === 'Accepted';
@@ -189,3 +198,165 @@ function invoiceChangeBlockReason($mysqli, $invoice_id, bool $block_if_payments 
     }
     return null;
 }
+
+/**
+ * MSP-DS-68 / MSP-DS-129 (review R15): the invoice amount after adding a line of $line_total - every existing line plus the new one, minus the
+ * discount, never below zero (same formula the line-item handlers use after saving).
+ */
+function invoiceAmountAfterLine($mysqli, $invoice_id, $line_total): float
+{
+    $invoice_id = intval($invoice_id);
+    $items = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COALESCE(SUM(item_total), 0) FROM invoice_items WHERE item_invoice_id = $invoice_id"))[0] ?? 0;
+    $disc = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COALESCE(invoice_discount_amount, 0) FROM invoices WHERE invoice_id = $invoice_id"))[0] ?? 0;
+    return max(0, moneyToCents(floatval($items) + floatval($line_total) - floatval($disc)) / 100);
+}
+
+/**
+ * Reason a line of $line_total (negative = credit) cannot be added to an existing invoice, or null. A line that would take the invoice total
+ * below what has already been paid leaves a Partial invoice no payment path accepts (MSP-DS-129), so it is refused.
+ */
+function invoiceLineBlockReason($mysqli, $invoice_id, $line_total): ?string
+{
+    if (invoiceBalanceDue($mysqli, $invoice_id, invoiceAmountAfterLine($mysqli, $invoice_id, $line_total)) < 0) {
+        return 'This line would take the invoice total below the amount already paid; reconcile the payments first';
+    }
+    return null;
+}
+
+/**
+ * After an invoice total change: a Partial invoice whose payments now exactly cover the total is Paid (invoiceStatusAfterPayment).
+ */
+function invoiceSettleStatus($mysqli, $invoice_id): void
+{
+    $invoice_id = intval($invoice_id);
+    $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT invoice_status, invoice_amount FROM invoices WHERE invoice_id = $invoice_id LIMIT 1"));
+    if ($row && $row['invoice_status'] === 'Partial' && invoiceBalanceDue($mysqli, $invoice_id, $row['invoice_amount']) <= 0) {
+        mysqli_query($mysqli, "UPDATE invoices SET invoice_status = 'Paid' WHERE invoice_id = $invoice_id LIMIT 1");
+    }
+}
+
+/**
+ * MSP-DS-35: write one invoice-history row per (invoice, PaymentIntent, kind) and say whether this call wrote it. $pi_id must already be
+ * SQL-escaped by the caller (sanitizeInput). Used for the two Stripe cases that must never be silent: a bank debit that is still 'processing'
+ * when the customer returns to the pay page, and a succeeded PaymentIntent the webhook could not record against a payable invoice.
+ * Returns true only for the call that inserted the row, so the caller notifies once however often the page or the event is replayed.
+ */
+function invoiceHistoryOnce($mysqli, int $invoice_id, string $status, string $description_prefix, string $pi_id): bool
+{
+    $description = $description_prefix . ' ' . $pi_id;
+    mysqli_query($mysqli, "INSERT INTO history (history_status, history_description, history_invoice_id)
+        SELECT '$status', '$description', $invoice_id FROM DUAL
+        WHERE NOT EXISTS (SELECT 1 FROM history WHERE history_invoice_id = $invoice_id AND history_description = '$description')");
+
+    return mysqli_affected_rows($mysqli) >= 1;
+}
+
+/**
+ * MSP-DS-161: Stripe amounts are in the currency's smallest unit. Zero-decimal currencies (JPY, KRW, VND ...) are whole units,
+ * three-decimal currencies (KWD, BHD ...) use 1000. ISK/UGX stay at 100: Stripe's API still wants two decimals for them.
+ */
+function stripeMinorFactor($currency): int
+{
+    $c = strtoupper((string) $currency);
+    if (in_array($c, ['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'], true)) {
+        return 1;
+    }
+    if (in_array($c, ['BHD', 'JOD', 'KWD', 'OMR', 'TND'], true)) {
+        return 1000;
+    }
+    return 100;
+}
+
+/** Major-unit amount -> the integer Stripe expects. Three-decimal currencies must end in 0 (Stripe rule), so round to 10 minor units. */
+function stripeAmountToMinor($amount, $currency): int
+{
+    $f = stripeMinorFactor($currency);
+    $minor = intval(round(floatval($amount) * $f));   // round before truncating so float error (19.99*100) cannot undercharge
+    return $f === 1000 ? intval(round($minor / 10) * 10) : $minor;
+}
+
+/** Integer from Stripe -> major-unit amount recorded in the books. */
+function stripeAmountFromMinor($minor, $currency): float
+{
+    return floatval($minor) / stripeMinorFactor($currency);
+}
+
+/**
+ * MSP-DS-164: marker put into every PaymentIntent's metadata so a Stripe account shared by two installs (production + beta,
+ * white-label ...) does not record one install's payments on the other's invoice with the same numeric id.
+ * Not the raw installation id (it also appears in lock file names); a one-way digest of it.
+ */
+function stripeInstallMarker(): string
+{
+    $id = (string) ($GLOBALS['installation_id'] ?? '');
+    return $id === '' ? '' : substr(hash('sha256', 'stripe-install|' . $id), 0, 16);
+}
+
+/**
+ * MSP-DS-164: does this PaymentIntent belong to this install's invoice? A marker from another install, another client, or a
+ * different currency means "not ours". Intents created before the marker existed carry none and are matched on client and currency only.
+ */
+function stripeIntentMatchesInvoice($metadata, $pi_currency, $invoice_client_id, $invoice_currency_code, string $our_marker): bool
+{
+    $theirs = (string) ($metadata->itflow_install ?? '');
+    if ($theirs !== '' && $our_marker !== '' && !hash_equals($our_marker, $theirs)) {
+        return false;
+    }
+    $pi_client = (string) ($metadata->itflow_client_id ?? '');
+    if ($pi_client !== '' && intval($pi_client) !== intval($invoice_client_id)) {
+        return false;
+    }
+    return strtoupper((string) $pi_currency) === strtoupper((string) $invoice_currency_code);
+}
+
+/**
+ * MSP-DS-164 (review R29): whether a succeeded PaymentIntent that found no PAYABLE invoice is still this install's money, i.e. worth a
+ * "payment received but not recorded, refund needed" alert. $invoice is the unfiltered invoice row (needs invoice_client_id and
+ * invoice_currency_code) or null when the id is unknown here. Another install's intent (marker, client or currency mismatch) is not ours to report.
+ */
+function stripeUnrecordedIntentIsOurs($metadata, $pi_currency, ?array $invoice, string $our_marker): bool
+{
+    if ($invoice === null) {
+        // no invoice to compare client/currency against: only the install marker can say it is foreign
+        $theirs = (string) ($metadata->itflow_install ?? '');
+        return !($theirs !== '' && $our_marker !== '' && !hash_equals($our_marker, $theirs));
+    }
+    return stripeIntentMatchesInvoice($metadata, $pi_currency, intval($invoice['invoice_client_id']), (string) $invoice['invoice_currency_code'], $our_marker);
+}
+
+/**
+ * MSP-DS-102: the active payment provider's card threshold (Admin > Payment Providers: invoices at or above it are not paid by card), enforced where the card
+ * is charged, not only where the Pay button is shown. 0 means no limit. Same comparison as the button in guest_view_invoice.php / client/unpaid_invoices.php.
+ */
+function cardPaymentAllowedForInvoice($mysqli, $invoice_amount): bool
+{
+    $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payment_provider_threshold FROM payment_providers WHERE payment_provider_active = 1 LIMIT 1")) ?: [];
+    $threshold = floatval($row['payment_provider_threshold'] ?? 0);
+    return $threshold == 0 || $threshold > floatval($invoice_amount);
+}
+
+/**
+ * MSP-DS-56: move stock for a stocked product ATOMICALLY. Call inside a transaction (mysqli_begin_transaction): the product row is locked
+ * (SELECT ... FOR UPDATE) so two concurrent invoice edits serialise on it, the available quantity is summed under that lock, and a decrement is
+ * refused (false, nothing written) when it would take the stock below zero. $delta > 0 puts stock back, < 0 takes it. The lock is released by the
+ * caller's commit/rollback, so the stock row and the invoice line it belongs to are written (or undone) together.
+ */
+function productStockMove($mysqli, $product_id, float $delta, string $note): bool
+{
+    $product_id = intval($product_id);
+    if ($delta == 0.0) {
+        return true;
+    }
+    mysqli_query($mysqli, "SELECT product_id FROM products WHERE product_id = $product_id FOR UPDATE");
+    if ($delta < 0) {
+        $available = floatval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COALESCE(SUM(stock_qty), 0) FROM product_stock WHERE stock_product_id = $product_id"))[0] ?? 0);
+        if ($available + $delta < 0) {
+            return false;
+        }
+    }
+    $note = mysqli_real_escape_string($mysqli, $note);
+    mysqli_query($mysqli, "INSERT INTO product_stock SET stock_qty = $delta, stock_note = '$note', stock_product_id = $product_id");
+    return mysqli_affected_rows($mysqli) === 1;
+}
+
+require_once __DIR__ . '/charge_attempts.php';   // MSP-DS-166 / MSP-DS-32: the shared charge-attempt scheme

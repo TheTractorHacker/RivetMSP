@@ -10,8 +10,19 @@
 // Internal ticket reply noting the signature.
 // Returns ['ok' => true, 'ticket_id', 'client_id', 'pdf_name', 'file_id', 'signed_name', 'signed_at']
 // or ['ok' => false, 'error' => '...'] on failure.
-function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
+function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature, $backfill = false) {
     $outtake_id = intval($outtake_id);
+    // $backfill (one-off repair, never reachable from a request): the form was ALREADY signed (an old phone signing wrote the signature but built no PDF).
+    // Build the missing PDF / file record / ticket attachment from the STORED name, signature and signing time; nothing about the signature is changed.
+    if ($backfill) {
+        $b = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT outtake_signed_name, outtake_signature FROM ticket_outtake_forms WHERE outtake_id = $outtake_id AND outtake_signed_at IS NOT NULL LIMIT 1"));
+        if (!$b) {
+            return ['ok' => false, 'error' => 'This form is not signed or does not exist.'];
+        }
+        $signed_name = (string) $b['outtake_signed_name'];
+        $signature = (string) $b['outtake_signature'];
+    }
+    $signed_name_raw = sanitizeInputRaw($signed_name);   // for display (PDF, ticket note, log): the SQL-escaped copy below would print O\'Brien
     $signed_name = sanitizeInput($signed_name);
 
     if (empty($signed_name)) {
@@ -31,7 +42,7 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
         JOIN tickets t ON ot.outtake_ticket_id = t.ticket_id
         LEFT JOIN clients c ON t.ticket_client_id = c.client_id
         LEFT JOIN contacts co ON t.ticket_contact_id = co.contact_id
-        WHERE ot.outtake_id = $outtake_id AND ot.outtake_signed_at IS NULL LIMIT 1");
+        WHERE ot.outtake_id = $outtake_id AND ot.outtake_signed_at IS " . ($backfill ? 'NOT NULL' : 'NULL') . " LIMIT 1");
 
     if (mysqli_num_rows($sql) !== 1) {
         return ['ok' => false, 'error' => 'This form has already been signed or does not exist.'];
@@ -46,11 +57,17 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
     $client_name   = $row['client_name'];
     $contact_name  = $row['contact_name'];
     $tech_notes    = $row['outtake_tech_notes'];
-    $signed_at_str = date('F j, Y \a\t g:i A');
+    $signed_at_str = $backfill ? date('F j, Y \a\t g:i A', strtotime($row['outtake_signed_at'])) : date('F j, Y \a\t g:i A');   // a repair prints the ORIGINAL signing time
 
     // Save signature + signed info
     $sig_escaped = mysqli_real_escape_string($mysqli, $signature);
-    mysqli_query($mysqli, "UPDATE ticket_outtake_forms SET outtake_signed_name = '$signed_name', outtake_signed_at = NOW(), outtake_signature = '$sig_escaped' WHERE outtake_id = $outtake_id");
+    // MSP-DS-24: claim the form atomically; a double submit that passed the SELECT above produces one PDF, not two
+    if (!$backfill) {
+        mysqli_query($mysqli, "UPDATE ticket_outtake_forms SET outtake_signed_name = '$signed_name', outtake_signed_at = NOW(), outtake_signature = '$sig_escaped' WHERE outtake_id = $outtake_id AND outtake_signed_at IS NULL");
+        if (mysqli_affected_rows($mysqli) !== 1) {
+            return ['ok' => false, 'error' => 'This form has already been signed or does not exist.'];
+        }
+    }
 
     // --- Generate PDF ---
     $co = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM companies, settings WHERE companies.company_id = settings.company_id AND companies.company_id = 1 LIMIT 1"));
@@ -68,6 +85,7 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
     $sql_replies = mysqli_query($mysqli, "SELECT tr.ticket_reply, tr.ticket_reply_type, tr.ticket_reply_created_at, u.user_name
         FROM ticket_replies tr LEFT JOIN users u ON tr.ticket_reply_by = u.user_id
         WHERE tr.ticket_reply_ticket_id = $ticket_id AND tr.ticket_reply_archived_at IS NULL
+          AND tr.ticket_reply_type IN ('Public', 'Client')
         ORDER BY tr.ticket_reply_id ASC LIMIT 10");
     while ($r = mysqli_fetch_assoc($sql_replies)) {
         $by   = htmlspecialchars($r['user_name'] ?: 'Client');
@@ -170,7 +188,7 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
 
     // Build right-column lines and calculate needed height
     $sig_lines = [
-        ['B', 'Signed by:'], ['', $signed_name],
+        ['B', 'Signed by:'], ['', $signed_name_raw],
         ['B', 'Date:'],      ['', $signed_at_str],
     ];
     if ($client_name) { $sig_lines[] = ['B', 'Client:']; $sig_lines[] = ['', $client_name]; }
@@ -248,7 +266,7 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
     $file_id = mysqli_insert_id($mysqli);
 
     // Add internal ticket reply noting PDF is attached
-    $reply_msg = mysqli_real_escape_string($mysqli, "Outtake form signed by $signed_name on $signed_at_str. PDF saved to client files: $pdf_name");
+    $reply_msg = mysqli_real_escape_string($mysqli, "Outtake form signed by $signed_name_raw on $signed_at_str. PDF saved to client files: $pdf_name");
     mysqli_query($mysqli, "INSERT INTO ticket_replies SET ticket_reply = '$reply_msg', ticket_reply_type = 'Internal', ticket_reply_by = 0, ticket_reply_ticket_id = $ticket_id");
 
     // Also copy the signed PDF into the ticket's attachments
@@ -262,7 +280,7 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
     $att_name_esc = mysqli_real_escape_string($mysqli, $pdf_name);
     mysqli_query($mysqli, "INSERT INTO ticket_attachments SET ticket_attachment_name='$att_name_esc', ticket_attachment_reference_name='$att_ref', ticket_attachment_reply_id=NULL, ticket_attachment_ticket_id=$ticket_id");
 
-    logAction("Outtake", "Sign", "Outtake form signed by $signed_name — PDF attached ($pdf_name)", $client_id, $ticket_id);
+    logAction("Outtake", "Sign", "Outtake form signed by $signed_name_raw — PDF attached ($pdf_name)", $client_id, $ticket_id);
 
     return [
         'ok'          => true,
@@ -270,7 +288,7 @@ function signOuttakeForm($mysqli, $outtake_id, $signed_name, $signature) {
         'client_id'   => $client_id,
         'pdf_name'    => $pdf_name,
         'file_id'     => $file_id,
-        'signed_name' => $signed_name,
+        'signed_name' => $signed_name_raw,
         'signed_at'   => $signed_at_str,
     ];
 }

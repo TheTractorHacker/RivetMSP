@@ -735,7 +735,7 @@ if (isset($_GET['export_document'])) {
     $pdf->SetFont('helvetica', '', 12);
 
     // Write HTML content to the PDF
-    $pdf->writeHTML($document_content, true, false, true, false, '');
+    $pdf->writeHTML(rivetPdfSafeHtml((string) $document_content), true, false, true, false, '');
 
     // Output PDF to browser
     $pdf->Output("$document_name.pdf", 'I'); // 'I' for inline display, 'D' for download

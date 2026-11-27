@@ -5,7 +5,7 @@ require_once 'includes/inc_all_guest.php';
 // This page embeds Stripe Elements (script + iframe + XHR to Stripe's domains),
 // which the shared guest CSP doesn't allow — override with a Stripe-inclusive
 // policy for this page only. header() replaces the prior same-name header.
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$csp_nonce' https://js.stripe.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; frame-src https://js.stripe.com; connect-src 'self' https://api.stripe.com https://cloudflareinsights.com");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$csp_nonce' https://js.stripe.com" . cspCloudflareScript() . "; style-src 'self' 'unsafe-inline'; frame-src https://js.stripe.com; connect-src 'self' https://api.stripe.com" . cspCloudflareConnect());
 
 DEFINE("WORDING_PAYMENT_FAILED", "<br><h2>There was an error verifying your payment. Please contact us for more information before attempting payment again.</h2>");
 
@@ -60,11 +60,18 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
     $client_id             = intval($row['client_id']);
     $client_name           = nullable_htmlentities($row['client_name']);
 
+    // MSP-DS-102: invoices at or above the provider's card threshold are not payable by card (the Pay button is hidden there too)
+    if (!cardPaymentAllowedForInvoice($mysqli, $invoice_amount)) {
+        echo "<div class='card mt-4'><div class='card-body text-center py-5'><h1 class='h3 mb-0'>This invoice cannot be paid by card. Please contact us for another way to pay.</h1></div></div>";
+        require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/footer.php';
+        exit();
+    }
+
     // Company info for currency formatting, etc
     $sql_company = mysqli_query($mysqli, "SELECT * FROM companies WHERE company_id = 1");
     $company_row = mysqli_fetch_assoc($sql_company);
     $company_locale = nullable_htmlentities($company_row['company_locale']);
-    $config_base_url = nullable_htmlentities($company_row['company_base_url'] ?? ''); // You might want to pull from settings if needed
+    // MSP-DS-103: companies has no company_base_url column; $config_base_url from config.php stays as it is (it was blanked here before)
 
     // Add up all payments made to the invoice
     $sql_amount_paid = mysqli_query($mysqli, "SELECT SUM(payment_amount) AS amount_paid FROM payments WHERE payment_invoice_id = $invoice_id");
@@ -179,6 +186,30 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
     if ($pi_obj->client_secret !== $pi_cs) {
         error_log("Stripe payment error - Payment intent ID/Secret mismatch for $pi_id");
         exit(WORDING_PAYMENT_FAILED);
+    } elseif ($pi_obj->status === "processing") {
+        // MSP-DS-35: a bank (ACH) debit is accepted but settles days later. That is not a failure: say so, leave a history row and tell
+        // billing once, and let the webhook (payment_intent.succeeded) record the payment when it clears.
+        require_once '../includes/billing_guards.php';
+        $processing_invoice_id = intval($pi_obj->metadata->itflow_invoice_id ?? 0);
+        if ($processing_invoice_id > 0) {   // MSP-DS-166 / MSP-DS-32: other paths see the debit and do not charge this invoice again
+            chargeAttemptSettleIntent($mysqli, $pi_id, $processing_invoice_id, intval(moneyToCents(stripeAmountFromMinor($pi_obj->amount, $pi_obj->currency))), 'pending', 'guest');
+        }
+        if ($processing_invoice_id > 0 && invoiceHistoryOnce($mysqli, $processing_invoice_id, 'Payment pending', 'Bank payment submitted and processing (not yet settled). Stripe PaymentIntent', $pi_id)) {
+            $processing_client_id = intval($pi_obj->metadata->itflow_client_id ?? 0);
+            appNotify("Invoice Payment Pending", "A bank payment for invoice ID $processing_invoice_id is processing at Stripe ($pi_id). It will be recorded when it clears; check that it settles.", "/agent/invoice.php?invoice_id=$processing_invoice_id", $processing_client_id);
+            logAction("Invoice", "Payment", "Bank payment for invoice ID $processing_invoice_id submitted and processing - $pi_id", $processing_client_id, $processing_invoice_id);
+        }
+        exit("<br><h2>Your bank payment has been submitted and is processing.</h2><p>Bank payments can take several business days to clear. Your invoice will be marked paid once the payment settles, so please do not pay it again.</p>");
+    } elseif ($pi_obj->status === "requires_action" && chargeAttemptPiIsBankDebit($pi_obj)) {
+        // M4-5: a hand-entered bank account must be verified with two small deposits (or the bank's own login) before the debit starts. That is
+        // pending verification, not a failure: the attempt stays visible to the other paths for days and the webhook settles it.
+        $verify_invoice_id = intval($pi_obj->metadata->itflow_invoice_id ?? 0);
+        if ($verify_invoice_id > 0) {
+            require_once '../includes/billing_guards.php';
+            chargeAttemptSettleIntent($mysqli, $pi_id, $verify_invoice_id, intval(moneyToCents(stripeAmountFromMinor($pi_obj->amount, $pi_obj->currency))), 'pending', 'guest');
+            invoiceHistoryOnce($mysqli, $verify_invoice_id, 'Payment pending', 'Bank account verification pending (microdeposits). Stripe PaymentIntent', $pi_id);
+        }
+        exit("<br><h2>Your bank account needs to be verified.</h2><p>Your payment has not been charged yet. Your bank will receive two small deposits within 1-2 business days; follow the verification link Stripe sends you (or the instructions on your bank statement) to confirm them. Once the account is verified the payment is submitted, and your invoice is marked paid when it clears. Please do not pay it again.</p>");
     } elseif ($pi_obj->status !== "succeeded") {
         exit(WORDING_PAYMENT_FAILED);
     } elseif ($pi_obj->amount !== $pi_obj->amount_received) {
@@ -196,10 +227,8 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
         $existing_invoice_id  = intval($existing_payment['payment_invoice_id']);
         $existing_invoice_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT invoice_url_key FROM invoices WHERE invoice_id = $existing_invoice_id LIMIT 1"));
         $existing_url_key     = sanitizeInput($existing_invoice_row['invoice_url_key'] ?? '');
-        // Company info isn't loaded yet on this branch (see below) - fetch just the
-        // base URL needed for the redirect.
-        $existing_base_url_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT company_base_url FROM companies WHERE company_id = 1"));
-        $existing_base_url     = sanitizeInput($existing_base_url_row['company_base_url'] ?? '');
+        // MSP-DS-103: the host comes from config.php; the old lookup read a column that does not exist and threw (HTTP 500) when the webhook had won the race.
+        $existing_base_url     = (string) $config_base_url;
         header('Location: //' . $existing_base_url . '/guest/guest_view_invoice.php?invoice_id=' . $existing_invoice_id . '&url_key=' . $existing_url_key);
         exit;
     }
@@ -208,7 +237,7 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
     $pi_date = date('Y-m-d', $pi_obj->created);
     $pi_invoice_id = intval($pi_obj->metadata->itflow_invoice_id);
     $pi_client_id = intval($pi_obj->metadata->itflow_client_id);
-    $pi_amount_paid = floatval(($pi_obj->amount_received / 100));
+    $pi_amount_paid = stripeAmountFromMinor($pi_obj->amount_received, $pi_obj->currency);
     $pi_currency = strtoupper(sanitizeInput($pi_obj->currency));
     $pi_livemode = $pi_obj->livemode;
 
@@ -257,7 +286,9 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
     }
 
     // Add Payment to History (exactly once per PaymentIntent; the webhook may have won the race)
-    if (!insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $stripe_account, 'Stripe', $pi_id, $invoice_id)) {
+    $guest_recorded = insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $stripe_account, 'Stripe', $pi_id, $invoice_id);
+    chargeAttemptSettleIntent($mysqli, $pi_id, $invoice_id, moneyToCents($pi_amount_paid), 'succeeded', 'guest');
+    if (!$guest_recorded) {
         exit(WORDING_PAYMENT_FAILED);
     }
 
@@ -298,7 +329,7 @@ if (isset($_GET['invoice_id'], $_GET['url_key']) && !isset($_GET['payment_intent
 
     if (!empty($config_smtp_host)) {
         $subject = "Payment Received - Invoice $invoice_prefix$invoice_number";
-        $body = "Hello $contact_name,<br><br>We have received online payment for the amount of " . $pi_currency . $pi_amount_paid . " for invoice <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount: " . numfmt_format_currency($currency_format, $pi_amount_paid, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>~<br>$company_name - Billing<br>$config_invoice_from_email<br>$company_phone";
+        $body = "Hello $contact_name,<br><br>We have received online payment for the amount of " . $pi_currency . $pi_amount_paid . " for invoice <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount: " . numfmt_format_currency($currency_format, $pi_amount_paid, $invoice_currency_code) . "<br><br>Thank you for your business!<br><br><br>~<br>$company_name - Billing<br>$config_invoice_from_email<br>$company_phone";
 
         $data = [
             [

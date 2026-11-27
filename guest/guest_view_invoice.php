@@ -107,10 +107,13 @@ if ($invoice_status == 'Sent') {
     mysqli_query($mysqli, "UPDATE invoices SET invoice_status = 'Viewed' WHERE invoice_id = $invoice_id");
 }
 
+// MSP-DS-162: at most one "viewed" notification per invoice per hour
+$recently_viewed = mysqli_num_rows(mysqli_query($mysqli, "SELECT 1 FROM history WHERE history_invoice_id = $invoice_id AND history_description LIKE 'Invoice viewed%' AND history_created_at > (NOW() - INTERVAL 1 HOUR) LIMIT 1")) > 0;
+
 //Mark viewed in history
 mysqli_query($mysqli, "INSERT INTO history SET history_status = '$invoice_status', history_description = 'Invoice viewed - $ip - $os - $browser', history_invoice_id = $invoice_id");
 
-if ($invoice_status !== 'Paid') {
+if (!$recently_viewed && $invoice_status !== 'Paid') {
 
     appNotify("Invoice Viewed", "Invoice $invoice_prefix$invoice_number has been viewed by $client_name_escaped - $ip - $os - $browser", "/agent/invoice.php?invoice_id=$invoice_id", $client_id);
 

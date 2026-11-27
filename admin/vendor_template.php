@@ -138,7 +138,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                         data-modal-url="modals/vendor_template/vendor_template_edit.php?id=<?= $vendor_template_id ?>">
                                         <i class="fas fa-fw fa-edit me-2"></i>Edit
                                     </a>
-                                    <?php if ($session_user_role == 3) { ?>
+                                    <?php if ($session_is_admin) { ?>
                                         <div class="dropdown-divider"></div>
                                         <a class="dropdown-item text-danger text-bold confirm-link" href="post.php?delete_vendor_template=<?= $vendor_template_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                             <i class="fas fa-fw fa-trash me-2"></i>Delete

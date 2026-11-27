@@ -18,6 +18,13 @@ if (isset($_POST['add_domain'])) {
 
     enforceClientAccess();
 
+    // A public mailbox provider is nobody's client domain (inbound mail from it must never be routed to one client, MSP-DS-33)
+    require_once dirname(__DIR__, 2) . '/includes/inbound_routing.php';
+    if (inboundIsFreemailDomain($name)) {
+        flash_alert("<strong>" . nullable_htmlentities($name) . "</strong> is a public mailbox provider and cannot be added as a client domain", 'error');
+        redirect();
+    }
+
     // Set/check/lookup expiry date
     if (strtotime($expire)) {
         $expire = "'" . $expire . "'";
@@ -39,8 +46,11 @@ if (isset($_POST['add_domain'])) {
     $txt = sanitizeInput($records['txt']);
     $whois = sanitizeInput($records['whois']);
 
+    // MSP-DS-16/33: only an administrator may switch on 'route inbound mail' for a domain (a Write-level tech could otherwise claim any sender domain)
+    $route_mail = ($session_is_admin && !empty($_POST['route_mail'])) ? 1 : 0;
+
     // Add domain record
-    mysqli_query($mysqli,"INSERT INTO domains SET domain_name = '$name', domain_description = '$description', domain_registrar = $registrar,  domain_webhost = $webhost, domain_dnshost = $dnshost, domain_mailhost = $mailhost, domain_expire = $expire, domain_ip = '$a', domain_name_servers = '$ns', domain_mail_servers = '$mx', domain_txt = '$txt', domain_raw_whois = '$whois', domain_notes = '$notes', domain_client_id = $client_id");
+    mysqli_query($mysqli,"INSERT INTO domains SET domain_route_mail = $route_mail, domain_name = '$name', domain_description = '$description', domain_registrar = $registrar,  domain_webhost = $webhost, domain_dnshost = $dnshost, domain_mailhost = $mailhost, domain_expire = $expire, domain_ip = '$a', domain_name_servers = '$ns', domain_mail_servers = '$mx', domain_txt = '$txt', domain_raw_whois = '$whois', domain_notes = '$notes', domain_client_id = $client_id");
 
     // Get inserted ID (for linking certificate, if exists)
     $domain_id = mysqli_insert_id($mysqli);
@@ -77,6 +87,13 @@ if (isset($_POST['edit_domain'])) {
     $client_id = intval(getFieldById('domains', $domain_id, 'domain_client_id'));
 
     enforceClientAccess();
+
+    // Renaming a domain to a public mailbox provider is refused as on add (MSP-DS-33); an untouched legacy name still saves
+    require_once dirname(__DIR__, 2) . '/includes/inbound_routing.php';
+    if (inboundIsFreemailDomain($name) && strcasecmp((string) getFieldById('domains', $domain_id, 'domain_name', 'raw'), $name) !== 0) {
+        flash_alert("<strong>" . nullable_htmlentities($name) . "</strong> is a public mailbox provider and cannot be added as a client domain", 'error');
+        redirect();
+    }
 
     // Set/check/lookup expiry date
     if (strtotime($expire) && (new DateTime($expire)) > (new DateTime())) {
@@ -116,8 +133,16 @@ if (isset($_POST['edit_domain'])) {
         WHERE domain_id = $domain_id
     "));
 
+    // MSP-DS-16/33: the 'route inbound mail' flag is admin-only; a non-admin edit keeps it, except that renaming a domain clears it
+    // (the flag was granted to the old name, not to whatever name a technician types next)
+    if ($session_is_admin) {
+        $route_mail = !empty($_POST['route_mail']) ? 1 : 0;
+    } else {
+        $route_mail = strcasecmp((string) ($original_domain_info['domain_name'] ?? ''), $name) === 0 ? intval($original_domain_info['domain_route_mail'] ?? 0) : 0;
+    }
+
     // Update domain
-    mysqli_query($mysqli,"UPDATE domains SET domain_name = '$name', domain_description = '$description', domain_registrar = $registrar,  domain_webhost = $webhost, domain_dnshost = $dnshost, domain_mailhost = $mailhost, domain_expire = $expire, domain_ip = '$a', domain_name_servers = '$ns', domain_mail_servers = '$mx', domain_txt = '$txt', domain_raw_whois = '$whois', domain_notes = '$notes' WHERE domain_id = $domain_id");
+    mysqli_query($mysqli,"UPDATE domains SET domain_route_mail = $route_mail, domain_name = '$name', domain_description = '$description', domain_registrar = $registrar,  domain_webhost = $webhost, domain_dnshost = $dnshost, domain_mailhost = $mailhost, domain_expire = $expire, domain_ip = '$a', domain_name_servers = '$ns', domain_mail_servers = '$mx', domain_txt = '$txt', domain_raw_whois = '$whois', domain_notes = '$notes' WHERE domain_id = $domain_id");
 
     // Fetch updated info
     $new_domain_info = mysqli_fetch_assoc(mysqli_query($mysqli,"
@@ -376,7 +401,7 @@ if (isset($_POST['export_domains_csv'])) {
     if ($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Domains-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -389,7 +414,7 @@ if (isset($_POST['export_domains_csv'])) {
         //output each row of the data, format line as csv and write to file pointer
         while($row = $sql->fetch_assoc()) {
             $lineData = array($row['domain_name'], $row['domain_description'], $row['domain_registrar'], $row['domain_webhost'], $row['domain_expire']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file

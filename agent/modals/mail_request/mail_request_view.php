@@ -4,7 +4,7 @@ require_once '../../../includes/modal_header.php';
 enforceUserPermission('module_support');
 
 $mail_request_id = intval($_GET['id'] ?? 0);
-$row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT mr.*, m.mailbox_name, m.mailbox_email
+$row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT mr.*, m.mailbox_name, m.mailbox_email, m.mailbox_default_client_id
     FROM mail_requests mr
     LEFT JOIN mailboxes m ON m.mailbox_id = mr.mail_request_mailbox_id
     WHERE mr.mail_request_id = $mail_request_id AND mr.mail_request_archived_at IS NULL LIMIT 1"));
@@ -15,12 +15,20 @@ if (!$row) {
     exit;
 }
 
+// Same mailbox client scope as the list, the convert modal and dismiss: a request on a mailbox bound to a client the agent may not access is not readable (MSP-DS-8)
+$mr_default_client_id = intval($row['mailbox_default_client_id'] ?? 0);
+if ($mr_default_client_id > 0) {
+    enforceClientAccess($mr_default_client_id);
+}
+
 $attachments_sql = mysqli_query($mysqli, "SELECT mail_request_attachment_name, mail_request_attachment_reference_name FROM mail_request_attachments WHERE mail_request_attachment_mail_request_id = $mail_request_id");
 
 // Initialize the HTML Purifier to prevent XSS — mail_request_body is the raw HTML body
 // of an inbound email from an untrusted external sender.
 require "../../../plugins/htmlpurifier/HTMLPurifier.standalone.php";
+require_once "../../../plugins/htmlpurifier/rivet_html_policy.php";
 $purifier_config = HTMLPurifier_Config::createDefault();
+rivet_html_policy_apply($purifier_config, 'strict');
 $purifier_config->set('Cache.DefinitionImpl', null); // Disable cache by setting a non-existent directory or an invalid one
 $purifier_config->set('URI.AllowedSchemes', ['data' => true, 'src' => true, 'http' => true, 'https' => true]);
 $purifier = new HTMLPurifier($purifier_config);

@@ -60,10 +60,10 @@ final class RivetMspBackupFactsProvider implements BackupFactsProviderInterface
                 lastSuccessAt: $finishedAt,
                 includedStores: BackupStore::required($this->rmmDataStoreKind),
                 destinations: $destinations,
-                encrypted: $isScript ? true : false,
+                encrypted: true,
                 retentionDays: null, // both paths prune by count/days configured at run time, not recorded per-run; honestly unknown here.
                 lastOffsiteSuccessAt: $offsiteAt,
-                encryptionMethod: $isScript ? 'openssl enc' : null,
+                encryptionMethod: $isScript ? 'openssl enc' : 'zip AES-256',
                 source: 'backup_runs',
             );
         } catch (\Throwable) {

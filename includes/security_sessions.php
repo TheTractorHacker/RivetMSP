@@ -117,7 +117,9 @@ if (!function_exists('secSessionLimits')) {
 
                     return true;
                 }
-                // row deleted, or it belongs to someone else: fall through and register afresh
+                // MSP-DS-169: a session that already had a row must not come back to life when that row is gone (purged) or
+                // belongs to someone else; the only safe answer is to end it (sign in again registers a fresh row).
+                return false;
             }
 
             secSessionRegister($mysqli, $userId);
@@ -217,6 +219,9 @@ if (!function_exists('secSessionLimits')) {
             setcookie('user_encryption_session_key', '', time() - 3600, '/');
         }
         unset($_COOKIE['user_encryption_session_key']);
+        if (function_exists('clearPasskeyEncKeyCookie')) {
+            clearPasskeyEncKeyCookie();   // MSP-DS-97
+        }
     }
 
     /** Revoke one of the user's own sessions. True if a live row was revoked. */
@@ -245,8 +250,23 @@ if (!function_exists('secSessionLimits')) {
     function secSessionsOnPasswordChange(mysqli $mysqli, int $userId, ?int $keepRowId = null): int
     {
         mysqli_query($mysqli, "DELETE FROM remember_tokens WHERE remember_token_user_id = $userId");
+        // MSP-DS-140: a passkey is a password-less way back in, so it must not outlive the password change that was meant to lock an intruder out
+        secPasskeysRevoke($mysqli, $userId);
 
         return secSessionRevokeAll($mysqli, $userId, $keepRowId, 'password_changed');
+    }
+
+    /**
+     * MSP-DS-140: remove every passkey of the user. Used by password change, administrator password set, IR reset and sign-out-everywhere. The user
+     * can enrol a new passkey (password re-check) afterwards. The passkey-wrapped vault key columns are left alone: they are the vault-repair
+     * source for a broken password wrap and are useless without the (now cleared) browser cookie key.
+     * Returns how many passkeys were removed. API bearer tokens are revoked by the callers (the API's own password change keeps the calling token).
+     */
+    function secPasskeysRevoke(mysqli $mysqli, int $userId): int
+    {
+        mysqli_query($mysqli, "DELETE FROM user_passkeys WHERE passkey_user_id = $userId");
+
+        return max(0, mysqli_affected_rows($mysqli));
     }
 
     /** The user's live sessions, newest activity first. @return array<int,array<string,mixed>> */
@@ -269,6 +289,92 @@ if (!function_exists('secSessionLimits')) {
     /** Housekeeping (cron): forget rows that ended or went quiet long ago. */
     function secSessionPurge(mysqli $mysqli): void
     {
-        @mysqli_query($mysqli, 'DELETE FROM user_sessions WHERE session_last_seen_at < (NOW() - INTERVAL 30 DAY)');
+        // MSP-DS-169: revoked rows are kept past the longest absolute session lifetime (90 days), so a revocation cannot be purged away
+        @mysqli_query($mysqli, 'DELETE FROM user_sessions WHERE (session_revoked_at IS NULL AND session_last_seen_at < (NOW() - INTERVAL 30 DAY)) OR (session_revoked_at IS NOT NULL AND session_last_seen_at < (NOW() - INTERVAL 100 DAY))');
+    }
+
+    /**
+     * MSP-DS-145 (review R30): idle and absolute lifetime for a CLIENT PORTAL session (setting-free: 8 hours idle, 24 hours absolute).
+     * $session is $_SESSION (by reference). Returns false when the session has run out and must be ended. A background request
+     * (EventSource stream, ?_bg=1, X-Rivet-Background) is still checked but never extends the idle timer. A session that pre-dates this
+     * check starts its clock on its first request.
+     */
+    function secPortalSessionAlive(array &$session, ?int $now = null, bool $background = false, int $idleSeconds = 28800, int $absoluteSeconds = 86400): bool
+    {
+        $now ??= time();
+        $started = (int) ($session['portal_started_at'] ?? 0);
+        $last    = (int) ($session['portal_last_activity'] ?? 0);
+        if ($started <= 0) {
+            $started = $now;
+            $session['portal_started_at'] = $now;
+        }
+        if ($last <= 0) {
+            $last = $now;
+        }
+        if ($now - $started > $absoluteSeconds || $now - $last > $idleSeconds) {
+            return false;
+        }
+        if (!$background) {
+            $session['portal_last_activity'] = $now;
+        } elseif (!isset($session['portal_last_activity'])) {
+            $session['portal_last_activity'] = $last;
+        }
+
+        return true;
+    }
+
+    /** Start the portal clocks and forget any password fingerprint left by an earlier sign-in in this browser (MSP-DS-145, review R30/R31). */
+    function secPortalSessionBegin(array &$session, ?int $now = null, ?mysqli $mysqli = null, int $userId = 0): void
+    {
+        $now ??= time();
+        $session['portal_started_at']    = $now;
+        $session['portal_last_activity'] = $now;
+        unset($session['portal_pw_fp'], $session['portal_sv']);
+        // MSP-DS-145: remember the account's session version (users.user_session_version) this sign-in belongs to; a later bump revokes it.
+        if ($mysqli !== null && $userId > 0) {
+            $session['portal_sv'] = secPortalSessionVersion($mysqli, $userId);
+        }
+    }
+
+    /** The account's current portal session version (0 when the column does not exist yet or the user is unknown). */
+    function secPortalSessionVersion(mysqli $mysqli, int $userId): int
+    {
+        try {
+            $r = mysqli_query($mysqli, "SELECT user_session_version FROM users WHERE user_id = $userId LIMIT 1");
+
+            return $r && ($x = mysqli_fetch_row($r)) ? (int) $x[0] : 0;
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * MSP-DS-145: sign every open portal session of this account out (password change or reset, an administrator setting a new password,
+     * login method change): their stored version no longer matches. Returns the new version. Silent when the column does not exist yet.
+     */
+    function secPortalSessionsRevoke(mysqli $mysqli, int $userId): int
+    {
+        try {
+            mysqli_query($mysqli, "UPDATE users SET user_session_version = user_session_version + 1 WHERE user_id = $userId AND user_type = 2");
+        } catch (\Throwable $e) {
+            return 0;
+        }
+
+        return secPortalSessionVersion($mysqli, $userId);
+    }
+
+    /**
+     * Is this portal session still valid for the account's current version? A session that has no version yet (it began before the column
+     * existed) adopts the current one; a stored version that differs from the account's means "revoked".
+     */
+    function secPortalSessionVersionOk(array &$session, int $currentVersion): bool
+    {
+        if (!isset($session['portal_sv'])) {
+            $session['portal_sv'] = $currentVersion;
+
+            return true;
+        }
+
+        return (int) $session['portal_sv'] === $currentVersion;
     }
 }

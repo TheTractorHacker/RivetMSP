@@ -10,6 +10,9 @@ if (isset($_POST['add_tag'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
+    // Categories and tags are shared by every client: only an administrator creates them (the form lives under admin/; MSP-DS-9)
+    enforceAdminPermission();
+
     require_once 'tag_model.php';
 
     mysqli_query($mysqli,"INSERT INTO tags SET tag_name = '$name', tag_type = $type, tag_color = '$color', tag_icon = '$icon'");

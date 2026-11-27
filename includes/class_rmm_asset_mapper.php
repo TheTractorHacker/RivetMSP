@@ -135,7 +135,7 @@ class RmmAssetMapper {
         }
 
         $message = (string) ($alert['message'] ?? $alert['description'] ?? $alert['alert_type'] ?? 'RMM Alert');
-        $message_esc  = mysqli_real_escape_string($m, substr($message, 0, 2000));
+        $message_esc  = mysqli_real_escape_string($m, mb_substr(mb_scrub($message, 'UTF-8'), 0, 2000, 'UTF-8'));
         $severity_esc = mysqli_real_escape_string($m, $severity);
         $raw_json_esc = mysqli_real_escape_string($m, json_encode($alert));
 
@@ -683,7 +683,7 @@ class RmmAssetMapper {
             }
 
             $name = preg_replace('/^\[\d+\]\s*/', '', $caption);
-            $name = mysqli_real_escape_string($m, substr($name, 0, 200));
+            $name = mysqli_real_escape_string($m, mb_substr(mb_scrub($name, 'UTF-8'), 0, 200, 'UTF-8'));
             $type_esc = mysqli_real_escape_string($m, $type);
             $mac_esc  = mysqli_real_escape_string($m, $mac);
             $ipv4_esc = mysqli_real_escape_string($m, $ipv4);

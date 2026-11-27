@@ -53,6 +53,7 @@ DOMAIN=""
 APP_DIR=""
 DB_NAME=""
 PROXY_MODE=0
+TRUSTED_PROXIES=""   # MSP-DS-158: --trusted-proxy=<address/CIDR> (repeatable); proxy mode only
 DEFAULT_VHOST=0
 SKIP_FIREWALL=0
 SKIP_FAIL2BAN=0
@@ -112,6 +113,10 @@ Deployment options:
                             backend cert instead, and configures the vhost so
                             nginx's own redirects stay relative (no internal
                             hostname/port ever leaks to an end user).
+  --trusted-proxy=<addr/CIDR>  With --proxy-mode: the reverse proxy's address (repeat or
+                            comma-separate for several). nginx then takes the visitor's
+                            address from X-Forwarded-For (real_ip), so login lockouts and
+                            rate limits work per visitor instead of per proxy.
   --default-vhost           Use this instance for requests sent to the server's
                             IP address. Set on only one vhost per nginx port.
   --skip-tls                 Skip certbot AND proxy-mode's redirect tweaks —
@@ -209,6 +214,7 @@ parse_args() {
             --app-dir=*)              APP_DIR="${arg#*=}" ;;
             --db-name=*)               DB_NAME="${arg#*=}" ;;
             --proxy-mode)               PROXY_MODE=1 ;;
+            --trusted-proxy=*)          TRUSTED_PROXIES="${TRUSTED_PROXIES:+${TRUSTED_PROXIES},}${arg#*=}" ;;
             --default-vhost)            DEFAULT_VHOST=1 ;;
             --skip-tls)                 SKIP_TLS=1 ;;
             --install-backup-timers)    INSTALL_BACKUP_TIMERS=1 ;;
@@ -429,6 +435,8 @@ setup_upload_dirs() {
 set_file_permissions() {
     info "Setting ownership (www-data:www-data) and permissions under ${APP_DIR}..."
     chown -R www-data:www-data "${APP_DIR}"
+    # MSP-DS-34 RR1: record the web user in a root-controlled file; the root tooling takes the account it drops app code to from here.
+    write_web_user_conf www-data
     find "${APP_DIR}" -type d -exec chmod 750 {} +
     find "${APP_DIR}" -type f -exec chmod 640 {} +
     # Widen only uploads/ and backups/ back to writable — everything else
@@ -582,6 +590,7 @@ EOF
 
     if [[ "${PROXY_MODE}" -eq 1 ]]; then
         sed -i '/# BEGIN DIRECT-TLS ONLY/,/# END DIRECT-TLS ONLY/d; /# __PROXY_MODE_BLOCK__/d; /# BEGIN PROXY-MODE ONLY/d; /# END PROXY-MODE ONLY/d' "${vhost_tmp}"
+        apply_real_ip_block "${vhost_tmp}" "${TRUSTED_PROXIES}"   # MSP-DS-158
     else
         sed -i '/# BEGIN PROXY-MODE ONLY/,/# END PROXY-MODE ONLY/d; /# __PROXY_MODE_BLOCK__/d; /# BEGIN DIRECT-TLS ONLY/d; /# END DIRECT-TLS ONLY/d' "${vhost_tmp}"
     fi
@@ -749,6 +758,9 @@ install_backup_timers() {
         warn "Created ${pass_file}. COPY IT TO AN OFFLINE PLACE NOW (password manager vault + a printed sealed copy): every encrypted backup is unreadable without it."
     fi
 
+    # The timers run as root: they execute a root-owned copy, never the web-user-writable app tree (MSP-DS-34).
+    bash "${SCRIPT_DIR}/install-trusted-tooling.sh"
+
     local unit
     for unit in backup restore-drill; do
         sed "s|\${APP_DIR}|${APP_DIR}|g" "${tpl}/itflow-${unit}.service" > "${unit_dir}/rivetmsp-${unit}-${safe_name}.service"
@@ -788,6 +800,9 @@ verify_setup_completed() {
 
 run_fresh_setup() {
     if [[ -f "${APP_DIR}/config.php" ]]; then
+        # MSP-DS-172: an earlier run that died midway leaves a config.php without the closing "$config_enable_setup = 0;" line, and the public
+        # /setup wizard stays open on it. Never treat that as "already set up".
+        verify_setup_completed
         info "config.php already exists — skipping application setup (already set up)."
         return 0
     fi
@@ -815,7 +830,8 @@ run_fresh_setup() {
     )
     [[ "${NON_INTERACTIVE}" -eq 1 ]] && setup_args+=(--non-interactive)
 
-    ( cd "${APP_DIR}/scripts" && sudo -u www-data env RIVETMSP_SKIP_KEYFILE=1 ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${ADMIN_PASSWORD}" php setup_cli.php "${setup_args[@]}" < /dev/null )
+    # MSP-DS-95: the passwords travel in the environment (sudo --preserve-env), never on the argv of sudo/env where /proc/PID/cmdline shows them
+    ( cd "${APP_DIR}/scripts" && export ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${ADMIN_PASSWORD}" && sudo --preserve-env=ITFLOW_DB_PASSWORD,ITFLOW_ADMIN_PASSWORD -u www-data env RIVETMSP_SKIP_KEYFILE=1 php setup_cli.php "${setup_args[@]}" < /dev/null )
     verify_setup_completed
     success "Application setup complete."
     create_key_file
@@ -875,7 +891,8 @@ run_restore_setup() {
         --non-interactive
     )
 
-    ( cd "${APP_DIR}/scripts" && sudo -u www-data env RIVETMSP_SKIP_KEYFILE=1 ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${placeholder_password}" php setup_cli.php "${setup_args[@]}" < /dev/null )
+    # MSP-DS-95: environment, not argv
+    ( cd "${APP_DIR}/scripts" && export ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${placeholder_password}" && sudo --preserve-env=ITFLOW_DB_PASSWORD,ITFLOW_ADMIN_PASSWORD -u www-data env RIVETMSP_SKIP_KEYFILE=1 php setup_cli.php "${setup_args[@]}" < /dev/null )
     verify_setup_completed
     success "Placeholder setup complete."
 

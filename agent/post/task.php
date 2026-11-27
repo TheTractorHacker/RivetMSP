@@ -157,7 +157,8 @@ if (isset($_POST['edit_ticket_template_task'])) {
 
     validateCSRFToken($_POST['csrf_token']);
 
-    enforceUserPermission('module_support', 2);
+    // MSP-DS-67: template tasks are admin-managed (created, deleted and normally edited in Admin > Ticket Templates), so a support-level technician may not edit them here
+    enforceAdminPermission();
 
     $task_template_id = intval($_POST['task_template_id']);
     $task_name = sanitizeInput($_POST['name']);
@@ -223,6 +224,11 @@ if (isset($_GET['complete_task'])) {
     }
     if ($client_id) {
         enforceClientAccess($client_id);
+    }
+
+    if (taskApprovalBlocksCompletion($task_id)) {
+        flash_alert("This task has an approval that is pending or declined - it cannot be completed yet.", 'error');
+        redirect();
     }
 
     mysqli_query($mysqli, "UPDATE tasks SET task_completed_at = NOW(), task_completed_by = $session_user_id, task_progress = 100 WHERE task_id = $task_id");
@@ -296,13 +302,22 @@ if (isset($_POST['add_ticket_task_approver'])) {
     enforceUserPermission('module_support', 2);
 
     $task_id = intval($_POST['task_id']);
-    $scope = sanitizeInput($_POST['approval_scope']);
-    $type = sanitizeInput($_POST['approval_type']);
+    // MSP-DS-64: scope and type are whitelisted (they used to be stored as typed, and 'Any'/'xyz' skipped the self-approval rule)
+    $scope = strtolower((string) ($_POST['approval_scope'] ?? ''));
+    $type = strtolower((string) ($_POST['approval_type'] ?? ''));
+    if (!in_array($scope, ['internal', 'client'], true) || !in_array($type, ['any', 'technical', 'billing', 'specific'], true)) {
+        flash_alert("Invalid approval scope or type", 'error');
+        redirect();
+    }
     $approval_url_key = randomString(32);
 
     $required_user_id = "NULL";
     if ($type == 'specific') {
         $required_user_id = intval($_POST['approval_required_user_id']);
+        if ($required_user_id <= 0 || $required_user_id === intval($session_user_id)) {
+            flash_alert("Pick another technician as the specific approver", 'error');
+            redirect();
+        }
     }
 
     // Task/Ticket Info
@@ -350,11 +365,11 @@ if (isset($_POST['add_ticket_task_approver'])) {
     // which has no way to enforce those identity checks.
     $subject = "Ticket task approval required - [$ticket_prefix$ticket_number] - $ticket_subject";
     if ($scope == 'internal') {
-        $action_html = "To approve this task, please <a href=\'https://$config_base_url/agent/ticket.php?ticket_id=$ticket_id\'>log in and view the ticket</a>.";
+        $action_html = "To approve this task, please <a href='https://$config_base_url/agent/ticket.php?ticket_id=$ticket_id'>log in and view the ticket</a>.";
     } else {
-        $action_html = "To approve this task, please click <a href=\'https://$config_base_url/guest/guest_approve_ticket_task.php?task_approval_id=$approval_id&url_key=$approval_url_key\'>here</a>.";
+        $action_html = "To approve this task, please click <a href='https://$config_base_url/guest/guest_approve_ticket_task.php?task_approval_id=$approval_id&url_key=$approval_url_key'>here</a>.";
     }
-    $body = "<i style=\'color: #808080\'>##- Please type your reply above this line -##</i><br><br>Hello,<br><br>A ticket regarding $ticket_subject has a task requiring your approval:- <br>Task name: $task_name<br>Scope/Type: $scope - $type <br><br>$action_html<br>If you require further information, please reply to this e-mail.<br><br>Ticket: $ticket_prefix$ticket_number<br>Subject: $ticket_subject<br>Status: $ticket_status<br>Portal: <a href=\'https://$config_base_url/guest/guest_view_ticket.php?ticket_id=$ticket_id&url_key=$ticket_url_key\'>View ticket</a><br><br>--<br>$company_name - Support<br>$config_ticket_from_email<br>$company_phone";
+    $body = "<i style='color: #808080'>##- Please type your reply above this line -##</i><br><br>Hello,<br><br>A ticket regarding $ticket_subject has a task requiring your approval:- <br>Task name: $task_name<br>Scope/Type: $scope - $type <br><br>$action_html<br>If you require further information, please reply to this e-mail.<br><br>Ticket: $ticket_prefix$ticket_number<br>Subject: $ticket_subject<br>Status: $ticket_status<br>Portal: <a href='https://$config_base_url/guest/guest_view_ticket.php?ticket_id=$ticket_id&url_key=$ticket_url_key'>View ticket</a><br><br>--<br>$company_name - Support<br>$config_ticket_from_email<br>$company_phone";
 
     if ($scope == 'internal' && $type == 'specific' && $session_user_id !== $required_user_id) {
         if (inapp_notification_allowed_for_user($required_user_id, 'Ticket')) {
@@ -493,6 +508,12 @@ if (isset($_GET['approve_ticket_task'])) {
 
     $approval_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT * FROM task_approvals LEFT JOIN tasks on task_id = approval_task_id WHERE approval_id = $approval_id AND approval_task_id = $task_id AND approval_scope = 'internal'"));
 
+    if (!$approval_row) {
+        flash_alert("Cannot find/approve that task", 'error');
+        redirect();
+        exit;
+    }
+
     $task_name = nullable_htmlentities($approval_row['task_name']);
     $scope = nullable_htmlentities($approval_row['approval_scope']);
     $type = nullable_htmlentities($approval_row['approval_type']);
@@ -500,8 +521,19 @@ if (isset($_GET['approve_ticket_task'])) {
     $created_by = intval($approval_row['approval_created_by']);
     $ticket_id = intval($approval_row['task_ticket_id']);
 
-    if (!$approval_row) {
-        flash_alert("Cannot find/approve that task", 'error');
+    // MSP-DS-64: the approver needs access to the task's client (ticket, else project)
+    if ($ticket_id) {
+        $approval_client_id = intval(getFieldById('tickets', $ticket_id, 'ticket_client_id'));
+    } else {
+        $approval_client_id = intval(getFieldById('projects', intval($approval_row['task_project_id']), 'project_client_id'));
+    }
+    if ($approval_client_id) {
+        enforceClientAccess($approval_client_id);
+    }
+
+    // Only a pending request can be approved (a declined one is not flipped back)
+    if ($approval_row['approval_status'] !== 'pending') {
+        flash_alert("That approval request is no longer pending", 'error');
         redirect();
         exit;
     }
@@ -512,14 +544,20 @@ if (isset($_GET['approve_ticket_task'])) {
         redirect();
         exit;
     }
-    if ($required_user == 0 && $type == 'any' && $created_by == $session_user_id) {
+    // Nobody approves the request they created, whatever its type
+    if ($created_by == $session_user_id) {
         flash_alert("You cannot approve your own task", 'error');
         redirect();
         exit;
     }
 
-    // Approve
-    mysqli_query($mysqli, "UPDATE task_approvals SET approval_status = 'approved', approval_approved_by = $session_user_id WHERE approval_id = $approval_id AND approval_task_id = $task_id AND approval_scope = 'internal'");
+    // Approve (the status condition makes a concurrent double click or a stale request a no-op)
+    mysqli_query($mysqli, "UPDATE task_approvals SET approval_status = 'approved', approval_approved_by = $session_user_id WHERE approval_id = $approval_id AND approval_task_id = $task_id AND approval_scope = 'internal' AND approval_status = 'pending'");
+    if (mysqli_affected_rows($mysqli) !== 1) {
+        flash_alert("That approval request is no longer pending", 'error');
+        redirect();
+        exit;
+    }
 
     // Notify
     if (inapp_notification_allowed_for_user($created_by, 'Ticket')) {
@@ -545,6 +583,21 @@ if (isset($_GET['delete_ticket_task_approver'])) {
 
     $approval_id = intval($_GET['delete_ticket_task_approver']);
 
+    // MSP-DS-64: client access to the approval's task (ticket, else project) before anything is deleted
+    $del_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT task_ticket_id, task_project_id FROM task_approvals LEFT JOIN tasks ON task_id = approval_task_id WHERE approval_id = $approval_id"));
+    if (!$del_row) {
+        flash_alert("Approval request not found", 'error');
+        redirect();
+    }
+    if (intval($del_row['task_ticket_id'])) {
+        $del_client_id = intval(getFieldById('tickets', intval($del_row['task_ticket_id']), 'ticket_client_id'));
+    } else {
+        $del_client_id = intval(getFieldById('projects', intval($del_row['task_project_id']), 'project_client_id'));
+    }
+    if ($del_client_id) {
+        enforceClientAccess($del_client_id);
+    }
+
     mysqli_query($mysqli, "DELETE FROM task_approvals WHERE approval_id = $approval_id");
 
     logAction("Task", "Delete", "$session_name deleted task approval request ($approval_id)", 0, 0);
@@ -567,7 +620,7 @@ if (isset($_GET['complete_all_tasks'])) {
     $client_id = intval(getFieldById('tickets', $ticket_id, 'ticket_client_id'));
     enforceClientAccess($client_id);
 
-    mysqli_query($mysqli, "UPDATE tasks SET task_completed_at = NOW(), task_completed_by = $session_user_id WHERE task_ticket_id = $ticket_id AND task_completed_at IS NULL");
+    mysqli_query($mysqli, "UPDATE tasks SET task_completed_at = NOW(), task_completed_by = $session_user_id WHERE task_ticket_id = $ticket_id AND task_completed_at IS NULL AND NOT EXISTS (SELECT 1 FROM task_approvals WHERE approval_task_id = tasks.task_id AND approval_status IN ('pending','declined'))");
 
     // Add reply
     mysqli_query($mysqli, "INSERT INTO ticket_replies SET ticket_reply = 'Marked all tasks complete', ticket_reply_type = 'System', ticket_reply_by = $session_user_id, ticket_reply_ticket_id = $ticket_id");

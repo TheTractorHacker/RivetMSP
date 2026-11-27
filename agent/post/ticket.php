@@ -6,10 +6,13 @@
 
 defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 
+require_once __DIR__ . '/../../includes/ticket_hygiene.php';
+
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/sla_functions.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/redis_functions.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/ai_functions.php';
 require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/ticket_automation_dispatch.php';
+require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/same_client.php';
 
 if (isset($_POST['add_ticket'])) {
 
@@ -18,7 +21,7 @@ if (isset($_POST['add_ticket'])) {
     enforceUserPermission('module_support', 2);
 
     $client_id = intval($_POST['client_id']);
-    $assigned_to = resolveTicketAssignee(intval($_POST['assigned_to']));
+    $assigned_to = resolveTicketAssignee(intval($_POST['assigned_to']), $client_id);
     $ticket_status = resolveTicketCreationStatus($assigned_to);
     $contact_id = intval($_POST['contact_id']);
     $category_id = resolveTicketCategory(intval($_POST['category_id']));
@@ -63,6 +66,14 @@ if (isset($_POST['add_ticket'])) {
     }
 
     enforceClientAccess();
+
+    // Every linked object must belong to the ticket's client (MSP-DS-11)
+    assertSameClient('contact', $contact_id, $client_id);
+    assertSameClient('asset', $asset_id, $client_id);
+    assertSameClient('asset', $_POST['additional_assets'] ?? [], $client_id);
+    assertSameClient('vendor', $vendor_id, $client_id);
+    assertSameClient('location', $location_id, $client_id);
+    assertSameClient('project', $project_id, $client_id);
 
     // Add the primary contact as the ticket contact if "Use primary contact" is checked
     if ($use_primary_contact == 1) {
@@ -318,6 +329,14 @@ if (isset($_POST['edit_ticket'])) {
         enforceClientAccess();
     }
 
+    // Every linked object must belong to the ticket's client (MSP-DS-11)
+    assertSameClient('contact', $contact_id, $client_id);
+    assertSameClient('asset', $asset_id, $client_id);
+    assertSameClient('asset', $_POST['additional_assets'] ?? [], $client_id);
+    assertSameClient('vendor', $vendor_id, $client_id);
+    assertSameClient('location', $location_id, $client_id);
+    assertSameClient('project', $project_id, $client_id);
+
     // Category is the source of truth for delivery method when it maps to one;
     // leave ticket_delivery_method untouched for categories with no mapping.
     $derived_delivery_method = getTicketDeliveryMethodForCategory($mysqli, $category_id);
@@ -328,12 +347,18 @@ if (isset($_POST['edit_ticket'])) {
     // Per-category SLA-exempt / Non-billable (DB 2.6.126): snapshot the OLD category/billable/override state before
     // the UPDATE below, so ticketCategoryApplyOnCategoryChange() can detect an actual category change afterward.
     require_once $_SERVER['DOCUMENT_ROOT'] . '/includes/ticket_category_rules.php';
-    $old_ticket_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_category, ticket_billable, ticket_billable_overridden FROM tickets WHERE ticket_id = $ticket_id LIMIT 1"));
+    $old_ticket_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_category, ticket_billable, ticket_billable_overridden, ticket_contact_id FROM tickets WHERE ticket_id = $ticket_id LIMIT 1"));
+    $old_contact_id = intval($old_ticket_row['ticket_contact_id'] ?? 0);
     $old_category_id = intval($old_ticket_row['ticket_category'] ?? 0);
     $old_billable = intval($old_ticket_row['ticket_billable'] ?? 0);
     $old_billable_overridden = intval($old_ticket_row['ticket_billable_overridden'] ?? 0);
 
     mysqli_query($mysqli, "UPDATE tickets SET ticket_category = $category_id, ticket_subject = '$ticket_subject', ticket_priority = '$ticket_priority', ticket_billable = $billable, ticket_details = '$details', ticket_due_at = $due, ticket_vendor_ticket_number = '$vendor_ticket_number', ticket_contact_id = $contact_id, ticket_assigned_to = $assigned_to, ticket_vendor_id = $vendor_id, ticket_location_id = $location_id, ticket_asset_id = $asset_id, ticket_project_id = $project_id$delivery_method_sql_fragment WHERE ticket_id = $ticket_id");
+
+    // MSP-DS-134 (review R14): swapping the contact here must also invalidate the previous contact's emailed guest link; the notification below reads the rotated key
+    if ($contact_id !== $old_contact_id) {
+        ticketRotateGuestKey($mysqli, $ticket_id);
+    }
 
     $billable_kept_override_notice = '';
     if ($category_id !== $old_category_id) {
@@ -559,6 +584,12 @@ if (isset($_POST['edit_ticket_status'])) {
         enforceClientAccess();
     }
 
+    // MSP-DS-66: closing through the status dropdown honours the outtake custody checks too
+    if ($new_status_id == 5 && ($close_block = ticketCloseBlockReason($ticket_id))) {
+        flash_alert("Cannot close ticket - $close_block", 'error');
+        redirect();
+    }
+
     $sql_new_status = mysqli_query($mysqli, "SELECT ticket_status_name, ticket_status_color FROM ticket_statuses WHERE ticket_status_id = $new_status_id LIMIT 1");
     $new_status_row = mysqli_fetch_assoc($sql_new_status);
     $new_status_name = sanitizeInput($new_status_row['ticket_status_name']);
@@ -635,8 +666,11 @@ if (isset($_POST['edit_ticket_contact'])) {
         enforceClientAccess();
     }
 
+    assertSameClient('contact', $contact_id, $client_id);
+
     // Update the contact
     mysqli_query($mysqli, "UPDATE tickets SET ticket_contact_id = $contact_id WHERE ticket_id = $ticket_id");
+    $url_key = ticketRotateGuestKey($mysqli, $ticket_id);   // MSP-DS-134: the previous contact's emailed link stops working; the new contact's email below carries the new key
 
     // Get New contact details
     $sql = mysqli_query($mysqli, "SELECT contact_name, contact_email FROM contacts WHERE contact_id = $contact_id");
@@ -717,6 +751,8 @@ if (isset($_POST['edit_ticket_project'])) {
     if ($client_id) {
         enforceClientAccess();
     }
+
+    assertSameClient('project', $project_id, $client_id);
 
     mysqli_query($mysqli, "UPDATE tickets SET ticket_project_id = $project_id WHERE ticket_id = $ticket_id");
 
@@ -821,7 +857,7 @@ if (isset($_POST['add_ticket_watcher'])) {
                 $data = []; // Queue array
 
                 $subject = "Ticket Notification - [$ticket_prefix$ticket_number] - $ticket_subject";
-                $body = "<i style=\'color: #808080\'>##- Please type your reply above this line -##</i><br><br>Hello,<br><br>You have been added as a collaborator on this ticket regarding \"$ticket_subject\".<br><br>--------------------------------<br>$ticket_details--------------------------------<br><br>Ticket: $ticket_prefix$ticket_number<br>Subject: $ticket_subject<br>Status: $ticket_status<br>Guest link: https://$config_base_url/guest/guest_view_ticket.php?ticket_id=$ticket_id&url_key=$url_key<br><br>--<br>$company_name - Support<br>$config_ticket_from_email<br>$company_phone";
+                $body = "<i style='color: #808080'>##- Please type your reply above this line -##</i><br><br>Hello,<br><br>You have been added as a collaborator on this ticket regarding \"$ticket_subject\".<br><br>--------------------------------<br>$ticket_details--------------------------------<br><br>Ticket: $ticket_prefix$ticket_number<br>Subject: $ticket_subject<br>Status: $ticket_status<br>Guest link: https://$config_base_url/guest/guest_view_ticket.php?ticket_id=$ticket_id&url_key=$url_key<br><br>--<br>$company_name - Support<br>$config_ticket_from_email<br>$company_phone";
 
                 $data[] = [
                     'from' => $ticket_from['email'],
@@ -876,6 +912,9 @@ if (isset($_GET['delete_ticket_watcher'])) {
     }
 
     mysqli_query($mysqli, "DELETE FROM ticket_watchers WHERE watcher_id = $watcher_id");
+    if (mysqli_affected_rows($mysqli) > 0 && $ticket_id) {
+        ticketRotateGuestKey($mysqli, $ticket_id);   // MSP-DS-134: the removed watcher's emailed link stops working
+    }
 
     // History
     mysqli_query($mysqli, "INSERT INTO ticket_history SET ticket_history_status = '$ticket_status_name', ticket_history_description = '$session_name removed ticket $watcher_email as a watcher', ticket_history_ticket_id = $ticket_id");
@@ -945,6 +984,9 @@ if (isset($_POST['edit_ticket_asset'])) {
         enforceClientAccess();
     }
 
+    assertSameClient('asset', $asset_id, $client_id);
+    assertSameClient('asset', $_POST['additional_assets'] ?? [], $client_id);
+
     mysqli_query($mysqli, "UPDATE tickets SET ticket_asset_id = $asset_id WHERE ticket_id = $ticket_id");
 
     // Add Additional Assets
@@ -997,6 +1039,8 @@ if (isset($_POST['edit_ticket_vendor'])) {
     if ($client_id) {
         enforceClientAccess();
     }
+
+    assertSameClient('vendor', $vendor_id, $client_id);
 
     mysqli_query($mysqli, "UPDATE tickets SET ticket_vendor_id = $vendor_id WHERE ticket_id = $ticket_id");
 
@@ -1164,6 +1208,11 @@ if (isset($_POST['quick_status_ticket'])) {
     $ticket_number = intval($td['ticket_number']);
 
     if ($client_id) { enforceClientAccess($client_id); }
+
+    // MSP-DS-66: quick status honours the outtake custody checks when it would close the ticket
+    if (in_array($new_status_id, [4, 5], true) && ticketCloseBlockReason($ticket_id)) {
+        echo json_encode(['ok' => false, 'error' => 'Cannot close ticket - ' . ticketCloseBlockReason($ticket_id)]); exit;
+    }
 
     $sql_ns = mysqli_query($mysqli, "SELECT ticket_status_name, ticket_status_color FROM ticket_statuses WHERE ticket_status_id = $new_status_id LIMIT 1");
     $ns = mysqli_fetch_assoc($sql_ns);
@@ -1698,6 +1747,7 @@ if (isset($_POST['bulk_merge_tickets'])) {
     if (isset($_POST['ticket_ids'])) {
 
         $ticket_count = count($_POST['ticket_ids']); // Get a ticket count
+        $skipped_merge_count = 0;
 
         foreach ($_POST['ticket_ids'] as $ticket_id) {
             $ticket_id = intval($ticket_id);
@@ -1720,6 +1770,12 @@ if (isset($_POST['bulk_merge_tickets'])) {
                     enforceClientAccess();
                 }
 
+                // MSP-DS-66: a merge force-closes the source ticket - skip tickets whose outtake custody is incomplete
+                if (ticketCloseBlockReason($ticket_id)) {
+                    $skipped_merge_count++;
+                    continue;
+                }
+
                 // Update current ticket
                 if (empty($ticket_first_response_at)) {
                     mysqli_query($mysqli, "UPDATE tickets SET ticket_first_response_at = NOW() WHERE ticket_id = $ticket_id");
@@ -1740,7 +1796,11 @@ if (isset($_POST['bulk_merge_tickets'])) {
 
         mysqli_query($mysqli, "UPDATE tickets SET ticket_updated_at = NOW() WHERE ticket_id = $merge_into_ticket_id");
 
-        flash_alert("<strong>$ticket_count</strong> tickets merged into <strong>$ticket_prefix$merge_into_ticket_number</strong>");
+        $merged_count = $ticket_count - $skipped_merge_count;
+        flash_alert("<strong>$merged_count</strong> tickets merged into <strong>$ticket_prefix$merge_into_ticket_number</strong>");
+        if ($skipped_merge_count > 0) {
+            flash_alert("<strong>$skipped_merge_count</strong> ticket(s) were not merged because they have an unsigned outtake form or unfinalized outtake worksheet.", 'info');
+        }
 
     }
 
@@ -1756,7 +1816,12 @@ if (isset($_POST['bulk_resolve_tickets'])) {
 
     // POST variables
     $details = mysqli_escape_string($mysqli, $_POST['bulk_details']);
-    $ticket_reply_time_worked = sanitizeInput($_POST['time']);
+    // MSP-DS-65: strict H:MM:SS, 0-838 hours, never negative
+    $ticket_reply_time_worked = parseTimeWorked($_POST['time'] ?? '');
+    if ($ticket_reply_time_worked === null) {
+        flash_alert("Time worked must be HH:MM:SS (0 to 838 hours)", 'error');
+        redirect();
+    }
     $private_note = intval($_POST['bulk_private_note']);
     if ($private_note == 1) {
         $ticket_reply_type = 'Internal';
@@ -1774,9 +1839,8 @@ if (isset($_POST['bulk_resolve_tickets'])) {
         foreach ($_POST['ticket_ids'] as $ticket_id) {
             $ticket_id = intval($ticket_id);
 
-            // Check to make sure Tasks are complete before resolving
-            $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COUNT('task_id') AS num FROM tasks WHERE task_completed_at IS NULL AND task_ticket_id = $ticket_id"));
-            $num_of_open_tasks = $row['num'];
+            // Open tasks, an unsigned outtake form and an unfinalized outtake worksheet all block a resolve (MSP-DS-66: one shared helper)
+            $num_of_open_tasks = ticketCloseBlockReason($ticket_id, true) ? 1 : 0;
 
             if ($num_of_open_tasks == 0) {
                 // Count the Ticket Loop
@@ -1903,7 +1967,7 @@ if (isset($_POST['bulk_resolve_tickets'])) {
     flash_alert("Resolved <strong>$ticket_count</strong> Tickets");
 
     if ($skipped_count > 0) {
-        flash_alert("Resolved <strong>$ticket_count</strong> Tickets <strong>$skipped_count</strong> ticket(s) could not be resolved because they have open tasks.", 'info');
+        flash_alert("Resolved <strong>$ticket_count</strong> Tickets <strong>$skipped_count</strong> ticket(s) could not be resolved because they have open tasks or an incomplete outtake.", 'info');
     }
 
     redirect();
@@ -1919,7 +1983,12 @@ if (isset($_POST['bulk_ticket_reply'])) {
     // POST variables
     $ticket_reply = mysqli_escape_string($mysqli, $_POST['bulk_reply_details']);
     $ticket_status = intval($_POST['bulk_status']);
-    $ticket_reply_time_worked = sanitizeInput($_POST['time']);
+    // MSP-DS-65: strict H:MM:SS, 0-838 hours, never negative
+    $ticket_reply_time_worked = parseTimeWorked($_POST['time'] ?? '');
+    if ($ticket_reply_time_worked === null) {
+        flash_alert("Time worked must be HH:MM:SS (0 to 838 hours)", 'error');
+        redirect();
+    }
     $private_note = intval($_POST['bulk_private_reply']);
     if ($private_note == 1) {
         $ticket_reply_type = 'Internal';
@@ -1950,6 +2019,11 @@ if (isset($_POST['bulk_ticket_reply'])) {
             // Don't Enforce Client Access if Ticket doesn't have an assigned client
             if ($client_id) {
                 enforceClientAccess();
+            }
+
+            // MSP-DS-66: a bulk reply that would resolve the ticket skips tickets whose outtake is not complete
+            if (in_array($ticket_status, [4, 5], true) && ticketCloseBlockReason($ticket_id)) {
+                continue;
             }
 
             if ($client_id) {
@@ -2135,6 +2209,9 @@ if (isset($_POST['bulk_add_ticket_project'])) {
                 enforceClientAccess();
             }
 
+            // The project must belong to this ticket's client (or be a shared project, MSP-DS-11)
+            assertSameClient('project', $project_id, $client_id);
+
             // Update ticket & insert reply
             mysqli_query($mysqli, "UPDATE tickets SET ticket_project_id = $project_id WHERE ticket_id = $ticket_id");
 
@@ -2209,6 +2286,8 @@ if (isset($_POST['bulk_add_asset_ticket'])) {
                 enforceClientAccess();
             }
 
+            assertSameClient('project', $project_id, $client_id);
+
             $subject_asset_prepended = "$asset_name - $subject";
 
             // Atomically increment and get the new ticket number
@@ -2251,6 +2330,8 @@ if (isset($_POST['bulk_add_asset_ticket'])) {
             // Add Tasks from Template if Template was selected
             if($ticket_template_id) {
                 if (mysqli_num_rows($sql_task_templates) > 0) {
+                    // MSP-DS-52: the result set is shared by every ticket of the bulk run - rewind it for each one
+                    mysqli_data_seek($sql_task_templates, 0);
                     while ($row = mysqli_fetch_assoc($sql_task_templates)) {
                         $task_order = intval($row['task_template_order']);
                         $task_name = sanitizeInput($row['task_template_name']);
@@ -2291,10 +2372,17 @@ if (isset($_POST['add_ticket_reply'])) {
         enforceClientAccess();
     }
 
+    // MSP-DS-66: a reply that resolves/closes the ticket honours the outtake custody checks (nothing is saved when it is blocked)
+    if (in_array($ticket_status, [4, 5], true) && ($close_block = ticketCloseBlockReason($ticket_id))) {
+        flash_alert("Cannot resolve ticket - $close_block", 'error');
+        redirect();
+    }
+
     // Time tracking, inputs & combine into string
-    $hours = intval($_POST['hours']);
-    $minutes = intval($_POST['minutes']);
-    $seconds = intval($_POST['seconds']);
+    // MSP-DS-65: clamped to what a TIME column and a sane reply can hold (a negative value used to cancel out logged time)
+    $hours = max(0, min(838, intval($_POST['hours'])));
+    $minutes = max(0, min(59, intval($_POST['minutes'])));
+    $seconds = max(0, min(59, intval($_POST['seconds'])));
     $ticket_reply_time_worked = sanitizeInput(sprintf("%02d:%02d:%02d", $hours, $minutes, $seconds));
     $reply_labor_type_id = intval($_POST['reply_labor_type_id'] ?? 0);
     $reply_charge_now    = isset($_POST['reply_charge_now']) ? 1 : 0;
@@ -2342,6 +2430,12 @@ if (isset($_POST['add_ticket_reply'])) {
 
     // Capture prior status for SLA pause accounting before it is overwritten.
     $sla_old_status_id = intval(getFieldById('tickets', $ticket_id, 'ticket_status'));
+
+    // MSP-DS-139: the posted status must be a real, active status (or the ticket's own current one); anything else keeps the current status
+    $status_ok = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_status_id FROM ticket_statuses WHERE ticket_status_id = $ticket_status AND ticket_status_active = 1 LIMIT 1"));
+    if ($ticket_status < 1 || (!$status_ok && $ticket_status !== $sla_old_status_id)) {
+        $ticket_status = $sla_old_status_id;
+    }
 
     // Update Ticket Status & updated at (in case status didn't change)
     mysqli_query($mysqli, "UPDATE tickets SET ticket_status = $ticket_status, ticket_updated_at = NOW() WHERE ticket_id = $ticket_id");
@@ -2571,8 +2665,18 @@ if (isset($_POST['edit_ticket_reply'])) {
 
     $ticket_reply_id = intval($_POST['ticket_reply_id']);
     $ticket_reply = mysqli_real_escape_string($mysqli, $_POST['ticket_reply']);
-    $ticket_reply_type = sanitizeInput($_POST['ticket_reply_type']);
-    $ticket_reply_time_worked = sanitizeInput($_POST['time']);
+    // MSP-DS-67: only the agent-side reply types can be set here ('Client' would make an agent reply render as client-authored)
+    $ticket_reply_type = (string) ($_POST['ticket_reply_type'] ?? '');
+    if (!in_array($ticket_reply_type, ['Public', 'Internal'], true)) {
+        flash_alert("Invalid reply type", 'error');
+        redirect();
+    }
+    // MSP-DS-65: strict H:MM:SS, 0-838 hours, never negative
+    $ticket_reply_time_worked = parseTimeWorked($_POST['time'] ?? '');
+    if ($ticket_reply_time_worked === null) {
+        flash_alert("Time worked must be HH:MM:SS (0 to 838 hours)", 'error');
+        redirect();
+    }
 
     // Derive client_id from the reply's ticket (not from POST) to prevent IDOR bypass
     $reply_ticket_id = intval(getFieldById('ticket_replies', $ticket_reply_id, 'ticket_reply_ticket_id'));
@@ -2724,10 +2828,20 @@ if (isset($_POST['merge_ticket'])) {
         redirect();
     }
 
+    // MSP-DS-66: a merge force-closes the source ticket, so it honours the same close preconditions (outtake custody) as every other close path
+    if ($close_block = ticketCloseBlockReason($ticket_id)) {
+        flash_alert("Cannot merge ticket - $close_block", 'error');
+        redirect();
+    }
+
     // Move ticket replies from child > parent
     if ($move_replies) {
-        mysqli_query($mysqli, "UPDATE ticket_replies SET ticket_reply_ticket_id = $merge_into_ticket_id WHERE ticket_reply_ticket_id = $ticket_id");
+        // MSP-DS-135: replies moved across clients must not show up in the destination client's portal or guest view: Public/Client become Internal
+        $cross_client_merge = $source_client_id !== $client_id;
+        $moved_type_sql = $cross_client_merge ? ", ticket_reply_type = IF(ticket_reply_type IN ('Public', 'Client'), 'Internal', ticket_reply_type)" : '';
+        mysqli_query($mysqli, "UPDATE ticket_replies SET ticket_reply_ticket_id = $merge_into_ticket_id$moved_type_sql WHERE ticket_reply_ticket_id = $ticket_id");
     }
+
 
     // Update current ticket
     if (empty($ticket_first_response_at)) {
@@ -2766,12 +2880,13 @@ if (isset($_POST['change_client_ticket'])) {
     // Confirm access to the ticket's CURRENT client before reassigning it - only
     // checking the destination (new_client_id) below let an attacker move any
     // other client's ticket into one they legitimately have access to.
-    $current_client_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_client_id FROM tickets WHERE ticket_id = $ticket_id"));
+    $current_client_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT ticket_client_id, ticket_contact_id FROM tickets WHERE ticket_id = $ticket_id"));
     if (!$current_client_row) {
         flash_alert("No ticket with that ID found.", 'error');
         redirect();
     }
     $current_client_id = intval($current_client_row['ticket_client_id']);
+    $current_contact_id = intval($current_client_row['ticket_contact_id']);
     if ($current_client_id) {
         enforceClientAccess($current_client_id);
     }
@@ -2781,11 +2896,22 @@ if (isset($_POST['change_client_ticket'])) {
         enforceClientAccess();
     }
 
+    // The contact chosen for the new client must belong to it (MSP-DS-11)
+    assertSameClient('contact', $contact_id, $client_id);
+
     // Set any/all existing replies to internal
     mysqli_query($mysqli, "UPDATE ticket_replies SET ticket_reply_type = 'Internal' WHERE ticket_reply_ticket_id = $ticket_id");
 
     // Update ticket client & contact
     mysqli_query($mysqli, "UPDATE tickets SET ticket_client_id = $client_id, ticket_contact_id = $contact_id WHERE ticket_id = $ticket_id LIMIT 1");
+
+    // MSP-DS-136: nothing of the old client stays on the ticket (watchers, guest link, contract, asset/location/vendor/project)
+    if ($current_client_id !== $client_id) {
+        ticketDetachFromOldClient($mysqli, $ticket_id);
+    } elseif ($current_contact_id !== $contact_id) {
+        // same client, different contact: the previous contact's emailed guest link must stop working (review RR10, same as edit_ticket)
+        ticketRotateGuestKey($mysqli, $ticket_id);
+    }
 
     logAction("Ticket", "Change", "$session_name changed ticket client", $client_id, $ticket_id);
 
@@ -2817,17 +2943,9 @@ if (isset($_GET['resolve_ticket'])) {
         enforceClientAccess();
     }
 
-    // Block resolve if unsigned dedicated outtake form exists
-    $sql_outtake_check = mysqli_query($mysqli, "SELECT COUNT(*) FROM ticket_outtake_forms WHERE outtake_ticket_id = $ticket_id AND outtake_signed_at IS NULL");
-    if (intval(mysqli_fetch_row($sql_outtake_check)[0]) > 0) {
-        flash_alert("Cannot resolve ticket — there is an unsigned outtake form. Have the customer sign it first.", "error");
-        redirect();
-    }
-
-    // Block resolve if outtake worksheet not finalized
-    $sql_ws_outtake = mysqli_query($mysqli, "SELECT COUNT(*) FROM ticket_worksheets WHERE worksheet_ticket_id = $ticket_id AND worksheet_is_outtake = 1 AND worksheet_completed_at IS NULL");
-    if (intval(mysqli_fetch_row($sql_ws_outtake)[0]) > 0) {
-        flash_alert("Cannot resolve ticket — there is an unfinalized outtake worksheet. Finalize it first.", "error");
+    // MSP-DS-66: same close preconditions as every other close path (outtake custody, open tasks)
+    if ($close_block = ticketCloseBlockReason($ticket_id, true)) {
+        flash_alert("Cannot resolve ticket - $close_block", 'error');
         redirect();
     }
 
@@ -2953,17 +3071,9 @@ if (isset($_GET['close_ticket'])) {
         enforceClientAccess();
     }
 
-    // Block close if unsigned dedicated outtake form exists
-    $sql_ot_close = mysqli_query($mysqli, "SELECT COUNT(*) FROM ticket_outtake_forms WHERE outtake_ticket_id = $ticket_id AND outtake_signed_at IS NULL");
-    if (intval(mysqli_fetch_row($sql_ot_close)[0]) > 0) {
-        flash_alert("Cannot close ticket — there is an unsigned outtake form. Have the customer sign it first.", "error");
-        redirect();
-    }
-
-    // Block close if outtake worksheet not finalized
-    $sql_ws_ot_close = mysqli_query($mysqli, "SELECT COUNT(*) FROM ticket_worksheets WHERE worksheet_ticket_id = $ticket_id AND worksheet_is_outtake = 1 AND worksheet_completed_at IS NULL");
-    if (intval(mysqli_fetch_row($sql_ws_ot_close)[0]) > 0) {
-        flash_alert("Cannot close ticket — there is an unfinalized outtake worksheet. Finalize it first.", "error");
+    // MSP-DS-66: same close preconditions as every other close path (outtake custody, open tasks)
+    if ($close_block = ticketCloseBlockReason($ticket_id, true)) {
+        flash_alert("Cannot close ticket - $close_block", 'error');
         redirect();
     }
 
@@ -3104,6 +3214,14 @@ if (isset($_POST['add_invoice_from_ticket'])) {
     $category = intval($_POST['category']);
     $scope = sanitizeInput($_POST['scope']);
 
+    // MSP-DS-68: same line validation as the invoice/quote line-item handlers - no negative or non-finite amounts
+    $line_qty_check = floatval($_POST['qty'] ?? 0);
+    $line_price_check = floatval($_POST['price'] ?? 0);
+    if ($line_qty_check < 0 || !is_finite($line_qty_check * $line_price_check) || abs($line_qty_check * $line_price_check) > 99999999) {
+        flash_alert("Quantity can not be negative and the line amount must be a reasonable number", 'error');
+        redirect();
+    }
+
     $sql = mysqli_query(
         $mysqli,
         "SELECT * FROM tickets
@@ -3179,6 +3297,18 @@ if (isset($_POST['add_invoice_from_ticket'])) {
             flash_alert($block_reason, 'error');
             redirect();
         }
+        // MSP-DS-129 (review R15): a negative price must not take the total below what was already paid
+        $from_ticket_tax_pct = 0;
+        $from_ticket_tax_id = intval($_POST['tax_id'] ?? 0);
+        if ($from_ticket_tax_id > 0) {
+            $from_ticket_tax_pct = floatval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT tax_percent FROM taxes WHERE tax_id = $from_ticket_tax_id"))[0] ?? 0);
+        }
+        $from_ticket_line = floatval($_POST['qty'] ?? 0) * floatval($_POST['price'] ?? 0);
+        $line_block = invoiceLineBlockReason($mysqli, $invoice_id, $from_ticket_line + $from_ticket_line * $from_ticket_tax_pct / 100);
+        if ($line_block !== null) {
+            flash_alert($line_block, 'error');
+            redirect();
+        }
         $invoice_prefix = sanitizeInput($row['invoice_prefix']);
         $invoice_number = intval($row['invoice_number']);
     }
@@ -3210,9 +3340,13 @@ if (isset($_POST['add_invoice_from_ticket'])) {
     $sql = mysqli_query($mysqli, "SELECT * FROM invoices WHERE invoice_id = $invoice_id");
     $row = mysqli_fetch_assoc($sql);
 
-    $new_invoice_amount = floatval($row['invoice_amount']) + $total;
+    // MSP-DS-68: recomputed from the lines minus the discount (never below zero), like the line-item handlers - not old amount + line
+    $invoice_discount_from_row = floatval($row['invoice_discount_amount']);
+    $row_total = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT SUM(item_total) AS invoice_total FROM invoice_items WHERE item_invoice_id = $invoice_id"));
+    $new_invoice_amount = max(0, floatval($row_total['invoice_total']) - $invoice_discount_from_row);
 
     mysqli_query($mysqli, "UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
+    invoiceSettleStatus($mysqli, $invoice_id);
 
     mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Draft', history_description = 'Invoice created from Ticket $ticket_prefix$ticket_number', history_invoice_id = $invoice_id");
 
@@ -3242,6 +3376,14 @@ if (isset($_POST['add_quote_from_ticket'])) {
 
     $ticket_id = intval($_POST['ticket_id']);
     $scope = sanitizeInput($_POST['scope']);
+
+    // MSP-DS-68: same line validation as the invoice/quote line-item handlers - no negative or non-finite amounts
+    $line_qty_check = floatval($_POST['qty'] ?? 0);
+    $line_price_check = floatval($_POST['price'] ?? 0);
+    if ($line_qty_check < 0 || !is_finite($line_qty_check * $line_price_check) || abs($line_qty_check * $line_price_check) > 99999999) {
+        flash_alert("Quantity can not be negative and the line amount must be a reasonable number", 'error');
+        redirect();
+    }
     $date = sanitizeInput($_POST['date']);
     $expire = sanitizeInput($_POST['expire']);
     $category = intval($_POST['category']);
@@ -3291,7 +3433,7 @@ if (isset($_POST['add_quote_from_ticket'])) {
     // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.
     $quote_prefix_sql = mysqli_real_escape_string($mysqli, (string) $config_quote_prefix);
     $company_currency_sql = mysqli_real_escape_string($mysqli, (string) $session_company_currency);
-    mysqli_query($mysqli,"INSERT INTO quotes SET quote_prefix = '$quote_prefix_sql', quote_number = $quote_number, quote_scope = '$scope', quote_date = '$date', quote_expire = '$expire', quote_amount = $total, quote_currency_code = '$company_currency_sql', quote_category_id = $category, quote_status = 'Draft', quote_url_key = '$quote_url_key', quote_client_id = $client_id");
+    mysqli_query($mysqli,"INSERT INTO quotes SET quote_prefix = '$quote_prefix_sql', quote_number = $quote_number, quote_scope = '$scope', quote_date = '$date', quote_expire = '$expire', quote_amount = " . max(0, $total) . ", quote_currency_code = '$company_currency_sql', quote_category_id = $category, quote_status = 'Draft', quote_url_key = '$quote_url_key', quote_client_id = $client_id");
 
     $quote_id = mysqli_insert_id($mysqli);
 
@@ -3348,7 +3490,7 @@ if (isset($_POST['export_tickets_csv'])) {
     if ($sql->num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Tickets-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -3361,7 +3503,7 @@ if (isset($_POST['export_tickets_csv'])) {
         //output each row of the data, format line as csv and write to file pointer
         while ($row = $sql->fetch_assoc()) {
             $lineData = array($config_ticket_prefix . $row['ticket_number'], $row['ticket_priority'], $row['ticket_status_name'], $row['ticket_subject'], $row['ticket_created_at'], $row['ticket_resolved_at'], $row['ticket_closed_at']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file

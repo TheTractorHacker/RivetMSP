@@ -100,7 +100,8 @@ restore_from_backup() {
     echo "entrypoint: RESTORE_FROM=${RESTORE_FROM} — writing a placeholder config.php via setup_cli.php, then restoring..."
     local placeholder_password
     placeholder_password="$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c 32)"
-    if ! ( cd "${APP_DIR}/scripts" && sudo -u www-data env ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${placeholder_password}" php setup_cli.php \
+    # MSP-DS-95: passwords in the environment (sudo --preserve-env), not on the argv of sudo/env
+    if ! ( cd "${APP_DIR}/scripts" && export ITFLOW_DB_PASSWORD="${DB_PASSWORD}" ITFLOW_ADMIN_PASSWORD="${placeholder_password}" && sudo --preserve-env=ITFLOW_DB_PASSWORD,ITFLOW_ADMIN_PASSWORD -u www-data php setup_cli.php \
         --host="${DB_HOST}" --username="${DB_USER}" --database="${DB_NAME}" --base-url="${APP_BASE_URL:-localhost}" \
         --locale=en_US --timezone=UTC --currency=USD --company-name="Restoring" --country="United States" \
         --address="" --city="" --state="" --zip="" --phone="" --company-email="" --website="" \

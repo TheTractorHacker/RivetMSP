@@ -7,7 +7,8 @@ function showOTPViaCredentialID(credential_id) {
         },
         function(data) {
             //If we get a response from post.php, parse it as JSON
-            const token = JSON.parse(data);
+            const token = data; // jQuery already parsed the application/json response (review R1)
+            if (token && typeof token === "object") { return; } // {error: ...}: show nothing
 
             document.getElementById("otp_" + credential_id).innerText = token
 

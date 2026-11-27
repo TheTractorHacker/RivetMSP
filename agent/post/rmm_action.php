@@ -41,6 +41,8 @@ if ($action === 'reboot' || $action === 'run_command') {
     enforceUserPermission('module_rmm_scripts', $action === 'run_command' ? 3 : 2);
 } else {
     enforceUserPermission('module_rmm', 2);
+    // MSP-DS-61: Core's EndpointAccessPolicy - rmm.patch.manage (scan) needs module_rmm_scripts >= 2, rmm.patch.install needs >= 3
+    enforceUserPermission('module_rmm_scripts', $action === 'patch_install' ? 3 : 2);
 }
 
 $link = mysqli_fetch_assoc(mysqli_query($mysqli,

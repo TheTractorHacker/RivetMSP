@@ -1,9 +1,15 @@
 <?php
 
+// MSP-DS-88: these public pages send the guest security headers (CSP with a script nonce, X-Frame-Options, nosniff, Referrer-Policy).
+require_once __DIR__ . '/../includes/csp_policies.php';
+$csp_nonce = base64_encode(random_bytes(16));
+sendGuestSigningHeaders($csp_nonce);
+
 require_once "../config.php";
 require_once "../functions.php";
 require_once "../includes/load_global_settings.php";
 require_once "../plugins/htmlpurifier/HTMLPurifier.standalone.php";
+require_once "../plugins/htmlpurifier/rivet_html_policy.php";
 
 session_start();
 require_once "../includes/inc_set_timezone.php";
@@ -43,6 +49,7 @@ $ticket_id     = intval($row['ticket_id']);
 $ticket_num    = nullable_htmlentities($row['ticket_prefix']) . intval($row['ticket_number']);
 $ticket_subj   = nullable_htmlentities($row['ticket_subject']);
 $_purifier_cfg = HTMLPurifier_Config::createDefault();
+rivet_html_policy_apply($_purifier_cfg, 'strict');
 $_purifier_cfg->set('Cache.DefinitionImpl', null);
 $_purifier_cfg->set('URI.AllowedSchemes', ['http' => true, 'https' => true]);
 $_purifier     = new HTMLPurifier($_purifier_cfg);
@@ -59,8 +66,8 @@ $existing_sig  = $row['outtake_signature'];
 // Load ticket replies
 $sql_replies = mysqli_query($mysqli, "SELECT tr.ticket_reply, tr.ticket_reply_type, tr.ticket_reply_created_at, u.user_name, co3.contact_name as reply_contact
     FROM ticket_replies tr
-    LEFT JOIN users u ON tr.ticket_reply_by = u.user_id
-    LEFT JOIN contacts co3 ON tr.ticket_reply_by = co3.contact_id
+    LEFT JOIN users u ON tr.ticket_reply_by = u.user_id AND tr.ticket_reply_type = 'Public'
+    LEFT JOIN contacts co3 ON tr.ticket_reply_by = co3.contact_id AND tr.ticket_reply_type = 'Client'
     WHERE tr.ticket_reply_ticket_id = $ticket_id AND tr.ticket_reply_archived_at IS NULL AND tr.ticket_reply_type IN ('Public', 'Client')
     ORDER BY tr.ticket_reply_id ASC LIMIT 10");
 
@@ -163,7 +170,7 @@ $sql_replies = mysqli_query($mysqli, "SELECT tr.ticket_reply, tr.ticket_reply_ty
     <div class="section-bar">Ticket Comments</div>
     <div class="section-body">
         <?php while ($reply = mysqli_fetch_assoc($sql_replies)) {
-            $by = $reply['ticket_reply_type'] == 'Agent' ? nullable_htmlentities($reply['user_name']) : nullable_htmlentities($reply['reply_contact']);
+            $by = $reply['ticket_reply_type'] == 'Client' ? nullable_htmlentities($reply['reply_contact']) : nullable_htmlentities($reply['user_name']);   // MSP-DS-163
             $dt = date('M j, Y', strtotime($reply['ticket_reply_created_at']));
             $body = htmlspecialchars(substr(strip_tags($reply['ticket_reply']), 0, 400));
         ?>
@@ -231,7 +238,9 @@ $sql_replies = mysqli_query($mysqli, "SELECT tr.ticket_reply, tr.ticket_reply_ty
 
 <link rel="stylesheet" href="/plugins/fontawesome-free/css/all.min.css">
 <script src="/js/signature_pad.js"></script>
+<script src="/js/rivet_dialog.js" nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>"></script>   <?php /* MSP-DS-186: RivetDialog is used below */ ?>
 <script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
+document.addEventListener('click', function (e) { if (e.target.closest('.js-print-page')) { window.print(); } });   // MSP-DS-186: app.js is not loaded on this page
 function clearSig() {
     var hidden = document.getElementById('sig_data');
     if (hidden) hidden.value = '';

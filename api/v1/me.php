@@ -61,6 +61,11 @@ if ($method === 'PUT' && isset(json_decode(file_get_contents('php://input'), tru
         api_error(401, 'Current password is required to register a biometric key');
     }
     $bio_totp_secret = secUserTotpSecret($bio_user['user_token'] ?? '', (int) $api_user_id);
+    // MSP-DS-143 (review R26): a stored seed that cannot be decrypted must not read as "no 2FA" - fail closed, like the sign-in does.
+    if (empty($bio_totp_secret) && trim((string) ($bio_user['user_token'] ?? '')) !== '') {
+        $bio_audit('denied', 'stored two-factor seed could not be read');
+        api_error(403, 'Your two-factor setup could not be read. Ask an administrator to reset it.');
+    }
     if (!empty($bio_totp_secret)) {
         $bio_code = trim((string) ($body['totp_code'] ?? ''));
         $bio_code_ok = $bio_code !== '' && (
@@ -116,15 +121,67 @@ if ($method === 'PUT' || $method === 'POST') {
 
     if (!$name || !$email) api_error(400, 'name and email required');
 
+    // MSP-DS-82: the sign-in email must be a valid address that no other account uses (login resolves 'user_name = X OR user_email = X LIMIT 1').
+    $me_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_name, user_email FROM users WHERE user_id = " . intval($api_user_id) . " LIMIT 1"));
+    $me_email_changed = strcasecmp(trim((string) ($body['email'] ?? '')), (string) ($me_row['user_email'] ?? '')) !== 0;
+    if ($me_email_changed) {
+        if (!filter_var(trim((string) ($body['email'] ?? '')), FILTER_VALIDATE_EMAIL)) {
+            api_error(400, 'A valid email address is required');
+        }
+        if (mysqli_fetch_row(mysqli_query($mysqli, "SELECT 1 FROM users WHERE (user_email = '$email' OR user_name = '$email') AND user_id <> " . intval($api_user_id) . " LIMIT 1"))) {
+            api_error(409, 'That email address is already in use');
+        }
+    }
+
+    // MSP-DS-141 (review R25): the display name is also a sign-in identifier for the apps (login looks users up by user_name OR user_email), so a
+    // CHANGED name may not equal another active staff member's name or email (the web profile applies the same rule). An unchanged name is never refused.
+    if (strcasecmp(trim((string) ($body['name'] ?? '')), (string) ($me_row['user_name'] ?? '')) !== 0
+        && mysqli_fetch_row(mysqli_query($mysqli, "SELECT 1 FROM users WHERE user_type = 1 AND user_archived_at IS NULL AND (user_email = '$name' OR user_name = '$name') AND user_id <> " . intval($api_user_id) . " LIMIT 1"))) {
+        api_error(409, 'That name is already in use by another user');
+    }
+
+    // MSP-DS-82 (review R27, MOBILE CONTRACT): CHANGING the sign-in email (a recovery path) needs the current password in the body; an UNCHANGED email
+    // needs nothing, so a plain name+email save keeps working. Same rate limit and denial counter as the password change below.
+    if ($me_email_changed) {
+        $em_denied = mysqli_fetch_row(mysqli_query($mysqli,
+            "SELECT COUNT(*) FROM logs WHERE log_type = 'API' AND log_action = 'Password Change Denied' AND log_user_id = " . intval($api_user_id) . " AND log_created_at > (NOW() - INTERVAL 10 MINUTE)"));
+        if (!api_rate_limit('me_password:' . intval($api_user_id), 10, 600) || (int) ($em_denied[0] ?? 0) >= 5) {
+            $GLOBALS['session_user_id'] = (int) $api_user_id;
+            logAction('API', 'Password Change Blocked', 'API email change rate limited');
+            header('Retry-After: 600');
+            api_error(429, 'Too many attempts. Try again later.');
+        }
+        $em_user = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = " . intval($api_user_id) . " LIMIT 1"));
+        if ($cur_pass === '') {
+            api_error(403, 'current_password is required to change your email address');
+        }
+        if (!$em_user || !password_verify($cur_pass, (string) $em_user['user_password'])) {
+            $GLOBALS['session_user_id'] = (int) $api_user_id;
+            logAction('API', 'Password Change Denied', 'API email change: current password wrong');
+            api_error(403, 'Current password is incorrect');
+        }
+    }
+
     $updates = ["user_name = '$name'", "user_email = '$email'"];
 
     if ($new_pass) {
         require_once __DIR__ . '/../../includes/security_policy.php';
         require_once __DIR__ . '/../../includes/security_sessions.php';
+        // MSP-DS-82: a wrong current password is counted, audited and rate limited like the step-up key enrolment, so this endpoint is not a password oracle.
+        $pw_denied = mysqli_fetch_row(mysqli_query($mysqli,
+            "SELECT COUNT(*) FROM logs WHERE log_type = 'API' AND log_action = 'Password Change Denied' AND log_user_id = " . intval($api_user_id) . " AND log_created_at > (NOW() - INTERVAL 10 MINUTE)"));
+        if (!api_rate_limit('me_password:' . intval($api_user_id), 10, 600) || (int) ($pw_denied[0] ?? 0) >= 5) {
+            $GLOBALS['session_user_id'] = (int) $api_user_id;
+            logAction('API', 'Password Change Blocked', 'API password change rate limited');
+            header('Retry-After: 600');
+            api_error(429, 'Too many attempts. Try again later.');
+        }
         // Verify current password
         $user = mysqli_fetch_assoc(mysqli_query($mysqli,
             "SELECT user_password FROM users WHERE user_id = $api_user_id LIMIT 1"));
         if (!password_verify($cur_pass, $user['user_password'])) {
+            $GLOBALS['session_user_id'] = (int) $api_user_id;
+            logAction('API', 'Password Change Denied', 'API password change: current password wrong');
             api_error(401, 'Current password is incorrect');
         }
         // Staff password policy (length from Admin > Settings > Security, not the name or email, optional breach check)
@@ -133,10 +190,34 @@ if ($method === 'PUT' || $method === 'POST') {
         $hash = secPasswordHash($new_pass);
         $esc_hash = mysqli_real_escape_string($mysqli, $hash);
         $updates[] = "user_password = '$esc_hash'";
+        // MSP-DS-13: the vault key stays readable with the new password (and no longer with the retired one)
+        $new_wrap = rewrapUserKeyForPasswordChange($mysqli, intval($api_user_id), $cur_pass, $new_pass);
+        if ($new_wrap !== null) {
+            $updates[] = "user_specific_encryption_ciphertext = '" . mysqli_real_escape_string($mysqli, $new_wrap) . "'";
+        }
     }
 
     $set = implode(', ', $updates);
     mysqli_query($mysqli, "UPDATE users SET $set WHERE user_id = $api_user_id");
+    if ($me_email_changed) {
+        // MSP-DS-82: audited, and the old address is told (the web profile does the same).
+        $GLOBALS['session_user_id'] = (int) $api_user_id;
+        logAction('API', 'Email Change', 'API: sign-in email changed from ' . ($me_row['user_email'] ?? '') . ' to ' . trim((string) ($body['email'] ?? '')));
+        if (!empty($config_smtp_host) && !empty($me_row['user_email']) && function_exists('addToMailQueue')) {
+            try {
+                addToMailQueue([[
+                    'from' => $config_mail_from_email ?? '',
+                    'from_name' => $config_mail_from_name ?? '',
+                    'recipient' => $me_row['user_email'],
+                    'recipient_name' => trim((string) ($body['name'] ?? '')),
+                    'subject' => 'Your account email address was changed',
+                    'body' => 'Your account email address was changed through the mobile app. If you did not do this, contact your administrator immediately.',
+                ]]);
+            } catch (\Throwable $e) {
+                // the change is already applied and audited; a mail failure must not fail the request
+            }
+        }
+    }
     if ($new_pass) {
         // Password changed: drop every other session, keep the one making this call
         $cur_hash = '';

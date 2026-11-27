@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Test-only hooks (RIVETMSP_TRUST_*, RIVETMSP_TEST_*, RIVETMSP_ETC_DIR) exist for unit tests of lib/common.sh functions; an entry script never
+# honours them from its environment, so nothing a caller (sudo from the web user included) puts there can relax a trust check.
+for _rv_v in $(compgen -v | grep -E '^(RIVETMSP_TRUST_|RIVETMSP_TEST_|RIVETMSP_ETC_DIR$|RIVETMSP_ALLOW_UNTRUSTED_|RIVETMSP_WEB_UPDATE_CONF$)'); do unset "${_rv_v}"; done
+unset _rv_v
+
 # RivetMSP - the root helper behind Administration > Update > "Update App" (issue rivet-core#39).
 #
 # The Update page used to run `git pull` as the web server user against a checkout owned by someone else, which fails or leaves a
@@ -42,13 +47,15 @@ REMOTE="$(cfg RELEASE_REMOTE)"; REMOTE="${REMOTE:-fork}"
 [[ "${APP_DIR}" == /* && -f "${APP_DIR}/scripts/update_cli.php" ]] || die "APP_DIR in ${CONF} is not an installed instance."
 
 OWNER="$(stat -c '%U' "${APP_DIR}/scripts/update_cli.php")"
-g() { sudo -u "${OWNER}" git -C "${APP_DIR}" "$@"; }
+# MSP-DS-34 (RR2): the sudo rule lets the web user start this, and every git below runs as OWNER, so first refuse a repository the web user could have rigged.
+require_git_tree_trusted "${APP_DIR}" "${OWNER}"
+g() { sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${APP_DIR}" "$@"; }
 
 if [[ -n "${BRANCH}" ]]; then
     current="$(g rev-parse --abbrev-ref HEAD)"
     if [[ "${current}" != "${BRANCH}" ]]; then
         announce "Release channel change: ${current} -> ${BRANCH}"
-        timeout 60 sudo -u "${OWNER}" git -C "${APP_DIR}" fetch "${REMOTE}" || die "git fetch ${REMOTE} failed."
+        timeout 60 sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${APP_DIR}" fetch "${REMOTE}" || die "git fetch ${REMOTE} failed."
         g rev-parse --verify --quiet "refs/remotes/${REMOTE}/${BRANCH}" >/dev/null || die "${REMOTE}/${BRANCH} does not exist."
         # forward only: never install older code
         g merge-base --is-ancestor HEAD "refs/remotes/${REMOTE}/${BRANCH}" || die "${REMOTE}/${BRANCH} does not contain the code this server runs; refusing to move to older code."

@@ -10,31 +10,11 @@ if ($method !== 'GET') api_error(405, 'Method not allowed');
 
 api_require_module_permission($mysqli, $api_user_id, 'module_credential');
 
-// Helper: decrypt a credential field using the token's stored master key
-function _api_decrypt(string $ciphertext, string $raw_token, array $token_row, $credential_id = null, string $field = 'password'): string {
-    if (!$ciphertext) return '';
-    // v3 field (credential vault v3): opened with the data key wrapped into this token at sign-in (api_tokens.token_enc_dek).
-    if (\RivetMSP\Crypto\VaultV3::isV3Field($ciphertext)) {
-        $dek = \RivetMSP\Crypto\VaultV3::unwrapFromToken($token_row['token_enc_dek'] ?? null, $raw_token);
-        if ($dek === null || $credential_id === null) return '';
-        $plain = \RivetMSP\Crypto\VaultV3::openField($ciphertext, $dek, $credential_id, $field);
-        return $plain === false ? '' : $plain;
-    }
-    if (!$token_row['token_enc_master_key']) return '';
-    $enc_key    = substr(hash('sha256', $raw_token . 'itflow_enc', true), 0, 16);
-    $enc_iv     = hex2bin($token_row['token_enc_master_iv']);
-    $master_key = openssl_decrypt($token_row['token_enc_master_key'], 'aes-128-cbc', $enc_key, 0, $enc_iv);
-    if (!$master_key) return '';
-    $cred_iv    = substr($ciphertext, 0, 16);
-    $cred_ct    = substr($ciphertext, 16);
-    return openssl_decrypt($cred_ct, 'aes-128-cbc', $master_key, 0, $cred_iv) ?: '';
-}
+// _api_decrypt() lives in includes/api_permissions.php (MSP-DS-180: shared with the client credentials tab)
 
 // Extract raw token from Authorization header for decryption
-$raw_token = '';
-if (preg_match('/^Bearer\s+(\S+)$/i', $_SERVER['HTTP_AUTHORIZATION'] ?? '', $bm)) {
-    $raw_token = $bm[1];
-}
+// MSP-DS-80: index.php already resolved the bearer token from HTTP_AUTHORIZATION, REDIRECT_HTTP_AUTHORIZATION or getallheaders().
+$raw_token = (string) ($raw_token ?? '');
 
 if ($id === null) {
     $page      = max(1, intval($_GET['page'] ?? 1));
@@ -141,7 +121,7 @@ if (!$row) api_error(404, 'Credential not found');
 
 // Verify the API user has permission to access this credential's client
 $cred_client_id = intval($row['credential_client_id']);
-if ($cred_client_id > 0 && !api_client_scope_ok($cred_client_id)) {
+if (!api_client_scope_ok($cred_client_id)) {   // MSP-DS-109: client 0 (internal) credentials are in scope only for unrestricted users
     api_error(403, 'Access denied');
 }
 
@@ -171,7 +151,7 @@ api_response(200, [
     'password'   => _api_decrypt($row['credential_password'], $raw_token, $api_token_row, $id, 'password'),
     'uri'        => $row['credential_uri'],
     'uri_2'      => $row['credential_uri_2'] ?? '',
-    'otp_secret' => $row['credential_otp_secret'] ?? '',
+    'otp_secret' => _api_decrypt((string) ($row['credential_otp_secret'] ?? ''), $raw_token, $api_token_row, $id, 'otp'),
     'note'       => $row['credential_note'] ?? '',
     'client'     => $row['client_name'],
 ]);

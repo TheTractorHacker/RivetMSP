@@ -142,21 +142,30 @@ class TokenAuth6238 {
     /**
      * Login-grade verification: narrow window (+/-1) and single use. A step that is not newer than the last
      * accepted step for this secret is rejected, so a code that was observed cannot be replayed (pentest F-08).
-     * State is a small per-secret file in the system temp dir (no schema change); if it cannot be written the
-     * check still succeeds on the narrow window (fail open on availability, not on correctness).
+     * State is a small per-secret file in an app-private directory (no schema change); if it cannot be written the
+     * code is refused (MSP-DS-171: fail closed).
      */
     public static function verifyOnce($secretkey, $code, $window = 1) {
         $step = self::matchStep($secretkey, $code, $window);
         if ($step === null) {
             return false;
         }
-        $dir = sys_get_temp_dir() . '/rivetmsp_totp_replay';
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0700, true);
+        // MSP-DS-171: the replay store lives in an app-owned 0700 directory (not the shared /tmp), and an unusable store
+        // means the code is refused (fail closed) instead of silently turning replay protection off.
+        $fh = false;
+        foreach ([dirname(__DIR__, 2) . '/uploads/totp_replay', sys_get_temp_dir() . '/rivetmsp_totp_replay_' . (function_exists('posix_geteuid') ? posix_geteuid() : '0')] as $dir) {
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0700, true);
+            }
+            if (is_dir($dir) && is_writable($dir) && (!function_exists('posix_geteuid') || @fileowner($dir) === posix_geteuid())) {
+                $fh = @fopen($dir . '/' . hash('sha256', $secretkey), 'c+');
+                if ($fh) {
+                    break;
+                }
+            }
         }
-        $fh = @fopen($dir . '/' . hash('sha256', $secretkey), 'c+');
         if (!$fh) {
-            return true;
+            return false;
         }
         $accepted = false;
         if (flock($fh, LOCK_EX)) {

@@ -261,6 +261,12 @@ if (isset($_POST['add_quote_item'])) {
 
     enforceClientAccess();
 
+    $qs_status = getFieldById('quotes', $quote_id, 'quote_status');
+    if (!quoteContentEditable($qs_status)) {
+        flash_alert("This quote is already answered or invoiced - its items, discount and dates can no longer be changed.", 'error');
+        redirect();
+    }
+
     $subtotal = $price * $qty;
 
     if ($tax_id > 0) {
@@ -349,6 +355,12 @@ if (isset($_POST['edit_quote_item'])) {
 
     enforceClientAccess();
 
+    $qs_status = (string) ($row['quote_status'] ?? '');
+    if (!quoteContentEditable($qs_status)) {
+        flash_alert("This quote is already answered or invoiced - its items, discount and dates can no longer be changed.", 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli,"UPDATE quote_items SET item_name = '$name', item_description = '$description', item_quantity = $qty, item_price = $price, item_subtotal = $subtotal, item_tax = $tax_amount, item_total = $total, item_tax_id = $tax_id WHERE item_id = $item_id");
 
     //Update Quote Balances by tallying up items
@@ -412,6 +424,12 @@ if (isset($_POST['edit_quote'])) {
     $client_id = intval($row['quote_client_id']);
 
     enforceClientAccess();
+
+    $qs_status = (string) ($row['quote_status'] ?? '');
+    if (!quoteContentEditable($qs_status)) {
+        flash_alert("This quote is already answered or invoiced - its items, discount and dates can no longer be changed.", 'error');
+        redirect();
+    }
 
     //Calculate the new quote amount
     $sql = mysqli_query($mysqli,"SELECT * FROM quote_items WHERE item_quote_id = $quote_id");
@@ -506,6 +524,12 @@ if (isset($_GET['delete_quote_item'])) {
     $client_id = intval($row['quote_client_id']);
 
     enforceClientAccess();
+
+    $qs_status = (string) ($row['quote_status'] ?? '');
+    if (!quoteContentEditable($qs_status)) {
+        flash_alert("This quote is already answered or invoiced - its items, discount and dates can no longer be changed.", 'error');
+        redirect();
+    }
 
     $new_quote_amount = max(0, floatval($row['quote_amount']) - $item_total);
 
@@ -681,7 +705,7 @@ if (isset($_GET['email_quote'])) {
     $config_base_url = sanitizeInput($config_base_url);
 
     $subject = "Quote [$quote_scope]";
-    $body = "Hello $contact_name,<br><br>Thank you for your inquiry, we are pleased to provide you with the following estimate.<br><br><br>$quote_scope<br>Total Cost: " . numfmt_format_currency($currency_format, $quote_amount, $quote_currency_code) . "<br><br><br>View and accept your estimate online <a href=\'https://$config_base_url/guest/guest_view_quote.php?quote_id=$quote_id&url_key=$quote_url_key\'>here</a><br><br><br>--<br>$company_name - Sales<br>$config_quote_from_email<br>$company_phone";
+    $body = "Hello $contact_name,<br><br>Thank you for your inquiry, we are pleased to provide you with the following estimate.<br><br><br>$quote_scope<br>Total Cost: " . numfmt_format_currency($currency_format, $quote_amount, $quote_currency_code) . "<br><br><br>View and accept your estimate online <a href='https://$config_base_url/guest/guest_view_quote.php?quote_id=$quote_id&url_key=$quote_url_key'>here</a><br><br><br>--<br>$company_name - Sales<br>$config_quote_from_email<br>$company_phone";
 
     // Queue Mail
     $data = [
@@ -775,7 +799,7 @@ if(isset($_POST['export_quotes_csv'])){
     if($num_rows > 0){
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Quotes-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -788,7 +812,7 @@ if(isset($_POST['export_quotes_csv'])){
         //output each row of the data, format line as csv and write to file pointer
         while($row = $sql->fetch_assoc()){
             $lineData = array($row['quote_prefix'] . $row['quote_number'], $row['quote_scope'], $row['quote_amount'], $row['quote_date'], $row['quote_status']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file

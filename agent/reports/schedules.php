@@ -51,7 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_schedule'])) {
 
     // Validate against the whitelists so only known reports/frequencies land in the table.
     // Recipients must be addresses of active staff accounts: company financials are never emailed to outside addresses.
-    $filtered = reportScheduleFilterRecipients($recipients, reportScheduleStaffEmails($mysqli));
+    // MSP-DS-156: ... and who may read this report (their role has its module, and they are not restricted to some clients)
+    $filtered = reportScheduleFilterRecipients($recipients, array_intersect(reportScheduleStaffEmails($mysqli), reportScheduleEligibleEmails($mysqli, $report)));
     $valid_emails = $filtered['allowed'];
 
     if (!isset($schedulable[$report])) {
@@ -62,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_schedule'])) {
         $_SESSION['alert_message'] = 'Please choose a valid frequency.';
     } elseif (!empty($filtered['rejected'])) {
         $_SESSION['alert_type'] = 'danger';
-        $_SESSION['alert_message'] = 'Recipients must be email addresses of active staff users. Not accepted: ' . implode(', ', array_map('htmlspecialchars', $filtered['rejected']));
+        $_SESSION['alert_message'] = 'Recipients must be email addresses of active staff users whose role may read this report and who are not limited to certain clients. Not accepted: ' . implode(', ', array_map('htmlspecialchars', $filtered['rejected']));
     } elseif (empty($valid_emails)) {
         $_SESSION['alert_type'] = 'danger';
         $_SESSION['alert_message'] = 'Please enter at least one valid recipient email address.';
@@ -73,8 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_schedule'])) {
         $recipients_esc = mysqli_real_escape_string($mysqli, implode(', ', $valid_emails));
 
         mysqli_query($mysqli,
-            "INSERT INTO report_schedules (schedule_report, schedule_frequency, schedule_recipients, schedule_active)
-             VALUES ('$report_esc', '$frequency_esc', '$recipients_esc', 1)");
+            "INSERT INTO report_schedules (schedule_report, schedule_frequency, schedule_recipients, schedule_active, schedule_created_by)
+             VALUES ('$report_esc', '$frequency_esc', '$recipients_esc', 1, " . intval($session_user_id) . ")");
 
         if (function_exists('logAction')) {
             logAction("Report Schedule", "Create", "Scheduled '{$schedulable[$report]}' ($frequency) to " . implode(', ', $valid_emails));
@@ -116,6 +117,29 @@ if (isset($_GET['toggle'])) {
 
     $_SESSION['alert_type'] = 'success';
     $_SESSION['alert_message'] = 'Report schedule updated.';
+    header('Location: schedules.php');
+    exit;
+}
+
+// ---- Take ownership of a schedule that has no known creator (MSP-DS-156 re-review MRR16) ----------------
+// Schedules created before the creator was recorded, and not attributable from the audit log, do not send. Whoever may send the report
+// (reporting write + the report's module, enforced by requireScheduleWrite) can take them over; from then on the usual creator re-check applies to them.
+if (isset($_GET['claim'])) {
+    validateCSRFToken($_GET['csrf_token'] ?? '');
+    $schedule_id = intval($_GET['claim']);
+    $sched_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT schedule_report FROM report_schedules WHERE schedule_id = $schedule_id AND (schedule_created_by IS NULL OR schedule_created_by = 0)"));
+    if (!$sched_row) {
+        $_SESSION['alert_type'] = 'danger';
+        $_SESSION['alert_message'] = 'That schedule already has an owner.';
+    } else {
+        $requireScheduleWrite($sched_row['schedule_report']);
+        mysqli_query($mysqli, "UPDATE report_schedules SET schedule_created_by = " . intval($session_user_id) . " WHERE schedule_id = $schedule_id AND (schedule_created_by IS NULL OR schedule_created_by = 0)");
+        if (function_exists('logAction')) {
+            logAction("Report Schedule", "Update", "Took ownership of report schedule #$schedule_id (it had no known creator)");
+        }
+        $_SESSION['alert_type'] = 'success';
+        $_SESSION['alert_message'] = 'You now own this report schedule; it will send again at its next due time.';
+    }
     header('Location: schedules.php');
     exit;
 }
@@ -206,7 +230,9 @@ $sql_schedules = mysqli_query($mysqli, "SELECT * FROM report_schedules ORDER BY 
                             <td><?php echo nullable_htmlentities($frequency); ?></td>
                             <td><?php echo nullable_htmlentities($row['schedule_recipients']); ?></td>
                             <td>
-                                <?php if ($active) { ?>
+                                <?php if (empty($row['schedule_created_by'])) { ?>
+                                    <span class="badge text-bg-warning" title="Created before the creator was recorded. It will not be emailed until someone takes ownership.">Needs an owner</span>
+                                <?php } elseif ($active) { ?>
                                     <span class="badge text-bg-success">Active</span>
                                 <?php } else { ?>
                                     <span class="badge text-bg-secondary">Paused</span>
@@ -215,6 +241,11 @@ $sql_schedules = mysqli_query($mysqli, "SELECT * FROM report_schedules ORDER BY 
                             <td><?php echo $last_sent; ?></td>
                             <td class="text-end">
                                 <?php if ($can_schedule) { ?>
+                                <?php if (empty($row['schedule_created_by'])) { ?>
+                                <a class="btn btn-sm btn-outline-warning" href="schedules.php?claim=<?php echo $schedule_id; ?>&csrf_token=<?php echo $_SESSION['csrf_token']; ?>">
+                                    <i class="fas fa-fw fa-user-check"></i> Take ownership
+                                </a>
+                                <?php } ?>
                                 <a class="btn btn-sm btn-outline-secondary" href="schedules.php?toggle=<?php echo $schedule_id; ?>&csrf_token=<?php echo $_SESSION['csrf_token']; ?>">
                                     <i class="fas fa-fw fa-<?php echo $active ? 'pause' : 'play'; ?>"></i><?php echo $active ? ' Pause' : ' Resume'; ?>
                                 </a>

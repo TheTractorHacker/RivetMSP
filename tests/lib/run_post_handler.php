@@ -6,12 +6,13 @@ if (PHP_SAPI !== 'cli') { exit; }
 $in = json_decode((string) ($argv[1] ?? ''), true);
 $root = dirname(__DIR__, 2);
 if (getenv('RIVETMSP_TEST_DB') !== '1' || !preg_match('/scratch/i', (string) getenv('RIVETMSP_TEST_DB_NAME'))) { fwrite(STDERR, "scratch DB only\n"); exit(2); }
-chdir($root . '/agent');
+$base = ($in['base'] ?? 'agent') === 'admin' ? 'admin' : 'agent';
+chdir($root . '/' . $base);
 $_SERVER['DOCUMENT_ROOT'] = $root; $_SERVER['REMOTE_ADDR'] = '127.0.0.1'; $_SERVER['SCRIPT_NAME'] = '/agent/post.php'; $_SERVER['REQUEST_METHOD'] = 'POST';
 $_POST = $in['post'] ?? []; $_GET = $in['get'] ?? [];
 mysqli_report(MYSQLI_REPORT_OFF);
 $mysqli = new mysqli('localhost', (string) getenv('RIVETMSP_TEST_DB_USER'), (string) getenv('RIVETMSP_TEST_DB_PASS'), (string) getenv('RIVETMSP_TEST_DB_NAME'));
-$mysqli->query("SET SESSION sql_mode=''");
+$mysqli->query("SET SESSION sql_mode='" . $mysqli->real_escape_string((string) getenv('RIVETMSP_TEST_SQL_MODE')) . "'"); // RIVETMSP_TEST_SQL_MODE=STRICT_ALL_TABLES runs the handler as production does
 $GLOBALS['mysqli'] = $mysqli;
 $config_app_name = 'Test'; $config_base_url = 'localhost'; $config_timezone = 'UTC';
 require $root . '/functions.php';
@@ -28,4 +29,4 @@ $access_permission_query = ($client_access_string && !$session_is_admin) ? "AND 
 define('FROM_POST_HANDLER', true);
 ob_start();
 register_shutdown_function(static function () { $o = ob_get_clean(); echo $o, "\n::END::", (isset($_SESSION['alert_type']) ? $_SESSION['alert_type'] . ':' . strip_tags((string) ($_SESSION['alert_message'] ?? '')) : 'none'), "\n"; });
-try { require $root . '/agent/post/' . $in['handler']; } catch (Throwable $e) { echo 'EXC:' . $e->getMessage(); }
+try { require $root . '/' . $base . '/post/' . $in['handler']; } catch (Throwable $e) { echo 'EXC:' . $e->getMessage(); }

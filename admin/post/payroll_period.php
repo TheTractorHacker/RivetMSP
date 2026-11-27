@@ -4,6 +4,59 @@ defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 
 require_once __DIR__ . '/../../includes/payroll_functions.php';
 
+// Re-review M3-9: archive an EMPTY duplicate pay period (same dates as another live period, no live run). Admin only; nothing is deleted; the reason is logged.
+if (isset($_POST['archive_duplicate_payroll_period'])) {
+
+    validateCSRFToken($_POST['csrf_token'] ?? '');
+
+    $period_id = intval($_POST['period_id'] ?? 0);
+    if (empty($session_is_admin)) {
+        flash_alert("Only an administrator can archive a duplicate pay period.", 'error');
+        redirect("/admin/payroll_period.php?id=$period_id");
+    }
+    [$archived, $archive_msg] = payrollArchiveDuplicatePeriod($mysqli, $period_id, (int) $session_user_id, (string) ($_POST['archive_reason'] ?? ''));
+    if (!$archived) {
+        flash_alert($archive_msg, 'error');
+        redirect("/admin/payroll_period.php?id=$period_id");
+    }
+    flash_alert($archive_msg);
+    redirect('/admin/payroll_periods.php');
+}
+
+// M4-2 (MSP-DS-39): archive a duplicate pay period TOGETHER with its live run(s) - the way out when two same-date periods each hold one live run. Admin only; never deletes;
+// reason required and logged; a period holding a FINALIZED run also needs the admin's password and is allowed only while the kept period still holds a finalized run.
+if (isset($_POST['archive_duplicate_payroll_period_with_runs'])) {
+
+    validateCSRFToken($_POST['csrf_token'] ?? '');
+
+    $period_id = intval($_POST['period_id'] ?? 0);
+    if (empty($session_is_admin)) {
+        flash_alert("Only an administrator can archive a duplicate pay period.", 'error');
+        redirect("/admin/payroll_period.php?id=$period_id");
+    }
+    $chk = payrollPeriodWithRunsArchiveCheck($mysqli, $period_id);
+    if (!$chk['ok']) {
+        flash_alert($chk['reason'], 'error');
+        redirect('/admin/payroll_periods.php');
+    }
+    require_once __DIR__ . '/../../includes/security_policy.php';
+    $reauthed = false;
+    if ($chk['finalized']) {
+        $reauthed = secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''));
+        if (!$reauthed) {
+            flash_alert("Archiving a pay period with a finalized payroll run needs your current password.", 'error');
+            redirect("/admin/payroll_period.php?id=$period_id");
+        }
+    }
+    [$archived, $archive_msg] = payrollArchiveDuplicatePeriodWithRuns($mysqli, $period_id, (int) $session_user_id, (string) ($_POST['archive_reason'] ?? ''), $reauthed);
+    if (!$archived) {
+        flash_alert($archive_msg, 'error');
+        redirect("/admin/payroll_period.php?id=$period_id");
+    }
+    flash_alert($archive_msg);
+    redirect('/admin/payroll_periods.php');
+}
+
 if (isset($_POST['save_payroll_hours'])) {
 
     validateCSRFToken($_POST['csrf_token']);
@@ -67,12 +120,26 @@ if (isset($_POST['run_payroll'])) {
         redirect("/admin/payroll_period.php?id=$period_id");
     }
 
+    // MSP-DS-39: check-then-create under a named lock so a double submit cannot create two runs for one period
+    $lock_name = "payroll_run_period_$period_id";
+    $got_lock = mysqli_fetch_row(mysqli_query($mysqli, "SELECT GET_LOCK('$lock_name', 10)"));
+    if (!$got_lock || intval($got_lock[0]) !== 1) {
+        flash_alert("Another payroll run is being created for this period - try again.", 'error');
+        redirect("/admin/payroll_period.php?id=$period_id");
+    }
+
     $existing_run = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payroll_run_id FROM payroll_runs WHERE payroll_run_period_id = $period_id AND payroll_run_archived_at IS NULL LIMIT 1"));
     if ($existing_run) {
+        mysqli_query($mysqli, "DO RELEASE_LOCK('$lock_name')");
         redirect("/admin/payroll_run.php?id=" . intval($existing_run['payroll_run_id']));
     }
 
     $run_id = payrollCreateRun($mysqli, $period_id, intval($session_user_id), (string) $session_company_currency);
+    mysqli_query($mysqli, "DO RELEASE_LOCK('$lock_name')");
+    if ($run_id <= 0) {
+        flash_alert("The payroll run could not be created.", 'error');
+        redirect("/admin/payroll_period.php?id=$period_id");
+    }
 
     logAction("Payroll", "Create", "$session_name ran payroll for pay period #$period_id");
 

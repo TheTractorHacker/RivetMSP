@@ -174,7 +174,8 @@ $compliance_profile = (string) ($settings_row['config_compliance_profile'] ?? 'n
 $audit_retention_stored = intval($settings_row['config_audit_retention_days'] ?? 365);
 $has_retention_policy = class_exists(\RivetCore\Compliance\RetentionPolicy::class);
 $log_retention_days = $has_retention_policy ? \RivetCore\Compliance\RetentionPolicy::effectiveDays($compliance_profile, $config_log_retention) : max(0, $config_log_retention);
-$audit_retention_days = $has_retention_policy ? \RivetCore\Compliance\RetentionPolicy::effectiveDays($compliance_profile, $audit_retention_stored) : max(0, $audit_retention_stored);
+// M3-17: one function (compliance profile floor + SecurityBaseline floor) for this delete and for the audit chain verifier that has to explain the gap
+$audit_retention_days = \RivetMSP\Audit\AuditChain::retentionFromSettings($audit_retention_stored, $compliance_profile);
 
 // Cleanup old audit, app/debug and auth logs.
 if ($log_retention_days >= 1) {
@@ -193,9 +194,7 @@ if (class_exists(\RivetCore\Retention\RetentionService::class)) {
         // the "requested" number in logs/traces. A horizon below 1 ("keep everything", RetentionService's own
         // documented convention) is left alone: SecurityBaseline::auditRetentionDays() has no such escape hatch
         // (effective() clamps unconditionally) and would otherwise turn "keep forever" into "keep >= 90 days".
-        $audit_retention_days_floored = ($audit_retention_days >= 1 && class_exists(\RivetCore\Security\SecurityBaseline::class))
-            ? \RivetCore\Security\SecurityBaseline::auditRetentionDays($audit_retention_days)
-            : $audit_retention_days;
+        $audit_retention_days_floored = $audit_retention_days;   // already floored by AuditChain::retentionFromSettings()
         (new \RivetCore\Retention\RetentionService(new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli)))->prune($log_retention_days, $audit_retention_days_floored);
     } catch (\Throwable $e) {
         error_log('RivetCore retention skipped: ' . $e->getMessage());
@@ -406,11 +405,23 @@ if (mysqli_num_rows($sql_recurring_tickets) > 0) {
         $details = mysqli_real_escape_string($mysqli, $row['recurring_ticket_details']);
         $priority = sanitizeInput($row['recurring_ticket_priority']);
         $frequency = sanitizeInput(strtolower($row['recurring_ticket_frequency']));
+        // MSP-DS-18: an unknown frequency used to leave $next_run unset and fatal cron.php after the ticket was created, every run.
+        // Skip such a row (once, with a notification) and push its run date out a day instead of creating tickets with no schedule.
+        if (!in_array($frequency, ['three days', 'weekly', 'biweekly', 'monthly', 'quarterly', 'biannually', 'annually'], true)) {
+            appNotify("Ticket", "Recurring ticket $subject has an unknown frequency and was skipped", "/agent/recurring_tickets.php");
+            mysqli_query($mysqli, "UPDATE recurring_tickets SET recurring_ticket_next_run = DATE_ADD(CURDATE(), INTERVAL 1 DAY) WHERE recurring_ticket_id = $recurring_ticket_id");
+            continue;
+        }
         $billable = intval($row['recurring_ticket_billable']);
         $created_id = intval($row['recurring_ticket_created_by']);
-        $assigned_id = resolveTicketAssignee(intval($row['recurring_ticket_assigned_to']));
+        $assigned_id = resolveTicketAssignee(intval($row['recurring_ticket_assigned_to']), intval($row['recurring_ticket_client_id']));
         $client_id = intval($row['recurring_ticket_client_id']);
         $contact_id = intval($row['recurring_ticket_contact_id']);
+        // MSP-DS-31: the template's contact must belong to the template's client, or the notification goes to someone else's contact.
+        if ($contact_id > 0) {
+            $contact_ok = mysqli_query($mysqli, "SELECT 1 FROM contacts WHERE contact_id = $contact_id AND contact_client_id = $client_id");
+            if (!$contact_ok || mysqli_num_rows($contact_ok) === 0) { $contact_id = 0; }
+        }
         $asset_id = intval($row['recurring_ticket_asset_id']);
         $category = resolveTicketCategory(intval($row['recurring_ticket_category']));
         // Per-category Non-billable (DB 2.6.126): forces 0 regardless of the recurring ticket template's stored billable value.
@@ -742,12 +753,31 @@ if ($config_send_invoice_reminders == 1) {
                 continue;
             }
 
+            // MSP-DS-2: this block is reached on every cron run of the matching calendar day. Claim (invoice, day, date) first with an
+            // atomic conditional insert into history, and skip when it was already claimed, so the late fee and the overdue email
+            // happen once per reminder day instead of once per cron tick.
+            $overdue_marker = 'Cron overdue reminder day ' . intval($day) . ' processed on ' . date('Y-m-d');
+            // The claim is serialised with a named lock: two overlapping runs (rivetCronGuard does nothing when Redis is off) cannot both
+            // pass the NOT EXISTS check. Each statement autocommits, so the second run sees the marker once the first releases.
+            $got_lock = mysqli_fetch_row(mysqli_query($mysqli, "SELECT GET_LOCK('rivet_cron_overdue_claim', 10)"))[0] ?? 0;
+            if ((int) $got_lock !== 1) {
+                continue;
+            }
+            mysqli_query($mysqli, "INSERT INTO history (history_status, history_description, history_invoice_id)
+                SELECT 'Sent', '$overdue_marker', $invoice_id FROM DUAL
+                WHERE NOT EXISTS (SELECT 1 FROM history WHERE history_invoice_id = $invoice_id AND history_description = '$overdue_marker')");
+            $claimed_now = mysqli_affected_rows($mysqli) >= 1;
+            mysqli_query($mysqli, "DO RELEASE_LOCK('rivet_cron_overdue_claim')");
+            if (!$claimed_now) {
+                continue;
+            }
+
             // Late Charges
             if ($config_invoice_late_fee_enable == 1 && $day > 1) {
 
                 $todays_date = date('Y-m-d');
-                $late_fee_amount = ($invoice_balance * $config_invoice_late_fee_percent) / 100;
-                $new_invoice_amount = $invoice_amount + $late_fee_amount;
+                $late_fee_amount = round(($invoice_balance * floatval($config_invoice_late_fee_percent)) / 100, 2);
+                $new_invoice_amount = round($invoice_amount + $late_fee_amount, 2);
 
                 mysqli_query($mysqli, "UPDATE invoices SET invoice_amount = $new_invoice_amount WHERE invoice_id = $invoice_id");
 
@@ -773,7 +803,7 @@ if ($config_send_invoice_reminders == 1) {
 
             $body = "Hello $contact_name,<br><br>Our records indicate that we have not yet received payment in full for the invoice $invoice_prefix$invoice_number. We kindly request that you submit your payment as soon as possible. If you have any questions or concerns, please do not hesitate to contact us at $company_email or $company_phone.
                 <br>
-                Kindly review the invoice details mentioned below.<br><br>Invoice: $invoice_prefix$invoice_number<br>Issue Date: $invoice_date<br>Invoice Total: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br>$paid_line" . "Balance Due: " . numfmt_format_currency($currency_format, $invoice_balance, $invoice_currency_code) . "<br>Due Date: $invoice_due<br>Over Due By: $day Days<br><br><br>To view your invoice, please click <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\'>here</a>.<br><br><br>--<br>$company_name - Billing<br>$config_invoice_from_email<br>$company_phone";
+                Kindly review the invoice details mentioned below.<br><br>Invoice: $invoice_prefix$invoice_number<br>Issue Date: $invoice_date<br>Invoice Total: " . numfmt_format_currency($currency_format, $invoice_amount, $invoice_currency_code) . "<br>$paid_line" . "Balance Due: " . numfmt_format_currency($currency_format, $invoice_balance, $invoice_currency_code) . "<br>Due Date: $invoice_due<br>Over Due By: $day Days<br><br><br>To view your invoice, please click <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>here</a>.<br><br><br>--<br>$company_name - Billing<br>$config_invoice_from_email<br>$company_phone";
 
             $mail = addToMailQueue([
                 [
@@ -791,7 +821,7 @@ if ($config_send_invoice_reminders == 1) {
             } else {
                 mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Sent', history_description = 'Cron Failed to send Overdue Invoice', history_invoice_id = $invoice_id");
 
-                appNotify("Mail", "Failed to send email to $contact_email");
+                appNotify("Mail", "Failed to send email to $contact_email", null, (int) $client_id);   // MSP-DS-105
 
                 // Logging
                 logApp("Mail", "error", "Failed to send email to $contact_email regarding $subject. $mail");
@@ -910,7 +940,7 @@ while ($row = mysqli_fetch_assoc($sql_recurring_invoices)) {
     if ($config_recurring_auto_send_invoice == 1 && $recurring_invoice_email_notify == 1) {
 
         $subject = "Invoice $invoice_prefix$invoice_number";
-        $body = "Hello $contact_name,<br><br>An invoice regarding \"$invoice_scope\" has been generated. Please view the details below.<br><br>Invoice: $invoice_prefix$invoice_number<br>Issue Date: $invoice_date<br>Total: " . numfmt_format_currency($currency_format, $invoice_amount, $recurring_invoice_currency_code) . "<br>Due Date: $invoice_due<br><br><br>To view your invoice, please click <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$new_invoice_id&url_key=$invoice_url_key\'>here</a>.<br><br><br>--<br>$company_name - Billing<br>$config_invoice_from_email<br>$company_phone";
+        $body = "Hello $contact_name,<br><br>An invoice regarding \"$invoice_scope\" has been generated. Please view the details below.<br><br>Invoice: $invoice_prefix$invoice_number<br>Issue Date: $invoice_date<br>Total: " . numfmt_format_currency($currency_format, $invoice_amount, $recurring_invoice_currency_code) . "<br>Due Date: $invoice_due<br><br><br>To view your invoice, please click <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$new_invoice_id&url_key=$invoice_url_key'>here</a>.<br><br><br>--<br>$company_name - Billing<br>$config_invoice_from_email<br>$company_phone";
 
         $mail = addToMailQueue([
             [
@@ -930,7 +960,7 @@ while ($row = mysqli_fetch_assoc($sql_recurring_invoices)) {
         } else {
             mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Draft', history_description = 'Cron Failed to send Invoice!', history_invoice_id = $new_invoice_id");
 
-            appNotify("Mail", "Failed to send email to $contact_email");
+            appNotify("Mail", "Failed to send email to $contact_email", null, (int) $client_id);   // MSP-DS-105
 
             // Logging
             logApp("Mail", "error", "Failed to send email to $contact_email regarding $subject. $mail");
@@ -1049,19 +1079,28 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
         if ($provider->supports('charge_saved_method')) {
             if ($provider_private_key && $stripe_customer_id && $stripe_payment_method_id) {
 
-                $balance_to_pay = invoiceBalanceDue($mysqli, $invoice_id, $invoice_amount);   // MSP-INJ-26(a): the balance, not the invoice total
-                if ($balance_to_pay <= 0) {
+                // MSP-DS-32: this block is reached on every cron run of the due date. Autopay claims (invoice, day) ONCE before any Stripe call, whatever
+                // the outcome (a decline is not retried every 5 minutes); see autopayClaimToday().
+                if (!autopayClaimToday($mysqli, $invoice_id)) {
                     continue;
                 }
+                // MSP-DS-166 / MSP-DS-32: then the shared charge claim (invoice row lock, balance read under it, ONE idempotency key for portal/agent/guest/cron).
+                // A live attempt - a portal/agent charge in flight, or a bank debit still 'processing' for days - means this run does not charge.
+                $charge_claim = chargeAttemptClaim($mysqli, $invoice_id, 'cron', $recurring_payment_saved_payment_id, chargeAttemptProviderLookup($provider));   // M3-1: an open guest-page intent is canceled first
+                if (!$charge_claim['ok']) {
+                    if ($charge_claim['reason'] === 'in_progress') {
+                        mysqli_query($mysqli, "DELETE FROM history WHERE history_invoice_id = $invoice_id AND history_description = 'Cron autopay attempt on " . date('Y-m-d') . "'");   // not charged: leave today's claim for a later run
+                    }
+                    continue;
+                }
+                $balance_to_pay = $charge_claim['balance'];   // MSP-INJ-26(a): the balance, not the invoice total
+                $charge_attempt_id = $charge_claim['attempt_id'];
+                $idempotency_key = $charge_claim['key'];
                 $pi_description = "RivetMSP: $client_name payment of $recurring_payment_currency_code $balance_to_pay for $invoice_prefix$invoice_number";
 
-                // Stable for one minute so an overlapping/retried cron run collapses into a
-                // single Stripe charge instead of billing the card twice for the same invoice.
-                $idempotency_key = md5("cron_autopay_stripe_{$invoice_id}_{$recurring_payment_saved_payment_id}_" . intdiv(time(), 60));
-
                 try {
-                    $payment_intent = $provider->chargeSavedMethod([
-                        'amount' => intval(round($balance_to_pay * 100)), // round before truncating so float representation error can't undercharge by a cent
+                    $payment_intent = chargeAttemptSend(fn (array $charge_params) => $provider->chargeSavedMethod($charge_params, $idempotency_key), [   // M5-7: one shared send (takeover idempotency conflicts)
+                        'amount' => stripeAmountToMinor($balance_to_pay, $recurring_payment_currency_code), // round before truncating so float representation error can't undercharge by a cent
                         'currency' => $recurring_payment_currency_code,
                         'customer' => $stripe_customer_id,
                         'payment_method' => $stripe_payment_method_id,
@@ -1073,16 +1112,20 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
                             'itflow_client_name' => $client_name,
                             'itflow_invoice_number' => $invoice_prefix . $invoice_number,
                             'itflow_invoice_id' => $invoice_id,
+                            'itflow_install' => stripeInstallMarker(),
+                            'rivet_attempt_key' => $idempotency_key,
                         ]
-                    ], $idempotency_key);
+                    ], !empty($charge_claim['reused']));
 
                     $pi_id = sanitizeInput($payment_intent->id);
                     $pi_date = date('Y-m-d', $payment_intent->created);
-                    $pi_amount_paid = floatval($payment_intent->amount_received / 100);
+                    $pi_amount_paid = stripeAmountFromMinor($payment_intent->amount_received, $payment_intent->currency);
                     $pi_currency = strtoupper(sanitizeInput($payment_intent->currency));
                     $pi_livemode = $payment_intent->livemode;
+                    chargeAttemptStoreResult($mysqli, $charge_attempt_id, $payment_intent->status, $pi_id);   // pending (ACH) / failed / succeeded-not-yet-recorded
 
                 } catch (Exception $e) {
+                    chargeAttemptStoreException($mysqli, $charge_attempt_id, $e);   // a timeout keeps the attempt (and its key) claimed
                     $error = $e->getMessage();
                     error_log("Stripe payment error - encountered exception during payment intent for invoice ID $invoice_id / $invoice_prefix$invoice_number: $error");
                     logApp("Stripe", "error", "Exception during PI for invoice ID $invoice_id: $error");
@@ -1094,7 +1137,9 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
                 if ($payment_intent->status == "succeeded" && moneyToCents($balance_to_pay) === moneyToCents($pi_amount_paid)) {
 
                     // Record the payment first, exactly once per PaymentIntent (the webhook may have recorded it already)
-                    if (!insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $account_id, 'Stripe', $pi_id, $invoice_id)) {
+                    $autopay_recorded = insertStripePaymentOnce($mysqli, $pi_date, $pi_amount_paid, $pi_currency, $account_id, 'Stripe', $pi_id, $invoice_id);
+                    chargeAttemptFinish($mysqli, $charge_attempt_id, 'succeeded');
+                    if (!$autopay_recorded) {
                         continue;
                     }
 
@@ -1111,7 +1156,7 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
                     // RECEIPT EMAIL
                     if ((!empty($config_smtp_host) || !empty($config_smtp_provider))) {
                         $subject = "Payment Received - Invoice $invoice_prefix$invoice_number";
-                        $body = "Hello $contact_name<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $recurring_payment_currency_code) . " for invoice <a href=\\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key\\'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $recurring_payment_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
+                        $body = "Hello $contact_name<br><br>We have received online payment for the amount of " . numfmt_format_currency($currency_format, $invoice_amount, $recurring_payment_currency_code) . " for invoice <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$invoice_id&url_key=$invoice_url_key'>$invoice_prefix$invoice_number</a>. Please keep this email as a receipt for your records.<br><br>Amount Paid: " . numfmt_format_currency($currency_format, $invoice_amount, $recurring_payment_currency_code) . "<br><br>Thank you for your business!<br><br><br>--<br>$company_name - Billing Department<br>$config_invoice_from_email<br>$company_phone";
 
                         $data = [[
                             'from' => $config_invoice_from_email,
@@ -1147,7 +1192,15 @@ while ($row = mysqli_fetch_assoc($sql_recurring_payments)) {
                     logAction("Invoice", "Payment", "Auto Stripe payment amount of " . numfmt_format_currency($currency_format, $invoice_amount, $recurring_payment_currency_code) . " added to invoice $invoice_prefix$invoice_number - $pi_id $extended_log_desc", $client_id, $invoice_id);
                     customAction('invoice_pay', $invoice_id);
 
+                } elseif ($payment_intent->status == 'processing') {
+                    // MSP-DS-32: bank debit accepted, settles in days: the attempt is 'pending' (nothing charges again), the webhook records it
+                    mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Payment pending', history_description = 'Bank autopay submitted and processing (not yet settled). Stripe PaymentIntent $pi_id', history_invoice_id = $invoice_id");
+                    logAction("Invoice", "Payment", "Auto Payment for invoice $invoice_prefix$invoice_number submitted and processing at Stripe - $pi_id", $client_id, $invoice_id);
                 } else {
+                    if ($payment_intent->status == 'succeeded') {
+                        chargeAttemptFinish($mysqli, $charge_attempt_id, 'succeeded', 'amount received differs from the balance charged');
+                        appNotify("Invoice Payment Needs Review", "Stripe took an autopay payment for invoice $invoice_prefix$invoice_number ($pi_id) whose amount differs from the balance; it was not recorded. Check it in Stripe.", "/agent/invoice.php?invoice_id=$invoice_id", $client_id);
+                    }
                     mysqli_query($mysqli, "INSERT INTO history SET history_status = 'Payment failed', history_description = 'Stripe autopay failed: Status {$payment_intent->status}', history_invoice_id = $invoice_id");
                     logAction("Invoice", "Payment", "Failed auto Payment for invoice $invoice_prefix$invoice_number. Stripe PI status: {$payment_intent->status}", $client_id, $invoice_id);
                 }
@@ -1183,6 +1236,13 @@ while ($row = mysqli_fetch_assoc($sql_recurring_expenses)) {
     $recurring_expense_category_id = intval($row['recurring_expense_category_id']);
     $recurring_expense_account_id = intval($row['recurring_expense_account_id']);
     $recurring_expense_client_id = intval($row['recurring_expense_client_id']);
+
+    // MSP-DS-92: an unknown frequency used to keep the row due today and book a new expense on every run. Skip it (with a notification) and push it out a day.
+    if (!in_array($recurring_expense_frequency, [1, 2], true)) {
+        appNotify("Expense", "Recurring expense $recurring_expense_description has an unknown frequency and was skipped", "/agent/recurring_expenses.php", $recurring_expense_client_id);
+        mysqli_query($mysqli, "UPDATE recurring_expenses SET recurring_expense_next_date = DATE_ADD(CURDATE(), INTERVAL 1 DAY) WHERE recurring_expense_id = $recurring_expense_id");
+        continue;
+    }
 
     // Calculate next billing date based on frequency
     if ($recurring_expense_frequency == 1) { // Monthly
@@ -1221,6 +1281,21 @@ while ($row = mysqli_fetch_assoc($sql_invalid_recurring_expenses)) {
 // upstream ITFlow project's telemetry.itflow.org whenever config_telemetry was enabled in Admin >
 // Settings > Telemetry. RivetMSP sends nothing anywhere; config_telemetry keeps its schema default (0).
 
+
+// MSP-DS-166 (re-review M3-2): guest pay page intents nobody finished are canceled at Stripe and their attempts closed, so they never block autopay.
+require_once dirname(__DIR__) . '/includes/charge_attempts.php';
+{
+    try {
+        $expire_provider = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT payment_provider_id FROM payment_providers WHERE payment_provider_name = 'Stripe' LIMIT 1"));
+        $expire_open = mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM invoice_charge_attempts WHERE attempt_status = 'processing' AND attempt_source = 'guest' AND attempt_pi_id <> '' AND attempt_updated_at < NOW() - INTERVAL " . CHARGE_ATTEMPT_GUEST_INTENT_SECONDS . " SECOND"))[0] ?? 0;
+        if ($expire_provider && intval($expire_open) > 0) {
+            require_once dirname(__DIR__) . '/includes/payment_provider_factory.php';
+            chargeAttemptExpireGuest($mysqli, chargeAttemptProviderLookup(getPaymentProvider(intval($expire_provider['payment_provider_id']))));
+        }
+    } catch (\Throwable $e) {
+        error_log('cron guest intent expiry: ' . $e->getMessage());
+    }
+}
 
 // Fetch Updates: once a day, on the first run at or after 03:00 app time (includes/update_check_schedule.php), not on every cron run.
 require_once dirname(__DIR__) . '/includes/update_check_schedule.php';
@@ -1371,12 +1446,12 @@ try {
 // it actually reaching us. Cron also refreshes the session key and polls
 // recent jobs as a fallback, so a failed backup always raises an alert even
 // if the webhook was never set up or didn't fire.
-$config_comet_enabled    = intval($row['config_comet_enabled'] ?? 0);
-$config_comet_totp_secret = decryptSetting($row['config_comet_totp_secret'] ?? '');
-$config_comet_server_url  = $row['config_comet_server_url'] ?? '';
-$config_comet_verify_ssl  = intval($row['config_comet_verify_ssl'] ?? 1);
-$config_comet_admin_user  = $row['config_comet_admin_user'] ?? '';
-$config_comet_admin_pass  = decryptSetting($row['config_comet_admin_pass'] ?? '');
+$config_comet_enabled    = intval($settings_row['config_comet_enabled'] ?? 0);
+$config_comet_totp_secret = decryptSetting($settings_row['config_comet_totp_secret'] ?? '');
+$config_comet_server_url  = $settings_row['config_comet_server_url'] ?? '';
+$config_comet_verify_ssl  = intval($settings_row['config_comet_verify_ssl'] ?? 1);
+$config_comet_admin_user  = $settings_row['config_comet_admin_user'] ?? '';
+$config_comet_admin_pass  = decryptSetting($settings_row['config_comet_admin_pass'] ?? '');
 
 if ($config_comet_enabled && !empty($config_comet_server_url)) {
     require_once dirname(__DIR__) . '/includes/comet.php';
@@ -1387,6 +1462,8 @@ if ($config_comet_enabled && !empty($config_comet_server_url)) {
 
     // Fallback failure/recovery detection via polling
     $recent_jobs = comet_get_jobs_recent() ?: [];
+    // MSP-DS-23: oldest job first, so a failure followed by a success (or the reverse) settles on the newest outcome
+    usort($recent_jobs, fn($a, $b) => intval($a['EndTime'] ?? $a['StartTime'] ?? 0) <=> intval($b['EndTime'] ?? $b['StartTime'] ?? 0));
     foreach ($recent_jobs as $job) {
         $result = comet_process_job($job);
         if ($result['action'] === 'ticket_created') {
@@ -1570,7 +1647,7 @@ if (!empty($automation_rules)) {
 
                 $summaries = [];
                 foreach (automationGetActions($rule) as $action) {
-                    if ($already_ran && in_array($action['action'] ?? '', ['add_note', 'ai_triage'], true)) {
+                    if ($already_ran && in_array($action['action'] ?? '', ['add_note', 'ai_triage', 'ai_sentiment', 'notify_assignee', 'escalate', 'dispatch_assign'], true)) {
                         continue;
                     }
                     $summary = automationExecuteAction($mysqli, $action, $context, $rule);
@@ -1729,6 +1806,46 @@ if ($config_module_enable_rmm) {
 
 /*
  * ###############################################################################################################
+ *  UNIFI SYNC (scheduled)
+ *  Every enabled UniFi controller (local or cloud) is synced automatically, at most once per 15 minutes each: the throttle looks at the
+ *  newest unifi_sync_log row of ANY status, so a controller that is down or slow is retried every 15 minutes, not on every cron tick.
+ *  Each run writes its own unifi_sync_log row (triggered_by 0 = Auto) so the Recent Sync Log and the recovery watch see it.
+ *  scripts/unifi_sync_cli.php remains for running it by hand.
+ * ###############################################################################################################
+ */
+
+$sql_unifi_auto = mysqli_query($mysqli, "SELECT id, name, type FROM unifi_integrations WHERE enabled=1");
+if ($sql_unifi_auto && mysqli_num_rows($sql_unifi_auto) > 0) {
+    require_once dirname(__DIR__) . '/includes/class_unifi.php';
+    require_once dirname(__DIR__) . '/includes/class_unifi_sync_mapper.php';
+    while ($unifi_auto = mysqli_fetch_assoc($sql_unifi_auto)) {
+        $unifi_auto_id = intval($unifi_auto['id']);
+        $unifi_recent = mysqli_query($mysqli, "SELECT id FROM unifi_sync_log WHERE integration_id=$unifi_auto_id AND started_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE) LIMIT 1");
+        if ($unifi_recent && mysqli_num_rows($unifi_recent) > 0) {
+            continue;
+        }
+        $unifi_log_id = 0;
+        try {
+            $unifi_mapper = new UnifiSyncMapper($mysqli, $unifi_auto_id, 0);
+            $unifi_log_id = $unifi_mapper->startSyncLog();
+            if (($unifi_auto['type'] ?? 'local') === 'cloud') {
+                $unifi_stats = $unifi_mapper->syncCloud(new UnifiCloudClient($unifi_auto_id));
+            } else {
+                $unifi_stats = $unifi_mapper->sync(new UnifiClient($unifi_auto_id));
+            }
+            $unifi_mapper->finishSyncLog($unifi_log_id, $unifi_stats);
+            logApp("Cron", "info", "UniFi sync for '{$unifi_auto['name']}': devices {$unifi_stats['devices_created']} created, {$unifi_stats['devices_updated']} updated; Wi-Fi {$unifi_stats['wifi_created']} created; networks {$unifi_stats['networks_created']} created");
+        } catch (\Throwable $e) {
+            logApp("Cron", "error", "UniFi sync failed for '{$unifi_auto['name']}': " . $e->getMessage());
+            if ($unifi_log_id > 0) {
+                mysqli_query($mysqli, "UPDATE unifi_sync_log SET finished_at=NOW(), status='failed', errors='" . mysqli_real_escape_string($mysqli, $e->getMessage()) . "' WHERE id=$unifi_log_id");
+            }
+        }
+    }
+}
+
+/*
+ * ###############################################################################################################
  *  RMM ALERT AUTO-TICKETING (Syncro-Beta)
  * ###############################################################################################################
  */
@@ -1752,8 +1869,13 @@ if ($config_module_enable_rmm && !empty($config_rmm_auto_ticket_severities)) {
 
         $auto_ticket_count = 0;
         while ($alert = mysqli_fetch_assoc($sql_new_alerts)) {
-            createTicketFromRmmAlert($mysqli, $alert, 0, 'RMM Automation');
-            $auto_ticket_count++;
+            // MSP-DS-25: one alert that cannot be ticketed must not abort the rest of the cron run
+            try {
+                createTicketFromRmmAlert($mysqli, $alert, 0, 'RMM Automation');
+                $auto_ticket_count++;
+            } catch (\Throwable $e) {
+                logApp("Cron", "error", "RMM auto-ticketing failed for alert " . intval($alert['id']) . ": " . $e->getMessage());
+            }
         }
 
         if ($auto_ticket_count > 0) {

@@ -58,7 +58,9 @@ $linked_tickets = mysqli_query(
 
 $available_changes = mysqli_query(
     $mysqli,
-    "SELECT change_id, title, status FROM changes WHERE change_id != " . intval($problem['change_problem_id'] ?: 0) . " ORDER BY created_at DESC"
+    // MSP-DS-130: only changes of the clients this user may see (and internal ones)
+    "SELECT change_id, title, status FROM changes WHERE change_id != " . intval($problem['change_problem_id'] ?: 0)
+        . (($client_access_string && !$session_is_admin) ? " AND (client_id = 0 OR client_id IS NULL OR client_id IN ($client_access_string))" : '') . " ORDER BY created_at DESC"
 );
 
 ?>

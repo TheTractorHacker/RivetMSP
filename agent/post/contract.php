@@ -60,7 +60,7 @@ function pauseRecurringInvoicesForContract(\mysqli $mysqli, int $contractId, str
 
 if (isset($_POST['edit_contract'])) {
     validateCSRFToken($_POST['csrf_token']);
-    enforceUserPermission('module_support', 2);
+    enforceUserPermission('module_sales', 2);   // MSP-DS-128: a status change can pause billing, which is a Sales decision
 
     $contract_id = intval($_POST['contract_id']);
 
@@ -114,7 +114,7 @@ if (isset($_POST['edit_contract'])) {
 
 if (isset($_GET['delete_contract'])) {
     validateCSRFToken($_GET['csrf_token']);
-    enforceUserPermission('module_support', 2);
+    enforceUserPermission('module_sales', 3);   // MSP-DS-128: deleting pauses linked recurring invoices
 
     $contract_id = intval($_GET['delete_contract']);
 

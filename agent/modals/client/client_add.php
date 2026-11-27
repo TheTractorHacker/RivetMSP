@@ -442,7 +442,7 @@ ob_start();
             {client_duplicate_check: 'true', name: name},
             function(data) {
                 //If we get a response from ajax.php, parse it as JSON
-                const client_duplicate_data = JSON.parse(data);
+                const client_duplicate_data = (typeof data === "string") ? JSON.parse(data) : data;
                 document.getElementById("client_duplicate_info").innerHTML = client_duplicate_data.message;
             }
         );

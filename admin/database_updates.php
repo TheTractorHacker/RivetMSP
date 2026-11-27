@@ -12,6 +12,12 @@ if (!defined("LATEST_DATABASE_VERSION") || !defined("CURRENT_DATABASE_VERSION") 
     exit();
 }
 
+// Raised when a migration step refuses to run because continuing would destroy or hide data the admin has to decide about
+// (MSP-DS-39 re-review MRR7). Nothing of that step has been applied; admin/post/update.php shows the message and releases its lock.
+if (!class_exists('DbUpdateRefusedException', false)) {
+    class DbUpdateRefusedException extends RuntimeException {}
+}
+
 // A migration step ends by writing the next version into settings. CURRENT_DATABASE_VERSION is fixed when the
 // page loads, so testing it let a run apply exactly one step (and made a long upgrade need the button pressed once
 // per version). Each step below tests the version the database holds right now instead, so a single run applies
@@ -8440,6 +8446,415 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         }
 
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.137'");
+    }
+
+    if ($rivetit_db_version() == '2.6.137') {
+        // DB 2.6.138: deep-scan data integrity.
+        //   MSP-DS-14  old API/worksheet/outtake ticket_replies rows ('reply', 'note') become 'Public' / 'Internal' so the portal and guest views treat them like web rows.
+        //   MSP-DS-41  UNIQUE (prefix, number) on tickets, invoices and quotes; existing duplicates are renumbered first (oldest row keeps its number) and the live
+        //              counters are lifted above the highest number in use, so the next insert cannot collide.
+        //   MSP-DS-141 UNIQUE staff e-mail; later duplicates are renamed (never deleted) and logged.
+        //   MSP-DS-49  per-user calendar feed token (hash), plus a 30 day window in which the old installation-wide HMAC token still works.
+        $db_has_column = static function (string $table, string $column) use ($mysqli): bool {
+            $t = mysqli_real_escape_string($mysqli, $table); $c = mysqli_real_escape_string($mysqli, $column);
+            return mysqli_num_rows(mysqli_query($mysqli, "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$t' AND COLUMN_NAME = '$c' LIMIT 1")) > 0;
+        };
+        $db_has_index = static function (string $table, string $index) use ($mysqli): bool {
+            $t = mysqli_real_escape_string($mysqli, $table); $i = mysqli_real_escape_string($mysqli, $index);
+            return mysqli_num_rows(mysqli_query($mysqli, "SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$t' AND INDEX_NAME = '$i' LIMIT 1")) > 0;
+        };
+        $db_log = static function (string $description) use ($mysqli): void {
+            $d = mysqli_real_escape_string($mysqli, mb_strcut($description, 0, 1000, 'UTF-8'));
+            mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Update', log_description = '$d'");
+        };
+
+        // --- MSP-DS-14
+        mysqli_query($mysqli, "UPDATE `ticket_replies` SET `ticket_reply_type` = 'Public' WHERE `ticket_reply_type` = 'reply'");
+        mysqli_query($mysqli, "UPDATE `ticket_replies` SET `ticket_reply_type` = 'Internal' WHERE `ticket_reply_type` = 'note'");
+
+        // --- MSP-DS-41: renumber duplicates, lift the counter, add the unique index
+        $db_unique_numbers = static function (string $table, string $id, string $prefix, string $number, string $counter, string $index) use ($mysqli, $db_has_index, $db_log): void {
+            if ($db_has_index($table, $index)) {
+                return;
+            }
+            // The counter must be above every number in use, otherwise the next insert would collide with an existing row.
+            mysqli_query($mysqli, "UPDATE `settings` SET `$counter` = GREATEST(COALESCE(`$counter`, 1), COALESCE((SELECT MAX(`$number`) + 1 FROM `$table`), 1)) WHERE company_id = 1");
+            $dups = mysqli_query($mysqli,
+                "SELECT t.`$id` AS id, t.`$prefix` AS prefix, t.`$number` AS num FROM `$table` t
+                 JOIN (SELECT `$prefix` AS p, `$number` AS n, MIN(`$id`) AS keep_id FROM `$table` WHERE `$prefix` IS NOT NULL GROUP BY `$prefix`, `$number` HAVING COUNT(*) > 1) d
+                   ON t.`$prefix` = d.p AND t.`$number` = d.n AND t.`$id` <> d.keep_id
+                 ORDER BY t.`$id`");
+            $rows = [];
+            while ($dups && ($r = mysqli_fetch_assoc($dups))) {
+                $rows[] = $r;
+            }
+            foreach ($rows as $r) {
+                mysqli_query($mysqli, "UPDATE `settings` SET `$counter` = LAST_INSERT_ID(`$counter`), `$counter` = `$counter` + 1 WHERE company_id = 1");
+                $new = (int) mysqli_insert_id($mysqli);
+                mysqli_query($mysqli, "UPDATE `$table` SET `$number` = $new WHERE `$id` = " . (int) $r['id']);
+                $db_log("MSP-DS-41: $table row " . (int) $r['id'] . " shared number " . $r['prefix'] . $r['num'] . " with an older row; renumbered to " . $r['prefix'] . $new);
+            }
+            mysqli_query($mysqli, "ALTER TABLE `$table` ADD UNIQUE KEY `$index` (`$prefix`, `$number`)");
+        };
+        $db_unique_numbers('tickets', 'ticket_id', 'ticket_prefix', 'ticket_number', 'config_ticket_next_number', 'uniq_tickets_prefix_number');
+        $db_unique_numbers('invoices', 'invoice_id', 'invoice_prefix', 'invoice_number', 'config_invoice_next_number', 'uniq_invoices_prefix_number');
+        $db_unique_numbers('quotes', 'quote_id', 'quote_prefix', 'quote_number', 'config_quote_next_number', 'uniq_quotes_prefix_number');
+
+        // --- MSP-DS-141: one staff account per e-mail. Client portal accounts (user_type 2) may share an address, so the index sits on a virtual column that is NULL for them.
+        if (!$db_has_index('users', 'uniq_users_staff_email')) {
+            // Duplicates are decided in SQL under the SAME collation the index uses (utf8mb4_general_ci: 'E-acute' = 'e', 'JOSE' = 'jose', trailing spaces ignored),
+            // never with PHP string rules (MSP-DS-141 re-review MRR4: an ASCII-only PHP key left accent/case-equal pairs un-renamed and the ADD UNIQUE failed with 1062).
+            // Every row of a group carries the group's own SQL value (d.e), so that value is the group key.
+            // A second pass re-checks after the renames (a renamed address could itself land on an existing one).
+            for ($pass = 0; $pass < 3; $pass++) {
+                $res = mysqli_query($mysqli,
+                    "SELECT u.user_id, u.user_email, d.e AS grp FROM users u
+                     JOIN (SELECT user_email COLLATE utf8mb4_general_ci AS e FROM users WHERE user_type = 1 AND user_email <> '' GROUP BY user_email COLLATE utf8mb4_general_ci HAVING COUNT(*) > 1) d
+                       ON (u.user_email COLLATE utf8mb4_general_ci) = d.e
+                     WHERE u.user_type = 1
+                     ORDER BY d.e, (u.user_archived_at IS NULL) DESC, u.user_status DESC, u.user_id ASC");
+                $seen = [];
+                $renames = [];
+                while ($res && ($r = mysqli_fetch_assoc($res))) {
+                    $key = $r['grp'];
+                    if (!isset($seen[$key])) {
+                        $seen[$key] = true;   // the first row of each group (active, then lowest id) keeps the address
+                        continue;
+                    }
+                    $renames[] = $r;
+                }
+                if (!$renames) {
+                    break;
+                }
+                foreach ($renames as $r) {
+                    $id = (int) $r['user_id'];
+                    $at = strrpos($r['user_email'], '@');
+                    $new = $at === false ? mb_strcut($r["user_email"], 0, 150) . ".dup$id" : mb_strcut($r["user_email"], 0, min($at, 100)) . "+dup$id" . substr($r["user_email"], $at);
+                    $new_esc = mysqli_real_escape_string($mysqli, mb_strcut($new, 0, 200));
+                    mysqli_query($mysqli, "UPDATE users SET user_email = '$new_esc' WHERE user_id = $id");
+                    $db_log("MSP-DS-141: staff user $id shared the e-mail " . $r['user_email'] . " with another staff account; e-mail renamed to $new (account kept, fix the address from Users)");
+                }
+            }
+            if (!$db_has_column('users', 'user_staff_email_key')) {
+                mysqli_query($mysqli, "ALTER TABLE `users` ADD COLUMN `user_staff_email_key` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci GENERATED ALWAYS AS (IF(`user_type` = 1 AND `user_email` <> '', `user_email`, NULL)) VIRTUAL");
+            }
+            mysqli_query($mysqli, "ALTER TABLE `users` ADD UNIQUE KEY `uniq_users_staff_email` (`user_staff_email_key`)");
+        }
+
+        // --- MSP-DS-49: per-user calendar feed token (sha256 of a random token; the token itself is shown once)
+        if (!$db_has_column('users', 'user_calendar_token_hash')) {
+            mysqli_query($mysqli, "ALTER TABLE `users` ADD COLUMN `user_calendar_token_hash` char(64) DEFAULT NULL, ADD COLUMN `user_calendar_token_rotated_at` datetime DEFAULT NULL, ADD COLUMN `user_calendar_legacy_until` datetime DEFAULT NULL");
+            // Feeds already subscribed keep working for 7 days (calendar apps poll at least daily), or until their owner generates a new link or an admin ends legacy links (security_settings calendar_legacy_links), whichever comes first.
+            mysqli_query($mysqli, "UPDATE `users` SET `user_calendar_legacy_until` = DATE_ADD(NOW(), INTERVAL 7 DAY) WHERE `user_type` = 1");
+        }
+        if (!$db_has_index('users', 'idx_users_calendar_token')) {
+            mysqli_query($mysqli, "ALTER TABLE `users` ADD KEY `idx_users_calendar_token` (`user_calendar_token_hash`)");
+        }
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.138'");
+    }
+
+    if ($rivetit_db_version() == '2.6.138') {
+        // DB 2.6.139 (deep-scan round 2, group B). Every change is idempotent (information_schema / IF NOT EXISTS) and every backfill is safe to re-run.
+        $ds_has_col = function ($table, $col) use ($mysqli) {
+            $r = mysqli_query($mysqli, "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$table' AND COLUMN_NAME = '$col' LIMIT 1");
+            return $r && mysqli_num_rows($r) > 0;
+        };
+        $ds_has_index = function ($table, $index) use ($mysqli) {
+            $r = mysqli_query($mysqli, "SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$table' AND INDEX_NAME = '$index' LIMIT 1");
+            return $r && mysqli_num_rows($r) > 0;
+        };
+
+        // MSP-DS-39 (re-review MRR7) PRE-FLIGHT, before anything in this step changes: payroll pay records are never archived or hidden by a migration.
+        // If a period has more than one live FINALIZED run, or two live periods with the same dates both carry live runs, the unique keys cannot be created
+        // without hiding finalized pay records, so the update REFUSES (version stays 2.6.138, nothing of this step applied) and says exactly what to fix.
+        // Fix by archiving the extra run or period (admin action "Archive this duplicate" on the run / period page in Payroll), then run the update again.
+        if (!$ds_has_index('payroll_runs', 'uniq_payroll_run_live_period') || !$ds_has_index('payroll_periods', 'uniq_payroll_period_live_key')) {
+            $ds39_problems = [];
+            $ds39_r = mysqli_query($mysqli, "SELECT payroll_run_period_id AS pid, GROUP_CONCAT(payroll_run_id ORDER BY payroll_run_id) AS ids FROM payroll_runs
+                WHERE payroll_run_archived_at IS NULL AND payroll_run_status = 'finalized' GROUP BY payroll_run_period_id HAVING COUNT(*) > 1");
+            while ($ds39_r && ($ds39_x = mysqli_fetch_assoc($ds39_r))) {
+                $ds39_problems[] = "payroll period {$ds39_x['pid']} has several finalized runs (run ids {$ds39_x['ids']})";
+            }
+            $ds39_r = mysqli_query($mysqli, "SELECT p.payroll_period_start_date AS sd, p.payroll_period_end_date AS ed, GROUP_CONCAT(p.payroll_period_id ORDER BY p.payroll_period_id) AS ids
+                FROM payroll_periods p
+                WHERE p.payroll_period_archived_at IS NULL
+                  AND EXISTS (SELECT 1 FROM payroll_runs x WHERE x.payroll_run_period_id = p.payroll_period_id AND x.payroll_run_archived_at IS NULL)
+                GROUP BY p.payroll_period_start_date, p.payroll_period_end_date HAVING COUNT(*) > 1");
+            while ($ds39_r && ($ds39_x = mysqli_fetch_assoc($ds39_r))) {
+                $ds39_problems[] = "payroll periods {$ds39_x['ids']} have the same dates {$ds39_x['sd']} to {$ds39_x['ed']} and each has live runs";
+            }
+            if ($ds39_problems) {
+                $ds39_msg = 'Database update 2.6.139 was NOT applied: payroll data needs a decision first. ' . implode('; ', $ds39_problems)
+                    . '. To resolve it, sign in as an administrator: open Payroll > Payroll Runs (admin/payroll_runs.php), open each extra run and use "Archive this duplicate" (a finalized duplicate asks for your password and a reason; rows are kept, never deleted). For periods with the same dates that each hold a run, open the extra period in Payroll > Pay Periods (admin/payroll_periods.php) and use "Archive this period and its run" (a period with a finalized run asks for your password and is allowed only while the period you keep still has a finalized run); an extra period with no run left uses "Archive this duplicate period". Nothing was changed or archived by the update. Then run the update again.';
+                $db_refuse_log = mysqli_real_escape_string($mysqli, mb_strcut('MSP-DS-39: ' . $ds39_msg, 0, 1000, 'UTF-8'));
+                mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Update', log_description = '$db_refuse_log'");
+                throw new DbUpdateRefusedException($ds39_msg);
+            }
+        }
+
+        // MSP-DS-166 / MSP-DS-32: one row per card/bank charge attempt, claimed before Stripe is called (includes/charge_attempts.php)
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `invoice_charge_attempts` (
+          `attempt_id` int(11) NOT NULL AUTO_INCREMENT,
+          `attempt_invoice_id` int(11) NOT NULL,
+          `attempt_key` varchar(120) NOT NULL,
+          `attempt_balance_cents` bigint(20) NOT NULL DEFAULT 0,
+          `attempt_method_id` int(11) NOT NULL DEFAULT 0,
+          `attempt_source` varchar(20) NOT NULL DEFAULT '',
+          `attempt_status` varchar(20) NOT NULL DEFAULT 'processing',
+          `attempt_pi_id` varchar(100) NOT NULL DEFAULT '',
+          `attempt_error` varchar(255) NOT NULL DEFAULT '',
+          `attempt_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `attempt_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`attempt_id`),
+          UNIQUE KEY `uniq_charge_attempt_key` (`attempt_key`),
+          KEY `idx_charge_attempt_invoice` (`attempt_invoice_id`,`attempt_status`),
+          KEY `idx_charge_attempt_pi` (`attempt_pi_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        // MSP-DS-164: refunds and disputes reported by Stripe, recorded against the payment they reverse
+        mysqli_query($mysqli, "CREATE TABLE IF NOT EXISTS `payment_reversals` (
+          `reversal_id` int(11) NOT NULL AUTO_INCREMENT,
+          `reversal_ref` varchar(100) NOT NULL,
+          `reversal_kind` varchar(10) NOT NULL DEFAULT 'refund',
+          `reversal_payment_id` int(11) NOT NULL DEFAULT 0,
+          `reversal_invoice_id` int(11) NOT NULL DEFAULT 0,
+          `reversal_pi_id` varchar(100) NOT NULL DEFAULT '',
+          `reversal_amount` decimal(15,2) NOT NULL DEFAULT 0.00,
+          `reversal_currency` varchar(10) NOT NULL DEFAULT '',
+          `reversal_status` varchar(40) NOT NULL DEFAULT '',
+          `reversal_event_type` varchar(60) NOT NULL DEFAULT '',
+          `reversal_created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          `reversal_updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`reversal_id`),
+          UNIQUE KEY `uniq_payment_reversal_ref` (`reversal_ref`),
+          KEY `idx_payment_reversal_payment` (`reversal_payment_id`),
+          KEY `idx_payment_reversal_invoice` (`reversal_invoice_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+        // MSP-DS-39 payroll: a fixed company workweek (default 'period' = the legacy behaviour), and the DB-level one-live-run-per-period / one-live-period-per-dates
+        // keys (generated columns that are NULL once archived, so archived rows never collide). Duplicate DRAFT runs / EMPTY periods are archived first and logged; finalized
+        // duplicates are never archived (the update refuses, see the preflight above).
+        mysqli_query($mysqli, "ALTER TABLE `settings` ADD COLUMN IF NOT EXISTS `config_payroll_workweek_start` varchar(10) NOT NULL DEFAULT 'period'");
+        $ds39_log = static function (string $description) use ($mysqli): void {
+            $d = mysqli_real_escape_string($mysqli, mb_strcut($description, 0, 1000, 'UTF-8'));
+            mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Update', log_description = '$d'");
+        };
+        // re-review M3-9: the clean-up pass is keyed on the UNIQUE KEY, not on the generated column, so a retry after an interrupted/refused run (column added, key missing) still archives duplicates instead of skipping straight to a key that cannot be built.
+        if (!$ds_has_index('payroll_runs', 'uniq_payroll_run_live_period')) {
+            // Only non-finalized duplicates can be left here (several finalized runs were refused above): the finalized run, else the oldest, stays live; each archived draft is logged.
+            $ds39_r = mysqli_query($mysqli, "SELECT r.payroll_run_id, r.payroll_run_period_id, r.payroll_run_status FROM payroll_runs r JOIN (
+                    SELECT payroll_run_period_id AS pid, MIN(CASE WHEN payroll_run_status = 'finalized' THEN payroll_run_id END) AS keep_final, MIN(payroll_run_id) AS keep_first
+                    FROM payroll_runs WHERE payroll_run_archived_at IS NULL GROUP BY payroll_run_period_id HAVING COUNT(*) > 1
+                ) d ON d.pid = r.payroll_run_period_id
+                WHERE r.payroll_run_archived_at IS NULL AND r.payroll_run_id <> COALESCE(d.keep_final, d.keep_first) AND r.payroll_run_status <> 'finalized'");
+            while ($ds39_r && ($ds39_x = mysqli_fetch_assoc($ds39_r))) {
+                mysqli_query($mysqli, "UPDATE payroll_runs SET payroll_run_archived_at = NOW() WHERE payroll_run_id = " . (int) $ds39_x['payroll_run_id'] . " AND payroll_run_status <> 'finalized'");
+                $ds39_log("MSP-DS-39: duplicate {$ds39_x['payroll_run_status']} payroll run {$ds39_x['payroll_run_id']} for period {$ds39_x['payroll_run_period_id']} was archived (not deleted) so one live run per period can be enforced");
+            }
+            if (!$ds_has_col('payroll_runs', 'payroll_run_live_period_id')) {
+                mysqli_query($mysqli, "ALTER TABLE `payroll_runs` ADD COLUMN `payroll_run_live_period_id` int(11) GENERATED ALWAYS AS (if(`payroll_run_archived_at` is null,`payroll_run_period_id`,NULL)) STORED");
+            }
+        }
+        if (!$ds_has_index('payroll_runs', 'uniq_payroll_run_live_period')) {
+            mysqli_query($mysqli, "ALTER TABLE `payroll_runs` ADD UNIQUE KEY `uniq_payroll_run_live_period` (`payroll_run_live_period_id`)");
+        }
+        if (!$ds_has_index('payroll_periods', 'uniq_payroll_period_live_key')) {
+            // Duplicate live periods (same dates): the one that carries live runs is kept (the preflight guarantees at most one does), else the oldest. The others carry no live run
+            // and are archived (not deleted), each one logged.
+            $ds39_r = mysqli_query($mysqli, "SELECT p.payroll_period_id, p.payroll_period_start_date AS sd, p.payroll_period_end_date AS ed,
+                    EXISTS (SELECT 1 FROM payroll_runs x WHERE x.payroll_run_period_id = p.payroll_period_id AND x.payroll_run_archived_at IS NULL) AS has_run
+                FROM payroll_periods p WHERE p.payroll_period_archived_at IS NULL ORDER BY p.payroll_period_start_date, p.payroll_period_end_date, has_run DESC, p.payroll_period_id");
+            $ds39_seen = [];
+            while ($ds39_r && ($ds39_x = mysqli_fetch_assoc($ds39_r))) {
+                $ds39_k = $ds39_x['sd'] . '|' . $ds39_x['ed'];
+                if (!isset($ds39_seen[$ds39_k])) {
+                    $ds39_seen[$ds39_k] = (int) $ds39_x['payroll_period_id'];
+                    continue;
+                }
+                if ((int) $ds39_x['has_run'] === 1) {
+                    continue; // cannot happen after the preflight; never archive a period that carries a live run
+                }
+                mysqli_query($mysqli, "UPDATE payroll_periods SET payroll_period_archived_at = NOW() WHERE payroll_period_id = " . (int) $ds39_x['payroll_period_id']);
+                $ds39_log("MSP-DS-39: duplicate payroll period {$ds39_x['payroll_period_id']} ({$ds39_k}) had no live run and was archived (not deleted); period {$ds39_seen[$ds39_k]} stays live");
+            }
+            if (!$ds_has_col('payroll_periods', 'payroll_period_live_key')) {
+                mysqli_query($mysqli, "ALTER TABLE `payroll_periods` ADD COLUMN `payroll_period_live_key` varchar(21) GENERATED ALWAYS AS (if(`payroll_period_archived_at` is null,concat(`payroll_period_start_date`,'|',`payroll_period_end_date`),NULL)) STORED");
+            }
+        }
+        if (!$ds_has_index('payroll_periods', 'uniq_payroll_period_live_key')) {
+            // No silent skip any more: the preflight removed the only known cause, so a failure here stops the update with a message instead of leaving the key missing for good.
+            try {
+                mysqli_query($mysqli, "ALTER TABLE `payroll_periods` ADD UNIQUE KEY `uniq_payroll_period_live_key` (`payroll_period_live_key`)");
+            } catch (\Throwable $e) {
+                throw new DbUpdateRefusedException('Database update 2.6.139 stopped: the unique key on payroll periods could not be created (' . $e->getMessage() . '). Open Payroll > Pay Periods (admin/payroll_periods.php), open the extra period with the same dates and use "Archive this duplicate period" (an admin action; rows are kept), then run the update again.');
+            }
+        }
+
+        // MSP-DS-115: every accounting entity-map row records the provider and realm/tenant it was written under, and is only read for the connection that is current.
+        // Existing rows are tagged with the connection they belong to: the one remembered by the last connect/disconnect (platform_settings accounting_map_connection,
+        // "provider|realm"), else the integration's current one. Rows that cannot be attributed stay untagged and are ignored until re-synced (never reused for another company).
+        mysqli_query($mysqli, "ALTER TABLE `accounting_entity_map`
+            ADD COLUMN IF NOT EXISTS `map_provider` varchar(30) NOT NULL DEFAULT '',
+            ADD COLUMN IF NOT EXISTS `map_realm_id` varchar(64) NOT NULL DEFAULT ''");
+        $ds115_bound = '';
+        $ds115_res = mysqli_query($mysqli, "SELECT setting_value FROM platform_settings WHERE setting_key = 'accounting_map_connection' LIMIT 1");
+        if ($ds115_res && ($ds115_row = mysqli_fetch_assoc($ds115_res))) {
+            $ds115_bound = (string) $ds115_row['setting_value'];
+        }
+        $ds115_int = mysqli_query($mysqli, "SELECT accounting_id, accounting_provider, accounting_realm_id FROM accounting_integrations");
+        while ($ds115_int && ($ds115_i = mysqli_fetch_assoc($ds115_int))) {
+            $ds115_pr = (string) $ds115_i['accounting_provider'];
+            $ds115_rm = (string) $ds115_i['accounting_realm_id'];
+            if ($ds115_bound !== '' && strpos($ds115_bound, '|') !== false) {
+                [$ds115_pr, $ds115_rm] = explode('|', $ds115_bound, 2);
+            }
+            if ($ds115_rm !== '') {
+                $ds115_pr_esc = mysqli_real_escape_string($mysqli, $ds115_pr);
+                $ds115_rm_esc = mysqli_real_escape_string($mysqli, $ds115_rm);
+                mysqli_query($mysqli, "UPDATE accounting_entity_map SET map_provider = '$ds115_pr_esc', map_realm_id = '$ds115_rm_esc'
+                    WHERE map_accounting_id = " . intval($ds115_i['accounting_id']) . " AND map_realm_id = ''");
+            }
+        }
+
+        // [group B additions are appended above this line]
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.139'");
+    }
+
+    if ($rivetit_db_version() == '2.6.139') {
+        // DB 2.6.140 (deep-scan 2026-11 group C):
+        //  - MSP-DS-16/33: domains.domain_route_mail: inbound mail is auto-filed by sender DOMAIN only when an administrator switched this on for the
+        //    domain. Existing domains that the earlier unambiguous-claim rule already routed (one client lists the name, not a public mailbox provider)
+        //    keep routing (backfilled to 1, once, when the column is added); everything else, and every domain added later by a non-admin, is 0.
+        //  - MSP-DS-156: report_schedules.schedule_created_by: the schedule's creator is re-checked at send time. Existing rows are attributed from the audit log
+        //    where unambiguous; the rest stay NULL and do not send until an admin takes ownership (Reports > Schedules).
+        $col_exists = function ($table, $col) use ($mysqli) {
+            $t = mysqli_real_escape_string($mysqli, $table);
+            $c = mysqli_real_escape_string($mysqli, $col);
+            $r = mysqli_query($mysqli, "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$t' AND COLUMN_NAME = '$c' LIMIT 1");
+            return $r && mysqli_num_rows($r) > 0;
+        };
+
+        // re-review M3-8: an upgrade notice goes to every active ADMIN as one row each (notification_user_id = that admin), exactly like appNotify() does, so the
+        // web bell shows it and one admin dismissing it does not remove it for the others. (user_id 0 rows are shown by no web page and dismissable by any technician in the mobile API.)
+        $notify_admins = function (string $type, string $text, string $action) use ($mysqli) {
+            $t = mysqli_real_escape_string($mysqli, mb_substr($type, 0, 200, 'UTF-8'));
+            $n = mysqli_real_escape_string($mysqli, mb_substr($text, 0, 1000, 'UTF-8'));
+            $a = mysqli_real_escape_string($mysqli, mb_substr($action, 0, 250, 'UTF-8'));
+            $r = mysqli_query($mysqli, "SELECT u.user_id FROM users u JOIN user_roles ro ON ro.role_id = u.user_role_id
+                WHERE u.user_type = 1 AND u.user_status = 1 AND u.user_archived_at IS NULL AND ro.role_is_admin = 1");
+            while ($r && ($u = mysqli_fetch_assoc($r))) {
+                mysqli_query($mysqli, "INSERT INTO `notifications` SET notification_type = '$t', notification = '$n', notification_action = '$a', notification_user_id = " . (int) $u['user_id']);
+            }
+        };
+
+        if (!$col_exists('domains', 'domain_route_mail')) {
+            mysqli_query($mysqli, "ALTER TABLE `domains` ADD `domain_route_mail` TINYINT(1) NOT NULL DEFAULT 0 AFTER `domain_client_id`");
+            // Grandfather exactly what routed before: an active domain that one client alone lists and that is not a public mailbox provider
+            require_once dirname(__DIR__) . '/includes/inbound_routing.php';
+            $dres = mysqli_query($mysqli, "SELECT domain_id, domain_name, domain_client_id FROM domains WHERE domain_archived_at IS NULL AND domain_client_id > 0");
+            $grandfather = [];
+            while ($dres && ($d = mysqli_fetch_assoc($dres))) {
+                if (inboundDomainOwnerClient($mysqli, $d['domain_name']) === (int) $d['domain_client_id']) {
+                    $grandfather[] = (int) $d['domain_id'];
+                }
+            }
+            if ($grandfather) {
+                mysqli_query($mysqli, "UPDATE domains SET domain_route_mail = 1 WHERE domain_id IN (" . implode(',', $grandfather) . ")");
+                // MSP-DS-16/33 re-review MRR17: grandfathered claims may include a domain a restricted technician planted before the upgrade. They keep routing
+                // (compatibility), but every one is logged for audit and the admins get ONE notification pointing at Domains to review them
+                // (switch "Route inbound mail" off on any that should not file mail into its client).
+                foreach ($grandfather as $gid) {
+                    $gr = mysqli_query($mysqli, "SELECT domain_name, domain_client_id FROM domains WHERE domain_id = " . (int) $gid);
+                    $gd = $gr ? mysqli_fetch_assoc($gr) : null;
+                    if ($gd) {
+                        $gdesc = mysqli_real_escape_string($mysqli, mb_strcut("MSP-DS-16/33: domain {$gd['domain_name']} (id $gid) was grandfathered for inbound mail auto-routing into client {$gd['domain_client_id']} by the upgrade; an admin should confirm the claim is legitimate (edit the domain and review its Route inbound mail option)", 0, 1000));
+                        mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Review', log_description = '$gdesc', log_client_id = " . (int) $gd['domain_client_id'] . ", log_entity_id = " . (int) $gid);
+                    }
+                }
+                $gnote = (count($grandfather) . ' domain(s) were grandfathered for inbound mail auto-routing by the upgrade (DB 2.6.140). Review them: a domain added by a technician before the upgrade keeps filing new senders into that client until "Route inbound mail from this domain to this client" is switched off on the domain. Details are in the activity log (type Database, action Review).');
+                $notify_admins('Domain', $gnote, 'domains.php');
+            }
+        }
+
+        if (!$col_exists('report_schedules', 'schedule_created_by')) {
+            mysqli_query($mysqli, "ALTER TABLE `report_schedules` ADD `schedule_created_by` INT(11) DEFAULT NULL AFTER `schedule_created_at`");
+        }
+        // MSP-DS-156 re-review MRR16: attribute legacy schedules from their audit log row where that is unambiguous; the rest stay without an owner and
+        // DO NOT SEND until someone allowed to send the report takes them over (Reports > Schedules > Take ownership). Each outcome is logged.
+        require_once dirname(__DIR__) . '/includes/report_schedule_guards.php';
+        $bf = reportScheduleBackfillCreators($mysqli);
+        foreach ($bf['owned'] as $bid) {
+            mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Update', log_description = 'MSP-DS-156: report schedule #" . (int) $bid . " attributed to its creator from the audit log', log_entity_id = " . (int) $bid);
+        }
+        if ($bf['unowned']) {
+            // re-review M3-18: log_description is varchar(1000): a long id list is cut to the first 40 ids plus a count (strict sql_mode aborts the update on an over-long value)
+            $unowned_ids = array_map('intval', $bf['unowned']);
+            $unowned_list = '#' . implode(', #', array_slice($unowned_ids, 0, 40)) . (count($unowned_ids) > 40 ? ' and ' . (count($unowned_ids) - 40) . ' more' : '');
+            $unowned_desc = mysqli_real_escape_string($mysqli, mb_substr("MSP-DS-156: report schedule(s) $unowned_list have no known creator and do not send until an admin takes ownership (Reports > Schedules)", 0, 1000, 'UTF-8'));
+            mysqli_query($mysqli, "INSERT INTO `logs` SET log_type = 'Database', log_action = 'Review', log_description = '$unowned_desc'");
+            $bnote = count($bf['unowned']) . ' scheduled report(s) created before the upgrade have no known owner and will not be emailed until an admin takes ownership of each in Reports > Schedules.';
+            $notify_admins('Report Schedule', $bnote, 'reports/schedules.php');
+        }
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.140'");
+    }
+
+    if ($rivetit_db_version() == '2.6.140') {
+        // DB 2.6.141 (deep-scan group D, all idempotent: every ADD COLUMN is guarded by information_schema).
+        $ds_add_column = function (string $table, string $column, string $definition) use ($mysqli) {
+            $t = mysqli_real_escape_string($mysqli, $table);
+            $c = mysqli_real_escape_string($mysqli, $column);
+            $r = mysqli_query($mysqli, "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '$t' AND column_name = '$c'");
+            if ($r && mysqli_num_rows($r) === 0) {
+                mysqli_query($mysqli, "ALTER TABLE `$table` ADD COLUMN `$column` $definition");
+            }
+        };
+
+        // MSP-DS-114: the OAuth consent (mcp_oauth_grants.grant_id) a queued MCP proposal was made under; approval checks THAT grant is still live. 0 = queued before this column existed.
+        $ds_add_column('mcp_pending_actions', 'grant_id', "int(11) NOT NULL DEFAULT 0 AFTER `oauth_client_id`");
+
+        // MSP-DS-145: portal session revocation: users.user_session_version is stored in the portal session at sign-in and bumped on a password change/reset/set-by-staff, which ends every older portal session.
+        $ds_add_column('users', 'user_session_version', "int(11) NOT NULL DEFAULT 0 AFTER `user_password_reset_token_expire`");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.141'");
+    }
+
+    if ($rivetit_db_version() == '2.6.141') {
+        // DB 2.6.142 (re-review M4-1, MSP-DS-67; idempotent: the ADD COLUMNs are guarded by information_schema, the backfill only ever lowers/fills).
+        // The change-approval guard used to read the action log, which log retention prunes and logAction() truncates. These two columns replace it.
+        $m4_add_column = function (string $table, string $column, string $definition) use ($mysqli) {
+            $t = mysqli_real_escape_string($mysqli, $table);
+            $c = mysqli_real_escape_string($mysqli, $column);
+            $r = mysqli_query($mysqli, "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '$t' AND column_name = '$c'");
+            if ($r && mysqli_num_rows($r) === 0) {
+                mysqli_query($mysqli, "ALTER TABLE `$table` ADD COLUMN `$column` $definition");
+            }
+        };
+        // set ONCE when a client approval is first requested (or the client first decides); never cleared
+        $m4_add_column('changes', 'client_approval_requested_at', "datetime DEFAULT NULL AFTER `client_decided_at`");
+        // the latest time the client rejected the change; the DS-51 content-edit reset puts client_decision back to 'pending' but never clears this
+        $m4_add_column('changes', 'client_rejected_at', "datetime DEFAULT NULL AFTER `client_approval_requested_at`");
+
+        // Backfill: audit_events (entity_id is the change id as text) ...
+        mysqli_query($mysqli, "UPDATE `changes` c JOIN (SELECT entity_id AS eid, MIN(created_at) AS t FROM `audit_events` WHERE entity_type = 'change' AND event_type IN ('change.client_approval_requested', 'change.client_approved', 'change.client_rejected') GROUP BY entity_id) a ON a.eid = CAST(c.change_id AS CHAR) SET c.client_approval_requested_at = IF(c.client_approval_requested_at IS NULL OR a.t < c.client_approval_requested_at, a.t, c.client_approval_requested_at)");
+        mysqli_query($mysqli, "UPDATE `changes` c JOIN (SELECT entity_id AS eid, MAX(created_at) AS t FROM `audit_events` WHERE entity_type = 'change' AND event_type = 'change.client_rejected' GROUP BY entity_id) a ON a.eid = CAST(c.change_id AS CHAR) SET c.client_rejected_at = IF(c.client_rejected_at IS NULL OR a.t > c.client_rejected_at, a.t, c.client_rejected_at)");
+        // ... and the action log rows that survive (log_entity_id is the change id)
+        mysqli_query($mysqli, "UPDATE `changes` c JOIN (SELECT log_entity_id AS id, MIN(log_created_at) AS t FROM `logs` WHERE log_entity_id > 0 AND log_type = 'Support' AND (log_description LIKE '% sent a client approval request for change %' OR log_description LIKE '% approved change %via guest link' OR log_description LIKE '% rejected change %via guest link') GROUP BY log_entity_id) l ON l.id = c.change_id SET c.client_approval_requested_at = IF(c.client_approval_requested_at IS NULL OR l.t < c.client_approval_requested_at, l.t, c.client_approval_requested_at)");
+        mysqli_query($mysqli, "UPDATE `changes` c JOIN (SELECT log_entity_id AS id, MAX(log_created_at) AS t FROM `logs` WHERE log_entity_id > 0 AND log_type = 'Support' AND log_description LIKE '% rejected change %via guest link' GROUP BY log_entity_id) l ON l.id = c.change_id SET c.client_rejected_at = IF(c.client_rejected_at IS NULL OR l.t > c.client_rejected_at, l.t, c.client_rejected_at)");
+        // ... and the change's own current state: a decided change was certainly requested; a currently rejected one was rejected
+        mysqli_query($mysqli, "UPDATE `changes` SET client_approval_requested_at = COALESCE(client_decided_at, created_at) WHERE client_approval_requested_at IS NULL AND client_decision <> 'pending'");
+        mysqli_query($mysqli, "UPDATE `changes` SET client_rejected_at = COALESCE(client_decided_at, created_at) WHERE client_rejected_at IS NULL AND client_decision = 'rejected'");
+        // (M6-2) requested_at is the EARLIEST of the request, approved and rejected events: a change approved through 'Copy link' has no request row, and after a
+        // reset to pending (client_decided_at NULL) the approved/rejected row is the only proof that approval was ever started. The cap below keeps (M5-1) a
+        // decided change from reading as stale when those rows were written a second after its decision stamp.
+        // (M5-1) Request events feed requested_at above; the approved/rejected rows can only lower it, never past client_decided_at: the approved/rejected audit/log rows are written after the UPDATE that stamps client_decided_at,
+        // so they can sit a second later and would make requested_at (and rejected_at) newer than the decision, which changeClientApprovalSatisfied() reads as stale.
+        // A decision can never pre-date its own request or rejection stamp, so cap both at client_decided_at once the client has decided.
+        mysqli_query($mysqli, "UPDATE `changes` SET client_approval_requested_at = LEAST(client_approval_requested_at, client_decided_at) WHERE client_decision <> 'pending' AND client_decided_at IS NOT NULL AND client_approval_requested_at > client_decided_at");
+        mysqli_query($mysqli, "UPDATE `changes` SET client_rejected_at = LEAST(client_rejected_at, client_decided_at) WHERE client_decision <> 'pending' AND client_decided_at IS NOT NULL AND client_rejected_at > client_decided_at");
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.142'");
     }
 
 // Core migrations catch-up, on EVERY Update Database run (idempotent: MigrationRunner keeps its own state in rivet_core_migrations). The version steps above run Core's

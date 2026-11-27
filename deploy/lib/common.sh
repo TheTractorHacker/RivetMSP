@@ -203,11 +203,318 @@ command_exists() {
 # config.php is a trusted local file this same install already wrote, so
 # requiring it here carries no more risk than the app's own every-request
 # bootstrap already does.
+# ---------------------------------------------------------------------------
+# Root must not run code the web user can rewrite (MSP-DS-34; same design as RivetIT IT-DS-28)
+# ---------------------------------------------------------------------------
+# rivetmsp_path_trusted PATH: succeeds only when PATH, what it resolves to and every parent directory are owned by root and not writable
+# by group or others. Prints why on failure. (Test hook: RIVETMSP_TRUST_TEST_NONROOT=1 lets a non-root test name another trusted owner via
+# RIVETMSP_TRUST_UID and a stop directory via RIVETMSP_TRUST_STOP.)
+rivetmsp_path_trusted() {
+    local p="$1" want=0 stop="/" q d u m
+    if [[ "${RIVETMSP_TRUST_TEST_NONROOT:-}" == "1" && "${EUID}" -ne 0 ]]; then want="${RIVETMSP_TRUST_UID:-0}"; stop="${RIVETMSP_TRUST_STOP:-/}"; fi
+    [[ "${p}" == /* ]] || { echo "not an absolute path: ${p}"; return 1; }
+    for q in "${p}" "$(readlink -f -- "${p}" 2>/dev/null || echo "${p}")"; do
+        [[ -e "${q}" ]] || { echo "missing: ${q}"; return 1; }
+        d="${q}"
+        while :; do
+            read -r u m < <(stat -c '%u %a' -- "${d}")
+            [[ "${u}" == "${want}" ]] || { echo "${d} is not owned by root"; return 1; }
+            if (( (8#${m} & 8#022) != 0 )); then echo "${d} is writable by group or others (mode ${m})"; return 1; fi
+            [[ "${d}" == "/" || "${d}" == "${stop}" ]] && break
+            d="$(dirname -- "${d}")"
+        done
+    done
+    return 0
+}
+
+# apply_real_ip_block <rendered-vhost-file> <comma-separated proxy addresses/CIDRs>: MSP-DS-158. Replaces the template's
+# "# __REAL_IP_BLOCK__" line with nginx real_ip directives so REMOTE_ADDR (and limit_req) see the visitor, not the reverse proxy. With an empty
+# list the line is dropped and a warning explains the consequence. Dies on anything that is not an IPv4/IPv6 address or CIDR.
+apply_real_ip_block() {
+    local file="$1" list="${2:-}" item lines="" n=0
+    local IFS=','
+    for item in ${list}; do
+        item="${item//[[:space:]]/}"
+        [[ -z "${item}" ]] && continue
+        [[ "${item}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2})?$ || "${item}" =~ ^[0-9A-Fa-f:]+(/[0-9]{1,3})?$ ]] \
+            || die "--trusted-proxy '${item}' is not an IPv4/IPv6 address or CIDR."
+        lines+="    set_real_ip_from ${item};"$'\n'
+        n=$((n + 1))
+    done
+    unset IFS
+    if [[ "${n}" -eq 0 ]]; then
+        sed -i '/# __REAL_IP_BLOCK__/d' "${file}"
+        warn "Proxy mode without --trusted-proxy: every visitor will appear to come from the reverse proxy, so one visitor's failed logins can lock everyone out. Re-run with --trusted-proxy=<proxy address/CIDR>."
+        return 0
+    fi
+    lines+="    real_ip_header X-Forwarded-For;"$'\n'"    real_ip_recursive on;"
+    local tmp; tmp="$(mktemp)"
+    awk -v block="${lines}" '/# __REAL_IP_BLOCK__/ { print block; next } { print }' "${file}" > "${tmp}" && cat "${tmp}" > "${file}"
+    rm -f "${tmp}"
+}
+
+# require_trusted_tooling <calling-script>: refuse to run privileged tooling (backup, restore, restore drill, update) from a tree the web
+# user can write, because that user could replace common.sh or the script itself and become root at the next timer run. The refusal is
+# loud: non-zero exit, a syslog entry, and (best effort, as the web user) a failed-backup report the application shows to administrators.
+# Install the root-owned copy with deploy/install-trusted-tooling.sh and run (and point the systemd units at) that copy.
+# RIVETMSP_ALLOW_UNTRUSTED_TOOLING=1 overrides, for an operator who reviewed the tree; the shipped units never set it.
+require_trusted_tooling() {
+    local caller="${1:-}" lib why f msg
+    lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    for f in "${lib}/common.sh" "${caller}"; do
+        [[ -n "${f}" ]] || continue
+        [[ "${f}" == /* ]] || f="$(cd "$(dirname "${f}")" && pwd)/$(basename "${f}")"
+        if ! why="$(rivetmsp_path_trusted "${f}")"; then
+            if [[ "${RIVETMSP_ALLOW_UNTRUSTED_TOOLING:-}" == "1" ]]; then
+                warn "Running although the tooling is not root-protected (${why}); RIVETMSP_ALLOW_UNTRUSTED_TOOLING=1 was set."
+                return 0
+            fi
+            msg="Refusing to run as root from a tree the web user can modify (${why}). Run: sudo deploy/install-trusted-tooling.sh, then use /usr/local/lib/rivetmsp-deploy/$(basename "${caller:-backup.sh}") and point the systemd units there."
+            logger -t rivetmsp-deploy -p user.crit "${msg}" 2>/dev/null || true
+            if [[ -n "${APP_DIR:-}" && -f "${APP_DIR}/deploy/lib/backup_status.php" ]]; then
+                # subshell: with no resolvable web user run_app_php dies, and that must not pre-empt the refusal below
+                ( run_app_php "${APP_DIR}" "${APP_DIR}/deploy/lib/backup_status.php" --app-dir="${APP_DIR}" --ok=0 --started="$(date +%s)" --error="${msg}" ) >/dev/null 2>&1 || true
+            fi
+            die "${msg}"
+        fi
+    done
+    return 0
+}
+
+# _rivetmsp_safe_read SRC MODE [WANT_UID]: MSP-DS-34 (re-review RR3). Writes the content of one file from a web-writable directory to stdout,
+# or refuses. The order matters: lstat the PATH first and refuse everything that is not a plain regular file (symlink, FIFO, device node,
+# directory, socket) BEFORE any open(), so a planted FIFO can never block root and a symlink can never make root open /dev/watchdog or a
+# secret. Only then open with O_RDONLY|O_NOFOLLOW|O_NONBLOCK (a file swapped for a symlink fails, one swapped for a FIFO opens without
+# blocking and fails the next check), fstat the DESCRIPTOR and require the same device:inode, a regular file and a single hard link
+# (re-checked on the open file, so a swap to a hard link after the first look is caught), and read at most 64 KiB from that descriptor.
+# MODE strict: owner uid WANT_UID and no group/other permission bits (the settings-key sidecar). MODE any: any owner or mode (the web
+# user's own scratch file whose content root copies to its own file). Exit 0 content written; 1 refused (reason on stderr); 2 absent.
+# Needs perl (perl-base is Essential on Debian/Ubuntu).
+_rivetmsp_safe_read() {
+    command -v perl >/dev/null 2>&1 || { echo "perl is required to read a web-writable path safely" >&2; return 1; }
+    perl -e '
+        use strict; use Fcntl qw(:DEFAULT :mode);
+        my ($src, $mode, $want) = @ARGV;
+        sub refuse { print STDERR "$_[0]\n"; exit 1 }
+        my @l = lstat($src);
+        unless (@l) { exit 2 if $!{ENOENT} || $!{ENOTDIR}; refuse("$src cannot be examined ($!)") }
+        my $m = $l[2];
+        unless (S_ISREG($m)) {
+            my $t = S_ISLNK($m) ? "a symbolic link" : S_ISFIFO($m) ? "a FIFO" : S_ISDIR($m) ? "a directory" : (S_ISCHR($m) || S_ISBLK($m)) ? "a device node" : "not a regular file";
+            refuse("$src is $t (only a plain regular file is accepted; symbolic links are never followed)");
+        }
+        sysopen(my $fh, $src, O_RDONLY | O_NOFOLLOW | O_NONBLOCK) or refuse("$src cannot be opened ($!)");
+        my @f = stat($fh);
+        refuse("$src changed while it was being checked") unless @f && S_ISREG($f[2]) && $f[0] == $l[0] && $f[1] == $l[1];
+        refuse(sprintf("%s has %d hard links", $src, $f[3])) unless $f[3] == 1;
+        if ($mode eq "strict") {
+            refuse("$src is owned by uid $f[4], not root") unless $f[4] == $want;
+            refuse(sprintf("%s has mode %o; a settings key must be 0600", $src, $f[2] & 07777)) if ($f[2] & 077) != 0;
+        }
+        refuse("$src is larger than 64 KiB") if $f[7] > 65536;
+        my ($buf, $n, $out) = ("", 0, "");
+        while (($n = sysread($fh, $buf, 65536)) > 0) { $out .= $buf; refuse("$src is larger than 64 KiB") if length($out) > 65536 }
+        defined $n or refuse("$src cannot be read ($!)");
+        print $out;
+    ' -- "$@"
+}
+
+# copy_trusted_sidecar SRC DEST: MSP-DS-34 (review R2, re-review RR3). A file found NEXT TO a backup archive (the <archive>.settings-key
+# sidecar) lives in a directory the web user can write, so root must not follow or trust whatever it finds there: a symlink to /etc/shadow,
+# a FIFO (which would hang root forever), a device node, a root SSH key or the backup passphrase. _rivetmsp_safe_read lstats first, opens
+# O_NOFOLLOW|O_NONBLOCK, verifies the open descriptor (regular, same inode, one link, root-owned, 0600 or stricter) and DEST (0600) is written
+# from those bytes only. Returns 0 on success, 1 (reason on stderr) when SRC is not safe, 2 when SRC does not exist.
+# (Test hook: with RIVETMSP_TRUST_TEST_NONROOT=1 and a non-root caller, RIVETMSP_TRUST_UID names the expected owner.)
+copy_trusted_sidecar() {
+    local src="$1" dest="$2" want=0 rc=0
+    if [[ "${RIVETMSP_TRUST_TEST_NONROOT:-}" == "1" && "${EUID}" -ne 0 ]]; then want="${RIVETMSP_TRUST_UID:-0}"; fi
+    ( umask 077; _rivetmsp_safe_read "${src}" strict "${want}" > "${dest}" ) || rc=$?
+    if [[ "${rc}" -ne 0 ]]; then : > "${dest}"; return "${rc}"; fi
+    chmod 600 "${dest}"
+    return 0
+}
+
+# refuse_untrusted_sidecar WHY: loud refusal (syslog + non-zero exit) for copy_trusted_sidecar failures.
+refuse_untrusted_sidecar() {
+    local msg="Refusing to use a settings-key file next to the archive: $1. The backup directory is writable by the web user, so only a root-owned regular 0600 file is accepted. Pass --settings-key-file=<path> explicitly to use another file."
+    logger -t rivetmsp-deploy -p user.crit "${msg}" 2>/dev/null || true
+    die "${msg}"
+}
+
+# rmm_pg_prepare APP_DIR: MSP-DS-34. Runs scripts/rmm_postgres_backup_env.php as the web user and sets RIVETCORE_PG_* from its
+# output (validated, never eval'd). The script writes the connection's PGPASSFILE into a directory only that user can reach; root
+# then reads that file (never through a symlink) and writes its OWN root-owned 0600 password file, and PGPASSFILE is set to that:
+# a path taken from app output is never trusted. Returns 0 with RMM_PG_READY=1 when a PostgreSQL store is configured, 0 with
+# RMM_PG_READY=0 when it is not, non-zero when the script failed.
+rmm_pg_prepare() {
+    local app_dir="$1" owner scratch out rc=0 own_pass
+    RMM_PG_READY=0
+    RMM_PG_USER_PASSFILE=""
+    owner="$(_app_exec_user "${app_dir}")" || die "Refusing to run application code as root."
+    scratch="$(mktemp -d)"; register_tmpfile "${scratch}"; chmod 700 "${scratch}"
+    [[ -n "${owner}" ]] && chown "${owner}" "${scratch}"
+    out="$(run_app_php "${app_dir}" "${app_dir}/scripts/rmm_postgres_backup_env.php" --app-dir="${app_dir}" --passfile="${scratch}/pgpass")" || rc=$?
+    [[ "${rc}" -eq 0 ]] || return "${rc}"
+    [[ -n "${out}" ]] || return 0
+    parse_rmm_pg_env "${out}"
+    own_pass="$(mktemp)"; chmod 600 "${own_pass}"; register_tmpfile "${own_pass}"
+    # The scratch directory is the web user's: never open its pgpass before an lstat (a FIFO swapped in would hang the root backup).
+    _rivetmsp_safe_read "${scratch}/pgpass" any > "${own_pass}" || { [[ $? -eq 2 ]] || warn "Not using ${scratch}/pgpass: it is not a plain regular file."; : > "${own_pass}"; }
+    export PGPASSFILE="${own_pass}"
+    # The web user's scratch copy (that user's own 0600 file in a directory only it can enter) is what run_rmm_pg_script hands to the
+    # vendor scripts, which run as that user; root never executes them.
+    [[ -f "${scratch}/pgpass" && ! -L "${scratch}/pgpass" ]] && RMM_PG_USER_PASSFILE="${scratch}/pgpass"
+    RMM_PG_READY=1
+    return 0
+}
+
+# _rivetmsp_root_mode: true when this process is root (or, in tests only, pretends to be: RIVETMSP_TRUST_TEST_NONROOT=1 plus
+# RIVETMSP_TEST_AS_ROOT=1 from a non-root caller, so the real root-only code paths run with `runuser` replaced on PATH).
+_rivetmsp_root_mode() {
+    [[ "${EUID}" -eq 0 ]] && return 0
+    [[ "${RIVETMSP_TRUST_TEST_NONROOT:-}" == "1" && "${RIVETMSP_TEST_AS_ROOT:-}" == "1" ]]
+}
+
+# rivetmsp_web_user <app_dir>: MSP-DS-34 (re-review RR1). The account application code must run as when this process is root. It comes from
+# a ROOT-CONTROLLED source, never from a file the web user can rename or replace (config.php, anything inside APP_DIR):
+#   1. WEB_USER= in /etc/rivetmsp/web-user.conf, then in /etc/rivetmsp/web-update.conf (written at install time by install.sh,
+#      install-web-update.sh, install-trusted-tooling.sh); each must be a root-owned regular file, not a symlink, not group/other-writable;
+#   There is deliberately NO fallback to the owner of APP_DIR: that account is often a sudo-capable admin (root-equivalent), and the web
+#   user is exactly who must not influence the choice. The web user must also not be root-equivalent (sudo/admin/wheel/docker group or sudoers).
+# Prints the user name. Fails (non-zero, loud) when nothing yields a valid non-root account, so nothing ever falls through to running app
+# code as root. (Test hooks, only with RIVETMSP_TRUST_TEST_NONROOT=1 and a non-root caller: RIVETMSP_ETC_DIR, RIVETMSP_TRUST_UID.)
+# Call as: u="$(rivetmsp_web_user "${APP_DIR}")" || die ...   (a die inside $(...) ends only the subshell, so callers must check.)
+rivetmsp_web_user() {
+    local app_dir="$1" etc=/etc/rivetmsp want=0 f u="" src="" st
+    if [[ "${RIVETMSP_TRUST_TEST_NONROOT:-}" == "1" && "${EUID}" -ne 0 ]]; then
+        etc="${RIVETMSP_ETC_DIR:-/etc/rivetmsp}"; want="${RIVETMSP_TRUST_UID:-0}"
+    fi
+    for f in web-user.conf web-update.conf; do
+        f="${etc}/${f}"
+        [[ -f "${f}" && ! -L "${f}" ]] || continue
+        st="$(stat -c '%u %a' -- "${f}" 2>/dev/null)" || continue
+        [[ "${st%% *}" == "${want}" ]] || { echo "WARNING: ${f} is not owned by root; ignoring it." >&2; continue; }
+        (( (8#${st##* } & 8#022) == 0 )) || { echo "WARNING: ${f} is group/other-writable; ignoring it." >&2; continue; }
+        u="$(sed -n -E 's/^WEB_USER=(.*)$/\1/p' "${f}" | head -n 1 | sed -E "s/^['\"]//; s/['\"]\$//")"
+        if [[ -n "${u}" ]]; then src="${f}"; break; fi
+    done
+    if ! [[ "${u}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+        echo "ERROR: cannot determine the web user (no WEB_USER in a root-owned ${etc}/web-user.conf; the owner of ${app_dir:-APP_DIR} is deliberately NOT used, it may be a sudo-capable admin account). Refusing to run application code as root. Run: sudo deploy/install-trusted-tooling.sh --web-user=www-data" >&2
+        return 1
+    fi
+    if [[ "${u}" == "root" || "$(id -u "${u}" 2>/dev/null || echo 0)" == "0" ]]; then
+        echo "ERROR: the web user from ${src} is root or does not exist. Refusing to run application code as root." >&2
+        return 1
+    fi
+    if _rivetmsp_user_privileged "${u}"; then
+        echo "ERROR: the web user '${u}' from ${src} is in a privileged group (sudo/admin/wheel/docker/root) or has sudo rights, so running application code as it would still be root. Refusing. Use a dedicated unprivileged web account (www-data): sudo deploy/install-trusted-tooling.sh --web-user=www-data" >&2
+        return 1
+    fi
+    printf '%s' "${u}"
+}
+
+# _rivetmsp_user_privileged <user>: true when the account is root-equivalent: member of sudo/admin/wheel/docker/lxd/root, or listed in sudoers
+# (`sudo -n -l -U user` prints "may run the following commands"). Application code must never run as such an account.
+_rivetmsp_user_privileged() {
+    local u="$1" g out
+    # test hook (only with RIVETMSP_TRUST_TEST_NONROOT=1 and a non-root caller): lets a test use its own, possibly sudo-capable, account
+    if [[ "${RIVETMSP_TRUST_TEST_NONROOT:-}" == "1" && "${EUID}" -ne 0 && "${RIVETMSP_TEST_PRIV_SKIP:-}" == "1" ]]; then return 1; fi
+    for g in $(id -nG "${u}" 2>/dev/null); do
+        case "${g}" in sudo|admin|wheel|docker|lxd|root) return 0 ;; esac
+    done
+    if command -v sudo >/dev/null 2>&1; then
+        out="$(sudo -n -l -U "${u}" 2>&1 || true)"
+        [[ "${out}" == *"may run the following commands"* ]] && return 0
+    fi
+    return 1
+}
+
+# write_web_user_conf <user>: install-time half of rivetmsp_web_user (root only): /etc/rivetmsp/web-user.conf, root:root 0644.
+write_web_user_conf() {
+    local u="$1"
+    [[ "${u}" =~ ^[a-z_][a-z0-9_-]{0,31}$ && "${u}" != "root" ]] || die "Not a usable web user name: '${u}'."
+    ! _rivetmsp_user_privileged "${u}" || die "'${u}' is root-equivalent (privileged group or sudo rights); use a dedicated web account such as www-data."
+    install -d -m 0755 -o root -g root /etc/rivetmsp
+    printf 'WEB_USER=%s\n' "${u}" > /etc/rivetmsp/web-user.conf.new
+    chown root:root /etc/rivetmsp/web-user.conf.new; chmod 0644 /etc/rivetmsp/web-user.conf.new
+    mv -fT /etc/rivetmsp/web-user.conf.new /etc/rivetmsp/web-user.conf
+}
+
+# _app_exec_user <app_dir>: the account application code must run as. Root: the web user from rivetmsp_web_user (never empty, never root;
+# non-zero otherwise). A normal user: "" (it just runs the command as itself, which gains nothing). No path returns "" to a root caller.
+_app_exec_user() {
+    if _rivetmsp_root_mode; then rivetmsp_web_user "$1"; return; fi
+    return 0
+}
+
+# run_app_php <app_dir> <php args...>: MSP-DS-34. Application PHP (config.php, scripts/*.php, the app's own bootstrap, vendor/) is writable by
+# the web user, so root must never execute it. As root it always drops to the web user (rivetmsp_web_user; dies when there is none); as a
+# normal user it simply runs php. Callers get only the output, which they treat as data.
+run_app_php() {
+    local app_dir="$1"; shift
+    run_app_exec "${app_dir}" "${PHP_BIN:-php}" "$@"
+}
+
+# run_app_exec <app_dir> <command> [args...]: run any command that lives in, or loads code from, the application tree (php, or an
+# executable under vendor/) as the web user when this is root. Review R3 / RR1: a root process must never execute a file the web user can
+# write, so a root caller that cannot name a non-root web user dies instead of running the command.
+run_app_exec() {
+    local app_dir="$1"; shift
+    local owner; owner="$(_app_exec_user "${app_dir}")" || die "Refusing to run application code as root."
+    if _rivetmsp_root_mode; then
+        [[ -n "${owner}" && "${owner}" != "root" ]] || die "Refusing to run application code as root (no web user)."
+        ( cd / && runuser -u "${owner}" -- "$@" )
+    else
+        ( cd / && "$@" )
+    fi
+}
+
+# run_rmm_pg_script <app_dir> <script> [args...]: MSP-DS-34 (review R3). rivet-core's rmm-postgres-backup.sh / rmm-postgres-restore.sh live in
+# vendor/ (web-writable), so they are NOT executed by root: they run as the web user, which already holds the RMM PostgreSQL credentials,
+# with the RIVETCORE_PG_* values root validated and the password file the web user's own scratch copy (from rmm_pg_prepare). STDIN/STDOUT
+# are inherited, so root keeps opening the dump file (backup: `> dump`, restore: `< dump`) in its root-only staging directory. Nothing the
+# script prints is trusted, and the dump is only data. A non-root caller runs it directly with its own password file; a root caller with no
+# resolvable web user dies (RR1).
+run_rmm_pg_script() {
+    local app_dir="$1" script="$2"; shift 2
+    local owner; owner="$(_app_exec_user "${app_dir}")" || die "Refusing to run application code as root."
+    if _rivetmsp_root_mode; then
+        [[ -n "${owner}" && "${owner}" != "root" ]] || die "Refusing to run application code as root (no web user)."
+        [[ -n "${RMM_PG_USER_PASSFILE:-}" && -f "${RMM_PG_USER_PASSFILE}" && ! -L "${RMM_PG_USER_PASSFILE}" ]] || die "No password file prepared for the RMM PostgreSQL step."
+        ( cd / && PGPASSFILE="${RMM_PG_USER_PASSFILE}" runuser -u "${owner}" -- "${script}" "$@" )
+    else
+        ( cd / && "${script}" "$@" )
+    fi
+}
+
+# parse_rmm_pg_env <text>: MSP-DS-34. scripts/rmm_postgres_backup_env.php prints `export NAME='value'` lines. It is app code the web
+# user can change, so its output is never eval'd: only exactly these variable names with single-quoted values are accepted, and the
+# value is taken literally (no expansion). The one extra line the script prints, `export PGPASSFILE='...'`, is ignored, never applied.
+parse_rmm_pg_env() {
+    local line name val
+    while IFS= read -r line; do
+        [[ -z "${line}" ]] && continue
+        # scripts/rmm_postgres_backup_env.php always prints `export PGPASSFILE='<its scratch file>'` after the six connection lines. That
+        # path is app output and is never trusted: discard the line (rmm_pg_prepare makes root's own password file and sets PGPASSFILE).
+        [[ "${line}" =~ ^export\ PGPASSFILE=\'.*\'$ ]] && continue
+        if [[ "${line}" =~ ^export\ (RIVETCORE_PG_DATABASE|RIVETCORE_PG_USER|RIVETCORE_PG_HOST|RIVETCORE_PG_PORT|RIVETCORE_PG_SSLMODE|RIVETCORE_PG_SCHEMA)=\'(.*)\'$ ]]; then
+            name="${BASH_REMATCH[1]}"; val="${BASH_REMATCH[2]}"
+            # A value is one single-quoted word: the only quote allowed inside is the shell idiom '\'' (close, escaped quote, reopen).
+            local rest="${val//\'\\\'\'/}"
+            [[ "${rest}" == *"'"* ]] && die "Unexpected output from scripts/rmm_postgres_backup_env.php; refusing to use it."
+            val="${val//\'\\\'\'/\'}"
+            printf -v "${name}" '%s' "${val}"; export "${name}"
+        else
+            die "Unexpected output from scripts/rmm_postgres_backup_env.php; refusing to use it."
+        fi
+    done <<< "$1"
+}
+
 read_app_config() {
     local app_dir="$1"
     info "Reading configuration from ${app_dir}/config.php..."
     local raw
-    if ! raw="$(php -r '
+    if ! raw="$(run_app_php "${app_dir}" -r '
         require $argv[1];
         echo $dbhost . "\n" . $dbusername . "\n" . $dbpassword . "\n" . $database . "\n";
         echo ($installation_id ?? "") . "\n";
@@ -307,6 +614,38 @@ _cleanup_tmpfiles() {
     done
 }
 
+# RIVETMSP_GIT_SAFE_ENV: MSP-DS-34 (review R12). Every git run as the checkout owner (directly, or through update_cli.php / composer / the
+# vendor-fixup script) must not execute anything configured inside the repository, which the web user may be able to write: hooks
+# (post-merge, reference-transaction, ...) and core.fsmonitor run arbitrary commands. GIT_CONFIG_COUNT/KEY/VALUE is "command" scope, wins over
+# .git/config, and is inherited by every git the child starts. Use as: sudo -u "${OWNER}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git ...
+RIVETMSP_GIT_SAFE_ENV=(GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false)
+
+# require_git_tree_trusted APP_DIR OWNER: MSP-DS-34 (re-review RR2). RIVETMSP_GIT_SAFE_ENV switches off hooks and fsmonitor, but a repository the web
+# user can write can run code as OWNER through many more keys (core.sshCommand, remote.*.uploadpack, filter.*.smudge + info/attributes,
+# credential.helper, include.path, protocol.ext.allow + an ext:: URL, or edited refs/index that make the pull check out attacker content).
+# Listing every such key cannot be complete, so the design is: git runs as OWNER only when nothing the web user could have written is in
+# the repository. APP_DIR/.git must be a real directory (not a symlink and not a `gitdir:` file) and EVERYTHING under it, plus APP_DIR itself
+# (whose owner could otherwise rename .git away and put its own in place), must be owned by OWNER or root and not group/other-writable.
+# A violation is a loud refusal (non-zero die, syslog) naming the first offending path and the fix. RIVETMSP_ALLOW_UNTRUSTED_GIT=1 overrides
+# for an operator who reviewed the tree. The safe env stays as defence in depth. Not a no-op for OWNER == web user (same account: nothing to
+# escalate to, and the check passes on a normally installed tree).
+require_git_tree_trusted() {
+    local app="${1:?app dir}" owner="${2:?owner}" g bad="" msg
+    g="${app}/.git"
+    [[ -e "${g}" || -L "${g}" ]] || return 0
+    if [[ -L "${g}" || ! -d "${g}" ]]; then
+        bad="${g} is not a plain directory (symlink or gitdir file)"
+    else
+        bad="$(find "${app}" -maxdepth 0 \( ! -user "${owner}" ! -user root -o -perm /022 \) -printf '%p (owner %u, mode %m)\n' 2>/dev/null | head -n 1)"
+        [[ -n "${bad}" ]] || bad="$(find "${g}" \( -type l -a ! -user "${owner}" -a ! -user root \) -o \( ! -type l -a \( \( ! -user "${owner}" -a ! -user root \) -o -perm /022 \) \) -printf '%p (owner %u, mode %m)\n' 2>/dev/null | head -n 1)"
+    fi
+    [[ -n "${bad}" ]] || return 0
+    msg="Refusing to run git/composer as ${owner}: ${bad} could be changed by another account, and a repository the web user can write can run code as ${owner} (core.sshCommand, remote.*.uploadpack, filter smudge, credential.helper, include.path). Fix: sudo chown -R ${owner} '${g}' && sudo chmod -R go-w '${g}' '${app}', then re-run. RIVETMSP_ALLOW_UNTRUSTED_GIT=1 overrides after you reviewed .git/config and .git/hooks."
+    if [[ "${RIVETMSP_ALLOW_UNTRUSTED_GIT:-}" == "1" ]]; then warn "${msg}"; return 0; fi
+    logger -t rivetmsp-deploy -p user.crit "${msg}" 2>/dev/null || true
+    die "${msg}"
+}
+
 # ensure_updater_remote APP_DIR [OWNER]: RivetMSP's updater (includes/release_channel.php RELEASE_REMOTE) pulls from a git
 # remote named "fork", but an install cloned or copied from a checkout only has "origin". Without it `git pull fork ...`
 # fails and update_cli.php still prints "Update successful", so nothing ever updates. Add it as an alias of origin when
@@ -315,10 +654,11 @@ ensure_updater_remote() {
     local app="${1:?app dir}" owner="${2:-}" rf name url
     rf="${app}/includes/release_channel.php"
     [[ -f "${rf}" && -d "${app}/.git" ]] || return 0
+    [[ -n "${owner}" ]] && require_git_tree_trusted "${app}" "${owner}"
     name="$(sed -n "s/.*define('RELEASE_REMOTE', *'\([^']*\)').*/\1/p" "${rf}" | head -1)"
     [[ -n "${name}" && "${name}" != "origin" ]] || return 0
     local -a g=(git -C "${app}")
-    [[ -n "${owner}" ]] && g=(sudo -u "${owner}" git -C "${app}")
+    [[ -n "${owner}" ]] && g=(sudo -u "${owner}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${app}")
     if "${g[@]}" remote get-url "${name}" >/dev/null 2>&1; then
         return 0
     fi
@@ -340,8 +680,9 @@ ensure_updater_remote() {
 ignore_git_filemode() {
     local app="${1:?app dir}" owner="${2:-}"
     [[ -d "${app}/.git" ]] || return 0
+    [[ -n "${owner}" ]] && require_git_tree_trusted "${app}" "${owner}"
     local -a g=(git -C "${app}")
-    [[ -n "${owner}" ]] && g=(sudo -u "${owner}" git -C "${app}")
+    [[ -n "${owner}" ]] && g=(sudo -u "${owner}" env "${RIVETMSP_GIT_SAFE_ENV[@]}" git -C "${app}")
     [[ "$("${g[@]}" config --get core.fileMode 2>/dev/null || true)" == "false" ]] && return 0
     "${g[@]}" config core.fileMode false || warn "Could not set core.fileMode=false in ${app}; a later update may be blocked by file-mode differences."
 }

@@ -32,6 +32,8 @@ if (!function_exists('secSetting')) {
             'remember_me_skips_mfa' => '0',
             'vault_stepup_minutes'  => '15',
             'vault_reveal_limit'    => '30',
+            'portal_entra_tenant'   => '',
+            'calendar_legacy_links' => '1',
         ];
     }
 
@@ -79,6 +81,7 @@ if (!function_exists('secSetting')) {
         switch ($key) {
             case 'password_min_length':   return (string) max(8, min(128, (int) $value));
             case 'password_hibp_check':
+            case 'calendar_legacy_links':
             case 'remember_me_skips_mfa': return ((int) $value) === 1 ? '1' : '0';
             case 'mfa_policy':            return in_array((string) $value, ['off', 'admins', 'all'], true) ? (string) $value : 'off';
             case 'mfa_grace_days':        return (string) max(0, min(90, (int) $value));
@@ -86,9 +89,53 @@ if (!function_exists('secSetting')) {
             case 'vault_stepup_minutes':  return (string) max(0, min(1440, (int) $value));
             case 'vault_reveal_limit':    return (string) max(1, min(1000, (int) $value));
             case 'mfa_policy_since':      return (string) $value;
+            case 'portal_entra_tenant':   return secPortalEntraTenantNormalize((string) $value);
         }
 
         return (string) $value;
+    }
+
+    /**
+     * MSP-DS-146: the Microsoft Entra tenant the client portal's Microsoft sign-in is pinned to: a tenant id (GUID) or a verified domain name.
+     * Empty (the default) keeps the multi-tenant 'organizations' authority. 'common', 'organizations' and 'consumers' are not tenants and read as empty.
+     */
+    function secPortalEntraTenantNormalize(string $value): string
+    {
+        $v = strtolower(trim($value));
+        if (in_array($v, ['', 'common', 'organizations', 'consumers'], true)) {
+            return '';
+        }
+
+        return preg_match('/^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+)$/D', $v) === 1 ? $v : '';
+    }
+
+    /** The path segment of the Entra authority the portal's Microsoft sign-in uses: the pinned tenant, or 'organizations' when none is set. */
+    function secPortalEntraAuthority(?mysqli $mysqli = null): string
+    {
+        $t = secPortalEntraTenantNormalize(secSetting('portal_entra_tenant', $mysqli));
+
+        return $t !== '' ? $t : 'organizations';
+    }
+
+    /**
+     * MSP-DS-146 (re-review MRR-13): number of active portal accounts that sign in with Microsoft while no Entra tenant is pinned (0 when a tenant
+     * is set, so the warning only shows while the multi-tenant 'organizations' authority is actually in use). The default is not changed.
+     */
+    function secPortalEntraUnpinnedAzureUsers(?mysqli $mysqli = null): int
+    {
+        $mysqli ??= $GLOBALS['mysqli'] ?? null;
+        if (!($mysqli instanceof mysqli) || secPortalEntraTenantNormalize(secSetting('portal_entra_tenant', $mysqli)) !== '') {
+            return 0;
+        }
+        $r = @mysqli_query($mysqli, "SELECT COUNT(*) FROM users WHERE user_type = 2 AND user_status = 1 AND user_archived_at IS NULL AND user_auth_method = 'azure'");
+
+        return $r ? (int) mysqli_fetch_row($r)[0] : 0;
+    }
+
+    /** MSP-DS-77 (re-review MRR-8): is the mobile passkey login set to require user verification? Reads $config_passkey_mobile_require_uv (config.php), the same switch api/v1/auth.php uses. Default off. */
+    function secMobilePasskeyUvRequired(): bool
+    {
+        return !empty($GLOBALS['config_passkey_mobile_require_uv']);
     }
 
     /** Store one setting. Unknown keys are ignored (returns false). */
@@ -365,15 +412,54 @@ if (!function_exists('secSetting')) {
     }
 
     /**
+     * MSP-DS-121: tell the account's owner (at the address that was on file BEFORE the change) that an administrator changed their sign-in
+     * email, password, role or two-factor, like the profile page does for self-service changes. $changes = plain-text list. Returns true if queued.
+     */
+    function secNotifyAccountChange(string $oldEmail, string $userName, array $changes, string $actingAdmin): bool
+    {
+        global $config_smtp_host, $config_mail_from_email, $config_mail_from_name, $config_app_name;
+        if ($changes === [] || empty($config_smtp_host) || !filter_var($oldEmail, FILTER_VALIDATE_EMAIL) || !function_exists('addToMailQueue')) {
+            return false;
+        }
+        $e = fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+        $list = implode('', array_map(fn ($c) => '<li>' . $e((string) $c) . '</li>', $changes));
+        $app = $e((string) ($config_app_name ?? 'RivetMSP'));
+        addToMailQueue([[
+            'from'           => (string) $config_mail_from_email,
+            'from_name'      => (string) $config_mail_from_name,
+            'recipient'      => $oldEmail,
+            'recipient_name' => $userName,
+            'subject'        => (string) ($config_app_name ?? 'RivetMSP') . ' account update for ' . $userName,
+            'body'           => 'Hi ' . $e($userName) . ',<br><br>An administrator (' . $e($actingAdmin) . ') changed your ' . $app . ' account:<ul>' . $list . '</ul>If you did not expect this, contact your ' . $app . ' administrator immediately.<br><br>Thanks,<br>' . $app,
+        ]]);
+
+        return true;
+    }
+
+    /**
      * MSP-WEB-3: re-confirm the signed-in user's own password before a change that can take the account over (email, two-factor, passkeys).
      * A stolen session cookie alone must not be enough. Failures are audited and counted like a failed sign-in.
      */
-    function secReauthPassword(mysqli $mysqli, int $userId, string $password): bool
+    function secReauthPassword(mysqli $mysqli, int $userId, string $password, int $userType = 1): bool
     {
-        $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $userId AND user_type = 1 AND user_status = 1 AND user_archived_at IS NULL LIMIT 1"));
+        $userType = $userType === 2 ? 2 : 1;   // 1 = agent (default), 2 = client-portal login (MSP-DS-150)
+        // MSP-DS-140: an attempt is reserved atomically BEFORE the password is checked (5 per 5 minutes per account, the same counter
+        // as the sign-in and the mobile API), so a stolen session cannot guess the password in a loop. A correct password resets it.
+        mysqli_query($mysqli, "UPDATE users SET
+                user_failed_login_count = IF(user_failed_login_at IS NULL OR user_failed_login_at <= UTC_TIMESTAMP() - INTERVAL 300 SECOND, 1, user_failed_login_count + 1),
+                user_failed_login_at = UTC_TIMESTAMP()
+            WHERE user_id = $userId AND user_type = $userType AND user_status = 1 AND user_archived_at IS NULL
+              AND (user_failed_login_count < 5 OR user_failed_login_at IS NULL OR user_failed_login_at <= UTC_TIMESTAMP() - INTERVAL 300 SECOND)");
+        if (mysqli_affected_rows($mysqli) < 1) {
+            secAudit('auth.reauth_locked', $userId, 'user', $userId, 'failure', 'Password re-check refused: too many attempts');
+
+            return false;
+        }
+        $row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT user_password FROM users WHERE user_id = $userId AND user_type = $userType AND user_status = 1 AND user_archived_at IS NULL LIMIT 1"));
         $ok = $row && $password !== '' && password_verify($password, (string) $row['user_password']);
-        if (!$ok) {
-            mysqli_query($mysqli, "UPDATE users SET user_failed_login_count = user_failed_login_count + 1, user_failed_login_at = UTC_TIMESTAMP() WHERE user_id = $userId");
+        if ($ok) {
+            mysqli_query($mysqli, "UPDATE users SET user_failed_login_count = 0 WHERE user_id = $userId");
+        } else {
             secAudit('auth.reauth_failed', $userId, 'user', $userId, 'failure', 'Wrong current password on a security change');
         }
 

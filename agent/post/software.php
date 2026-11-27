@@ -258,7 +258,7 @@ if (isset($_POST['export_software_csv'])) {
     if ($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename($file_name_prepend . "Software-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -299,7 +299,7 @@ if (isset($_POST['export_software_csv'])) {
             }
 
             $lineData = array($row['software_name'], $row['software_version'], $row['software_description'], $row['software_type'], $row['software_license_type'], $row['software_seats'], decryptSetting((string) ($row['software_key'] ?? '')), $assigned_to_assets, $assigned_to_contacts, $row['software_purchase'], $row['software_expire'], $row['software_notes']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file

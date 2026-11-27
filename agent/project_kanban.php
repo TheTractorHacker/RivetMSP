@@ -63,6 +63,9 @@ foreach ($lanes as $l) {
     $board[$l] = [];
 }
 
+// MSP-DS-70: a client-restricted user sees only tasks of tickets of clients they may access (plus internal tickets and project-only tasks)
+$project_task_scope = ($access_permission_query ?? '') !== '' ? "AND (tickets.ticket_id IS NULL OR tickets.ticket_client_id = 0 OR tickets.ticket_client_id IN ($client_access_string))" : '';
+
 // Fetch project tasks (directly on the project, or via a project ticket)
 $sql_tasks = mysqli_query(
     $mysqli,
@@ -71,6 +74,7 @@ $sql_tasks = mysqli_query(
      LEFT JOIN tickets ON tickets.ticket_id = tasks.task_ticket_id
      LEFT JOIN users ON users.user_id = tasks.task_assigned_to
      WHERE (tasks.task_project_id = $project_id OR tickets.ticket_project_id = $project_id)
+     $project_task_scope
      ORDER BY tasks.task_order ASC, tasks.task_created_at ASC"
 );
 

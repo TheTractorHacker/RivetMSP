@@ -303,7 +303,7 @@ ob_start();
                         $h_new   = $hr['history_new_value'] !== null ? nullable_htmlentities($hr['history_new_value']) : '<em class="text-muted">—</em>';
                         $h_by    = nullable_htmlentities($hr['history_user_name']);
                         $h_when  = timeAgo($hr['history_created_at']);
-                        if ($h_field === 'Password') {
+                        if ($h_field === 'Password' || $h_field === 'Username') { // MSP-DS-54: usernames are never shown from (or stored in) the history
                             $h_old = '<em class="text-muted">hidden</em>';
                             $h_new = '<em class="text-muted">hidden</em>';
                         }

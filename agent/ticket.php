@@ -26,8 +26,11 @@ require_once "../includes/sla_functions.php";
 
 // Initialize the HTML Purifier to prevent XSS
 require_once "../plugins/htmlpurifier/HTMLPurifier.standalone.php";
+require_once "../plugins/htmlpurifier/rivet_html_policy.php";
 
 $purifier_config = HTMLPurifier_Config::createDefault();
+
+rivet_html_policy_apply($purifier_config, 'strict');
 $purifier_config->set('Cache.DefinitionImpl', null); // Disable cache by setting a non-existent directory or an invalid one
 $purifier_config->set('URI.AllowedSchemes', ['data' => true, 'src' => true, 'http' => true, 'https' => true]);
 $purifier = new HTMLPurifier($purifier_config);
@@ -1264,7 +1267,7 @@ if (isset($_GET['ticket_id'])) {
                             while ($ticket_attachment = mysqli_fetch_assoc($sql_ticket_reply_attachments)) {
                                 $name = nullable_htmlentities($ticket_attachment['ticket_attachment_name']);
                                 $ref_name = nullable_htmlentities($ticket_attachment['ticket_attachment_reference_name']);
-                                echo "<hr><i class='fas fa-fw fa-paperclip text-secondary me-1'></i>$name | <a href='../uploads/tickets/$ticket_id/$ref_name' download='$name'><i class='fas fa-fw fa-download me-1'></i>Download</a> | <a target='_blank' href='../uploads/tickets/$ticket_id/$ref_name'><i class='fas fa-fw fa-external-link-alt me-1'></i>View</a>";
+                                echo "<hr><i class='fas fa-fw fa-paperclip text-secondary me-1'></i>$name | <a href='../uploads/tickets/$ticket_id/$ref_name' download='$name'><i class='fas fa-fw fa-download me-1'></i>Download</a> | <a target='_blank' href='" . (strtolower(pathinfo($ticket_attachment['ticket_attachment_reference_name'], PATHINFO_EXTENSION)) === 'pdf' ? 'pdf_view.php?type=ticket&id=' . intval($ticket_attachment['ticket_attachment_id']) : "../uploads/tickets/$ticket_id/$ref_name") . "'><i class='fas fa-fw fa-external-link-alt me-1'></i>View</a>";
                             }
                             ?>
                         </div>
@@ -2228,7 +2231,7 @@ if (isset($_GET['ticket_id'])) {
                         <div class="border-bottom px-3 py-2 d-flex align-items-center">
                             <i class="fas fa-file text-secondary me-2"></i>
                             <span class="flex-grow-1">
-                                <a target="_blank" href="../uploads/tickets/<?= $ticket_id ?>/<?= $att_ref ?>"><?= $att_name ?></a> <small class="text-secondary"><?= $att_date ?></small>
+                                <a target="_blank" href="<?= strtolower(pathinfo($att['ticket_attachment_reference_name'], PATHINFO_EXTENSION)) === 'pdf' ? "pdf_view.php?type=ticket&id=$att_id" : "../uploads/tickets/$ticket_id/$att_ref" ?>"><?= $att_name ?></a> <small class="text-secondary"><?= $att_date ?></small>
                             </span>
                             <div class="ms-2 dropdown dropleft text-center">
                                 <button class="btn btn-secondary btn-sm" type="button" data-bs-toggle="dropdown">
@@ -2903,9 +2906,10 @@ $(document).on('click', '#ai-draft-reply-btn', function(e) {
 });
 
 // Reply status split-button: pick a status and auto-submit the reply form
-$(document).on('click', '.reply-status-submit', function(e) {
+$(document).on('click', 'a.reply-status-submit[data-status-id]', function(e) {   // MSP-DS-139: only the real items (reply HTML cannot carry data-* attributes)
     e.preventDefault();
     var sid   = $(this).data('status-id');
+    if (sid === undefined || sid === '') { return; }
     var sname = $(this).data('status-name');
     $('#reply_status_val').val(sid);
     $('#reply_submit_label').text('Submit & ' + sname);

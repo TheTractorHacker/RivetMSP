@@ -6,6 +6,8 @@
 
 defined('FROM_POST_HANDLER') || die("Direct file access is not allowed");
 
+require_once __DIR__ . '/../../includes/security_policy.php';
+
 /**
  * A role's access levels as module name => level, for the audit trail's before/after of a permission change.
  *
@@ -56,6 +58,12 @@ if (isset($_POST['add_role'])) {
     $description = sanitizeInput($_POST['role_description']);
     $admin = intval($_POST['role_is_admin']);
 
+    // MSP-DS-121 (review R22): a new administrator role needs the acting administrator's password
+    if ($admin === 1 && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert('Your current password is required (and must be correct) to create an administrator role.', 'error');
+        redirect();
+    }
+
     mysqli_query($mysqli, "INSERT INTO user_roles SET role_name = '$name', role_description = '$description', role_is_admin = $admin");
 
     $role_id = mysqli_insert_id($mysqli);
@@ -93,6 +101,12 @@ if (isset($_POST['edit_role'])) {
     $admin = intval($_POST['role_is_admin']);
 
     $was_admin = intval(getFieldById('user_roles', $role_id, 'role_is_admin')) === 1;
+
+    // MSP-DS-121 (review R22): turning a role into an administrator role promotes everyone in it, so it needs the acting administrator's password
+    if ($admin === 1 && !$was_admin && !secReauthPassword($mysqli, (int) $session_user_id, (string) ($_POST['admin_current_password'] ?? ''))) {
+        flash_alert('Your current password is required (and must be correct) to make a role an administrator role.', 'error');
+        redirect();
+    }
     $levels_before = rivet_role_levels_snapshot($mysqli, $role_id);
 
     mysqli_query($mysqli, "UPDATE user_roles SET role_name = '$name', role_description = '$description', role_is_admin = $admin WHERE role_id = $role_id");

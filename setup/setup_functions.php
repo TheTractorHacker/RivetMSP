@@ -622,6 +622,11 @@ if (!function_exists('applyManifestSettingsEncKey')) {
             }
         }
 
+        // MSP-DS-27: whatever its source (the uploaded manifest is attacker-controlled), the key is written into PHP source, so it must be hex.
+        if (!preg_match('/^[0-9a-fA-F]{32,128}$/', $key)) {
+            return ['status' => 'bad_supplied_key', 'message' => 'The settings-encryption key in this backup is not a hex string, so it was not applied. config_settings_enc_key was left as-is.'];
+        }
+
         $configContents = @file_get_contents($configPath);
         if ($configContents === false || !preg_match('/^\$config_settings_enc_key = \'.*\';$/m', $configContents)) {
             return ['status' => 'no_config_line', 'message' => "config.php has no \$config_settings_enc_key line to update - this instance's config.php may predate that setting. Investigate before trusting restored SMTP/IMAP/RMM/webhook secrets."];
@@ -630,9 +635,9 @@ if (!function_exists('applyManifestSettingsEncKey')) {
         // setup_cli.php / deploy/restore.sh's own equivalent both rely on this same
         // guarantee: $config_settings_enc_key is always bin2hex() output through a
         // single-quoted var_export-style literal, so no escaping is needed here.
-        $newContents = preg_replace(
+        $newContents = preg_replace_callback(
             '/^\$config_settings_enc_key = \'.*\';$/m',
-            "\$config_settings_enc_key = '" . $key . "';",
+            static fn (array $m): string => "\$config_settings_enc_key = " . var_export($key, true) . ';',
             $configContents,
             1
         );
@@ -674,5 +679,93 @@ if (!function_exists('manifestKeyringNote')) {
 
         return "This backup's secrets use the Core key file (key id(s) " . implode(', ', $missing) . '): put the offline copy of keys.json at '
             . ($state->path ?? '/etc/rivetmsp/keys.json') . ' (owner root, group www-data, mode 0640, directory 0755), or those secrets stay unreadable (see docs/KEY_MANAGEMENT.md).';
+    }
+}
+
+// ------------------------------
+// setupAuditAnchorAside (M5-5)
+// ------------------------------
+if (!function_exists('setupAuditAnchorAside')) {
+    /** After a backup replaced the database: move the setup genesis anchor aside (renamed with a timestamp) so verify says "anchor missing, re-anchor" instead of tampering. */
+    function setupAuditAnchorAside(): ?string {
+        try {
+            require_once dirname(__DIR__) . '/vendor/autoload.php';
+            $to = \RivetMSP\Audit\AuditChain::setGenesisAnchorAside();
+            if ($to !== null) {
+                error_log('RivetMSP restore: moved the setup audit chain anchor to ' . $to . '; use Re-anchor on Administration > Audit trail.');
+            }
+
+            return $to;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+}
+
+// ------------------------------
+// setupProvisionRestoreDrill
+// ------------------------------
+if (!function_exists('setupProvisionRestoreDrill')) {
+    /**
+     * Fresh install: creates the restore drill's own database account (it can create and fill only `drill_%` databases, nothing on the live
+     * schema), stores its encrypted password in recovery_settings and switches the nightly drill ON. Needs a database user that may CREATE USER
+     * and GRANT; the usual app account may not, and then nothing is enabled (an enabled-but-unconfigured drill would only raise alerts) and the
+     * message gives the exact SQL to run once. Never throws.
+     *
+     * @param ?callable $exec Test seam: fn(string $sql): bool used instead of $mysqli->query for the CREATE USER / GRANT statements.
+     * @return array{ok:bool,enabled:bool,message:string}
+     */
+    function setupProvisionRestoreDrill(mysqli $mysqli, string $dbHost, ?callable $exec = null, string $user = 'rivet_drill'): array {
+        try {
+            require_once dirname(__DIR__) . '/vendor/autoload.php';
+            if (!\RivetMSP\Recovery\RecoverySettings::ready($mysqli)) {
+                return ['ok' => false, 'enabled' => false, 'message' => 'Restore drill not set up: the recovery tables are missing.'];
+            }
+            $pass   = bin2hex(random_bytes(24));
+            $local  = in_array(strtolower($dbHost), ['localhost', '127.0.0.1', '::1'], true);
+            $acctHost = $local ? 'localhost' : '%';
+            $qUser  = "'" . $mysqli->real_escape_string($user) . "'@'" . $mysqli->real_escape_string($acctHost) . "'";
+            $run    = $exec ?? static fn (string $sql): bool => (bool) @$mysqli->query($sql);
+            $manual = "CREATE USER IF NOT EXISTS $qUser IDENTIFIED BY '<a long random password>'; GRANT ALL PRIVILEGES ON `drill\\_%`.* TO $qUser;";
+            if (!$run("CREATE USER IF NOT EXISTS $qUser IDENTIFIED BY '" . $mysqli->real_escape_string($pass) . "'")
+                || !$run("ALTER USER $qUser IDENTIFIED BY '" . $mysqli->real_escape_string($pass) . "'")
+                || !$run("GRANT ALL PRIVILEGES ON `drill\\_%`.* TO $qUser")) {
+                return ['ok' => false, 'enabled' => false, 'message' => "The nightly restore drill was not enabled: the database account used by setup may not create users. As a database administrator run: $manual then enter the account under Admin > Backup > Restore drill and tick Enable."];
+            }
+            if (!function_exists('encryptSetting')) {
+                return ['ok' => false, 'enabled' => false, 'message' => 'The restore drill was not enabled: stored secrets cannot be encrypted at this point.'];
+            }
+            $stored = encryptSetting($pass);
+            $okAll = \RivetMSP\Recovery\RecoverySettings::set($mysqli, 'drill_db_user', $user)
+                && \RivetMSP\Recovery\RecoverySettings::set($mysqli, 'drill_db_pass', $stored)
+                && \RivetMSP\Recovery\RecoverySettings::set($mysqli, 'drill_enabled', '1');
+
+            return $okAll
+                ? ['ok' => true, 'enabled' => true, 'message' => 'The nightly restore drill is set up and enabled.']
+                : ['ok' => false, 'enabled' => false, 'message' => 'The restore drill account was created but its settings could not be saved; set it under Admin > Backup > Restore drill.'];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'enabled' => false, 'message' => 'The restore drill could not be set up: ' . $e->getMessage()];
+        }
+    }
+}
+
+// ------------------------------
+// setupAuditGenesis (M4-6)
+// ------------------------------
+if (!function_exists('setupAuditGenesis')) {
+    /**
+     * A brand-new install writes the genesis anchor of its audit hash chain HERE and nowhere else (the application never derives "this install
+     * never sealed a row" from database state). Needs the key in config.php and the schema imported; refuses on an install that has audit rows.
+     *
+     * @return array{ok:bool,message:string}
+     */
+    function setupAuditGenesis(mysqli $mysqli): array {
+        try {
+            require_once dirname(__DIR__) . '/vendor/autoload.php';
+
+            return (new \RivetMSP\Audit\AuditChain($mysqli))->startFreshChain();
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'message' => 'The audit chain anchor could not be written: ' . $e->getMessage()];
+        }
     }
 }

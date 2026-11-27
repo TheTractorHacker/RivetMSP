@@ -33,6 +33,9 @@ if (isset($_GET['logout'])) {
     setcookie("user_encryption_session_key", '', time() - 3600, "/");
     unset($_COOKIE['user_encryption_session_key']);
 
+    // MSP-DS-97: the long-lived passkey vault-key cookie goes too (a shared browser must not keep the unwrap key after Logout).
+    clearPasskeyEncKeyCookie();
+
     setcookie("user_extension_key", '', time() - 3600, "/");
     unset($_COOKIE['user_extension_key']);
 

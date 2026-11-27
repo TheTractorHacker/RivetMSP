@@ -2,12 +2,15 @@
 // Not including the full guest header as we don't want any HTML output,
 // but still apply the same security headers as the rest of the guest/ surface.
 $csp_nonce = base64_encode(random_bytes(16));
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$csp_nonce' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.foleyit.com; connect-src 'self' https://cloudflareinsights.com");
 header("X-Frame-Options: DENY");
 header("X-Content-Type-Options: nosniff");
 header("Referrer-Policy: strict-origin-when-cross-origin");
 
 require_once "../config.php";
+// MSP-DS-183: installation-specific CSP sources come from config.php ($config_csp_img_src, $config_csp_cloudflare_insights)
+require_once __DIR__ . '/../includes/csp_policies.php';
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$csp_nonce'" . cspCloudflareScript() . "; style-src 'self' 'unsafe-inline'; " . cspImgSrc() . "; connect-src 'self'" . cspCloudflareConnect());
+
 
 // Set Timezone
 require_once "../includes/inc_set_timezone.php";
@@ -68,15 +71,17 @@ if (isset($_GET['id']) && isset($_GET['key'])) {
     $client_id = intval($file_row['file_client_id']);
     $file_path = "../uploads/clients/$client_id/" . basename($file_reference_name);
 
+    // MSP-DS-104: claim the view atomically before the file is streamed
+    require_once __DIR__ . '/../includes/share_views.php';
+    if (!claimSharedItemView($mysqli, $item_id)) {
+        exit("Item cannot be viewed at this time (view limit exceeded).");
+    }
+
     // Display file as download
     $mime_type = mime_content_type($file_path);
     header('Content-type: '.$mime_type);
     header('Content-Disposition: attachment; filename=' . $file_name);
     readfile($file_path);
-
-    // Update file view count
-    $new_item_views = $item_views + 1;
-    mysqli_query($mysqli, "UPDATE shared_items SET item_views = $new_item_views WHERE item_id = $item_id");
 
     //Logging
     logAction("Share", "View", "Downloaded shared file $file_name via link", $client_id);

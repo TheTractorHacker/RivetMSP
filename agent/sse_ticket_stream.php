@@ -33,4 +33,7 @@ if (!$ticket_id || mysqli_num_rows($sql) == 0) {
 // on session_start() for up to $max_runtime seconds while this connection is open.
 session_write_close();
 
+$sse_stream_owner = 'agent:' . intval($session_user_id);   // MSP-DS-138
+$sse_stream_cap = 6;
+
 require $_SERVER['DOCUMENT_ROOT'] . '/includes/sse_ticket_stream.php';

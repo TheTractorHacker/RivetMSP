@@ -23,6 +23,16 @@ if (isset($_POST['convert_mail_request'])) {
         }
     }
 
+    // The mailbox the request came in on may be bound to a client: respect that scope as dismiss_mail_request does (MSP-DS-8 / MSP-INJ-15)
+    $mr_row = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT m.mailbox_default_client_id
+        FROM mail_requests mr
+        LEFT JOIN mailboxes m ON m.mailbox_id = mr.mail_request_mailbox_id
+        WHERE mr.mail_request_id = $mail_request_id AND mr.mail_request_archived_at IS NULL LIMIT 1"));
+    $mr_default_client_id = intval($mr_row['mailbox_default_client_id'] ?? 0);
+    if ($mr_default_client_id > 0) {
+        enforceClientAccess($mr_default_client_id);
+    }
+
     // Make sure this agent is actually permitted to act on the client they're converting to
     if ($client_id > 0) {
         enforceClientAccess($client_id);

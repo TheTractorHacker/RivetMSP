@@ -5,7 +5,8 @@ function _firebase_b64u(string $data): string {
 }
 
 function firebase_load_sa(): ?array {
-    $sa_file = $_SERVER['DOCUMENT_ROOT'] . '/config/firebase_service_account.json';
+    // MSP-DS-106: relative to the app, not $_SERVER['DOCUMENT_ROOT'] (empty under CLI, so cron-raised notifications never got a push)
+    $sa_file = dirname(__DIR__) . '/config/firebase_service_account.json';
     if (!file_exists($sa_file)) return null;
     $sa = json_decode(file_get_contents($sa_file), true);
     return (is_array($sa) && !empty($sa['project_id']) && !empty($sa['private_key'])) ? $sa : null;

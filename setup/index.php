@@ -64,10 +64,10 @@ if (isset($_POST['add_database'])) {
         exit;
     }
 
-    $host = filter_var(trim($_POST['host']), FILTER_SANITIZE_STRING);
-    $database = filter_var(trim($_POST['database']), FILTER_SANITIZE_STRING);
-    $username = filter_var(trim($_POST['username']), FILTER_SANITIZE_STRING);
-    $password = filter_var(trim($_POST['password']), FILTER_SANITIZE_STRING);
+    $host = trim((string) ($_POST['host'] ?? ''));
+    $database = trim((string) ($_POST['database'] ?? ''));
+    $username = trim((string) ($_POST['username'] ?? ''));
+    $password = trim((string) ($_POST['password'] ?? ''));
     $config_base_url = $_SERVER['HTTP_HOST'];
 
     $installation_id = randomString(32);
@@ -134,7 +134,13 @@ if (isset($_POST['add_database'])) {
             }
         }
 
-        $_SESSION['alert_message'] = "Database successfully added, now lets add a user." . (($key_file_result['status'] ?? '') === 'failed' ? " Note: " . $key_file_result['message'] : '');
+        // M4-6: the genesis anchor of the audit hash chain is written by setup only (the application never derives it from database state)
+        require_once __DIR__ . '/setup_functions.php';
+        $audit_genesis = setupAuditGenesis($mysqli);
+        // The nightly restore drill: own scoped database account, created and switched on here (or the exact SQL to run if setup's account cannot).
+        $drill_setup = setupProvisionRestoreDrill($mysqli, (string) $host);
+
+        $_SESSION['alert_message'] = "Database successfully added, now lets add a user." . (($key_file_result['status'] ?? '') === 'failed' ? " Note: " . $key_file_result['message'] : '') . ($audit_genesis['ok'] ? '' : ' Note: ' . $audit_genesis['message']) . ($drill_setup['ok'] ? '' : ' Note: ' . $drill_setup['message']);
         header("Location: ?user");
         exit;
 
@@ -149,6 +155,17 @@ if (isset($_POST['add_database'])) {
 }
 
 if (isset($_POST['restore'])) {
+
+    // MSP-DS-27 / MSP-WEB-23: restore replaces every table and needs no login, so it is only ever allowed while the instance has no users
+    // (the same guard add_user has). Once an account exists, setup cannot be used to overwrite the database or config.php.
+    $restore_users = $mysqli_available ? @mysqli_query($mysqli, "SHOW TABLES LIKE 'users'") : false;
+    if ($restore_users && mysqli_num_rows($restore_users) > 0) {
+        $restore_user_count = intval(mysqli_fetch_row(mysqli_query($mysqli, "SELECT COUNT(*) FROM users"))[0]);
+        if ($restore_user_count > 0) {
+            http_response_code(403);
+            exit('Users already exist in the database. Restore is only available on an empty installation.');
+        }
+    }
 
     // ---------- Long-running guards ----------
     @set_time_limit(0);
@@ -264,11 +281,17 @@ if (isset($_POST['restore'])) {
         }
     }
 
+    // In-app backups are AES-256 encrypted with the backup passphrase: the passphrase field below also opens the zip itself.
+    $restore_zip_pass = trim((string) ($_POST['backup_passphrase'] ?? ''));
+    if ($restore_zip_pass !== '') {
+        $zip->setPassword($restore_zip_pass);
+    }
+
     if (!$zip->extractTo($tempDir)) {
         $zip->close();
         @unlink($tempZip);
         deleteDir($tempDir);
-        die("Failed to extract backup contents.");
+        die("Failed to extract backup contents. If the backup is encrypted, check the backup passphrase.");
     }
 
     $zip->close();
@@ -292,6 +315,10 @@ if (isset($_POST['restore'])) {
         } catch (Throwable $e) {
             deleteDir($tempDir);
             die("SQL import failed: " . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
+        }
+        // M5-5: setup wrote a genesis anchor for the (now replaced) database; move it aside so the restored chain is "anchor missing, re-anchor"
+        if (function_exists('setupAuditAnchorAside')) {
+            setupAuditAnchorAside();
         }
     } else {
         deleteDir($tempDir);

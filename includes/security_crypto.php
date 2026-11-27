@@ -259,7 +259,7 @@ if (!function_exists('secIsWrapped')) {
         }
         // A value too long for its column, or one that cannot be read, is skipped; do not retry it on every request, once an hour is enough.
         $marker = sys_get_temp_dir() . '/rivetmsp_rewrap_skip_' . md5((string) ($GLOBALS['database'] ?? 'db') . '|' . implode(',', $set) . '|' . implode(',', array_keys($move)));
-        if (is_file($marker) && time() - (int) @filemtime($marker) < 3600) {
+        if (is_file($marker) && (int) @filemtime($marker) <= time() && time() - (int) @filemtime($marker) < 3600) {   // MSP-DS-155: a future mtime never extends the pause
             return;
         }
         try {

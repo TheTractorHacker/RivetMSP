@@ -272,6 +272,18 @@ if (!file_exists('../config.php')) {
     die("config.php does not exist after write attempt.\n");
 }
 
+// MSP-DS-172: config.php exists from here on but its closing "$config_enable_setup = 0;" line is only appended at the very end. If anything dies
+// in between (a SQL error, a fatal, die()), leaving config.php behind would make a re-run skip setup while index.php/login.php send every
+// visitor to the public /setup wizard. So an unfinished run removes the config.php it wrote (db.sql drops and recreates its tables, so a retry is clean).
+$GLOBALS['setup_cli_finished'] = false;
+register_shutdown_function(function () {
+    if (empty($GLOBALS['setup_cli_finished']) && is_file(__DIR__ . '/../config.php')) {
+        @unlink(__DIR__ . '/../config.php');
+        fwrite(STDERR, "\nSetup did not finish: the partly written config.php was removed so setup can be run again.\n");
+        exit(1);
+    }
+});
+
 require "../config.php";
 
 // The key file (RivetCore\Crypto, docs/KEY_MANAGEMENT.md): a fresh install starts on it, with the config.php key as kid k1. A restore
@@ -302,6 +314,17 @@ foreach ($lines as $line) {
     }
 }
 echo "Database imported successfully.\n";
+
+// MSP-DS-172 begin: every CLI value goes into SQL below, so escape it once here (the web wizard sanitizeInput()s the same fields)
+foreach (['company_name', 'country', 'address', 'city', 'state', 'zip', 'phone', 'company_email', 'website', 'locale', 'timezone', 'currency_code', 'user_name', 'user_email'] as $_cli_var) {
+    $$_cli_var = mysqli_real_escape_string($mysqli, (string) ($$_cli_var ?? ''));
+}
+// MSP-DS-172 end
+
+// M4-6: the genesis anchor of the audit hash chain is written by setup only (the application never derives it from database state)
+require_once __DIR__ . '/../setup/setup_functions.php';
+$audit_genesis = setupAuditGenesis($mysqli);
+echo ($audit_genesis['ok'] ? '' : 'WARNING: ') . $audit_genesis['message'] . "\n";
 
 // Create User
 $password_hash = secPasswordHash(trim($user_password_plain));
@@ -433,6 +456,7 @@ $myfile = fopen("../config.php", "a");
 $txt = "\$config_enable_setup = 0;\n\n";
 fwrite($myfile, $txt);
 fclose($myfile);
+$GLOBALS['setup_cli_finished'] = true;   // MSP-DS-172: the shutdown handler above keeps config.php only from here
 
 echo "\nSetup complete!\n";
 echo "You can now log in with the user you created at: https://$base_url/login.php\n";

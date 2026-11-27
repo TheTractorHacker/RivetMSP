@@ -25,7 +25,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
 <div class="card card-dark">
     <div class="card-header py-2">
         <h3 class="card-title mt-2"><i class="fas fa-fw fa-hand-holding-usd me-2"></i>Revenues</h3>
-        <?php if (lookupUserPermission("module_sales") >= 2) { ?>
+        <?php if (lookupUserPermission("module_financial") >= 2) { ?>
         <div class="card-tools">
             <button type="button" class="btn btn-primary ajax-modal" data-modal-url="modals/revenue/revenue_add.php" data-modal-size="lg"><i class="fas fa-plus me-2"></i>New Revenue</button>
         </div>

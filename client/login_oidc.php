@@ -15,6 +15,7 @@ header('X-Content-Type-Options: nosniff');
 require_once '../config.php';
 require_once '../functions.php';
 require_once '../includes/oidc_portal.php';
+require_once '../includes/security_sessions.php';
 // rivetAudit() is defined in event_bus.php, which is not loaded by every entry point (the lesson already
 // learned once this session for guest_post.php/agent/post/kb_article_versions.php) - required directly.
 require_once '../includes/event_bus.php';
@@ -141,6 +142,7 @@ try {
     // (same shape client/login_microsoft.php already uses - client_logged_in/client_id/user_id/user_type/
     // contact_id/csrf_token/login_method; client/includes/check_login.php only ever checks client_logged_in).
     session_regenerate_id(true);
+    secPortalSessionBegin($_SESSION, null, $mysqli, (int) $account['user_id']);   // MSP-DS-145 (review R30/R31): start the idle/absolute clocks, drop a stale password fingerprint from an earlier sign-in in this browser
     $_SESSION['client_logged_in'] = true;
     $_SESSION['client_id'] = (int) $account['contact_client_id'];
     $_SESSION['user_id'] = (int) $account['user_id'];

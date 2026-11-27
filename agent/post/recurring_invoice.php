@@ -547,7 +547,7 @@ if (isset($_GET['force_recurring'])) {
         // Email to client
 
         $subject = "Invoice $invoice_prefix$invoice_number";
-        $body = "Hello $contact_name,<br><br>An invoice regarding \"$invoice_scope\" has been generated. Please view the details below.<br><br>Invoice: $invoice_prefix$invoice_number<br>Issue Date: $invoice_date<br>Total: $$invoice_amount<br>Due Date: $invoice_due<br><br><br>To view your invoice, please click <a href=\'https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$new_invoice_id&url_key=$invoice_url_key\'>here</a>.<br><br><br>--<br>$company_name - Billing<br>$company_phone";
+        $body = "Hello $contact_name,<br><br>An invoice regarding \"$invoice_scope\" has been generated. Please view the details below.<br><br>Invoice: $invoice_prefix$invoice_number<br>Issue Date: $invoice_date<br>Total: $$invoice_amount<br>Due Date: $invoice_due<br><br><br>To view your invoice, please click <a href='https://$config_base_url/guest/guest_view_invoice.php?invoice_id=$new_invoice_id&url_key=$invoice_url_key'>here</a>.<br><br><br>--<br>$company_name - Billing<br>$company_phone";
 
 
         $data = [
@@ -616,9 +616,17 @@ if (isset($_POST['set_recurring_payment'])) {
             SELECT * FROM payment_providers
             LEFT JOIN client_saved_payment_methods ON saved_payment_provider_id = payment_provider_id
             WHERE saved_payment_id = $saved_payment_id
+            AND saved_payment_client_id = $client_id
+            AND payment_provider_active = 1
         ");
 
         $row = mysqli_fetch_assoc($sql);
+
+        // MSP-DS-58: only this client's own saved method on an active provider (the portal handler does the same)
+        if (!$row) {
+            flash_alert("Saved payment method not found for this client.", 'error');
+            redirect();
+        }
 
         $provider_id = intval($row['payment_provider_id']);
         $provider_name = sanitizeInput($row['payment_provider_name']);
@@ -675,12 +683,12 @@ if (isset($_POST['export_client_recurring_invoice_csv'])) {
 
         //set column headers
         $fields = array('Recurring Number', 'Scope', 'Amount', 'Frequency', 'Date Created');
-        fputcsv($f, $fields, $delimiter);
+        fputcsv($f, $fields, $delimiter, '"', '');
 
         //output each row of the data, format line as csv and write to file pointer
         while($row = $sql->fetch_assoc()) {
             $lineData = array($row['recurring_invoice_prefix'] . $row['recurring_invoice_number'], $row['recurring_invoice_scope'], $row['recurring_invoice_amount'], ucwords($row['recurring_invoice_frequency'] . "ly"), $row['recurring_invoice_created_at']);
-            fputcsv($f, $lineData, $delimiter);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, '"', '');
         }
 
         //move back to beginning of file

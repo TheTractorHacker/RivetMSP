@@ -103,10 +103,13 @@ if ($quote_status == 'Sent') {
     mysqli_query($mysqli, "UPDATE quotes SET quote_status = 'Viewed' WHERE quote_id = $quote_id");
 }
 
+// MSP-DS-162: at most one "viewed" notification per quote per hour
+$recently_viewed = mysqli_num_rows(mysqli_query($mysqli, "SELECT 1 FROM history WHERE history_quote_id = $quote_id AND history_description LIKE 'Quote viewed%' AND history_created_at > (NOW() - INTERVAL 1 HOUR) LIMIT 1")) > 0;
+
 //Mark viewed in history
 mysqli_query($mysqli, "INSERT INTO history SET history_status = '$quote_status', history_description = 'Quote viewed - $ip - $os - $browser', history_quote_id = $quote_id");
 
-if ($quote_status == "Draft" || $quote_status == "Sent" || $quote_status == "Viewed") {
+if (!$recently_viewed && ($quote_status == "Draft" || $quote_status == "Sent" || $quote_status == "Viewed")) {
 
     appNotify("Quote Viewed", "Quote $quote_prefix$quote_number has been viewed by $client_name_escaped - $ip - $os - $browser", "/agent/quote.php?quote_id=$quote_id", $client_id);
 }

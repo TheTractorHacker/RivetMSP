@@ -1186,7 +1186,7 @@ if (isset($_GET['asset_id'])) {
                                                         data-modal-url="modals/asset/asset_interface_edit.php?id=<?= $interface_id ?>">
                                                         <i class="fas fa-fw fa-edit me-2"></i>Edit
                                                     </a>
-                                                    <?php if ($session_user_role == 3 && $interface_primary == 0): ?>
+                                                    <?php if ($session_is_admin && $interface_primary == 0): ?>
                                                         <div class="dropdown-divider"></div>
                                                         <a class="dropdown-item text-danger text-bold" href="post.php?delete_asset_interface=<?= $interface_id; ?>&csrf_token=<?= $_SESSION['csrf_token']; ?>">
                                                             <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -1234,9 +1234,9 @@ if (isset($_GET['asset_id'])) {
                                     if (empty($credential_uri)) {
                                         $credential_uri_display = "-";
                                     } else {
-                                        $credential_uri_display = "$credential_uri<button class='btn btn-sm clipboardjs' data-clipboard-text='$credential_uri'><i class='far fa-copy text-secondary'></i></button><a href='$credential_uri' target='_blank'><i class='fa fa-external-link-alt text-secondary'></i></a>";
+                                        $credential_uri_display = "$credential_uri<button class='btn btn-sm clipboardjs' data-clipboard-text='$credential_uri'><i class='far fa-copy text-secondary'></i></button><a href='" . sanitize_url($row['credential_uri']) . "' target='_blank'><i class='fa fa-external-link-alt text-secondary'></i></a>";
                                     }
-                                    vaultGate('asset page');
+                                    if (!vaultGateRow('asset page')) { echo vaultRowDeniedHtml($credential_name, 6); continue; }   // R9: mask the row, never die mid-table
                                     $credential_username = nullable_htmlentities(decryptCredentialEntry($row['credential_username'], ($row['credentials_credential_id'] ?? $row['credential_id'] ?? null), 'username'));
                                     if (empty($credential_username)) {
                                         $credential_username_display = "-";
@@ -1311,7 +1311,7 @@ if (isset($_GET['asset_id'])) {
                                                     <a class="dropdown-item" href="post.php?unlink_credential_from_asset&asset_id=<?= $asset_id; ?>&credential_id=<?= $credential_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                         <i class="fas fa-fw fa-unlink me-2"></i>Unlink
                                                     </a>
-                                                    <?php if ($session_user_role == 3) { ?>
+                                                    <?php if ($session_is_admin) { ?>
                                                         <div class="dropdown-divider"></div>
                                                         <a class="dropdown-item text-danger text-bold" href="post.php?delete_credential=<?= $credential_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                             <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -1637,7 +1637,7 @@ if (isset($_GET['asset_id'])) {
                                                         <i class="fa fa-fw fa-paper-plane text-secondary me-2"></i>Force Reoccur
                                                     </a>
                                                     <?php
-                                                    if ($session_user_role == 3) { ?>
+                                                    if ($session_is_admin) { ?>
                                                     <div class="dropdown-divider"></div>
                                                     <a class="dropdown-item text-danger text-bold confirm-link" href="post.php?delete_recurring_ticket=<?= $recurring_ticket_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                         <i class="fas fa-fw fa-trash me-2"></i>Delete

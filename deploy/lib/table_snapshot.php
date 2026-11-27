@@ -3,7 +3,9 @@
  * RivetMSP - write the table snapshot (table names, row estimates, exact counts of the core tables; no row data, no secrets) that
  * deploy/backup.sh packs into its archive next to the dump, so the restore drill can prove rows came back.
  *
- *   php deploy/lib/table_snapshot.php <app-dir> <output-file>
+ *   php deploy/lib/table_snapshot.php <app-dir> <output-file|->
+ * With "-" the JSON goes to STDOUT: deploy/backup.sh runs this as the web user and redirects STDOUT into its root-only staging
+ * directory, which that user cannot reach (MSP-DS-19/34).
  * Best effort: prints a warning and exits 0 without a file if it cannot connect, and the backup carries no snapshot.
  */
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
@@ -21,12 +23,21 @@ try {
     require_once $app . '/vendor/autoload.php';
     ob_end_clean();
     $json = json_encode(\RivetMSP\Recovery\TableSnapshot::build($mysqli), JSON_UNESCAPED_SLASHES);
-    if ($json === false || file_put_contents($out, $json) === false) {
-        throw new RuntimeException('cannot write ' . $out);
+    if ($json === false) {
+        throw new RuntimeException('cannot encode the snapshot');
     }
-    @chmod($out, 0600);
+    if ($out === '-') {
+        fwrite(STDOUT, $json);
+    } else {
+        if (file_put_contents($out, $json) === false) {
+            throw new RuntimeException('cannot write ' . $out);
+        }
+        @chmod($out, 0600);
+    }
 } catch (\Throwable $e) {
     fwrite(STDERR, 'table_snapshot: ' . $e->getMessage() . "\n");
-    @unlink($out);
+    if ($out !== '-') {
+        @unlink($out);
+    }
 }
 exit(0);

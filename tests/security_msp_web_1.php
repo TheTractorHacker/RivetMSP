@@ -8,7 +8,7 @@ $files = ['agent/ajax.php', 'agent/post/credential.php', 'agent/post/client.php'
     'agent/contact_details.php', 'agent/modals/asset/asset_details.php', 'agent/modals/contact/contact_details.php', 'agent/modals/credential/credential_edit.php'];
 foreach ($files as $f) {
     $s = (string) file_get_contents("$root/$f");
-    $first = strpos($s, 'vaultGate(');
+    $first = preg_match('/vaultGate(Row)?\(/', $s, $fm, PREG_OFFSET_CAPTURE) ? $fm[0][1] : false;
     $dec = preg_match('/decryptCredentialEntry\(\$row\[|decryptOtpSecret\(\$(row|totp_secret_raw)/', $s, $m, PREG_OFFSET_CAPTURE) ? $m[0][1] : false;
     $ok("$f: gate precedes the first decrypt of a stored value", $first !== false && $dec !== false && $first < $dec);
 }

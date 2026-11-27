@@ -165,7 +165,8 @@ ob_start();
         </div>
 
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer flex-wrap">
+        <input type="password" class="form-control mb-2" name="admin_current_password" placeholder="Your password (required to create an administrator)" autocomplete="current-password">
         <button type="submit" name="add_user" class="btn btn-primary text-bold"><i class="fas fa-check me-2"></i>Create</button>
         <button type="button" class="btn btn-light" data-bs-dismiss="modal"><i class="fas fa-times me-2"></i>Cancel</button>
     </div>
@@ -181,7 +182,7 @@ ob_start();
                 get_readable_pass: 'true'
             },
             function(data) {
-                input.value = JSON.parse(data);
+                input.value = data; // jQuery already parsed the application/json response (review R1)
             }
         );
     }

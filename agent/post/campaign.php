@@ -89,8 +89,8 @@ if (isset($_POST['send_campaign'])) {
         redirect("campaigns.php");
     }
 
-    if ($campaign['campaign_status'] === 'sent') {
-        flash_alert("This campaign has already been sent", "warning");
+    if (in_array($campaign['campaign_status'], ['sent', 'sending'], true)) {
+        flash_alert($campaign['campaign_status'] === 'sending' ? "This campaign is being sent right now" : "This campaign has already been sent", "warning");
         redirect("campaigns.php?campaign_id=$campaign_id");
     }
 
@@ -107,6 +107,14 @@ if (isset($_POST['send_campaign'])) {
 
     $segment = mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT segment_criteria_json FROM crm_segments WHERE segment_id = $segment_id LIMIT 1"));
     $criteria = $segment ? crmCriteriaFromJson($segment['segment_criteria_json']) : [];
+
+    // MSP-DS-126: claim the campaign atomically; a double submit or a second sender gets 0 affected rows and mails nobody.
+    $previous_campaign_status = mysqli_real_escape_string($mysqli, (string) ($campaign['campaign_status'] ?? 'draft'));
+    mysqli_query($mysqli, "UPDATE crm_campaigns SET campaign_status = 'sending' WHERE campaign_id = $campaign_id AND (campaign_status IS NULL OR campaign_status NOT IN ('sending', 'sent'))");
+    if (mysqli_affected_rows($mysqli) !== 1) {
+        flash_alert("This campaign is already being sent or has been sent", "warning");
+        redirect("campaigns.php?campaign_id=$campaign_id");
+    }
 
     // Only contacts with an email; scoped to the sender's client access.
     $recipients = crmResolveContacts($mysqli, $criteria, $client_access_string ?? '', $session_is_admin ?? false, true);
@@ -151,7 +159,14 @@ if (isset($_POST['send_campaign'])) {
     }
 
     if ($sent_count > 0) {
-        addToMailQueue($mail_batch);
+        $queued = addToMailQueue($mail_batch);
+        if ($queued !== true) {
+            // nothing was queued: release the claim so the campaign can be sent again
+            mysqli_query($mysqli, "UPDATE crm_campaigns SET campaign_status = '$previous_campaign_status' WHERE campaign_id = $campaign_id AND campaign_status = 'sending'");
+            mysqli_query($mysqli, "DELETE FROM crm_campaign_recipients WHERE campaign_id = $campaign_id");
+            flash_alert("The campaign could not be queued. Nothing was sent.", "error");
+            redirect("campaigns.php?campaign_id=$campaign_id");
+        }
     }
 
     mysqli_query($mysqli, "UPDATE crm_campaigns SET campaign_status = 'sent', campaign_sent_at = NOW() WHERE campaign_id = $campaign_id");

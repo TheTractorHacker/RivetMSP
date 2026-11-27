@@ -113,7 +113,7 @@ $num_rows = mysqli_fetch_row(mysqli_query($mysqli, "SELECT FOUND_ROWS()"));
                                         data-bulk="true">
                                         <i class="fas fa-fw fa-user me-2"></i>Set Client
                                     </a>
-                                    <?php if ($session_user_role == 3) { ?>
+                                    <?php if ($session_is_admin) { ?>
                                     <div class="dropdown-divider"></div>
                                     <a class="dropdown-item text-danger text-bold ajax-modal" href="#"
                                         data-modal-url="modals/expense/expense_bulk_delete.php"

@@ -360,7 +360,7 @@ function generatePassword() {
             get_readable_pass: 'true'
         },
         function(data) {
-            const password = JSON.parse(data);
+            const password = data; // jQuery already parsed the application/json response (MSP-DS-28 review R1)
             document.getElementById("password").value = password;
         }
     );

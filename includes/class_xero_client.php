@@ -173,7 +173,7 @@ class XeroClient implements AccountingClientInterface {
     }
 
     /** Authenticated Xero Accounting API request. Returns the decoded JSON array. */
-    private function request(string $method, string $path, ?array $body = null): array {
+    private function request(string $method, string $path, ?array $body = null, string $idempotencyKey = ''): array {
         if (empty($this->tenant_id)) {
             throw new XeroException('Xero not connected: missing tenant id (did the /connections step run?).');
         }
@@ -189,6 +189,9 @@ class XeroClient implements AccountingClientInterface {
             'Xero-tenant-id: ' . $this->tenant_id,
             'Accept: application/json',
         ];
+        if ($idempotencyKey !== '') {
+            $headers[] = 'Idempotency-Key: ' . $idempotencyKey;   // MSP-DS-165: a retried create returns the first result
+        }
         if ($body !== null) {
             $headers[] = 'Content-Type: application/json';
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
@@ -382,6 +385,7 @@ class XeroClient implements AccountingClientInterface {
 
     /** $payload is QBO-shaped (CustomerRef/Line[]/TxnDate/DueDate/DocNumber) - translated here. */
     public function createInvoice(array $payload): array {
+        $rk = accountingTakeRequestKey($payload);   // MSP-DS-165
         $xero = [
             'Type'    => 'ACCREC',
             'Contact' => ['ContactID' => (string) ($payload['CustomerRef']['value'] ?? '')],
@@ -394,7 +398,7 @@ class XeroClient implements AccountingClientInterface {
         }
         $xero['LineItems'] = $this->linesToXeroShape($payload['Line'] ?? []);
 
-        $res = $this->request('PUT', 'Invoices', ['Invoices' => [$xero]]);
+        $res = $this->request('PUT', 'Invoices', ['Invoices' => [$xero]], $rk);
         if (empty($res['Invoices'][0]['InvoiceID'])) {
             throw new XeroException('Xero createInvoice: unexpected response.');
         }
@@ -410,12 +414,14 @@ class XeroClient implements AccountingClientInterface {
             'Id'         => (string) ($inv['InvoiceID'] ?? ''),
             'SyncToken'  => '',
             'DocNumber'  => (string) ($inv['InvoiceNumber'] ?? ''),
+            'TotalAmt'   => isset($inv['Total']) ? (float) $inv['Total'] : null,   // MSP-DS-165: lets the sync compare totals
         ];
     }
 
     // ── Estimate (ITFlow "Quote") -> Xero Quote ──────────────────────────────
 
     public function createEstimate(array $payload): array {
+        $rk = accountingTakeRequestKey($payload);   // MSP-DS-165
         $xero = [
             'Contact' => ['ContactID' => (string) ($payload['CustomerRef']['value'] ?? '')],
             'Date'    => (string) ($payload['TxnDate'] ?? ''),
@@ -429,7 +435,7 @@ class XeroClient implements AccountingClientInterface {
         }
         $xero['LineItems'] = $this->linesToXeroShape($payload['Line'] ?? []);
 
-        $res = $this->request('PUT', 'Quotes', ['Quotes' => [$xero]]);
+        $res = $this->request('PUT', 'Quotes', ['Quotes' => [$xero]], $rk);
         if (empty($res['Quotes'][0]['QuoteID'])) {
             throw new XeroException('Xero createEstimate: unexpected response.');
         }
@@ -448,6 +454,7 @@ class XeroClient implements AccountingClientInterface {
 
     /** $payload is QBO-shaped (TotalAmt/CustomerRef/TxnDate/Line[0].LinkedTxn.TxnId). */
     public function createPayment(array $payload): array {
+        $rk = accountingTakeRequestKey($payload);   // MSP-DS-165
         $invoice_id = (string) ($payload['Line'][0]['LinkedTxn'][0]['TxnId'] ?? '');
         if ($invoice_id === '') {
             throw new XeroException('Xero createPayment: no linked invoice id in payload.');
@@ -462,7 +469,7 @@ class XeroClient implements AccountingClientInterface {
             'Date'    => (string) ($payload['TxnDate'] ?? ''),
             'Amount'  => round(floatval($payload['TotalAmt'] ?? 0), 2),
         ];
-        $res = $this->request('PUT', 'Payments', ['Payments' => [$xero]]);
+        $res = $this->request('PUT', 'Payments', ['Payments' => [$xero]], $rk);
         if (empty($res['Payments'][0]['PaymentID'])) {
             throw new XeroException('Xero createPayment: unexpected response.');
         }

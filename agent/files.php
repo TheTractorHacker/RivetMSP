@@ -80,7 +80,7 @@ function is_ancestor_folder($folder_id, $current_folder_id, $client_id) {
 }
 
 function display_folders($parent_folder_id, $client_id, $indent = 0, $render_root = false) {
-    global $mysqli, $get_folder_id, $session_user_role, $archive_query, $archived, $num_root_items, $folders_expanded;
+    global $mysqli, $get_folder_id, $session_is_admin, $archive_query, $archived, $num_root_items, $folders_expanded;
 
     // Always render root (only once)
     if ($parent_folder_id == 0 && $indent == 0) {
@@ -189,7 +189,7 @@ function display_folders($parent_folder_id, $client_id, $indent = 0, $render_roo
                    data-modal-url="modals/folder/folder_rename.php?id=<?= $folder_id ?>">
                     <i class="fas fa-fw fa-edit me-2"></i>Rename
                 </a>
-                <?php if ($session_user_role == 3 && $num_total == 0 && $subfolder_count == 0) { ?>
+                <?php if ($session_is_admin && $num_total == 0 && $subfolder_count == 0) { ?>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item text-danger text-bold confirm-link" href="post.php?delete_folder=<?php echo $folder_id; ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                         <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -646,7 +646,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                                 <a class="dropdown-item text-info" href="post.php?restore_file=<?= $file_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                     <i class="fas fa-fw fa-redo me-2"></i>Restore
                                                 </a>
-                                                <?php if ($session_user_role == 3) { ?>
+                                                <?php if ($session_is_admin) { ?>
                                                     <div class="dropdown-divider"></div>
                                                     <a class="dropdown-item text-danger text-bold" href="#" data-bs-toggle="modal" data-bs-target="#deleteFileModal" data-file-delete='<?= json_encode(['id' => (int) $file_id, 'name' => (string) $file_name], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG) ?>'>
                                                         <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -756,7 +756,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                                 </div>
                                             </td>
                                             <td>
-                                                <a href="<?php echo "../uploads/clients/$client_id/$file_reference_name"; ?>" target="_blank">
+                                                <a href="<?php echo $file_icon === 'file-pdf' ? 'pdf_view.php?type=file&id=' . intval($file_id) : "../uploads/clients/$client_id/$file_reference_name"; ?>" target="_blank">
                                                     <div class="media">
                                                         <i class="fa fa-fw fa-2x fa-<?php echo $file_icon; ?> text-dark me-3"></i>
                                                         <div class="media-body">
@@ -814,7 +814,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                                             <a class="dropdown-item text-info" href="post.php?restore_file=<?= $file_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                                 <i class="fas fa-fw fa-redo me-2"></i>Restore
                                                             </a>
-                                                            <?php if ($session_user_role == 3) { ?>
+                                                            <?php if ($session_is_admin) { ?>
                                                                 <div class="dropdown-divider"></div>
                                                                 <a class="dropdown-item text-danger text-bold" href="#" data-bs-toggle="modal" data-bs-target="#deleteFileModal" data-file-delete='<?= json_encode(['id' => (int) $file_id, 'name' => (string) $file_name], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_TAG) ?>'>
                                                                     <i class="fas fa-fw fa-trash me-2"></i>Delete
@@ -933,7 +933,7 @@ $num_root_items = intval($row_root_files['num']) + intval($row_root_docs['num'])
                                                             <a class="dropdown-item text-info" href="post.php?restore_document=<?= $document_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                                 <i class="fas fa-fw fa-redo me-2"></i>Restore
                                                             </a>
-                                                            <?php if ($session_user_role == 3) { ?>
+                                                            <?php if ($session_is_admin) { ?>
                                                                 <div class="dropdown-divider"></div>
                                                                 <a class="dropdown-item text-danger text-bold" href="post.php?delete_document=<?= $document_id ?>&csrf_token=<?= $_SESSION['csrf_token'] ?>">
                                                                     <i class="fas fa-fw fa-trash me-2"></i>Delete

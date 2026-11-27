@@ -117,6 +117,8 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
+    // MSP-DS-76: acknowledging / resolving needs the same module as the web handlers (agent/post/rmm_alert.php, comet_alert.php).
+    api_require_module_permission($mysqli, $api_user_id, 'module_rmm_alerts_ack');
     $body     = json_decode(file_get_contents('php://input'), true) ?? [];
     $source   = $body['source'] ?? '';
     $alert_id = intval($body['id'] ?? 0);

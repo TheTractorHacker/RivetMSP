@@ -7,7 +7,23 @@ $vault_canonical_key_set_at = $vault_row['config_vault_canonical_key_set_at'] ??
 
 $vault_unsynced_users = intval(mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COUNT(*) AS c FROM users WHERE user_status = 1 AND (user_specific_encryption_ciphertext IS NULL OR user_specific_encryption_ciphertext = '')"))['c']);
 
+
+// M3-3: in Cloudflare mode, say so when this very request came from a peer the header is NOT believed from (its address would then be the proxy's).
+$cf_peer_warning = false;
+if (defined('CONST_GET_IP_METHOD') && CONST_GET_IP_METHOD === 'HTTP_CF_CONNECTING_IP') {
+    [$cf_trusted, $cf_ranges] = rivetCloudflareIpConfig();
+    $cf_peer_warning = !cloudflarePeerTrusted((string) ($_SERVER['REMOTE_ADDR'] ?? ''), $cf_trusted, $cf_ranges);
+}
 ?>
+
+<?php if ($cf_peer_warning) { ?>
+<div class="alert alert-warning">
+    <i class="fas fa-fw fa-exclamation-triangle me-1"></i>
+    Client IP detection is set to Cloudflare (<code>CF-Connecting-IP</code>), but this request reached the server from <code><?php echo nullable_htmlentities((string) $_SERVER['REMOTE_ADDR']); ?></code>,
+    which is neither a Cloudflare address nor listed in <code>CONST_TRUSTED_PROXIES</code>. The header is ignored for this connection, so every visitor behind that proxy shares one address
+    (shared login lockouts). If this is your own reverse proxy, add its address to <code>CONST_TRUSTED_PROXIES</code> in config.php and make it overwrite <code>CF-Connecting-IP</code>. See docs/UPDATING.md.
+</div>
+<?php } ?>
 
 <div class="card card-dark">
     <div class="card-header py-3">
@@ -197,7 +213,7 @@ foreach (($kp_inventory['totals'] ?? []) as $kp_label => $kp_n) {
                     <div class="input-group-prepend">
                         <span class="input-group-text"><i class="fa fa-fw fa-key"></i></span>
                     </div>
-                    <input type="text" class="form-control" name="config_login_key_secret" pattern="\w{3,99}" placeholder="Something really easy for techs to remember: e.g. MYSECRET" value="<?php echo nullable_htmlentities($config_login_key_secret); ?>">
+                    <input type="text" class="form-control" name="config_login_key_secret" pattern="\w{16,99}" placeholder="At least 16 letters, digits or underscores" value="<?php echo nullable_htmlentities($config_login_key_secret); ?>">
                 </div>
             </div>
 
@@ -247,6 +263,29 @@ foreach (($kp_inventory['totals'] ?? []) as $kp_label => $kp_n) {
 require_once "../includes/security_policy.php";
 $sp = secSettingsAll($mysqli, true);
 ?>
+
+<?php
+require_once __DIR__ . '/../includes/security_policy.php';
+$cal_legacy_on = secSetting('calendar_legacy_links') === '1';
+$cal_legacy_open = intval(mysqli_fetch_assoc(mysqli_query($mysqli, "SELECT COUNT(*) AS c FROM users WHERE user_calendar_legacy_until IS NOT NULL AND user_calendar_legacy_until > NOW() AND user_calendar_token_hash IS NULL"))['c'] ?? 0);
+?>
+<div class="card card-dark mb-3">
+    <div class="card-header py-3">
+        <h3 class="card-title"><i class="fas fa-fw fa-calendar-alt me-2"></i>Legacy calendar feed links</h3>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-2">Calendar feed links created before the per-user random token (derived from the installation id) keep working for a short window after the upgrade, or until their owner generates a new link.</p>
+        <?php if ($cal_legacy_on) { ?>
+        <p class="mb-2"><span class="badge bg-warning text-dark">Accepted</span> <?php echo $cal_legacy_open; ?> staff account(s) still on a legacy link inside the window.</p>
+        <form action="post.php" method="post" class="d-inline">
+            <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token'] ?>">
+            <button type="submit" name="end_calendar_legacy_links" class="btn btn-outline-danger confirm-link"><i class="fas fa-fw fa-ban me-1"></i>End legacy links now</button>
+        </form>
+        <?php } else { ?>
+        <p class="mb-0"><span class="badge bg-success">Ended</span> Only per-user tokens are accepted.</p>
+        <?php } ?>
+    </div>
+</div>
 
 <div class="card card-dark">
     <div class="card-header py-3">

@@ -114,6 +114,7 @@ PHP_SOCK_ARG=""
 SSL_CERT_PATH=""
 SSL_CERT_KEY_PATH=""
 PROXY_MODE=false
+TRUSTED_PROXIES=""   # MSP-DS-158: --trusted-proxy <address/CIDR> (repeatable); proxy mode only
 DEFAULT_VHOST=false
 EXTRA_PORTS=()
 SKIP_PHP=false
@@ -162,6 +163,7 @@ while [[ $# -gt 0 ]]; do
         --ssl-cert) SSL_CERT_PATH="${2:?--ssl-cert requires a value}"; shift 2 ;;
         --ssl-cert-key) SSL_CERT_KEY_PATH="${2:?--ssl-cert-key requires a value}"; shift 2 ;;
         --proxy-mode) PROXY_MODE=true; shift ;;
+        --trusted-proxy) TRUSTED_PROXIES="${TRUSTED_PROXIES:+${TRUSTED_PROXIES},}${2:?--trusted-proxy requires a value}"; shift 2 ;;
         --default-vhost) DEFAULT_VHOST=true; shift ;;
         --allow-port) EXTRA_PORTS+=("${2:?--allow-port requires a value}"); shift 2 ;;
         --skip-php) SKIP_PHP=true; shift ;;
@@ -615,6 +617,7 @@ EOF
 
         if $PROXY_MODE; then
             sed -i '/# BEGIN DIRECT-TLS ONLY/,/# END DIRECT-TLS ONLY/d; /# __PROXY_MODE_BLOCK__/d; /# BEGIN PROXY-MODE ONLY/d; /# END PROXY-MODE ONLY/d' "$VHOST_TMP"
+            if command -v apply_real_ip_block >/dev/null 2>&1; then apply_real_ip_block "$VHOST_TMP" "$TRUSTED_PROXIES"; else sed -i '/# __REAL_IP_BLOCK__/d' "$VHOST_TMP"; fi   # MSP-DS-158
         else
             sed -i '/# BEGIN PROXY-MODE ONLY/,/# END PROXY-MODE ONLY/d; /# __PROXY_MODE_BLOCK__/d; /# BEGIN DIRECT-TLS ONLY/d; /# END DIRECT-TLS ONLY/d' "$VHOST_TMP"
         fi

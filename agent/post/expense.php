@@ -14,7 +14,7 @@ if (isset($_POST['add_expense'])) {
 
     require_once 'expense_model.php';
 
-    enforceClientAccess();
+    if ($client_id) { enforceClientAccess(); } // MSP-DS-55: internal (no-client) rows have no client to check
 
     // Company currency / document prefixes are admin-entered settings loaded raw from the database: escape before use in SQL.
     $company_currency_sql = mysqli_real_escape_string($mysqli, (string) $session_company_currency);
@@ -59,13 +59,13 @@ if (isset($_POST['edit_expense'])) {
 
     // Confirm access to the expense's current client before allowing any edit
     $client_id = intval(getFieldById('expenses', $expense_id, 'expense_client_id'));
-    enforceClientAccess();
+    if ($client_id) { enforceClientAccess(); } // MSP-DS-55: internal (no-client) rows have no client to check
 
     require_once 'expense_model.php';
 
     // The form may also reassign the expense to a different client - confirm
     // access to that destination client too.
-    enforceClientAccess();
+    if ($client_id) { enforceClientAccess(); } // MSP-DS-55: internal (no-client) rows have no client to check
 
     // Get old receipt
     $existing_file_name = sanitizeInput(getFieldById('expenses', $expense_id, 'expense_receipt'));
@@ -114,7 +114,7 @@ if (isset($_GET['delete_expense'])) {
     $expense_description = sanitizeInput($row['expense_description']);
     $client_id = intval($row['expense_client_id']);
 
-    enforceClientAccess();
+    if ($client_id) { enforceClientAccess(); } // MSP-DS-55: internal (no-client) rows have no client to check
 
     unlink("../uploads/expenses/$expense_receipt");
 
@@ -154,7 +154,7 @@ if (isset($_POST['bulk_edit_expense_category'])) {
             $expense_description = sanitizeInput($row['expense_description']);
             $client_id = intval($row['expense_client_id']);
 
-            enforceClientAccess();
+            if ($client_id) { enforceClientAccess(); } // MSP-DS-55: internal (no-client) rows have no client to check
 
             mysqli_query($mysqli,"UPDATE expenses SET expense_category_id = $category_id WHERE expense_id = $expense_id");
 
@@ -197,7 +197,7 @@ if (isset($_POST['bulk_edit_expense_account'])) {
             $expense_description = sanitizeInput($row['expense_description']);
             $client_id = intval($row['expense_client_id']);
 
-            enforceClientAccess();
+            if ($client_id) { enforceClientAccess(); } // MSP-DS-55: internal (no-client) rows have no client to check
 
             mysqli_query($mysqli,"UPDATE expenses SET expense_account_id = $account_id WHERE expense_id = $expense_id");
 
@@ -223,7 +223,7 @@ if (isset($_POST['bulk_edit_expense_client'])) {
     $client_id = intval($_POST['bulk_client_id']);
 
     // Confirm access to the destination client
-    enforceClientAccess();
+    if ($client_id) { enforceClientAccess(); } // MSP-DS-55: internal (no-client) rows have no client to check
 
     // Get Client name for logging and Notification
     $client_name = sanitizeInput(getFieldById('clients', $client_id, 'client_name'));
@@ -242,7 +242,7 @@ if (isset($_POST['bulk_edit_expense_client'])) {
             $row = mysqli_fetch_assoc($sql);
             $expense_description = sanitizeInput($row['expense_description']);
             $source_client_id = intval($row['expense_client_id']);
-            enforceClientAccess($source_client_id);
+            if ($source_client_id) { enforceClientAccess($source_client_id); }
 
             mysqli_query($mysqli,"UPDATE expenses SET expense_client_id = $client_id WHERE expense_id = $expense_id");
 
@@ -279,7 +279,7 @@ if (isset($_POST['bulk_delete_expenses'])) {
             $expense_receipt = sanitizeInput($row['expense_receipt']);
             $client_id = intval($row['expense_client_id']);
 
-            enforceClientAccess();
+            if ($client_id) { enforceClientAccess(); } // MSP-DS-55: internal (no-client) rows have no client to check
 
             unlink("../uploads/expenses/$expense_receipt");
 
@@ -360,7 +360,7 @@ if (isset($_POST['export_expenses_csv'])) {
     if ($num_rows > 0) {
         $delimiter = ",";
         $enclosure = '"';
-        $escape    = '\\';   // backslash
+        $escape    = '';   // empty: plain RFC 4180 quoting; a backslash escape lets  x\",=2+5  split into a formula cell (MSP-DS-99, review R21)
         $filename = sanitize_filename("$session_company_name-Expenses-" . date('Y-m-d_H-i-s') . ".csv");
 
         //create a file pointer
@@ -373,7 +373,7 @@ if (isset($_POST['export_expenses_csv'])) {
         //output each row of the data, format line as csv and write to file pointer
         while($row = mysqli_fetch_assoc($sql)) {
             $lineData = array($row['expense_date'], $row['expense_amount'], $row['vendor_name'], $row['expense_description'], $row['category_name'], $row['account_name']);
-            fputcsv($f, $lineData, $delimiter, $enclosure, $escape);
+            fputcsv($f, csvSafeRow($lineData), $delimiter, $enclosure, $escape);
         }
 
         //move back to beginning of file
