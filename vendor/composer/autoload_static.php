@@ -3046,6 +3046,7 @@ class ComposerStaticInit690e04a27fa241bad9da145ee44cf2eb
         'RivetMSP\\Reports\\Widgets\\WidgetContext' => __DIR__ . '/../..' . '/src/Reports/Widgets/WidgetContext.php',
         'RivetMSP\\Reports\\Widgets\\WidgetRegistry' => __DIR__ . '/../..' . '/src/Reports/Widgets/WidgetRegistry.php',
         'RivetMSP\\Reports\\Widgets\\WidgetRenderer' => __DIR__ . '/../..' . '/src/Reports/Widgets/WidgetRenderer.php',
+        'RivetMSP\\Security\\PlainText' => __DIR__ . '/../..' . '/src/Security/PlainText.php',
         'SensitiveParameter' => __DIR__ . '/..' . '/symfony/polyfill-php82/Resources/stubs/SensitiveParameter.php',
         'SensitiveParameterValue' => __DIR__ . '/..' . '/symfony/polyfill-php82/Resources/stubs/SensitiveParameterValue.php',
         'Stringable' => __DIR__ . '/..' . '/symfony/polyfill-php80/Resources/stubs/Stringable.php',

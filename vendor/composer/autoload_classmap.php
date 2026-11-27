@@ -2917,6 +2917,7 @@ return array(
     'RivetMSP\\Reports\\Widgets\\WidgetContext' => $baseDir . '/src/Reports/Widgets/WidgetContext.php',
     'RivetMSP\\Reports\\Widgets\\WidgetRegistry' => $baseDir . '/src/Reports/Widgets/WidgetRegistry.php',
     'RivetMSP\\Reports\\Widgets\\WidgetRenderer' => $baseDir . '/src/Reports/Widgets/WidgetRenderer.php',
+    'RivetMSP\\Security\\PlainText' => $baseDir . '/src/Security/PlainText.php',
     'SensitiveParameter' => $vendorDir . '/symfony/polyfill-php82/Resources/stubs/SensitiveParameter.php',
     'SensitiveParameterValue' => $vendorDir . '/symfony/polyfill-php82/Resources/stubs/SensitiveParameterValue.php',
     'Stringable' => $vendorDir . '/symfony/polyfill-php80/Resources/stubs/Stringable.php',

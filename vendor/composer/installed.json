@@ -990,17 +990,17 @@
         },
         {
             "name": "rivet/rivet-core",
-            "version": "v1.0.0-rc.60",
-            "version_normalized": "1.0.0.0-RC60",
+            "version": "v1.0.0-rc.61",
+            "version_normalized": "1.0.0.0-RC61",
             "source": {
                 "type": "git",
                 "url": "https://github.com/TheTractorHacker/rivet-core",
-                "reference": "62993117f08c63c518b43e44f2f076d6a4a064f2"
+                "reference": "50b46f2f9ac0f4a4fd24dac6a04bc69a393d62c0"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/TheTractorHacker/rivet-core/zipball/62993117f08c63c518b43e44f2f076d6a4a064f2",
-                "reference": "62993117f08c63c518b43e44f2f076d6a4a064f2",
+                "url": "https://api.github.com/repos/TheTractorHacker/rivet-core/zipball/50b46f2f9ac0f4a4fd24dac6a04bc69a393d62c0",
+                "reference": "50b46f2f9ac0f4a4fd24dac6a04bc69a393d62c0",
                 "shasum": ""
             },
             "require": {
@@ -1019,7 +1019,7 @@
             "suggest": {
                 "ext-pdo_pgsql": "Only for the optional PostgreSQL RMM data store (docs/rmm/POSTGRES.md); MariaDB and MySQL installs never need it."
             },
-            "time": "2026-11-12T13:51:05+00:00",
+            "time": "2026-11-27T20:57:24+00:00",
             "type": "library",
             "installation-source": "dist",
             "autoload": {
@@ -1550,6 +1550,6 @@
             "install-path": "../symfony/polyfill-php82"
         }
     ],
-    "dev": false,
+    "dev": true,
     "dev-package-names": []
 }
