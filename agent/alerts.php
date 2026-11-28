@@ -291,10 +291,10 @@ $has_active_filter = $filter_severity || $filter_client || $filter_search || $fi
 <div class="d-flex align-items-center mb-2 px-1">
     <small class="text-muted mr-auto">Showing <?= $total_shown ?> alert<?= $total_shown != 1 ? 's' : '' ?></small>
     <button class="btn btn-sm btn-outline-warning me-2 js-bulk-alert-action" data-bulk-action="acknowledge">
-        <i class="fas fa-check-double me-1"></i>Ack All Shown
+        <i class="fas fa-check-double me-1"></i><span class="js-bulk-label" data-label-all="Ack All Shown" data-label-sel="Ack Selected">Ack All Shown</span>
     </button>
     <button class="btn btn-sm btn-outline-success js-bulk-alert-action" data-bulk-action="resolve">
-        <i class="fas fa-check-circle me-1"></i>Resolve All Shown
+        <i class="fas fa-check-circle me-1"></i><span class="js-bulk-label" data-label-all="Resolve All Shown" data-label-sel="Resolve Selected">Resolve All Shown</span>
     </button>
 </div>
 <?php elseif ($total_shown > 0): ?>
@@ -450,10 +450,20 @@ function toggleSelectAll(cb) {
     document.querySelectorAll('.alert-chk').forEach(c => c.checked = cb.checked);
 }
 
+// With nothing ticked the two buttons act on every alert shown; with rows ticked they act on just those, and say so.
+function updateBulkLabels() {
+    const n = document.querySelectorAll('.alert-chk:checked').length;
+    document.querySelectorAll('.js-bulk-label').forEach(l => {
+        l.textContent = n ? l.dataset.labelSel + ' (' + n + ')' : l.dataset.labelAll;
+    });
+}
+
 async function bulkAction(action) {
-    const checked = [...document.querySelectorAll('.alert-chk:checked')];
-    if (!checked.length) { RivetDialog.alert('No alerts selected.'); return; }
-    if (!(await RivetDialog.confirm(`${action === 'acknowledge' ? 'Acknowledge' : 'Resolve'} ${checked.length} alert(s)?`))) return;
+    let checked = [...document.querySelectorAll('.alert-chk:checked')];
+    const selectedOnly = checked.length > 0;
+    if (!selectedOnly) { checked = [...document.querySelectorAll('.alert-chk')]; }
+    if (!checked.length) { RivetDialog.alert('No alerts to act on.'); return; }
+    if (!(await RivetDialog.confirm(`${action === 'acknowledge' ? 'Acknowledge' : 'Resolve'} ${selectedOnly ? 'the ' + checked.length + ' selected' : 'all ' + checked.length + ' shown'} alert(s)?`))) return;
 
     let done = 0;
     checked.forEach(chk => {
@@ -483,6 +493,7 @@ document.addEventListener('click', function (e) {
 });
 document.addEventListener('change', function (e) {
     if (e.target.closest('.js-toggle-select-all')) { toggleSelectAll(e.target); }
+    if (e.target.closest('.alert-chk') || e.target.closest('.js-toggle-select-all')) { updateBulkLabels(); }
 });
 </script>
 
