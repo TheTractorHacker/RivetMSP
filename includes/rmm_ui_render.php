@@ -158,6 +158,15 @@ function rivetRmmUiClockBadge(?array $clock): string
         . ($clock['minutes'] !== null && $clock['text'] !== '' ? ' ' . (int) $clock['minutes'] . ' min' : '') . '</span>';
 }
 
+/** One CPU / RAM / Disk meter tile: label, large value, bar (a null percentage reads "no data" with an empty bar). */
+function rivetRmmUiMeter(string $label, ?float $pct, string $kind): string
+{
+    $v = $pct === null ? null : max(0, min(100, (int) round($pct)));
+
+    return '<div class="dev-meter dev-meter-' . rmmH($kind) . '"><span class="dev-meter-label">' . rmmH($label) . '</span><span class="dev-meter-val">' . ($v === null ? 'no data' : $v . '%')
+        . '</span><span class="dev-meter-bar"><i style="width:' . (int) ($v ?? 0) . '%"></i></span></div>';
+}
+
 // ------------------------------------------------------------------ strip
 
 /** @param array<string,mixed> $vm rivetRmmUiPanel() */
@@ -187,19 +196,17 @@ function rivetRmmUiStrip(array $vm): string
     $live = '';
     $volumesModalId = '';
     if (!$never) {
-        $live = '<div class="mt-2 small d-flex flex-wrap align-items-center rmm-live' . ($vm['offline'] ? ' rmm-dim' : '') . '">';
+        $live = '<div class="mt-2 small d-flex flex-wrap align-items-center rmm-live rmm-live-meters' . ($vm['offline'] ? ' rmm-dim' : '') . '">';
         foreach ($vm['header_chips'] as $chip) {
             if ($chip['key'] === 'cpu' || $chip['key'] === 'ram') {
                 $bk = rivetRmmUiKind((string) $chip['level'])[0];
-                $live .= '<span class="me-3 text-nowrap"><span class="text-muted">' . ($chip['key'] === 'cpu' ? 'CPU' : 'RAM') . '</span> <span class="badge text-bg-' . $bk . '">'
-                    . (int) round($chip['pct']) . '%</span></span>';
+                $live .= rivetRmmUiMeter($chip['key'] === 'cpu' ? 'CPU' : 'RAM', (float) $chip['pct'], $bk);
             } elseif ($chip['key'] === 'disk') {
                 $bk = $chip['level'] !== null ? rivetRmmUiKind((string) $chip['level'])[0] : 'secondary';
-                $pctTxt = $chip['used_pct'] !== null ? (int) round($chip['used_pct']) . '%' : 'no data';
-                $live .= '<span class="me-3 text-nowrap"><span class="text-muted">Disk' . ($chip['pool'] ? ' (pool)' : '') . ' ' . rmmH($chip['label']) . '</span> <span class="badge text-bg-' . $bk . '">' . $pctTxt . '</span></span>';
+                $live .= rivetRmmUiMeter('Disk' . ($chip['pool'] ? ' (pool)' : '') . ' ' . (string) $chip['label'], $chip['used_pct'] !== null ? (float) $chip['used_pct'] : null, $bk);
                 if ((int) $chip['more'] > 0) {
                     $volumesModalId = 'rmm-volumes-' . (int) $vm['device_id'];
-                    $live .= '<button type="button" class="btn btn-link btn-sm p-0 me-3 text-nowrap" data-bs-toggle="modal" data-bs-target="#' . $volumesModalId . '">+' . (int) $chip['more'] . ' more</button>';
+                    $live .= '<button type="button" class="btn btn-link btn-sm p-0 text-nowrap rmm-more-vols" data-bs-toggle="modal" data-bs-target="#' . $volumesModalId . '">+' . (int) $chip['more'] . ' more volume' . ((int) $chip['more'] === 1 ? '' : 's') . '</button>';
                 }
             } elseif ($chip['key'] === 'uptime') {
                 // A stored uptime_s survives a device going offline (Core's own chip keeps reporting it), but it stops meaning anything once stale - the
@@ -241,6 +248,7 @@ function rivetRmmUiStrip(array $vm): string
     $scriptReason = !$dev ? 'The device is not approved or no longer active.' : (!in_array($vm['platform'], ['windows', 'linux'], true) ? 'Script jobs run on Windows and Linux devices.'
         : (!($perm['run_saved'] || $perm['run_script']) ? 'Your role cannot run jobs.' : ($never ? 'Available after the first check-in.' : 'No script is available for this device, and your role cannot run free-form scripts.')));
     $actions = '';
+    $remoteHint = '';
     $actions .= $btn('rmm-act-script', 'btn-primary', 'fas fa-play', 'Run script', $dev && !$never && $canScript, $scriptReason, ' data-bs-toggle="modal" data-bs-target="#rmmRunModal"');
     $actions .= $btn('rmm-act-reboot', 'btn-outline-warning', 'fas fa-power-off', 'Reboot', $dev && !$never && $perm['reboot'], !$dev ? 'The device is not approved or no longer active.'
         : ($never ? 'Available after the first check-in.' : 'Your role cannot reboot devices.'), ' data-bs-toggle="modal" data-bs-target="#rmmRebootModal"');
@@ -262,8 +270,8 @@ function rivetRmmUiStrip(array $vm): string
         // Remote access card (js/rmm_panel.js wires every .rmm-mesh-approve on the page).
         $ma = is_array($vm['mesh_agent'] ?? null) ? $vm['mesh_agent'] : null;
         $approve = $ma !== null && $ma['map_state'] === 'needs_approval';
-        $actions .= '<span class="text-muted small me-2" id="rmm-act-remote-unmapped"><i class="fas fa-desktop me-1" aria-hidden="true"></i>'
-            . rmmH($approve ? 'This device reported a MeshCentral node that is waiting for approval: check it in MeshCentral, then map it.' : $rh['hint']) . '</span>';
+        $remoteHint = '<div class="rmm-remote-hint" id="rmm-act-remote-unmapped"><i class="fas fa-desktop me-2" aria-hidden="true"></i>'
+            . rmmH($approve ? 'This device reported a MeshCentral node that is waiting for approval: check it in MeshCentral, then map it.' : $rh['hint']) . '</div>';
         if ($approve && !empty($rh['can_map_manually']) && $ma['node_id'] !== '') {
             $actions .= '<button type="button" class="btn btn-outline-primary btn-sm rmm-mesh-approve" id="rmm-act-remote-approve" data-rmm-mesh-approve="' . rmmH($ma['node_id']) . '"><i class="fas fa-check me-1" aria-hidden="true"></i>Approve Mesh node</button>';
         }
@@ -329,7 +337,7 @@ function rivetRmmUiStrip(array $vm): string
         . '<span class="badge text-bg-light border ms-1"><i class="' . $osIcon . ' me-1" aria-hidden="true"></i>' . $platformName . '</span>'
         . ($vm['pending_approval'] ? ' ' . rivetRmmUiPill('warn', 'Waiting for approval') : '') . ($vm['revoked'] ? ' ' . rivetRmmUiPill('crit', 'Revoked') : '')
         . ($vm['retired'] ? ' ' . rivetRmmUiPill('off', 'Retired') : '')
-        . '<div class="text-muted small mt-1">' . $facts . '</div>' . $live . $tagsRow . '</div>'
+        . '<div class="text-muted small mt-1">' . $facts . '</div>' . $live . $remoteHint . $tagsRow . '</div>'
         . '<div class="d-flex align-items-center flex-wrap rmm-actions" role="group" aria-label="Device actions" style="gap:6px">' . $actions . '</div></div>' . $banners . $reasons . '</div></section>' . $volumesModal . $meshMapModal;
 }
 
