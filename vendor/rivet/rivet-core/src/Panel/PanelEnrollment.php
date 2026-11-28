@@ -8,6 +8,7 @@ use RivetCore\Panel\Contracts\PanelTicketGatewayInterface;
 use RivetCore\Rmm\Contracts\RmmAuditInterface;
 use RivetCore\Rmm\Contracts\RmmTenancyInterface;
 use RivetCore\Rmm\Enrollment\AttemptLog;
+use RivetCore\Rmm\Enrollment\DeviceValidator;
 use RivetCore\Rmm\Http\ApiError;
 use RivetCore\Rmm\Support\Sql;
 
@@ -174,9 +175,9 @@ final class PanelEnrollment
 
     private function recordAttempt(string $ip, bool $ok, string $reason, string $selector): void
     {
-        $this->attempts->record(PanelProtocol::ENROLL_RATE_SALT, $ip, $ok, 'panel_' . $reason, $selector);
-        if (!$ok) {
-            $this->audit->record('Panel Enrollment Failed', 'Panel enrollment attempt rejected (' . $reason . ') from ' . substr($ip, 0, 64) . ($selector !== '' ? ' using token ' . substr($selector, 0, 12) : ''), 0, 0);
+        $id = $this->attempts->insert(PanelProtocol::ENROLL_RATE_SALT, $ip, $ok, 'panel_' . $reason, $selector);
+        if (!$ok && ($tail = $this->attempts->auditSampling(AttemptLog::KIND_PANEL, $id)) !== '') {   // CORE-API-3: sampled past the instance-wide threshold
+            $this->audit->record('Panel Enrollment Failed', 'Panel enrollment attempt rejected (' . $reason . ') from ' . substr($ip, 0, 64) . ($selector !== '' ? ' using token ' . substr($selector, 0, 12) : '') . ($tail ?? ''), 0, 0);
         }
     }
 
@@ -186,7 +187,7 @@ final class PanelEnrollment
         $parts = explode('.', $tokenStr);
         $selector = '';
         $row = null;
-        if (count($parts) === 3 && $parts[0] === PanelProtocol::ENROLL_TOKEN_PREFIX && preg_match(PanelProtocol::ENROLL_TOKEN_SELECTOR_RE, $parts[1]) === 1 && preg_match(PanelProtocol::ENROLL_TOKEN_SECRET_RE, $parts[2]) === 1) {
+        if (count($parts) === 3 && $parts[0] === PanelProtocol::ENROLL_TOKEN_PREFIX && preg_match(PanelProtocol::ENROLL_TOKEN_SELECTOR_RE . 'D', $parts[1]) === 1 && preg_match(PanelProtocol::ENROLL_TOKEN_SECRET_RE . 'D', $parts[2]) === 1) {
             $selector = $parts[1];
             $row = $this->sql->one('SELECT * FROM endpoint_agent_enrollment_tokens WHERE token_selector = ?', [$selector]);
         }
@@ -216,7 +217,7 @@ final class PanelEnrollment
     private function validateDevice(array $dev): array
     {
         $install = $dev['install_id'] ?? null;
-        if (!is_string($install) || preg_match(PanelProtocol::INSTALL_ID_RE, strtolower($install)) !== 1) {
+        if (!is_string($install) || preg_match(PanelProtocol::INSTALL_ID_RE . 'D', strtolower($install)) !== 1) {
             throw new ApiError(422, 'invalid', 'device.install_id must be a UUID.');
         }
         $os = $dev['os'] ?? null;
@@ -224,17 +225,33 @@ final class PanelEnrollment
             throw new ApiError(422, 'invalid', 'device.os must be one of ' . implode(', ', PanelProtocol::OSES) . '.');
         }
 
+        // CORE-API-4: these three are stored in endpoint_agent_devices beside the agents' devices, listed to technicians, and the host name is written into the "Panel
+        // Enrolled" audit text (a stored-text sink the edition must escape when it renders it). They get what the agent path gives them (DeviceValidator::cleanHostname):
+        // the characters that open markup or leave an attribute (`<` `>` `"` backtick) and the backslash become `_`. The edition's output escaping stays the real defence.
+        $hostname = DeviceValidator::cleanHostname(PanelText::input($dev['hostname'] ?? null, 'device.hostname', 200, false), 200);
+        if ($hostname === null) {
+            throw new ApiError(422, 'invalid', 'device.hostname is required.');
+        }
+
         return [
             'install_id' => strtolower($install),
-            'hostname' => PanelText::input($dev['hostname'] ?? null, 'device.hostname', 200, false),
+            'hostname' => $hostname,
             'os' => $os,
-            'os_version' => PanelText::input($dev['os_version'] ?? '', 'device.os_version', 200, false, true),
-            'app_version' => PanelText::input($dev['app_version'] ?? '', 'device.app_version', 40, false, true),
+            'os_version' => self::inert(PanelText::input($dev['os_version'] ?? '', 'device.os_version', 200, false, true)),
+            'app_version' => self::inert(PanelText::input($dev['app_version'] ?? '', 'device.app_version', 40, false, true)),
+            // CORE-DS-61: the credential this install already holds, if it still has one: the proof that lets an enrollment re-key an existing device
+            'previous_token' => is_string($dev['previous_token'] ?? null) && str_starts_with($dev['previous_token'], PanelProtocol::DEVICE_TOKEN_PREFIX) && strlen($dev['previous_token']) <= 200 ? $dev['previous_token'] : null,
         ];
     }
 
+    /** CORE-API-4: the markup and attribute characters {@see DeviceValidator::cleanHostname()} replaces, replaced the same way in a version string (same length). */
+    private static function inert(string $s): string
+    {
+        return str_replace(['<', '>', '"', '`', '\\'], '_', $s);
+    }
+
     /**
-     * @param array{install_id:string,hostname:string,os:string,os_version:string,app_version:string} $d
+     * @param array{install_id:string,hostname:string,os:string,os_version:string,app_version:string,previous_token?:?string} $d
      * @param array<string,mixed> $token
      * @return array{device_id:int,device_token:string,event:string}
      */
@@ -247,6 +264,21 @@ final class PanelEnrollment
         $clientId = (int) $token['client_id'];
         $contactId = $token['contact_id'] !== null ? (int) $token['contact_id'] : null;
 
+        // CRR-18: the proof is looked up by the credential itself. A device created on an install-id collision carries a server-side install id its app never learns, so the app
+        // can only ever say "my install id" plus "my token"; the token finds the row, whatever install id the row holds.
+        $held = is_string($d['previous_token'] ?? null) && $d['previous_token'] !== ''
+            ? $this->sql->one('SELECT * FROM endpoint_agent_devices WHERE token_hash = ? AND kind = ? AND client_id = ? FOR UPDATE', [hash('sha256', (string) $d['previous_token']), PanelProtocol::KIND, $clientId])
+            : null;
+        if ($held !== null) {
+            if ($held['revoked_at'] !== null || $held['retired_at'] !== null) {
+                throw new ApiError(403, 'forbidden', 'This device was ' . ($held['revoked_at'] !== null ? 'revoked' : 'retired') . '. An administrator must allow re-enrollment first.');
+            }
+            $this->sql->run('UPDATE endpoint_agent_devices SET hostname = ?, os = ?, os_version = ?, agent_version = ?, token_hash = ?, token_issued_at = ?, token_expires_at = ?,
+                enroll_count = enroll_count + 1, enrolled_via_token_id = ?, last_ip = ?, contact_id = ? WHERE device_id = ? AND kind = ?',
+                [$d['hostname'], $d['os'], $d['os_version'], $d['app_version'], $hash, $now, $expires, $token['token_id'], substr($ip, 0, 64), $contactId, $held['device_id'], PanelProtocol::KIND]);
+
+            return ['device_id' => (int) $held['device_id'], 'device_token' => $plain, 'event' => 're-enrolled'];
+        }
         $dev = $this->sql->one('SELECT * FROM endpoint_agent_devices WHERE install_id = ? FOR UPDATE', [$d['install_id']]);
         if ($dev !== null) {
             // An RMM agent's install id, or another client's panel, is never taken over by a panel enrollment.
@@ -256,11 +288,20 @@ final class PanelEnrollment
             if ($dev['revoked_at'] !== null || $dev['retired_at'] !== null) {
                 throw new ApiError(403, 'forbidden', 'This device was ' . ($dev['revoked_at'] !== null ? 'revoked' : 'retired') . '. An administrator must allow re-enrollment first.');
             }
-            $this->sql->run('UPDATE endpoint_agent_devices SET hostname = ?, os = ?, os_version = ?, agent_version = ?, token_hash = ?, token_issued_at = ?, token_expires_at = ?,
-                enroll_count = enroll_count + 1, enrolled_via_token_id = ?, last_ip = ?, contact_id = ? WHERE device_id = ? AND kind = ?',
-                [$d['hostname'], $d['os'], $d['os_version'], $d['app_version'], $hash, $now, $expires, $token['token_id'], substr($ip, 0, 64), $contactId, $dev['device_id'], PanelProtocol::KIND]);
+            // CORE-DS-61 (CORE-32): an install id is not a credential (it is a UUID on the machine, readable in logs and deployment output), so knowing it is not enough to take over
+            // the device behind it with another token of the same client: that rewrote its credential and handed its tickets and chat to the new holder. Re-keying the existing
+            // device needs the credential it holds now (`device.previous_token`; the PC that is handed to another person keeps its device row, and ticket ownership still follows the
+            // (device, contact) pair). Without that proof the enrollment is a NEW
+            // device (its own device id and credential); the old one, and what it owns, is untouched and its holder keeps working.
+            $proved = is_string($d['previous_token'] ?? null) && hash_equals((string) $dev['token_hash'], hash('sha256', (string) $d['previous_token']));
+            if ($proved) {
+                $this->sql->run('UPDATE endpoint_agent_devices SET hostname = ?, os = ?, os_version = ?, agent_version = ?, token_hash = ?, token_issued_at = ?, token_expires_at = ?,
+                    enroll_count = enroll_count + 1, enrolled_via_token_id = ?, last_ip = ?, contact_id = ? WHERE device_id = ? AND kind = ?',
+                    [$d['hostname'], $d['os'], $d['os_version'], $d['app_version'], $hash, $now, $expires, $token['token_id'], substr($ip, 0, 64), $contactId, $dev['device_id'], PanelProtocol::KIND]);
 
-            return ['device_id' => (int) $dev['device_id'], 'device_token' => $plain, 'event' => 're-enrolled'];
+                return ['device_id' => (int) $dev['device_id'], 'device_token' => $plain, 'event' => 're-enrolled'];
+            }
+            $d['install_id'] = sprintf('%08x-%04x-4%03x-%04x-%012x', random_int(0, 0xffffffff), random_int(0, 0xffff), random_int(0, 0xfff), random_int(0x8000, 0xbfff), random_int(0, 0xffffffffffff));
         }
         $id = $this->sql->insert('INSERT INTO endpoint_agent_devices (install_id, hostname, os, os_version, arch, agent_version, asset_id, client_id, location_id, ring, link_state, match_reason,
             token_hash, token_issued_at, token_expires_at, enrolled_via_token_id, first_seen_at, last_ip, created_at, kind, contact_id)

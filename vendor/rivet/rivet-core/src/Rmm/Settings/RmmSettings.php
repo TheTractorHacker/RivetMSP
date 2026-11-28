@@ -46,6 +46,15 @@ final class RmmSettings
     /** Writable columns added in 1.0.0-rc.41 (kept apart so that {@see WRITABLE_ADDED} keeps its value). @internal */
     public const WRITABLE_ADDED_RC41 = ['data_store_phase'];
 
+    /** Writable columns added by the deep-scan fixes (migration 0053). @internal */
+    public const WRITABLE_ADDED_DS = ['mesh_token_ttl_exact', 'signed_config', 'release_rollover_json'];
+
+    /**
+     * CORE-AGENT-4 (red team 2026-11-21): the signed-configuration level a NEW install starts at (written when the module is switched on for the first time
+     * and mints its signing key with no device enrolled). An existing install keeps what it has; {@see hardeningStatus()} warns while it is below this.
+     */
+    public const SIGNED_CONFIG_DEFAULT = 2;
+
     /**
      * Server-side bounds for the intervals agents are told to use (design 13.3). The two floors are a DELIBERATE change from RivetIT's
      * original save handler (check-in 30 to 3600, collect 10 to 3600): they are capacity controls, because the check-in rate and the
@@ -62,7 +71,7 @@ final class RmmSettings
     public const MESH_TOKEN_TTL_DEFAULT_S = 300;
 
     /** Every feature a sub-switch may name (the first five are live in Phase 0; the rest are reserved for later phases). */
-    public const FEATURES = ['monitoring', 'metrics', 'jobs', 'remote', 'updates', 'inventory_software', 'policies', 'scripts', 'patching', 'software', 'software_deploy', 'logs', 'change_monitor', 'hypervisor', 'reports', 'alerting', 'remote_tools', 'filetransfer'];
+    public const FEATURES = ['monitoring', 'metrics', 'jobs', 'remote', 'updates', 'inventory_software', 'policies', 'scripts', 'patching', 'software', 'software_deploy', 'logs', 'change_monitor', 'hypervisor', 'reports', 'alerting', 'remote_tools', 'filetransfer', 'remote_console'];
     /** What a NULL features_json means: today's behaviour. `remote` follows mesh_enabled. */
     public const LEGACY_FEATURES = ['monitoring', 'metrics', 'jobs', 'updates'];
 
@@ -305,14 +314,37 @@ final class RmmSettings
         $this->stateListener = $listener;
     }
 
+    /**
+     * The settings row in one query. CORE-DS-16/26/39: the switches of the deep-scan fixes live in a table of their own (migration 0053), joined here so a read costs no more than
+     * before; an install without that table (or without its row) simply has them off.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function read(): ?array
+    {
+        try {
+            $row = $this->sql->one('SELECT s.*, h.mesh_token_ttl_exact, h.signed_config, h.release_rollover_json FROM endpoint_agent_settings s LEFT JOIN rmm_hardening_settings h ON h.id = s.id WHERE s.id = 1');
+        } catch (\Throwable) {
+            $row = $this->sql->one('SELECT * FROM endpoint_agent_settings WHERE id = 1');
+        }
+        if ($row === null) {
+            return null;
+        }
+        $row['mesh_token_ttl_exact'] = (int) ($row['mesh_token_ttl_exact'] ?? 0);
+        $row['signed_config'] = (int) ($row['signed_config'] ?? 0);
+        $row['release_rollover_json'] ??= null;
+
+        return $row;
+    }
+
     /** @return array<string,mixed> the settings row */
     public function get(bool $fresh = false): array
     {
         if ($this->cache === null || $fresh) {
-            $row = $this->sql->one('SELECT * FROM endpoint_agent_settings WHERE id = 1');
+            $row = $this->read();
             if ($row === null) {
                 $this->sql->run('INSERT IGNORE INTO endpoint_agent_settings (id) VALUES (1)');
-                $row = $this->sql->one('SELECT * FROM endpoint_agent_settings WHERE id = 1') ?? [];
+                $row = $this->read() ?? [];
             }
             $this->cache = $row;
         }
@@ -351,6 +383,15 @@ final class RmmSettings
         $this->floors = $floors;
     }
 
+    /**
+     * CORE-39: true when floors were set but could not be read (a {@see \RivetCore\Compliance\Profile\RetentionFloors} whose load failed). They then answer
+     * "none", which is wrong for a framework minimum: the housekeeping skips its history, log, change and metric prunes for that run instead of deleting below it.
+     */
+    public function retentionFloorsUnavailable(): bool
+    {
+        return $this->floors instanceof \RivetCore\Compliance\Profile\RetentionFloors && $this->floors->unavailable();
+    }
+
     public function retentionFloors(): ?RetentionFloorsInterface
     {
         return $this->floors;
@@ -359,7 +400,7 @@ final class RmmSettings
     /** @return list<string> every column {@see set()} may write */
     public static function writableColumns(): array
     {
-        return [...self::WRITABLE, ...self::WRITABLE_ADDED, ...self::WRITABLE_ADDED_RC41];
+        return [...self::WRITABLE, ...self::WRITABLE_ADDED, ...self::WRITABLE_ADDED_RC41, ...self::WRITABLE_ADDED_DS];
     }
 
     /**
@@ -370,15 +411,27 @@ final class RmmSettings
     {
         $sets = [];
         $params = [];
+        $extraSets = [];
+        $extraParams = [];
         foreach ($values as $k => $v) {
             if (!in_array($k, self::writableColumns(), true)) {
                 throw new \InvalidArgumentException("unknown setting $k");
+            }
+            if (in_array($k, self::WRITABLE_ADDED_DS, true)) {
+                $extraSets[] = "`$k` = ?";
+                $extraParams[] = $v;
+
+                continue;
             }
             $sets[] = "`$k` = ?";
             $params[] = $v;
         }
         if ($sets !== []) {
             $this->sql->run('UPDATE endpoint_agent_settings SET ' . implode(', ', $sets) . ' WHERE id = 1', $params);
+        }
+        if ($extraSets !== []) {
+            $this->sql->run('INSERT IGNORE INTO rmm_hardening_settings (id) VALUES (1)');
+            $this->sql->run('UPDATE rmm_hardening_settings SET ' . implode(', ', $extraSets) . ' WHERE id = 1', $extraParams);
         }
         $this->cache = null;
         if ($this->stateListener !== null && array_intersect(array_keys($values), \RivetCore\Rmm\RmmState::MIRRORED_COLUMNS) !== []) {
@@ -430,6 +483,7 @@ final class RmmSettings
         $int('enroll_max_ttl_h', 1, 720);
         $int('max_devices', 0, 1000000);
         $int('mesh_token_ttl_s', self::MESH_TOKEN_TTL_MIN_S, self::MESH_TOKEN_TTL_MAX_S);
+        $int('signed_config', 0, 2);   // CORE-AGENT-4: the hardening switch is part of the validated form (0 off, 1, 2 recommended)
         if (array_key_exists('unmatched_policy', $in)) {
             $out['unmatched_policy'] = in_array($in['unmatched_policy'], ['approval', 'auto_create'], true) ? $in['unmatched_policy'] : 'approval';
         }
@@ -539,6 +593,7 @@ final class RmmSettings
         $wasOff = (int) ($cfg['enabled'] ?? 0) !== 1;
         if ((string) $cfg['signing_public_key'] === '' || empty($cfg['signing_private_key_enc'])) {
             $this->generateSigningKey();
+            $this->defaultSignedConfigForNewInstall((int) ($cfg['signed_config'] ?? 0));
         }
         $this->integrationId();
         $this->set(['enabled' => 1]);
@@ -549,6 +604,51 @@ final class RmmSettings
                 // a warm start that cannot be recorded is simply not in force
             }
         }
+    }
+
+    /**
+     * CORE-AGENT-4: the very first switch-on of an install with no device enrolled is a new install: it starts with signed configuration at
+     * {@see SIGNED_CONFIG_DEFAULT}, so every agent that enrolls refuses unsigned checks and unsigned log configuration from its first check-in. An install
+     * that has devices keeps its value (they may run agents older than CORE-DS-16; see {@see hardeningStatus()} and UPGRADING.md). Never lowers a level;
+     * an administrator can still choose another one afterwards. Needs migration 0053 (without it nothing is written and the level stays off).
+     */
+    private function defaultSignedConfigForNewInstall(int $current): void
+    {
+        if ($current >= self::SIGNED_CONFIG_DEFAULT) {
+            return;
+        }
+        try {
+            if ((int) $this->sql->val('SELECT COUNT(*) FROM endpoint_agent_devices') > 0) {
+                return;
+            }
+            $this->set(['signed_config' => self::SIGNED_CONFIG_DEFAULT]);
+        } catch (\Throwable) {
+            // migration 0053 not applied yet: the level stays off, as before
+        }
+    }
+
+    /**
+     * CORE-AGENT-4: the state of the hardening switches for the administration page (a fixed, secret-free summary). `signed_config_warning` is a
+     * sentence to show prominently while signed configuration is below the recommended level: with it off, anyone who can change a check-in response
+     * (an in-path party, a database writer) can make every agent run unsigned http/port/cert checks and read their results back (red team Chain G).
+     *
+     * @return array{signed_config:int,signed_config_recommended:int,signed_config_ok:bool,signed_config_warning:?string,mesh_token_ttl_exact:bool,release_rollover_set:bool}
+     */
+    public function hardeningStatus(): array
+    {
+        $level = $this->signedConfigLevel();
+        $warning = match (true) {
+            $level >= self::SIGNED_CONFIG_DEFAULT => null,
+            $level === 1 => 'Signed configuration is at level 1: checks and the log configuration are signed, but the log configuration is not yet bound to the device. '
+                . 'Set it to 2 (agents that predate CORE-DS-16 ignore the setting, so it never breaks them; agents that know it keep it for good).',
+            default => 'Signed configuration is OFF: agents accept unsigned check definitions and an unsigned log configuration, so anyone who can change a check-in '
+                . 'response or the database can make every agent probe its network and report the results. Set it to 2. Agents that predate CORE-DS-16 ignore '
+                . 'the setting (no harm, no protection); agents that know it refuse unsigned checks from then on, and keep doing so.',
+        };
+        $cfg = $this->get();
+
+        return ['signed_config' => $level, 'signed_config_recommended' => self::SIGNED_CONFIG_DEFAULT, 'signed_config_ok' => $warning === null, 'signed_config_warning' => $warning,
+            'mesh_token_ttl_exact' => (int) ($cfg['mesh_token_ttl_exact'] ?? 0) === 1, 'release_rollover_set' => is_string($cfg['release_rollover_json'] ?? null) && $cfg['release_rollover_json'] !== ''];
     }
 
     /** Switch the master off. Nothing is deleted. */
@@ -813,6 +913,25 @@ final class RmmSettings
     }
 
     /**
+     * CORE-DS-16: is the signed-configuration contract on (`rmm_hardening_settings.signed_config`, migration 0053)? Then responses announce `config.signed_config: 1` and signed
+     * checks carry the device they are for. Off (the column default, an install whose devices predate the switch, and when the column does not exist yet) the wire
+     * is exactly what it was. A new install starts at {@see SIGNED_CONFIG_DEFAULT} (CORE-AGENT-4).
+     */
+    public function signedConfig(): bool
+    {
+        return $this->signedConfigLevel() >= 1;
+    }
+
+    /**
+     * The contract version announced as `config.signed_config`: 0 off, 1 signed checks and logs, 2 as 1 and `config.logs` also carries `device_id` (a string) and a monotonic `seq`
+     * inside the signature (docs/design/SIGNED_CONFIG_CONTRACT.md, item 3). Anything else stored counts as the nearest valid value.
+     */
+    public function signedConfigLevel(): int
+    {
+        return max(0, min(2, (int) ($this->get()['signed_config'] ?? 0)));
+    }
+
+    /**
      * Check definitions as delivered to the agent, each signed (script checks execute code on the endpoint).
      *
      * A Phase 3 check type is included only when $caps (the device's announced capabilities) lists `check:<type>`; the four original types
@@ -824,9 +943,9 @@ final class RmmSettings
      * @param list<string>|null $caps
      * @return list<array<string,mixed>>
      */
-    public function signedChecks(?array $caps = null, ?string $os = null): array
+    public function signedChecks(?array $caps = null, ?string $os = null, ?int $deviceId = null): array
     {
-        return $this->signCheckList($this->checks(), $caps, $os);
+        return $this->signCheckList($this->checks(), $caps, $os, $deviceId);
     }
 
     /**
@@ -836,8 +955,9 @@ final class RmmSettings
      * @param list<string>|null $caps
      * @return list<array<string,mixed>>
      */
-    public function signCheckList(array $checks, ?array $caps = null, ?string $os = null): array
+    public function signCheckList(array $checks, ?array $caps = null, ?string $os = null, ?int $deviceId = null): array
     {
+        $bind = $deviceId !== null && $this->signedConfig();
         [$sec] = $this->signingKey();
         $out = [];
         foreach ($checks as $c) {
@@ -859,6 +979,9 @@ final class RmmSettings
             $target = RmmChecks::osOf($c);
             if ($target !== null) {
                 $item['os'] = $target;
+            }
+            if ($bind) {
+                $item['device_id'] = $deviceId;   // CORE-DS-16: a signed check cannot be replayed on another device
             }
             $item['signature'] = Signer::sign(Signer::checkMessage($item), $sec);
             $out[] = $item;

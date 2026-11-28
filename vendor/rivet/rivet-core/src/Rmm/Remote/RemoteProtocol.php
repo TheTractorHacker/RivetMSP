@@ -38,11 +38,15 @@ final class RemoteProtocol
     public const CAP_PROCESSES = 'remote:processes';
     public const CAP_FILES = 'remote:files';
     public const CAP_LOGS = 'logs:collect';
+    /** CORE-DS-16: the domain line of the signed log collection configuration (`config.logs.signature`), separate from every other signed object. */
+    public const LOGS_SIGN_DOMAIN = 'rivetit-logs-config-v1';
 
     // ---- sub-switches (RmmSettings::FEATURES)
     public const FEATURE_REMOTE_TOOLS = 'remote_tools';
     public const FEATURE_FILE_TRANSFER = 'filetransfer';
     public const FEATURE_LOGS = 'logs';
+    /** The optional Rivet Console desktop app (default off): when on, a launch also returns a `rivetconsole://` deep link; off is stock MeshCentral launch. */
+    public const FEATURE_REMOTE_CONSOLE = 'remote_console';
 
     // ---- service and process manager
     public const SERVICE_ACTIONS = ['start', 'stop', 'restart', 'enable', 'disable', 'manual'];
@@ -114,7 +118,7 @@ final class RemoteProtocol
      */
     public static function serviceName(mixed $v, string $os): ?string
     {
-        if (!is_string($v) || preg_match(self::SERVICE_NAME_RE, $v) !== 1) {
+        if (!is_string($v) || preg_match(self::SERVICE_NAME_RE . 'D', $v) !== 1) {
             return null;
         }
         if ($os === 'linux') {
@@ -130,7 +134,7 @@ final class RemoteProtocol
 
     public static function processName(mixed $v): ?string
     {
-        if (!is_string($v) || preg_match(self::PROCESS_NAME_RE, $v) !== 1 || trim($v) === '' || trim($v) !== $v) {
+        if (!is_string($v) || preg_match(self::PROCESS_NAME_RE . 'D', $v) !== 1 || trim($v) === '' || trim($v) !== $v) {
             return null;
         }
 
@@ -139,7 +143,7 @@ final class RemoteProtocol
 
     public static function pid(mixed $v): ?int
     {
-        if (is_string($v) && preg_match('/^[1-9][0-9]{0,7}$/', $v) === 1) {
+        if (is_string($v) && preg_match('/^[1-9][0-9]{0,7}$/D', $v) === 1) {
             $v = (int) $v;
         }
         if (!is_int($v) || $v < self::PID_MIN || $v > self::PID_MAX) {

@@ -2141,6 +2141,7 @@ CREATE TABLE `endpoint_agent_mesh_agents` (
   `first_installed_at` datetime DEFAULT NULL,
   `reported_at` datetime NOT NULL,
   `changed_at` datetime NOT NULL,
+  `verify_json` text DEFAULT NULL,   -- RivetCore migration 0052 (rc.67)
   PRIMARY KEY (`device_id`),
   KEY `idx_node` (`node_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -2173,6 +2174,7 @@ CREATE TABLE `endpoint_agent_mesh_settings` (
   `install_args_json` text DEFAULT NULL,
   `updated_by` int(11) NOT NULL DEFAULT 0,
   `updated_at` datetime DEFAULT NULL,
+  `verify_json` text DEFAULT NULL,   -- RivetCore migration 0052 (rc.67)
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -3867,6 +3869,108 @@ CREATE TABLE `rivet_core_migrations` (
   PRIMARY KEY (`migration_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+--
+-- RivetCore migrations 0050 (rc.68), 0051 (rc.70), 0053/0054 (rc.76): per-client remote session policy, Rivet Console codes/sessions/settings,
+-- rmm_hardening_settings (+ its id=1 row) and the offline agent release signatures. 0052 is the verify_json columns above; 0055 only repairs interim installs.
+--
+
+DROP TABLE IF EXISTS `rmm_agent_release_sigs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_agent_release_sigs` (
+  `binary_id` int(11) NOT NULL,
+  `os` varchar(8) NOT NULL,
+  `arch` varchar(8) NOT NULL,
+  `release_signature` varchar(128) NOT NULL,
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`binary_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_client_remote_policy`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_client_remote_policy` (
+  `client_id` int(11) NOT NULL,
+  `policy` varchar(10) NOT NULL,
+  `updated_by` int(11) NOT NULL DEFAULT 0,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`client_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_console_settings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_console_settings` (
+  `id` tinyint(4) NOT NULL DEFAULT 1,
+  `public_url` varchar(255) NOT NULL DEFAULT '',
+  `min_version` varchar(20) NOT NULL DEFAULT '',
+  `log_file_paths` tinyint(1) NOT NULL DEFAULT 0,
+  `cookie_once` tinyint(1) NOT NULL DEFAULT 1,
+  `updated_by` int(11) NOT NULL DEFAULT 0,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_console_codes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_console_codes` (
+  `code_hash` char(64) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `user_name` varchar(100) NOT NULL DEFAULT '',
+  `device_id` int(11) NOT NULL,
+  `client_id` int(11) NOT NULL DEFAULT 0,
+  `asset_id` int(11) NOT NULL DEFAULT 0,
+  `node_id` varchar(150) NOT NULL,
+  `kind` varchar(12) NOT NULL,
+  `mode` varchar(12) NOT NULL DEFAULT 'standard',
+  `session_id` char(16) NOT NULL,
+  `ip_hash` char(64) NOT NULL DEFAULT '',
+  `created_at` datetime NOT NULL,
+  `expires_at` datetime NOT NULL,
+  `used_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`code_hash`),
+  KEY `idx_expires` (`expires_at`),
+  KEY `idx_device` (`device_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_console_sessions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_console_sessions` (
+  `session_id` char(16) NOT NULL,
+  `token_hash` char(64) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `user_name` varchar(100) NOT NULL DEFAULT '',
+  `device_id` int(11) NOT NULL,
+  `client_id` int(11) NOT NULL DEFAULT 0,
+  `asset_id` int(11) NOT NULL DEFAULT 0,
+  `node_id` varchar(150) NOT NULL,
+  `kind` varchar(12) NOT NULL,
+  `started_at` datetime NOT NULL,
+  `ended_at` datetime DEFAULT NULL,
+  `token_expires_at` datetime NOT NULL,
+  `hard_expires_at` datetime NOT NULL,
+  `events_count` int(11) NOT NULL DEFAULT 0,
+  `truncated` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`session_id`),
+  UNIQUE KEY `uniq_token` (`token_hash`),
+  KEY `idx_started` (`started_at`),
+  KEY `idx_device` (`device_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `rmm_hardening_settings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `rmm_hardening_settings` (
+  `id` tinyint(4) NOT NULL DEFAULT 1,
+  `mesh_token_ttl_exact` tinyint(1) NOT NULL DEFAULT 0,
+  `signed_config` tinyint(1) NOT NULL DEFAULT 0,
+  `release_rollover_json` text DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+INSERT IGNORE INTO `rmm_hardening_settings` (`id`) VALUES (1);
 DROP TABLE IF EXISTS `rmm_alert_meta`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;

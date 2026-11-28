@@ -37,11 +37,11 @@ Request: `{"enrollment_token": "rvte1...", "device": {install_id (UUID), machine
 
 Response 201: `{device_id, device_token (shown once), check_in_interval_s, server_time, status ("linked" or "pending_approval"), matched_asset_id, signing_public_key, signing_key_id, config: {checks: [signed check definitions], collect_interval_s}}`.
 
-Identity rules (unchanged): a known `install_id` re-enrolls (a different machine behind the same id is 409 `conflict`); otherwise the same `machine_guid`, then the same non-junk `serial`, is a reinstall, but only within the token's client: a match under another client never reuses that device (an `install_id` held by another client is 409 `conflict`; a `machine_guid` or serial held by another client creates a new device of the token's client in `pending_approval` with reason `cross_client_identity`); a new device is matched to an existing asset by serial and MAC address only, inside the token's client, unambiguously and not already owned; a hostname alone is only a hint and never links; anything else waits for an administrator (`pending_approval`) or, with the `auto_create` policy and no match at all, gets a new asset. A revoked or retired device is 403 `forbidden` until an administrator allows re-enrollment. A full installation (`max_devices`) answers 403 `device_limit` for a new device. Enrollment attempts are limited per address from the database (10 failures or 60 attempts per 600 s; 429 `rate_limited`, `Retry-After: 600`).
+Identity rules (unchanged): a known `install_id` re-enrolls (a different machine behind the same id is 409 `conflict`); otherwise the same `machine_guid`, then the same non-junk `serial`, is a reinstall, but only within the token's client: a match under another client never reuses that device (an `install_id` held by another client is 409 `conflict`; a `machine_guid` or serial held by another client creates a new device of the token's client in `pending_approval` with reason `cross_client_identity`); a new device is matched to an existing asset by serial and MAC address only, inside the token's client, unambiguously and not already owned; a hostname alone is only a hint and never links; anything else waits for an administrator (`pending_approval`) or, with the `auto_create` policy and no match at all, gets a new asset. A revoked or retired device is 403 `forbidden` until an administrator allows re-enrollment. A full installation (`max_devices`) answers 403 `device_limit` for a new device. Enrollment attempts are limited per address from the database (10 failures or 60 attempts per 600 s; 429 `rate_limited`, `Retry-After: 600`); an IPv6 address counts as its /64 (red team 2026-11-21 CORE-API-3; the full address is still logged). Past 100 rejected attempts of one kind in 600 s across the instance, the audit log gets one sampled row per 100 attempts (saying how many it stands for) instead of one per attempt; nothing is refused for the instance as a whole. The same applies to the panel enrollment and the installer download.
 
 ### 3.2 `agent_checkin` (POST, device token)
 
-Request: `{seq (integer, idempotency key per device), collected_at (RFC 3339, at most 900 s in the future since rc.23; it was 300), agent_version, inventory (object, at most 65536 bytes, or null), metrics {cpu_pct, mem_pct, disk[{mount, used_pct}], net_rx_bps, net_tx_bps}, checks [{key, status ("ok","warn","fail","unknown"), detail, value (optional number)}] (at most 100), buffered [{collected_at, metrics, checks}] (at most 100), update_result (optional {version, state ("ok","failed","rolled_back"), detail})}`. Body cap 1 MiB. A missing metric produces no sample; it is never stored as 0. Duplicate `seq` is a normal 200 (the liveness is real, the data is not processed twice). At most 40 per 60 s per device (429).
+Request: `{seq (integer, idempotency key per device), collected_at (RFC 3339, at most 900 s in the future since rc.23; it was 300), agent_version, inventory (object, at most 65536 bytes, or null), metrics {cpu_pct, mem_pct, disk[{mount, used_pct}], net_rx_bps, net_tx_bps}, checks [{key, status ("ok","warn","fail","unknown"), detail, value (optional number)}] (at most 100), buffered [{collected_at, metrics, checks}] (at most 100), update_result (optional {version, state ("ok","failed","rolled_back"), detail})}`. Body cap 1 MiB. A missing metric produces no sample; it is never stored as 0. A reading outside its plausible range is treated as missing (rejected, never clamped; red team 2026-11-21 CORE-API-2): percentages 0 to 100, `net_*_bps` 0 to 1e13, IOPS 0 to 1e9, `disk_queue` 0 to 1e6; the edition's health columns then get null. Duplicate `seq` is a normal 200 (the liveness is real, the data is not processed twice). At most 40 per 60 s per device (429).
 
 Response 200: `{ok, status, matched_asset_id, next_check_in_s, jobs_pending, config: {checks: [signed], collect_interval_s}, update (signed manifest, or null), server_time, signing_key_id}`. `jobs_pending` is 0 and `update` is omitted while the `jobs` or `updates` sub-switch is off. Under load shedding (levels 2 and 3) the interval grows and level 3 answers 503 `unavailable` with a jittered `Retry-After`.
 
@@ -137,6 +137,8 @@ Everything here is optional on both sides; an agent that does not announce `logs
      {"kind": "eventlog", "channel": "System", "levels": ["critical", "error", "warning"], "event_ids": [7036], "contains": []},
      {"kind": "journal", "units": ["ssh.service"], "identifiers": [], "min_level": "warning", "contains": ["failed password"]}]}}}
 ```
+
+  `config.logs` carries a `signature` (CORE-DS-16): Ed25519 over the line `rivetit-logs-config-v1`, a line feed, and the canonical JSON of the object without `signature` (the same construction as `config.change`). An agent that verifies it against the key it pinned at enrolment cannot be told which logs to ship by anyone without the signing key; an older agent ignores the member. With no usable signing key the configuration is not offered. With `config.signed_config: 2` (announced when the installation switches on contract version 2) the signed object also carries `device_id` (this device's id as a string) and `seq` (a non-negative integer that never decreases and repeats while the configuration is unchanged); an agent refuses a signed logs configuration for another device or with a lower `seq`.
 
   A device receives only the sources of its own platform (`eventlog` for Windows, `journal` for Linux). `version` changes exactly when something the agent is told changes. The agent collects only while the latest response offers the feature and carries `config.logs`; the moment a response does not, it stops reading (its saved bookmark is kept) and drops what it had not sent.
 * **Sources.** Windows: `channel` (letters, digits, space and `_ . / % -`, at most 100), `levels` (`critical`, `error`, `warning`, `info`, `verbose`), `event_ids` (at most 50 numbers, 0 to 65535; empty means all), `contains` (at most 10 phrases of at most 80 characters, any may match, case-insensitive). Linux: `units` and `identifiers` (at most 20 names each, letters, digits and `: _ . @ -`), `min_level` (`critical`, `error`, `warning`, `info`, `debug`: that severity or worse), `contains` as above. No source ever carries a regular expression. Windows sources may also carry `"levels": []` (every level) and, for an agent that announced `logs:presets`, `aggregate` (3.2.7).
@@ -267,7 +269,7 @@ Six job types, queued only by their own technician endpoints, only for a device 
 
 The agent also refuses (`failed`, a stable `detail`) to stop, restart or disable its own service (`refused_self`) and a short list of critical services (`refused_protected`). The server refuses the agent's own service names first (`422 protected`). A destructive job is offered at most once and never retried (3.3). A technician needs `rmm.remote.manage` for all of them except `file_put`, which needs `rmm.admin`.
 
-**Path policy of `file_get` and `file_put`.** The path must be absolute (a Linux path starting with `/`; a Windows path with a drive letter, never a UNC or device path), free of `.`, `..`, empty parts, control characters and (Windows) alternate data streams, wildcards, trailing dots and 8.3 short names, and at most 1000 characters. `allow` is the administrator's list of folders for the device's platform, newline separated (each at least two levels deep: never a whole drive, `/etc`, `/root` or `/home`); the path, after the agent has resolved symbolic links, must lie inside one of them, compared by whole path elements (`/srv/data` never allows `/srv/data2`) and, on Windows, case-insensitively. An empty list refuses everything (`no_allowed_roots`). The never-transfer list always applies and wins over the allow list: Linux `/etc/shadow`, `/etc/gshadow`, `/etc/sudoers` and `/etc/sudoers.d`, `/etc/ssh/ssh_host_*`, `/proc`, `/sys`, `/dev`, `/run/secrets`, `/root/.ssh`, any `.ssh` or `.gnupg` folder, files named `id_rsa*`, `id_ed25519*`, `id_ecdsa*`, `id_dsa*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.kdbx`, `*.keystore`, and the agent's own folders; Windows `<SystemRoot>\System32\config` (the SAM, SECURITY, SYSTEM and SOFTWARE hives), `\Windows\NTDS`, `ntds.dit`, `pagefile.sys`, `hiberfil.sys`, `swapfile.sys` and the agent's own `ProgramData` folder. A refusal by the agent is `failed` with `detail` `path_denied:<reason>`. `file_put` writes to a temporary file in the destination folder (never creating folders, never following a symbolic link), checks the byte count and the SHA-256 against the signed job, then renames it into place; any failure removes the temporary file and leaves the destination untouched.
+**Path policy of `file_get` and `file_put`.** The path must be absolute (a Linux path starting with `/`; a Windows path with a drive letter, never a UNC or device path), free of `.`, `..`, empty parts, control characters and (Windows) alternate data streams, wildcards, trailing dots and 8.3 short names, and at most 1000 characters. `allow` is the administrator's list of folders for the device's platform, newline separated (each at least two levels deep: never a whole drive, `/etc`, `/root` or `/home`); the path, after the agent has resolved symbolic links, must lie inside one of them, compared by whole path elements (`/srv/data` never allows `/srv/data2`) and, on Windows, case-insensitively. An empty list refuses everything (`no_allowed_roots`). The never-transfer list always applies and wins over the allow list: Linux `/etc/shadow`, `/etc/gshadow`, `/etc/sudoers` and `/etc/sudoers.d`, `/etc/ssh/ssh_host_*`, `/proc`, `/sys`, `/dev`, `/run/secrets`, `/root/.ssh`, any `.ssh` or `.gnupg` folder, files named `id_rsa*`, `id_ed25519*`, `id_ecdsa*`, `id_dsa*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.kdbx`, `*.keystore`, and the agent's own folders; Windows `<SystemRoot>\System32\config` (the SAM, SECURITY, SYSTEM and SOFTWARE hives), `\Windows\NTDS`, `ntds.dit`, `pagefile.sys`, `hiberfil.sys`, `swapfile.sys` and the agent's own `ProgramData` folder. Both platforms also deny the agent's own program files (CORE-AGENT-6): `/opt/rivetit-agent` and `<ProgramFiles>\RivetIT`, a file named `rivetit-agent`/`rivetit-agent.exe` or one of its self-update siblings (`.new`, `.prev`, `.failed`) in any folder, the `rivetit-agent.service` unit and its `.d` drop-in folder under `/etc/systemd/system`, `/lib/systemd/system`, `/usr/lib/systemd/system` and `/run/systemd/system`, and the Mesh agent's install and identity (`/usr/local/mesh_services`, `/opt/meshagent*`, the `meshagent.service` units, `<ProgramFiles>\Mesh Agent`, `meshagent.msh` and `meshagent.db*` anywhere). The agent adds the folder of its own running executable when that folder is named like the agent (a non-default `--install-dir`), and otherwise the executable and its siblings. Self-update never goes through this policy. **`file_put` is still root/SYSTEM-equivalent:** it can write any file the list does not name (another service unit, a cron job, a scheduled task, a DLL next to a program); the list protects the agent's own files and credentials, it does not make the ability safe to hand out. A refusal by the agent is `failed` with `detail` `path_denied:<reason>`. `file_put` writes to a temporary file in the destination folder (never creating folders, never following a symbolic link), checks the byte count and the SHA-256 against the signed job, then renames it into place; any failure removes the temporary file and leaves the destination untouched.
 
 ### 3.6a Patch job types (Phase 4, additive)
 
@@ -277,6 +279,7 @@ Two job types, queued only by the patch endpoints and the scheduler, only for a 
 |---|---|---|---|---|
 | `patch_scan` | `patch:scan` | `categories` (comma list of `security,critical,important,definition,feature,driver,optional,other`, empty for all), `max_items` (1 to 1000, default 500) | no | `{v, ok, manager, scanned_at, scan_state, wu_state, reboot_pending, last_install_at, truncated, total, updates: [{id, kb, title, kind, severity, size, reboot_required, released_at, eula_accepted, categories, current, version}]}`; `manager` `wua`, `apt`, `dnf`, `yum`, `zypper`; `kind` critical, security, important, optional, driver, other; failure `{v, ok: false, detail, message?}` with `detail` `no_package_manager`, `wu_unavailable`, `timeout`, `lock_held`, `parse_error`, `invalid_params`, `busy`, `scan_failed` |
 | `patch_install` | `patch:install` | `ids` (at most 40 ids and 1000 characters; a Windows Update id in lower-case GUID form or a Linux package id), `mode` (`dry_run` default, `install`), `max_minutes` (1 to 240, default 60) | always | `{v, ok, mode, manager, results: [{id, title, result, code, detail, reboot_required}], reboot_required, truncated}`; `result` `would_install`, `installed`, `needs_reboot`, `failed`, `skipped`, `not_applicable`, `eula_required`, `not_found`, `locked` |
+| `patch_configure` | `patch:configure` | `mode` (`dry_run` default, `apply`), `update_mode` (`leave` default, `managed`), `feature_target` (`none` default, `hold`, or a version such as `25H2`: two digits, `H1` or `H2`), `defer_days` (0 to 30) | Windows only; destructive (offered once) | `{v, ok, mode, outcome, detail?, changes: [{key, from, to}], before, after}`; `outcome` `unchanged`, `changed`, `restored`, `would_change`, `would_restore`, `externally_managed`, `cannot_hold`; `before` and `after` are the Windows Update policy state (`feature_version`, `build`, `product`, `external`, `policy`, `core`). A `patch_scan` result from a Windows agent that has it carries the same object as `windows_update` (additive). Not run on Windows yet: [WINDOWS_UPDATE_CONTROL_TEST.md](WINDOWS_UPDATE_CONTROL_TEST.md) |
 
 The agent validates every parameter again (an unknown key, an out-of-range number, an id that does not match the platform's syntax, a duplicate or more than 40 ids is refused as `invalid_params` before any command is built), re-scans before an install and installs only ids that are still applicable, never accepts an EULA, never removes a package, never restarts the machine and never breaks a package manager lock. The job is `succeeded` when every requested id ended `installed`, `would_install`, `needs_reboot`, `skipped` or `not_applicable`; it is `failed` (the document is still the full result) when any ended `failed`, `eula_required`, `not_found` or `locked`. The server keeps no other channel: results are applied from the job report, nothing rides on the check-in. `disable_patching` withdraws both capabilities on a machine.
 
@@ -677,7 +680,7 @@ content-type: application/json
 
 ```http
 POST /api/v1/agent_checkin
-authorization: Bearer <TOKEN#5>
+authorization: Bearer <TOKEN#3>
 content-type: application/json
 
 {
@@ -804,7 +807,7 @@ content-type: application/json
 
 ```http
 GET /api/v1/agent_jobs
-authorization: Bearer <TOKEN#5>
+authorization: Bearer <TOKEN#3>
 
 HTTP 200
 cache-control: no-store
@@ -836,7 +839,7 @@ content-type: application/json
 
 ```http
 POST /api/v1/agent_jobs
-authorization: Bearer <TOKEN#5>
+authorization: Bearer <TOKEN#3>
 content-type: application/json
 
 {
@@ -859,7 +862,7 @@ content-type: application/json
 
 ```http
 POST /api/v1/agent_jobs
-authorization: Bearer <TOKEN#5>
+authorization: Bearer <TOKEN#3>
 content-type: application/json
 
 {
@@ -885,7 +888,7 @@ content-type: application/json
 
 ```http
 GET /api/v1/agent_update?arch=amd64&version=1.1.0
-authorization: Bearer <TOKEN#5>
+authorization: Bearer <TOKEN#3>
 
 HTTP 200
 cache-control: no-store

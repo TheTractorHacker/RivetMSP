@@ -27,6 +27,8 @@ final class RemoteSettings
         'logs_fleet_max_rows' => [1000, 200000000, 2000000],
         'logs_rate_per_min' => [10, 6000, 600],
         'logs_interval_s' => [30, 3600, 60],
+        // Rivet Console sessions (ended, or never ended and past their token's 12 hour cap); redeem codes go after a day. Never the audit log.
+        'console_session_retention_days' => [30, 3650, 365],
     ];
 
     public const FILE_TRANSFER_RISK = 'File transfer lets technicians copy files off managed devices and lets administrators put files onto them. '
@@ -39,8 +41,8 @@ final class RemoteSettings
         . 'Collection is capped per device and for the whole fleet and old entries are deleted, but choose narrow sources (warnings and errors from a few channels or services), '
         . 'keep retention short and watch the storage figure shown here before you turn it on for a large fleet.';
 
-    private const CHANNEL_RE = '/^[A-Za-z0-9][A-Za-z0-9 _.\/%-]{0,99}$/';
-    private const UNIT_RE = '/^[A-Za-z0-9][A-Za-z0-9:_.@-]{0,199}$/';
+    private const CHANNEL_RE = '/^[A-Za-z0-9][A-Za-z0-9 _.\/%-]{0,99}$/D';
+    private const UNIT_RE = '/^[A-Za-z0-9][A-Za-z0-9:_.@-]{0,199}$/D';
 
     /** @var array<string,mixed>|null */
     private ?array $cache = null;

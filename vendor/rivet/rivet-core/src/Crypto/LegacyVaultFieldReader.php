@@ -29,7 +29,7 @@ final class LegacyVaultFieldReader implements LegacyReader
             return false;
         }
         $rest = substr($stored, 16);
-        if (preg_match('/^[A-Za-z0-9+\/]+={0,2}$/', $rest) !== 1) {
+        if (preg_match('/^[A-Za-z0-9+\/]+={0,2}$/D', $rest) !== 1) {
             return false;
         }
         $raw = base64_decode($rest, true);
@@ -43,6 +43,6 @@ final class LegacyVaultFieldReader implements LegacyReader
             throw new KeyUnavailable('The legacy vault master key is not available.');
         }
 
-        return LegacyCbc::decrypt(substr($stored, 16), $this->masterKey, substr($stored, 0, 16), 0);
+        return LegacyCbc::decryptText(substr($stored, 16), $this->masterKey, substr($stored, 0, 16), 0);
     }
 }
