@@ -12,6 +12,9 @@ $filter_source    = in_array($_GET['source'] ?? '', ['agent', 'third'], true) ? 
 $filter_os        = in_array($_GET['os'] ?? '', ['windows', 'server', 'linux', 'macos', 'other'], true) ? $_GET['os'] : '';
 $filter_seen      = in_array($_GET['seen'] ?? '', ['1h', '24h', '7d', '30d', 'stale7', 'stale30'], true) ? $_GET['seen'] : '';
 
+$per_page = in_array(intval($_GET['per_page'] ?? 50), [25, 50, 100, 250], true) ? intval($_GET['per_page'] ?? 50) : 50;
+$page     = max(1, intval($_GET['page'] ?? 1));
+
 $os_labels   = ['windows' => 'Windows', 'server' => 'Windows Server', 'linux' => 'Linux', 'macos' => 'macOS', 'other' => 'Other'];
 $seen_labels = ['1h' => 'Last hour', '24h' => 'Last 24 hours', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'stale7' => 'Not seen for 7+ days', 'stale30' => 'Not seen for 30+ days'];
 
@@ -85,6 +88,13 @@ usort($rmm_link_rows, function ($a, $b) {
     return strcasecmp($a['hostname'] ?? '', $b['hostname'] ?? '');
 });
 
+// Pagination (the list is deduped per asset above, so the total is the deduped count)
+$total_devices = count($rmm_link_rows);
+$total_pages   = max(1, (int) ceil($total_devices / $per_page));
+$page          = min($page, $total_pages);
+$page_offset   = ($page - 1) * $per_page;
+$rmm_link_rows = array_slice($rmm_link_rows, $page_offset, $per_page);
+
 // Counts for stat cards (every filter except status, so the tiles stay a map of what you filtered to)
 $cnt = mysqli_fetch_assoc(mysqli_query($mysqli,
     "SELECT
@@ -105,9 +115,10 @@ while ($ii = mysqli_fetch_assoc($sql_integrations)) { $integrations_list[] = $ii
 $has_own_agent = (bool) mysqli_fetch_row(mysqli_query($mysqli, "SELECT 1 FROM rmm_integrations WHERE type='rivetit_agent' LIMIT 1"));
 
 // Tile / reset links keep the other filters
-$keep = array_filter(['q' => $filter_q, 'client_id' => $filter_client_id ?: null, 'integration_id' => $filter_intg_id ?: null, 'source' => $filter_source, 'os' => $filter_os, 'seen' => $filter_seen], static fn ($v) => $v !== null && $v !== '');
+$keep = array_filter(['q' => $filter_q, 'client_id' => $filter_client_id ?: null, 'integration_id' => $filter_intg_id ?: null, 'source' => $filter_source, 'os' => $filter_os, 'seen' => $filter_seen, 'per_page' => $per_page !== 50 ? $per_page : null], static fn ($v) => $v !== null && $v !== '');
 $tile_url = static fn (array $over = []): string => '?' . http_build_query(array_merge($keep, $over));
-$active_filters = count($keep) + ($filter_status !== '' ? 1 : 0);
+$active_filters = count(array_diff_key($keep, ['per_page' => 1])) + ($filter_status !== '' ? 1 : 0);
+$page_url = static fn (int $pg, ?int $pp = null): string => '?' . http_build_query(array_filter(array_merge($keep, ['status' => $filter_status], ['per_page' => ($pp ?? $per_page) !== 50 ? ($pp ?? $per_page) : null, 'page' => $pg > 1 ? $pg : null]), static fn ($v) => $v !== null && $v !== ''));
 $sql_clients = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients WHERE client_archived_at IS NULL" . ($client_access_string && !$session_is_admin ? " AND client_id IN ($client_access_string)" : '') . " ORDER BY client_name ASC");
 $clients_list = [];
 while ($c = mysqli_fetch_assoc($sql_clients)) $clients_list[] = $c;
@@ -233,10 +244,6 @@ $sync_target_name_js = json_encode($sync_target_name, JSON_HEX_TAG);
         </form>
     </div>
 </div>
-<div class="d-flex align-items-center mb-2 px-1 text-muted small">
-    <span><?= count($rmm_link_rows) ?> device<?= count($rmm_link_rows) === 1 ? '' : 's' ?><?= $active_filters ? ' match' : '' ?></span>
-</div>
-
 <!-- Asset table -->
 <div class="card card-dark">
     <div class="card-body p-0">
@@ -311,6 +318,25 @@ $sync_target_name_js = json_encode($sync_target_name, JSON_HEX_TAG);
         </table>
         <?php endif; ?>
     </div>
+    <?php if ($total_devices > 0): ?>
+    <div class="card-footer rmm-assets-pager">
+        <div class="rmm-assets-pager-count">Showing <strong><?= $page_offset + 1 ?>–<?= $page_offset + count($rmm_link_rows) ?></strong> of <strong><?= $total_devices ?></strong> device<?= $total_devices === 1 ? '' : 's' ?><?= $active_filters ? ' (filtered)' : '' ?></div>
+        <form method="get" class="rmm-assets-pager-size">
+            <?php foreach (array_merge($keep, ['status' => $filter_status]) as $k => $v): if ($v === '' || $v === null || $k === 'per_page') continue; ?><input type="hidden" name="<?= nullable_htmlentities($k) ?>" value="<?= nullable_htmlentities((string) $v) ?>"><?php endforeach; ?>
+            <label for="rmmpp" class="mb-0">Per page</label>
+            <select id="rmmpp" name="per_page" class="form-select form-select-sm auto-submit-select">
+                <?php foreach ([25, 50, 100, 250] as $n): ?><option value="<?= $n ?>" <?= $per_page === $n ? 'selected' : '' ?>><?= $n ?></option><?php endforeach; ?>
+            </select>
+        </form>
+        <?php if ($total_pages > 1): ?>
+        <nav aria-label="Pages" class="rmm-assets-pager-nav">
+            <a class="btn btn-sm btn-outline-secondary <?= $page <= 1 ? 'disabled' : '' ?>" href="<?= nullable_htmlentities($page_url(max(1, $page - 1))) ?>" <?= $page <= 1 ? 'aria-disabled="true" tabindex="-1"' : '' ?>><i class="fas fa-chevron-left"></i> Prev</a>
+            <span class="rmm-assets-pager-page">Page <strong><?= $page ?></strong> of <?= $total_pages ?></span>
+            <a class="btn btn-sm btn-outline-secondary <?= $page >= $total_pages ? 'disabled' : '' ?>" href="<?= nullable_htmlentities($page_url(min($total_pages, $page + 1))) ?>" <?= $page >= $total_pages ? 'aria-disabled="true" tabindex="-1"' : '' ?>>Next <i class="fas fa-chevron-right"></i></a>
+        </nav>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
 </div>
 
 <script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
