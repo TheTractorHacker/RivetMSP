@@ -438,3 +438,10 @@ pre.bg-body-tertiary, pre.bg-body-secondary, pre.bg-light, pre.bg-body { color: 
 #rdt-overview .table td { font-size: .9rem; padding: .5rem .6rem; vertical-align: middle; border-bottom: 1px solid var(--tblr-border-color, rgba(0,0,0,.08)); }
 #rdt-overview .table td.text-muted { font-size: .78rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 #rdt-overview .table tr:last-child td { border-bottom: 0; }
+
+/* ---- RMM Assets filter bar ---- */
+.rmm-assets-filter-grid { display: grid; grid-template-columns: minmax(16rem, 2fr) repeat(5, minmax(9rem, 1fr)) auto; gap: .75rem 1rem; align-items: end; }
+.rmm-assets-filter-label { display: block; margin-bottom: .25rem; font-size: .72rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--tblr-secondary-color, #667085); }
+.rmm-assets-filter-actions { display: flex; gap: .5rem; }
+@media (max-width: 1199.98px) { .rmm-assets-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .rmm-assets-filter-search { grid-column: 1 / -1; } }
+@media (max-width: 575.98px) { .rmm-assets-filter-grid { grid-template-columns: 1fr; } }

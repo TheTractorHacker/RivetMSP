@@ -2,22 +2,57 @@
 require_once "includes/inc_all.php";
 enforceUserPermission('module_rmm');
 
-// Filter params
-$filter_status    = sanitizeInput($_GET['status'] ?? '');
+// Filter params (all GET, all optional)
+$filter_q         = trim((string) ($_GET['q'] ?? ''));
+$filter_status    = in_array($_GET['status'] ?? '', ['online', 'offline', 'unknown'], true) ? $_GET['status'] : '';
 $filter_client_id = intval($_GET['client_id'] ?? 0);
 $filter_intg_id   = intval($_GET['integration_id'] ?? 0);
+// Source: our own endpoint agent vs. a third-party RMM integration (integration_id picks one specific third-party RMM)
+$filter_source    = in_array($_GET['source'] ?? '', ['agent', 'third'], true) ? $_GET['source'] : '';
+$filter_os        = in_array($_GET['os'] ?? '', ['windows', 'server', 'linux', 'macos', 'other'], true) ? $_GET['os'] : '';
+$filter_seen      = in_array($_GET['seen'] ?? '', ['1h', '24h', '7d', '30d', 'stale7', 'stale30'], true) ? $_GET['seen'] : '';
 
-// Build WHERE clause
-$where = "1=1";
-if ($filter_status)    { $where .= " AND arl.rmm_status='" . mysqli_real_escape_string($mysqli, $filter_status) . "'"; }
-if ($filter_client_id) { $where .= " AND a.asset_client_id=$filter_client_id"; }
-if ($filter_intg_id)   { $where .= " AND arl.integration_id=$filter_intg_id"; }
+$os_labels   = ['windows' => 'Windows', 'server' => 'Windows Server', 'linux' => 'Linux', 'macos' => 'macOS', 'other' => 'Other'];
+$seen_labels = ['1h' => 'Last hour', '24h' => 'Last 24 hours', '7d' => 'Last 7 days', '30d' => 'Last 30 days', 'stale7' => 'Not seen for 7+ days', 'stale30' => 'Not seen for 30+ days'];
+
+// Build WHERE clauses. $where_base is everything except the status filter, so the stat tiles stay a map of the filtered fleet.
+$esc = static fn (string $v): string => mysqli_real_escape_string($mysqli, $v);
+$where_base = "1=1";
+if ($filter_client_id) { $where_base .= " AND a.asset_client_id=$filter_client_id"; }
+if ($filter_intg_id)   { $where_base .= " AND arl.integration_id=$filter_intg_id"; }
+if ($filter_source === 'agent') { $where_base .= " AND i.type='rivetit_agent'"; }
+if ($filter_source === 'third') { $where_base .= " AND (i.type IS NULL OR i.type <> 'rivetit_agent')"; }
+if ($filter_q !== '') {
+    $like = '%' . $esc(addcslashes($filter_q, '%_\\')) . '%';
+    $where_base .= " AND (arl.hostname LIKE '$like' OR arl.os_name LIKE '$like' OR arl.logged_in_user LIKE '$like' OR a.asset_name LIKE '$like' OR a.asset_make LIKE '$like' OR a.asset_model LIKE '$like' OR c.client_name LIKE '$like')";
+}
+if ($filter_os !== '') {
+    $os_server = "arl.os_name LIKE '%server%'";
+    $where_base .= [
+        'windows' => " AND arl.os_name LIKE '%windows%' AND NOT ($os_server)",
+        'server'  => " AND $os_server",
+        'linux'   => " AND (arl.os_name LIKE '%linux%' OR arl.os_name LIKE '%ubuntu%' OR arl.os_name LIKE '%debian%' OR arl.os_name LIKE '%centos%' OR arl.os_name LIKE '%red hat%' OR arl.os_name LIKE '%rocky%' OR arl.os_name LIKE '%alma%')",
+        'macos'   => " AND (arl.os_name LIKE '%mac%' OR arl.os_name LIKE '%darwin%')",
+        'other'   => " AND NOT (arl.os_name LIKE '%windows%' OR arl.os_name LIKE '%linux%' OR arl.os_name LIKE '%ubuntu%' OR arl.os_name LIKE '%debian%' OR arl.os_name LIKE '%centos%' OR arl.os_name LIKE '%mac%' OR arl.os_name LIKE '%darwin%')",
+    ][$filter_os];
+}
+if ($filter_seen !== '') {
+    $where_base .= [
+        '1h'      => " AND arl.last_seen >= NOW() - INTERVAL 1 HOUR",
+        '24h'     => " AND arl.last_seen >= NOW() - INTERVAL 1 DAY",
+        '7d'      => " AND arl.last_seen >= NOW() - INTERVAL 7 DAY",
+        '30d'     => " AND arl.last_seen >= NOW() - INTERVAL 30 DAY",
+        'stale7'  => " AND (arl.last_seen IS NULL OR arl.last_seen < NOW() - INTERVAL 7 DAY)",
+        'stale30' => " AND (arl.last_seen IS NULL OR arl.last_seen < NOW() - INTERVAL 30 DAY)",
+    ][$filter_seen];
+}
 // Client-restricted techs should only see assets for clients they have access to
-if ($client_access_string && !$session_is_admin) { $where .= " AND a.asset_client_id IN ($client_access_string)"; }
+if ($client_access_string && !$session_is_admin) { $where_base .= " AND a.asset_client_id IN ($client_access_string)"; }
+$where = $where_base . ($filter_status ? " AND arl.rmm_status='" . $esc($filter_status) . "'" : '');
 
 $sql_links = mysqli_query($mysqli,
     "SELECT arl.*, a.asset_id, a.asset_name, a.asset_type, a.asset_client_id,
-            c.client_name, i.type AS integration_type
+            c.client_name, i.type AS integration_type, i.name AS integration_name
      FROM asset_rmm_links arl
      JOIN assets a ON a.asset_id = arl.asset_id
      LEFT JOIN clients c ON c.client_id = a.asset_client_id
@@ -50,17 +85,29 @@ usort($rmm_link_rows, function ($a, $b) {
     return strcasecmp($a['hostname'] ?? '', $b['hostname'] ?? '');
 });
 
-// Counts for stat cards
+// Counts for stat cards (every filter except status, so the tiles stay a map of what you filtered to)
 $cnt = mysqli_fetch_assoc(mysqli_query($mysqli,
     "SELECT
-       SUM(rmm_status='online') as online,
-       SUM(rmm_status='offline') as offline,
-       SUM(rmm_status='unknown') as unknown,
+       COALESCE(SUM(arl.rmm_status='online'),0) as online,
+       COALESCE(SUM(arl.rmm_status='offline'),0) as offline,
+       COALESCE(SUM(arl.rmm_status='unknown'),0) as unknown,
        COUNT(*) as total
-     FROM asset_rmm_links WHERE integration_id=" . ($filter_intg_id ?: 'integration_id')
+     FROM asset_rmm_links arl
+     JOIN assets a ON a.asset_id = arl.asset_id
+     LEFT JOIN clients c ON c.client_id = a.asset_client_id
+     LEFT JOIN rmm_integrations i ON i.id = arl.integration_id
+     WHERE $where_base"
 ));
 
 $sql_integrations = mysqli_query($mysqli, "SELECT id, name FROM rmm_integrations WHERE enabled=1 AND type <> 'rivetit_agent' ORDER BY name");
+$integrations_list = [];
+while ($ii = mysqli_fetch_assoc($sql_integrations)) { $integrations_list[] = $ii; }
+$has_own_agent = (bool) mysqli_fetch_row(mysqli_query($mysqli, "SELECT 1 FROM rmm_integrations WHERE type='rivetit_agent' LIMIT 1"));
+
+// Tile / reset links keep the other filters
+$keep = array_filter(['q' => $filter_q, 'client_id' => $filter_client_id ?: null, 'integration_id' => $filter_intg_id ?: null, 'source' => $filter_source, 'os' => $filter_os, 'seen' => $filter_seen], static fn ($v) => $v !== null && $v !== '');
+$tile_url = static fn (array $over = []): string => '?' . http_build_query(array_merge($keep, $over));
+$active_filters = count($keep) + ($filter_status !== '' ? 1 : 0);
 $sql_clients = mysqli_query($mysqli, "SELECT client_id, client_name FROM clients WHERE client_archived_at IS NULL" . ($client_access_string && !$session_is_admin ? " AND client_id IN ($client_access_string)" : '') . " ORDER BY client_name ASC");
 $clients_list = [];
 while ($c = mysqli_fetch_assoc($sql_clients)) $clients_list[] = $c;
@@ -93,28 +140,28 @@ $sync_target_name_js = json_encode($sync_target_name, JSON_HEX_TAG);
         <div class="small-box bg-success">
             <div class="inner"><h3><?= intval($cnt['online']) ?></h3><p>Online</p></div>
             <div class="icon"><i class="fas fa-check-circle"></i></div>
-            <a href="?status=online" class="small-box-footer">Filter <i class="fas fa-arrow-circle-right"></i></a>
+            <a href="<?= nullable_htmlentities($tile_url(['status' => 'online'])) ?>" class="small-box-footer">Filter <i class="fas fa-arrow-circle-right"></i></a>
         </div>
     </div>
     <div class="col-md-3">
         <div class="small-box bg-danger">
             <div class="inner"><h3><?= intval($cnt['offline']) ?></h3><p>Offline</p></div>
             <div class="icon"><i class="fas fa-times-circle"></i></div>
-            <a href="?status=offline" class="small-box-footer">Filter <i class="fas fa-arrow-circle-right"></i></a>
+            <a href="<?= nullable_htmlentities($tile_url(['status' => 'offline'])) ?>" class="small-box-footer">Filter <i class="fas fa-arrow-circle-right"></i></a>
         </div>
     </div>
     <div class="col-md-3">
         <div class="small-box bg-secondary">
             <div class="inner"><h3><?= intval($cnt['unknown']) ?></h3><p>Unknown</p></div>
             <div class="icon"><i class="fas fa-question-circle"></i></div>
-            <a href="?status=unknown" class="small-box-footer">Filter <i class="fas fa-arrow-circle-right"></i></a>
+            <a href="<?= nullable_htmlentities($tile_url(['status' => 'unknown'])) ?>" class="small-box-footer">Filter <i class="fas fa-arrow-circle-right"></i></a>
         </div>
     </div>
     <div class="col-md-3">
         <div class="small-box bg-info">
             <div class="inner"><h3><?= intval($cnt['total']) ?></h3><p>Total Managed</p></div>
             <div class="icon"><i class="fas fa-desktop"></i></div>
-            <a href="?" class="small-box-footer">Show All <i class="fas fa-arrow-circle-right"></i></a>
+            <a href="<?= nullable_htmlentities($tile_url()) ?>" class="small-box-footer">Show All <i class="fas fa-arrow-circle-right"></i></a>
         </div>
     </div>
 </div>
@@ -126,27 +173,68 @@ $sync_target_name_js = json_encode($sync_target_name, JSON_HEX_TAG);
 
 <!-- Filter bar -->
 <div class="card card-dark mb-2">
-    <div class="card-body py-2">
-        <form method="get" class="form-inline">
-            <select name="integration_id" class="form-control form-control-sm me-2 auto-submit-select">
-                <option value="">All Integrations</option>
-                <?php while ($i = mysqli_fetch_assoc($sql_integrations)): ?>
-                <option value="<?= $i['id'] ?>" <?= $filter_intg_id == $i['id'] ? 'selected' : '' ?>>
-                    <?= nullable_htmlentities($i['name']) ?>
-                </option>
-                <?php endwhile; ?>
-            </select>
-            <select name="status" class="form-control form-control-sm me-2 auto-submit-select">
-                <option value="">All Statuses</option>
-                <option value="online"  <?= $filter_status === 'online'  ? 'selected' : '' ?>>Online</option>
-                <option value="offline" <?= $filter_status === 'offline' ? 'selected' : '' ?>>Offline</option>
-                <option value="unknown" <?= $filter_status === 'unknown' ? 'selected' : '' ?>>Unknown</option>
-            </select>
-            <?php if ($filter_status || $filter_client_id): ?>
-                <a href="?" class="btn btn-secondary btn-sm">Clear Filters</a>
-            <?php endif; ?>
+    <div class="card-body py-3">
+        <form method="get" role="search" aria-label="Filter RMM assets" class="rmm-assets-filter">
+            <div class="rmm-assets-filter-grid">
+                <div class="rmm-assets-filter-search">
+                    <label class="rmm-assets-filter-label" for="rmmq">Search</label>
+                    <input type="search" id="rmmq" name="q" class="form-control" value="<?= nullable_htmlentities($filter_q) ?>" placeholder="Hostname, user, OS, model or client">
+                </div>
+                <div>
+                    <label class="rmm-assets-filter-label" for="rmmsrc">Source</label>
+                    <select id="rmmsrc" class="form-select" data-src-select aria-label="Source">
+                        <option value="">All sources</option>
+                        <?php if ($has_own_agent): ?><option value="source:agent" <?= $filter_source === 'agent' ? 'selected' : '' ?>><?= nullable_htmlentities(defined('APP_NAME') ? APP_NAME : 'RivetMSP') ?> endpoint agent</option><?php endif; ?>
+                        <option value="source:third" <?= $filter_source === 'third' ? 'selected' : '' ?>>Any third-party RMM</option>
+                        <?php foreach ($integrations_list as $i): ?>
+                        <option value="integration:<?= intval($i['id']) ?>" <?= $filter_intg_id == $i['id'] ? 'selected' : '' ?>><?= nullable_htmlentities($i['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <input type="hidden" name="source" value="<?= nullable_htmlentities($filter_source) ?>" data-src-source>
+                    <input type="hidden" name="integration_id" value="<?= $filter_intg_id ?: '' ?>" data-src-intg>
+                </div>
+                <div>
+                    <label class="rmm-assets-filter-label" for="rmmst">Status</label>
+                    <select id="rmmst" name="status" class="form-select auto-submit-select">
+                        <option value="">Any status</option>
+                        <option value="online"  <?= $filter_status === 'online'  ? 'selected' : '' ?>>Online</option>
+                        <option value="offline" <?= $filter_status === 'offline' ? 'selected' : '' ?>>Offline</option>
+                        <option value="unknown" <?= $filter_status === 'unknown' ? 'selected' : '' ?>>Unknown</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="rmm-assets-filter-label" for="rmmcl">Client</label>
+                    <select id="rmmcl" name="client_id" class="form-select auto-submit-select">
+                        <option value="">Any client</option>
+                        <?php foreach ($clients_list as $cl): ?>
+                        <option value="<?= intval($cl['client_id']) ?>" <?= $filter_client_id == $cl['client_id'] ? 'selected' : '' ?>><?= nullable_htmlentities($cl['client_name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div>
+                    <label class="rmm-assets-filter-label" for="rmmos">Operating system</label>
+                    <select id="rmmos" name="os" class="form-select auto-submit-select">
+                        <option value="">Any OS</option>
+                        <?php foreach ($os_labels as $k => $lbl): ?><option value="<?= $k ?>" <?= $filter_os === $k ? 'selected' : '' ?>><?= $lbl ?></option><?php endforeach; ?>
+                    </select>
+                </div>
+                <div>
+                    <label class="rmm-assets-filter-label" for="rmmseen">Last seen</label>
+                    <select id="rmmseen" name="seen" class="form-select auto-submit-select">
+                        <option value="">Any time</option>
+                        <?php foreach ($seen_labels as $k => $lbl): ?><option value="<?= $k ?>" <?= $filter_seen === $k ? 'selected' : '' ?>><?= $lbl ?></option><?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="rmm-assets-filter-actions">
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-search me-1"></i>Apply</button>
+                    <?php if ($active_filters): ?><a href="?" class="btn btn-outline-secondary">Reset</a><?php endif; ?>
+                </div>
+            </div>
         </form>
     </div>
+</div>
+<div class="d-flex align-items-center mb-2 px-1 text-muted small">
+    <span><?= count($rmm_link_rows) ?> device<?= count($rmm_link_rows) === 1 ? '' : 's' ?><?= $active_filters ? ' match' : '' ?></span>
 </div>
 
 <!-- Asset table -->
@@ -163,6 +251,7 @@ $sync_target_name_js = json_encode($sync_target_name, JSON_HEX_TAG);
                 <tr>
                     <th class="ps-3">Status</th>
                     <th>Hostname</th>
+                    <th>Source</th>
                     <th>Client</th>
                     <th>OS</th>
                     <th>Logged In User</th>
@@ -186,6 +275,7 @@ $sync_target_name_js = json_encode($sync_target_name, JSON_HEX_TAG);
                         <?= nullable_htmlentities($row['hostname']) ?>
                     </a>
                 </td>
+                <td class="text-muted small"><?= nullable_htmlentities($row['integration_name'] ?? 'RMM') ?></td>
                 <td>
                     <?php if ($row['asset_client_id']): ?>
                         <a href="/agent/client_overview.php?client_id=<?= intval($row['asset_client_id']) ?>">
@@ -224,6 +314,15 @@ $sync_target_name_js = json_encode($sync_target_name, JSON_HEX_TAG);
 </div>
 
 <script nonce="<?= htmlspecialchars($csp_nonce ?? '') ?>">
+// Source picker: one visible select drives the two hidden params (source=agent|third, or integration_id=<n>)
+document.addEventListener('change', function (e) {
+    var sel = e.target.closest('[data-src-select]');
+    if (!sel) return;
+    var f = sel.form, v = sel.value.split(':');
+    f.querySelector('[data-src-source]').value = v[0] === 'source' ? v[1] : '';
+    f.querySelector('[data-src-intg]').value = v[0] === 'integration' ? v[1] : '';
+    f.submit();
+});
 // Delegated wiring (CSP forbids inline onclick= attributes).
 document.addEventListener('click', function (e) {
     if (e.target.closest('.js-trigger-sync')) { e.preventDefault(); triggerSync(); }
