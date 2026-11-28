@@ -76,6 +76,130 @@ the public API freeze (docblock `@api`/`@internal` and array-shape annotations, 
 (`docs/security/`), and the adapter conformance kit under `RivetCore\Testing` ([ADR-009](docs/architecture/ADR-009-test-helpers-in-package.md)).
 If a release candidate breaks something that this guide did not warn about, that is a bug in the release candidate: report it.
 
+## Red team 2026-11-21 fixes (unreleased; no migration; read before updating)
+
+Fixes for the 2026-11-21 red-team report (agent, panel/data and RMM server/inbound monitoring). No migration and no breaking signature change (new
+arguments are optional and last). What to do, in order:
+
+1. **Whoever releases the agent, before the next `agent-v*` tag:** generate the release signing key OFFLINE and set the repository variable
+   `AGENT_RELEASE_KEYS` to its public half; a release tag without it fails on purpose. Build hosts: set `RELEASE_KEYS` (and `TRUST_KEYS` when the host
+   builds for one server) in `build-host.conf`. From the first anchored build on, sign every published binary offline (CORE-AGENT-1, below).
+2. **Editions, RMM settings page:** show `RmmReadModel::settingsSummary()['hardening']['signed_config_warning']` and offer raising `signed_config` to 2.
+   Existing installs are NOT migrated; new installs start at 2 (CORE-AGENT-4, below).
+3. **Editions that wire inbound monitoring:** give each client's sender its own secret limited to that client before handing a secret out, label or hide
+   the `_cap` counter rows, keep nested locks working, and stop reading `ticket_id` from the response (Chain A, below).
+4. **Edition code that matches one of the frozen pattern constants itself:** append the `D` modifier (CORE-DATA-3, below).
+5. **Operators:** check that no key id has a trailing newline (query below); Linux fleets with a custom `--state-dir`/`--install-dir`: fix ownership and
+   permissions before rolling out the new agent (CORE-AGENT-5); tell panel users which CSV shapes are now refused (CORE-API-1).
+
+### Endpoint agent
+
+Nothing is required of an edition's PHP code; these items are for whoever releases and runs agents.
+
+* **CORE-AGENT-1 (act before the next `agent-v*` tag).** Generate the release signing key pair OFFLINE and put only its public half in the repository
+  variable `AGENT_RELEASE_KEYS` ([AGENT_BUILD.md, "Release signing key"](docs/rmm/AGENT_BUILD.md)). Without it the release gate fails the tag build on
+  purpose. From the first anchored release on, every published agent binary needs its offline release signature in the edition (Agent binaries), or
+  anchored agents refuse the update. Agents already deployed are unaffected until they install an anchored build. Self-hosted builds stamped
+  `RELEASE_BUILD=1` without `RELEASE_KEYS` refuse every self-update. A build host (`scripts/build-host.sh`) takes the same `RELEASE_KEYS`, `TRUST_KEYS`
+  and `RELEASE_BUILD` in `build-host.conf` ([BUILD_HOST.md](docs/rmm/BUILD_HOST.md)); left empty it keeps building unanchored agents.
+* **CORE-AGENT-6.** File transfer now refuses the agent's own program files, service unit and the Mesh agent's identity even inside an allowed folder,
+  and the server refuses them as transfer roots. An administrator who used `file_put` to replace the agent binary by hand must use a package upgrade,
+  the installer or self-update instead.
+* **CORE-AGENT-2.** An `http`, `port` or `cert` check aimed at a link-local or cloud metadata address (169.254.x.x and the like) now reports
+  `unknown` "destination refused" instead of running, and the server refuses such literal targets when a check is saved. Nothing to do unless a
+  check deliberately watched such an address; `ntp` checks against Amazon Time Sync (169.254.169.123) keep working.
+* **CORE-AGENT-5 (Linux custom directories).** A Linux agent now refuses a `--state-dir` / `--install-dir` that is a symbolic link, is owned by another
+  account, or sits in a folder other accounts can write. Default paths are unaffected. If a fleet used such a layout, fix the directory
+  (`chown root:root`, `chmod go-w`) before rolling out this agent version; an agent that is updated into a refused layout rolls back to its previous
+  binary (CORE-DS-11) and reports the update as failed.
+* **CORE-AGENT-4 (agent side).** After this update an agent refuses unsigned check definitions once its server has sent a fully signed check list
+  (every current Core server does). Nothing to do for Core-based editions. A custom or very old server that mixes signed and unsigned checks keeps
+  working (a mixed list never switches the rule on); to undo it on one device set `"allow_unsigned_checks": true` in `config.json`.
+* **Monitoring-only devices.** A device that must never run anything from the server sets all three of `disable_jobs`, `disable_script_checks` and
+  `disable_update` in its `config.json` (endpoint-agent/README.md, "Monitoring-only profile"). `disable_jobs` alone still lets the server replace the
+  agent binary (Chain C).
+
+### Panel and data
+
+- **Panel CSV attachments (CORE-API-1 / CORE-DATA-1).** More CSV files are refused with 422 `attachment_rejected`: any cell (in any column, quote-aware, read with
+  comma, semicolon and tab separators) that starts with `=`, `+`, `-`, `@` or a tab, unless the whole cell is a plain number. `- item`, `-- note`, `+1 (555) 123-4567`,
+  `@handle` and a comma row whose first cell is signed (`-5,apples`) are now refused (docs/panel/PANEL_API.md lists them). Tell panel users to send such data as `.txt`.
+- **Key ids (CORE-DATA-3).** A key id with a trailing newline is refused when a key ring is built (key file, `RIVETCORE_KEYRING`, `RIVETCORE_KEK_ID`). Before updating,
+  check that `RIVETCORE_KEK_ID` and the key file's key ids have no line end, and that no stored v3 value has one in its header (on each column the edition encrypts:
+  `WHERE col LIKE 'v3:%' AND LOCATE(CHAR(10), SUBSTRING_INDEX(col, ':', 2)) > 0`). Such a value can only exist where a key id was configured with a newline, and it would no
+  longer decrypt; Core's tests and the red team found none.
+- **Pattern constants.** `KeyRing::KID_PATTERN`, `RmmProtocol::*_RE`, `PanelProtocol::*_RE`, `RemoteProtocol::*_RE` and `StarterPack::ID_RE`/`PACK_ID_RE` keep their values;
+  their `$` also matches before a final newline. If edition code matches one of them itself, append the modifier: `preg_match(RmmProtocol::CHECK_KEY_RE . 'D', $v)`
+  (or use `RmmProtocol::matches()`).
+- **Redactor (CORE-DATA-2).** `Redactor::redact()` takes an optional second argument (`$passwordToEndOfLine`, default true); existing calls are unchanged and now mask more.
+- **Panel devices (CORE-API-4).** New and re-enrolled panel devices have `<` `>` `"` backtick and backslash replaced with `_` in host name, OS version and app version. Keep
+  escaping device text and the audit log where you render them; rows enrolled before keep what was sent.
+- **Webhooks (CORE-API-6).** A destination that resolves to the Azure Wire Server 168.63.129.16 is refused, even when listed in allowed networks.
+
+### RMM server and inbound monitoring
+
+- **Signed configuration (CORE-AGENT-4).** A NEW install (the first switch-on mints the signing key and no device is enrolled) now starts with
+  `rmm_hardening_settings.signed_config = 2`, so every agent that enrolls refuses unsigned check definitions and an unsigned log configuration from its first
+  contact. **An existing install is not changed**: it keeps its value (0 unless you set it). `RmmReadModel::settingsSummary()['hardening']`
+  (`RmmSettings::hardeningStatus()`) carries `signed_config`, `signed_config_recommended` (2), `signed_config_ok` and `signed_config_warning`; show the
+  warning prominently on the RMM settings or hardening page. `signed_config` (0 to 2) is now part of the validated settings form (`RmmSettings::update()`,
+  `RmmAdmin::saveSettings()`), so the page can offer the switch. Raising it is safe for every agent: one that predates CORE-DS-16 ignores the announcement
+  (it neither breaks nor gains protection; verified against the agent source before CORE-DS-16 with a new install's enrollment and check-in answers), one
+  that knows it keeps requiring signatures even if the level is lowered again later.
+- **Inbound monitoring (Chain A, CORE-API-5, NEW-1).** Responses no longer carry `ticket_id`; heartbeat times in the future count as the arrival time;
+  per-client (300/h) and overall (600/h) ticket caps write counter rows with source `_cap` into your incident table (label or hide them in the admin view; your
+  `IncidentStoreInterface::locked()` must allow nested locks on different keys, which GET_LOCK does; rerun `IncidentStoreConformanceTestCase`). Before you give
+  a client its own Uptime Kuma, give that sender its own secret limited to that client (`InboundAuthenticator`'s second argument); a shared secret trusts its
+  holder with every client.
+- **Release operations (NEW-2).** `RmmAdmin`'s binary, release, MSI template, release signature and rollover operations refuse a caller limited to some clients
+  (403), like `clearUpdateFailures` already did. Nothing to change while `rmm.binary.publish` stays an administrator ability.
+
+## Adopting the Rivet Console redeem and events routes (1.0.0-rc.70, provisional; migration 0051; optional, off by default)
+
+Needs the remote session policy / Rivet Console release (rc.68 and rc.69, PR #130) first. Nothing is required: with `remote_console` off (the default) every existing call behaves as before.
+
+| Signature | Change | Intentional | Edition action |
+|---|---|---|---|
+| `Technician\TechnicianActions::__construct()` | trailing optional `?ConsoleSessionService $consoleSessions = null` | yes: mints the redeem code | none through `RmmModule::technician()`; hand-built without it a console launch answers 409 `not_configured` |
+| `Remote\RemoteActions::__construct()` | trailing optional `?ConsoleSettings $console = null` | yes: the four console settings | none through `RmmModule::remoteActions()`; hand-built without it the console keys of `updateSettings()` answer 422 |
+| `Maintenance\Housekeeping::__construct()` | trailing optional `?RemoteSettings $remoteSettings = null`, `?ConsoleRetention $console = null` | yes: prunes codes and sessions | none through `RmmModule::housekeeping()` |
+| `Mesh\MeshCookie::login()` | trailing optional `bool $once = false` | yes: the redeem cookie's `once` claim | none: the default is the stock payload |
+| `Remote\ConsoleLink::build()`, `descriptor()` | new parameters (origin, code): the rc.69 `(kind, node)` forms are gone | yes: the v1 link shape | none: the class never left a release candidate; editions use the launch result's `console.url` and `console.fallback_url` |
+
+1. **Migration.** `CoreMigrations::all()` gains `0051_rmm_console_sessions` after `0050_rmm_client_remote_policy`: three new tables (`rmm_console_settings`, `rmm_console_codes`, `rmm_console_sessions`), `CREATE TABLE IF NOT EXISTS`, nothing altered. Mirror them in your `db.sql` and updater with your own numbering, and do not mirror the codes or sessions anywhere else (they hold SHA-256 hashes only). Code before the migration is safe: reading the settings falls back to the defaults, and a console launch needs the switch on and the URL set.
+2. **Mount the two routes** as public, POST-only, JSON-only routes, no CORS headers: `POST /api/v1/endpoint_console/redeem` -> `RmmModule::consoleApi($rateLimit)->redeem($request)`, `POST /api/v1/endpoint_console/events` -> `->events($request)` (or `->handle($request)` with the path segment). Build the `RmmRequest` with the client address from your trusted-proxy rule only. **Never log the request body anywhere** (it is a login code or a bearer token): check the web server log format, the WAF, request-logging middleware and your API request log table. Behind a real reverse proxy the per-address limits are per client address; verify on beta.
+3. **Settings page.** Four settings through `RemoteActions::updateSettings()` (administrators; Core validates and audits): `console_public_url` (set it before turning the console on, or launches are refused), `min_console_version`, `console_log_file_paths`, `console_cookie_once`; read them back from `settings()`. The new limit `console_session_retention_days` (default 365).
+4. **Launch.** The `console` object is now `{url, fallback_url}` (no `kind`); open `console.url` by assigning `window.location`. Show Core's refusal message verbatim: 409 `not_configured` (no public URL, or an unacceptable node id or Mesh domain, `unsupported`).
+5. **Events.** Four new ids in `RmmEvent` and `Webhooks\EventCatalog`: `rmm.console.link_redeemed`, `link_denied`, `session_ended`, `events_reported` (45 `rmm.*` events in all). New audit actions: `Console Link Redeemed`, `Console Link Denied`, `Console Event Reported`, `Console Events Truncated`, `Console Session Ended`; list them wherever the edition lists audit rows.
+6. **Operators.** Mesh accounts, groups and rights are created in MeshCentral, not by Rivet. A `notify` client policy is a banner for the technician, an `approve` policy is currently a refusal (403 `approval_required`). The console's direct mode is not a security control. See docs/modules/rmm.md, "Rivet Console redeem and events".
+
+## Adopting the per-client remote session policy and the optional Rivet Console (1.0.0-rc.68 and rc.69; migration 0050; optional, off by default)
+
+Nothing is required: with the switch off (the default) and no stored policy every existing call behaves as before. A signature change the API checker reports as BREAKING by its text comparison, and why it does not break a correct caller (it only appends optional trailing parameters to a `final` class, so no positional call changes and nothing can override it):
+
+| Signature | Change | Intentional | Edition action |
+|---|---|---|---|
+| `Technician\TechnicianActions::launchRemote()` | trailing optional `$console = false`, `$consoleKind = null` | yes: the console deep link | none: positional calls are unchanged; the defaults give the stock launch |
+
+1. **Migration.** `CoreMigrations::all()` gains `0050_rmm_client_remote_policy` (one new table, `CREATE TABLE IF NOT EXISTS`, nothing altered). It is numbered 0050 and registered after `0049_rmm_installer_managed_externally`; the migration is additive and idempotent, and it never ran in a released version, so no installation has applied it under another id. RivetMSP mirrors it in `db.sql` and its updater with its own numbering; RivetIT has no per-client policy screen and may skip the table (`RemoteSessionPolicy` treats a missing store row as no policy).
+2. **Policy changes** go through `RmmModule::remoteSessionPolicySettings()` (`Remote\RemoteSessionPolicySettingsService`: `rmm.admin` required, audited with old and new value, fails closed if the audit write fails). The raw setter on `DbRemoteSessionPolicyStore` is for Core only; calling it from edition code skips the check and the audit. An edition with its own storage passes it as the `remote_session_policy` module option and audits its own changes.
+3. **`approve` is a refusal for now** and `notify` is a banner for the technician only; never describe either as asking or telling the end user.
+
+## Pentest 2026-11-08 fixes (1.0.0-rc.62; no migration; read before updating)
+
+**Operator step you must not miss (CORE-13): Mesh launches stop until the account template uses `{user_id}` and matching Mesh accounts exist.** After this update, if the stored template contains `{username}`, every Remote launch (web, REST and the technician actions) fails with `not_configured` until an administrator fixes it. Check the current template before you update: in the RMM settings, MeshCentral section, field "account name", or with `SELECT mesh_account_template FROM endpoint_agent_settings WHERE id = 1;` (the default `rivetit-support` has no placeholder and is not affected, but shares one Mesh account between all technicians, see docs/rmm/REMOTE_AND_LOGS.md). If it contains `{username}`, change it to use `{user_id}` (for example `rivetit-{user_id}`), then create a Mesh account named for each technician's id (`rivetit-<id>`) with rights on the right device groups. `{user_id}` is the only placeholder Core substitutes; any other word in braces is literal text.
+
+Behaviour an edition can see:
+
+* **CORE-13, Mesh account template.** A template containing `{username}` (for example `{username}` or `rit-{username}`) is refused when saving the MeshCentral settings (422), and on an install that already stored one, Remote launches fail with `not_configured` ("uses {username}, which is no longer allowed") until an administrator changes it. Switch to `{user_id}` (for example `rivetit-{user_id}`) and create the matching Mesh accounts; accounts named after display names will not be reached. This fails closed on purpose: a technician could rename themselves into any Mesh account. `MeshCookie::accountName()` ignores its `$username` argument and returns `''` for such a template. If your Rivet Console contract reports `technician.username` "as in the Mesh account template" from Core's own record, that string is now only meaningful for `{user_id}` templates.
+* **CORE-3, token lifetime.** `mesh_token_ttl_s` now shortens the login cookie when set to anything other than the stored default of 300 (which keeps the old ~58 minutes). Expect shorter cookies only on installs where an administrator changed it.
+* **CORE-15, software versions and vendor parameters.** Adding or restoring a package version (including through the starter-template route onto an existing package) where an assignment without a pinned version or an auto-install policy follows the package, and setting or clearing a vendor parameter of a package that installs by itself (any install assignment, pinned or not, or an enabled auto-install policy), now needs `rmm.software.deploy` as well; a `two_person` package refuses these (409) until its assignments are removed or pinned. If your role mapping gives `rmm.software.manage` to a level below `rmm.software.deploy` (both editions do), those users lose these actions on live packages. Hosted-file upload, retiring a version and changes to packages nothing installs by itself are unchanged.
+* **CORE-17, reinstalls (frozen protocol changed deliberately: an identity-only reinstall of a linked device now enrols as a separate pending device).** A new install_id with the MachineGuid or serial of a LINKED device used to reuse that device's row, rotate its credential and keep it linked. It no longer touches the existing row or its credential: the real agent keeps checking in and getting jobs. The newcomer appears on the pending-devices screen as its own device (`match_reason` `reinstall_identity`; `match_candidates_json[0]` carries the original's `asset_id` and `device_id`) and is offered no jobs. Approve it by linking it to that asset: `DeviceService::approve($newcomerId, $assetId, ...)` then retires the original device first (queued jobs cancelled, credential revoked, link dropped) and links the newcomer, which keeps the device id and credential it enrolled with. Approving with another asset, or "create asset", retires nothing (the admin must retire the old device first if they link the same asset). Rejecting discards the newcomer. Up to 5 pending reinstalls of one device coexist (cap `EnrollmentService::REINSTALL_PENDING_MAX`); the 6th drops the oldest and writes a `Reinstall Dropped` audit row, so someone holding a multi-use token and a readable MachineGuid can fill the queue but cannot silently replace a legitimate request below the cap. Each pending reinstall is a normal pending device: the approval queue now also carries `source_ip` (its `last_ip`), `replaces_device_id` and `link_consequence`, and the replaced device's detail carries `pending_reinstalls` (device_id, hostname, first_seen_at, source_ip). Show `link_consequence` next to the link action: it states that linking retires the old device, revokes its credential, cancels its queued jobs and rejects the other pending reinstalls of it (approving one rejects the rest). The retire and the link happen in one transaction; the audit rows are written after it commits. Only an explicit link to that device's own asset retires it; linking to another asset or creating an asset retires nothing. The `resolvePending` route keeps its gate (device-manage on the device's client, other clients answer 404 exactly like an unknown id). Edition screens that list pending devices should show `reinstall_identity` and may pre-select the candidate asset. Expect one approval per genuine OS reinstall; the retired original keeps its history, the new device row starts fresh. An enrollment that reports no guid and no serial for an install id whose row has one is refused with 409. Devices that are not linked are never offered jobs.
+  What an OLD agent receives: the enrollment answer is the normal 201 with the same keys as for any unapproved device (`status: "pending_approval"`, `matched_asset_id: null`, a new `device_id` and `device_token`, signing key, config). The agent treats it exactly like any other unapproved device (checked against the Go agent in `endpoint-agent/internal/agent/agent.go`): it stores `pending_approval`, checks in and samples at the low pending rate (300 s), is offered no jobs, and keeps retrying until the check-in answer says `linked`. No agent change is needed and the stored device id stays valid after approval, because the newcomer keeps its row. Compatibility notes: (a) the agent's own check of the signed job `device_id` against the stored one is why approval retires the old row instead of moving the newcomer's credential onto it; (b) until an administrator acts, a genuinely reinstalled machine shows as pending and gets no jobs, whereas before it silently resumed; (c) if the admin rejects, the agent receives a revoked credential and goes dormant until re-enrolled with a fresh token; (d) a caller who knows a linked device's install_id AND reports its identity is still treated as that device re-enrolling (unchanged).
+* **CORE-18 / CORE-19 (partial).** Agents reporting `log.rule_*`, `change.rule_*`, `patch.*` or `hv.*` check keys are ignored; pending devices no longer store logs, changes, software or hypervisor data (they get `accepted: 0`) and cannot long-poll jobs. These resume the moment the device is approved. These two findings are only partially mitigated, see the CHANGELOG for what remains open.
+* **CORE-24.** `ScriptActions::createScript()` returns 403 for a client-restricted user, like `updateScript` and `retireScript` already did.
+* **CORE-39.** `Housekeeping::run()` can return `retention_held => 1` and skips the history, log, change and metric prunes for that run when the compliance retention floors could not be read. It also holds when the compliance tables do not exist yet (code deployed before migration 0046); it resumes once they are readable.
+
 ## Adopting the audit log hash chain (1.0.0-rc.57; migration 0048; optional)
 
 **An edition that changes nothing keeps running exactly as before** (plain audit rows). The migration only adds two nullable columns and two small tables; code before the migration is safe. Full description and limits: [docs/security/AUDIT_CHAIN.md](docs/security/AUDIT_CHAIN.md).

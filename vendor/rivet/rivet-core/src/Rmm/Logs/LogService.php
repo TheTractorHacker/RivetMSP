@@ -30,7 +30,7 @@ use RivetCore\Rmm\Support\Sql;
  */
 final class LogService
 {
-    private const TIME_RE = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/';
+    private const TIME_RE = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/D';
     /** Rows deleted per statement and per transaction. */
     public const PRUNE_BATCH = 2000;
     /** Rows one housekeeping pass may delete in total. */
@@ -64,6 +64,10 @@ final class LogService
         $agentDropped = $body['dropped'] ?? 0;
         if (!is_int($agentDropped) || $agentDropped < 0 || $agentDropped > 1000000000) {
             throw new ApiError(422, 'invalid', 'dropped must be a non-negative integer');
+        }
+        if (($dev['link_state'] ?? 'linked') !== 'linked') {
+            // CORE-19: a device that is not linked (pending approval) is not yet trusted to fill the shared log store or feed the log rules.
+            return ['ok' => true, 'accepted' => 0, 'dropped' => count($events), 'duplicates' => 0];
         }
         $deviceId = (int) $dev['device_id'];
         $limits = $this->remote->limits();

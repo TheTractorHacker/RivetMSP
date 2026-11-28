@@ -26,6 +26,7 @@ use RivetCore\Rmm\Technician\TechnicianActions;
  *   POST endpoint_devices/{id}/jobs            {type: powershell|reboot|collect, script|script_id, params, timeout_s, destructive, confirm}
  *   POST endpoint_devices/{id}/jobs/{job}/cancel
  *   POST endpoint_devices/{id}/remote          {force?} -> {url, session_id}
+ *   POST endpoint_devices/{id}/remote          {console: true, console_kind?, view?, force?} -> {url, session_id, console: {url, fallback_url}} (only with the remote_console switch on and console_public_url set; otherwise the plain result or 409 not_configured)
  *
  * Phase 1 additions (all additive; the routes above are unchanged, and the list also accepts the filters tag, group, software and
  * location_id):
@@ -80,6 +81,32 @@ final class TechnicianApi
     /** Largest request body (a script is at most 100 KiB; JSON escaping can inflate it). */
     public const MAX_BODY = 1048576;
 
+    /**
+     * CORE-API-7 (red team 2026-11-21): write routes whose handler reads and validates the body before the action checks the ability, so a caller without
+     * the ability got 400 or 422 (learning field names and body validity) instead of 403. The ability each action itself requires (any one of the list) is
+     * asked here BEFORE the body is read: role-level (client 0) for a fleet route, at the device's client for a route under a device (the device is already
+     * inside the caller's clients, else 404 as before). A caller the action would accept always passes, so no status code changes for an authorized caller;
+     * the action still runs its own complete check. Path pattern: '#' is a number; a leading '#' is the device id.
+     *
+     * @var list<array{0:list<string>,1:list<string>,2:list<string>}>
+     */
+    private const WRITE_PRECHECK = [
+        [['changes', 'settings'], ['PUT', 'PATCH', 'POST'], [RmmAbility::ADMIN, RmmAbility::CHANGE_MANAGE]],
+        [['changes', 'rules', 'recommended'], ['POST'], [RmmAbility::CHANGE_MANAGE]],
+        [['software_params', '#'], ['PUT', 'POST', 'DELETE'], [RmmAbility::SOFTWARE_MANAGE]],
+        [['software_packages', '#', 'versions', '#'], ['PUT', 'PATCH'], [RmmAbility::SOFTWARE_MANAGE]],
+        [['mesh', 'approve'], ['POST'], [RmmAbility::DEVICE_MANAGE]],
+        [['hypervisor', 'vms', '#'], ['PUT', 'PATCH'], [RmmAbility::HYPERVISOR_MANAGE]],
+        [['hypervisor', 'settings'], ['PUT', 'PATCH', 'POST'], [RmmAbility::ADMIN, RmmAbility::HYPERVISOR_MANAGE]],
+        [['patches', 'approve'], ['POST'], [RmmAbility::PATCH_MANAGE]],
+        [['patches', 'decline'], ['POST'], [RmmAbility::PATCH_MANAGE]],
+        [['#', 'parent'], ['PUT', 'POST'], [RmmAbility::ALERT_MANAGE]],
+        [['#', 'mesh', 'install'], ['POST'], [RmmAbility::REMOTE_MANAGE]],
+        [['#', 'mesh', 'uninstall'], ['POST'], [RmmAbility::REMOTE_MANAGE]],
+        [['#', 'tags'], ['POST'], [RmmAbility::DEVICE_MANAGE]],
+        [['#', 'hypervisor'], ['PUT', 'PATCH'], [RmmAbility::HYPERVISOR_MANAGE]],
+    ];
+
     public function __construct(
         private readonly RmmAuthorizer $authz,
         private readonly TechnicianActions $actions,
@@ -127,6 +154,9 @@ final class TechnicianApi
         $op = $seg[3] ?? null;
 
         if ($id === null) {
+            if (($pre = $this->writePrecheck($uid, $method, $seg, 0)) !== null) {
+                return $pre;
+            }
             if ($seg !== [] && $this->alerting !== null && in_array($seg[0], AlertingApi::FLEET, true)) {
                 return $this->alerting->fleet($req, $who, $seg);
             }
@@ -185,6 +215,9 @@ final class TechnicianApi
         if ($dev === null) {
             return self::json(404, ['error' => 'Device not found.', 'code' => 'not_found']);
         }
+        if (($pre = $this->writePrecheck($uid, $method, $seg, (int) $dev['client_id'])) !== null) {
+            return $pre;
+        }
         $canSeeOutput = $this->authz->allowed($uid, RmmAbility::JOB_RUN_SAVED, (int) $dev['client_id']);
 
         if ($what === null) {
@@ -233,7 +266,14 @@ final class TechnicianApi
             if (!is_string($view)) {
                 return self::json(422, ['error' => 'The view must be desktop, terminal or files.', 'code' => 'invalid']);
             }
-            $r = $this->actions->launchRemote($who, $id, !empty($in['force']), $req->clientIp, $req->userAgent, $view);
+            $consoleKind = $in['console_kind'] ?? null;
+            if ($consoleKind !== null && !is_string($consoleKind)) {
+                return self::json(422, ['error' => 'The console kind must be desktop, terminal, terminal-ps or files.', 'code' => 'invalid']);
+            }
+            $r = $this->actions->launchRemote($who, $id, !empty($in['force']), $req->clientIp, $req->userAgent, $view, ($in['console'] ?? false) === true, $consoleKind);
+            if ($r->ok && array_key_exists('console', $r->data)) {
+                return self::json(200, ['url' => $r->data['url'] ?? null, 'session_id' => $r->data['session_id'] ?? null, 'console' => $r->data['console']]);
+            }
 
             return $r->ok ? self::json(200, ['url' => $r->data['url'] ?? null, 'session_id' => $r->data['session_id'] ?? null]) : self::failure($r);
         }
@@ -257,7 +297,12 @@ final class TechnicianApi
             return $routed;
         }
         if ($what === 'policy' && $job === null && $method === 'GET' && $this->read->automation() !== null) {
-            return self::json(200, $this->read->automation()->effectivePolicy($dev));
+            $eff = $this->read->automation()->effectivePolicy($dev);
+            if (!$this->mayReadScripts($who->userId)) {
+                $eff['checks'] = \RivetCore\Rmm\Policy\PolicyStore::withoutScriptBodies($eff['checks']);   // CR17 (CORE-DS-37): the merged checks of the device carry the script text too
+            }
+
+            return self::json(200, $eff);
         }
         if ($what === 'fields' && $this->read->automation() !== null) {
             if ($job === null && $method === 'GET') {
@@ -301,6 +346,12 @@ final class TechnicianApi
         return self::notFound();
     }
 
+    /** CORE-DS-37: script text is shown to whoever may run saved scripts, as on the scripts routes. */
+    private function mayReadScripts(int $uid): bool
+    {
+        return $this->authz->allowed($uid, RmmAbility::JOB_RUN_SAVED, 0);
+    }
+
     /** @param list<string> $seg */
     private function automationRoute(RmmRequest $req, RmmPrincipal $who, string $method, array $seg): RmmResponse
     {
@@ -342,7 +393,7 @@ final class TechnicianApi
             $store = $read->policyStore();
             if (!isset($seg[1])) {
                 if ($method === 'GET') {
-                    return self::json(200, ['data' => $store->all()]);
+                    return self::json(200, ['data' => $this->mayReadScripts($uid) ? $store->all() : \RivetCore\Rmm\Policy\PolicyStore::withoutScriptBodies($store->all())]);   // CORE-DS-37
                 }
                 if ($method === 'POST' && $this->policies !== null) {
                     [$in, $bad] = $this->jsonBody($req);
@@ -359,6 +410,10 @@ final class TechnicianApi
                 if ($method === 'GET') {
                     $d = $read->policyDetail($rid);
                     $d['assignments'] = $this->visibleAssignments($uid, $d['assignments']);
+                    if (!$this->mayReadScripts($uid)) {
+                        $d['policy'] = \RivetCore\Rmm\Policy\PolicyStore::withoutScriptBodies($d['policy']);   // CORE-DS-37
+                        $d['assignments'] = \RivetCore\Rmm\Policy\PolicyStore::withoutScriptBodies($d['assignments']);   // CR18: an assignment's overrides can carry a script check too
+                    }
 
                     return $d['policy'] === null ? self::json(404, ['error' => 'Policy not found.', 'code' => 'not_found']) : self::json(200, $d);
                 }
@@ -374,7 +429,12 @@ final class TechnicianApi
                 return $noMethod;
             }
             if ($sub === 'versions' && $method === 'GET' && $sub2 === null) {
-                return self::json(200, ['data' => $store->versions($rid, ($req->query['body'] ?? '') === '1')]);
+                $withBody = ($req->query['body'] ?? '') === '1';
+                if ($withBody && !$this->mayReadScripts($uid)) {
+                    return self::json(403, ['error' => 'Reading the bodies of earlier policy versions needs the grant to run saved scripts.', 'code' => 'forbidden']);   // CORE-DS-37
+                }
+
+                return self::json(200, ['data' => $store->versions($rid, $withBody)]);
             }
             if ($sub === 'assignments' && $this->policies !== null) {
                 if ($sub2 === null && $method === 'POST') {
@@ -540,7 +600,8 @@ final class TechnicianApi
             $svc = $read->scheduleService();
             if (!isset($seg[1])) {
                 if ($method === 'GET') {
-                    return self::json(200, ['data' => $svc->all()]);
+                    // TEN-2: a caller limited to some clients sees the schedules that run on their own clients and devices, not the others'.
+                    return self::json(200, ['data' => array_values(array_filter($svc->all(), fn (array $s): bool => $this->scheduleSeen($uid, $s)))]);
                 }
                 if ($method === 'POST' && $this->scripts !== null) {
                     [$in, $bad] = $this->jsonBody($req);
@@ -557,7 +618,7 @@ final class TechnicianApi
                 if ($method === 'GET') {
                     $s = $svc->get($rid);
 
-                    return $s === null ? self::json(404, ['error' => 'Schedule not found.', 'code' => 'not_found']) : self::json(200, ['schedule' => $s, 'runs' => $svc->runs($rid, 20)]);
+                    return $s === null || !$this->scheduleSeen($uid, $s) ? self::json(404, ['error' => 'Schedule not found.', 'code' => 'not_found']) : self::json(200, ['schedule' => $s, 'runs' => $svc->runs($rid, 20)]);
                 }
                 if ($put && $this->scripts !== null) {
                     [$in, $bad] = $this->jsonBody($req);
@@ -571,7 +632,8 @@ final class TechnicianApi
                 return $noMethod;
             }
             if ($sub === 'history' && $method === 'GET' && $sub2 === null) {
-                if ($svc->get($rid) === null) {
+                $cur = $svc->get($rid);
+                if ($cur === null || !$this->scheduleSeen($uid, $cur)) {
                     return self::json(404, ['error' => 'Schedule not found.', 'code' => 'not_found']);
                 }
                 $visible = $this->authz->visibleClientIds($uid);
@@ -657,6 +719,12 @@ final class TechnicianApi
     private function approvalSeen(int $uid, array $approval): bool
     {
         return $this->scripts !== null ? $this->scripts->approvalVisible($uid, $approval) : $this->authz->visibleClientIds($uid) === null;
+    }
+
+    /** @param array<string,mixed> $schedule */
+    private function scheduleSeen(int $uid, array $schedule): bool
+    {
+        return $this->scripts !== null ? $this->scripts->scheduleVisible($uid, $schedule) : $this->authz->visibleClientIds($uid) === null;
     }
 
     /** A saved schedule: 201/200 with the schedule, or 202 when it waits for an approval. */
@@ -858,6 +926,38 @@ final class TechnicianApi
     private static function action(ActionResult $r, \Closure $body): RmmResponse
     {
         return $r->ok ? self::json($r->http, $body($r)) : self::failure($r);
+    }
+
+    /**
+     * CORE-API-7: the {@see WRITE_PRECHECK} answer for this request: null when the route is not listed or the caller holds one of its abilities (at
+     * `$clientId`), else the 403 the action would give, before any body is read.
+     *
+     * @param list<string> $seg
+     */
+    private function writePrecheck(int $uid, string $method, array $seg, int $clientId): ?RmmResponse
+    {
+        foreach (self::WRITE_PRECHECK as [$pattern, $methods, $abilities]) {
+            if (count($pattern) !== count($seg) || !in_array($method, $methods, true)) {
+                continue;
+            }
+            foreach ($pattern as $i => $p) {
+                if ($p === '#' ? !ctype_digit($seg[$i]) : $p !== $seg[$i]) {
+                    continue 2;
+                }
+            }
+            $first = null;
+            foreach ($abilities as $ability) {
+                $denied = $this->authz->check($uid, $ability, $clientId);
+                if ($denied === null) {
+                    return null;
+                }
+                $first ??= $denied;
+            }
+
+            return self::json(403, ['error' => (string) $first, 'code' => 'forbidden']);
+        }
+
+        return null;
     }
 
     /**

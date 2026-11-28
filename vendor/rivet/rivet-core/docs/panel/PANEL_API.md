@@ -91,9 +91,11 @@ Every successful answer and every error includes `"server_time"` (RFC 3339 UTC).
  "server_time": "2026-10-23T17:57:22Z"}
 ```
 
-`contact` is `null` for a client-level device. Enrolling again with the same `install_id` and a new token keeps `device_id` and rotates the credential (the old one stops
+`contact` is `null` for a client-level device. Enrolling again with the same `install_id`, a new token and `device.previous_token` (the credential the install holds now; CORE-DS-61) keeps `device_id` and rotates the credential (the old one stops
 working at once). Failures: 401 `invalid_token` / `revoked` / `expired` (token), 403 `forbidden` (token used up; device revoked or retired until an administrator allows
 re-enrollment), 403 `contact_invalid` (the contact the token was issued for is gone; the token is not consumed), 409 `conflict`, 422 `invalid`, 429 `rate_limited`.
+
+The install id is not a secret, so it is not proof: an enrollment for an existing install id WITHOUT a valid `device.previous_token` creates a new device (new `device_id`, new credential, its own tickets) and leaves the existing device untouched. A panel app that lost its credential therefore starts over as a new device.
 
 ### GET /panel_me
 
@@ -173,8 +175,17 @@ Every check is on the server and none trusts the client:
 - the declared content type must be the one that extension maps to,
 - the **magic bytes** must match (PNG, JPEG, GIF, WebP, PDF); text files (`txt`, `log`, `csv`) must be valid UTF-8 without NUL or control characters, must not start with `#!`, and must not
   contain HTML/script markup **anywhere** (1.0.0-rc.38; it used to be the first 8 KiB),
-- a text file must not **begin with a spreadsheet formula character** (`=`, `+`, `-`, `@`, a tab or a carriage return, after an optional byte-order mark), and a CSV must not
-  have a cell that starts with `=` or looks like a function or DDE call (`+cmd|' /C calc'!A0`, `@SUM(`) (1.0.0-rc.38; a cell that merely contains `=` or `|`, or a negative number, is fine),
+- a `txt` or `log` file must not **begin with a spreadsheet formula character** (`=`, `+`, `-`, `@`, a tab or a carriage return, after an optional byte-order mark),
+- in a CSV **no cell** may start with `=`, `+`, `-`, `@`, a tab or a line break (after white space, Unicode spaces included, and an optional quote) unless the whole cell is a
+  plain number (`-12.5`, `+3`, `1e5`, `+1,5`, `"-1,234.56"`, `-5%`, `+44 20 7946 0958`) or signs alone (`-`, `--`). The file is read quote-aware (RFC 4180) **once per
+  separator a spreadsheet may use** (comma, semicolon, tab, all three at once, and the one a first line `sep=X` names), because the reader, not the file, picks the separator,
+  and every reading must pass. No function name or DDE shape is enumerated (CORE-DS-33, reopened by the 2026-11-21 red-team findings CORE-API-1 / CORE-DATA-1 and closed).
+  A cell that merely contains `=`, `|` or `@` is fine. **Refused on purpose** (change the cell, or send the data as `.txt`, where only the first character is checked): a cell such as
+  `- item`, `-- note`, `+1 (555) 123-4567` or `@handle`; a comma-separated row whose *first* cell starts with a sign and has more cells after it (`-5,apples`: a semicolon
+  reader sees the whole row as one cell starting with `-`); a line that starts with `= + - @` inside a multi-line quoted cell that is not in the first column (a reader with
+  another separator sees that line as a new row); a cell that starts with a tab followed by text when the file is read with commas or semicolons; a quoted cell that is never
+  closed; a `sep=` line naming a letter, digit, space, quote or `= + - @ . , ' %`; and a file in which more than 100 000 plus one per 32 bytes of cells need a closer look
+  than the fast reader gives them (no ordinary CSV comes near it),
 - executables are recognised by content under any name (MZ, ELF, Mach-O, shebang), and ZIP and OLE containers (so Office documents, jar, apk, msi) are not accepted,
 - the stored filename is a sanitised basename (letters, digits, `. - _ ( ) [ ]` and space, at most 100 characters); the original name is never used as a path. A Windows
   device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`..`COM9`, `LPT1`..`LPT9`, with or without an extension) and a name that starts with `-` are refused (1.0.0-rc.38).
@@ -186,12 +197,16 @@ A rejected attachment answers 422 `attachment_rejected` (or 413 `too_large`) and
 Core never writes or serves a file; the gateway stores the bytes. Core checks the type but cannot look inside a PNG, GIF or PDF for active content (`GIF89a<script>`, a PDF with
 `/OpenAction /JavaScript` pass the magic-byte check). So the gateway must (1) store the bytes **outside the web root**, under a name it generates, (2) serve them only to an
 authorized staff user, as a **download**: `Content-Disposition: attachment`, `Content-Type` from its own table (never from the upload), `X-Content-Type-Options: nosniff`, and
-ideally from a cookie-less origin, never inline from the application origin, and (3) remember that a CSV opened in a spreadsheet is the remaining risk Core reduces but cannot remove.
+ideally from a cookie-less origin, never inline from the application origin, and with `Content-Security-Policy: sandbox` (so a file that is opened anyway runs in no origin and without scripts), and (3) remember that a CSV opened in a spreadsheet is the remaining risk Core reduces but cannot remove. The text scan in Core (`PanelAttachments`) is a second line, not the control: it refuses text that could be active markup (a tag with an event handler or a URL or style attribute, also when a quoted value hides another tag or a quote is never closed), but only these three response headers make a stored text file harmless. An edition must verify them on every serve path (download, preview, thumbnail, e-mail attachment).
 
 ## Text handling
 
 Input (subject, body, names, filenames): must be UTF-8; NUL, control characters, bidirectional overrides/isolates/marks, zero-width characters and line/paragraph
 separators are removed; the length is checked in characters; markup is kept as typed (stored as plain text; the edition's renderer must escape it).
+The enrolling device's `hostname`, `os_version` and `app_version` are the exception: they share `endpoint_agent_devices` with the agents' devices and are listed to
+technicians, so they get what the agent path gives a host name (`DeviceValidator::cleanHostname`): `<`, `>`, `"`, backtick and backslash become `_` (CORE-API-4, red team
+2026-11-21; rows written before that keep what was sent). The host name is also written into the `Panel Enrolled` audit text, which is stored text like any other: the
+edition escapes it where it shows the audit log.
 Output (every string the API returns): entities are decoded once, tags are stripped, the same invisible characters are removed and the two markup characters left are
 returned as `&lt;` and `&gt;`. A client renders the value as text, decoding exactly those two entities; even an `innerHTML` mistake is inert.
 
@@ -202,7 +217,7 @@ Per device, through the edition's limiter closure (the same shape and Redis `Rat
 | Bucket | Limit | Used by |
 |---|---|---|
 | `panel_read` | 120 per 60 s | me, categories, ticket list, chat read |
-| `panel_create` | 10 per 60 s (and 50 per 24 h, `PanelLimits::$ticketsPerDayMax`) | create ticket |
+| `panel_create` | 10 per 60 s (and 50 per 24 h, `PanelLimits::$ticketsPerDayMax`, counted and reserved under a lock on the device row so parallel creates cannot pass it; a retry with the same `client_request_id` is not counted) | create ticket |
 | `panel_chat` | 20 per 60 s (and 500 posts / 50 MiB per UTC day, `PanelLimits::$chatPostsPerDayMax` / `$chatBytesPerDayMax`, kept in `rmm_daily_budget`) | chat post |
 | `panel_authfail:<sha1 address>` | 30 per 60 s | failed credential checks per address (a valid call is not counted) |
 

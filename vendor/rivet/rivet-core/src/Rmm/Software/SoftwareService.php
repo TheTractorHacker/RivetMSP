@@ -31,6 +31,9 @@ final class SoftwareService
     public const SOURCES = ['registry', 'registry32', 'appx', 'dpkg', 'rpm', 'snap', 'flatpak'];
     /** Events published for one report; the change log keeps every change. */
     public const EVENT_CAP = 25;
+    /** CORE-DS-43: rows one device may hold in the current list (removed ones included) and in the change history (enforced by the history stores' append(), outside the control transaction); reports past it are trimmed, never refused. */
+    public const MAX_ROWS_PER_DEVICE = 20000;
+    public const MAX_HISTORY_PER_DEVICE = 20000;
     private const CHUNK = 250;
 
     private readonly SoftwareHistoryStore $history;
@@ -55,11 +58,11 @@ final class SoftwareService
         $base = $raw['base_hash'] ?? null;
         $items = $raw['items'] ?? [];
         $removed = $raw['removed'] ?? [];
-        if (!in_array($mode, ['full', 'delta'], true) || !is_string($hash) || preg_match('/^[0-9a-f]{64}$/', $hash) !== 1
+        if (!in_array($mode, ['full', 'delta'], true) || !is_string($hash) || preg_match('/^[0-9a-f]{64}$/D', $hash) !== 1
             || !is_array($items) || !array_is_list($items) || count($items) > self::MAX_ITEMS || !is_array($removed) || !array_is_list($removed) || count($removed) > self::MAX_REMOVED) {
             return null;
         }
-        if ($mode === 'delta' && (!is_string($base) || preg_match('/^[0-9a-f]{64}$/', $base) !== 1)) {
+        if ($mode === 'delta' && (!is_string($base) || preg_match('/^[0-9a-f]{64}$/D', $base) !== 1)) {
             return null;
         }
         $clean = [];
@@ -93,7 +96,7 @@ final class SoftwareService
 
     private static function date(mixed $v): ?string
     {
-        if (!is_string($v) || preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $v, $m) !== 1 || !checkdate((int) $m[2], (int) $m[3], (int) $m[1]) || (int) $m[1] < 1990) {
+        if (!is_string($v) || preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D', $v, $m) !== 1 || !checkdate((int) $m[2], (int) $m[3], (int) $m[1]) || (int) $m[1] < 1990) {
             return null;
         }
 
@@ -133,9 +136,13 @@ final class SoftwareService
                 $history = [];
                 $events = [];
                 $incoming = [];
+                $room = max(0, self::MAX_ROWS_PER_DEVICE - count($rows));
                 foreach ($report['items'] as $i) {
                     $incoming[$i['key']] = true;
                     $cur = $rows[$i['key']] ?? null;
+                    if ($cur === null && $room-- <= 0) {
+                        continue;   // CORE-DS-43: one device does not get unlimited rows
+                    }
                     if ($cur === null || $cur['removed_at'] !== null) {
                         $upsert[] = $i;
                         $out['installed']++;

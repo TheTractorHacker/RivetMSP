@@ -21,12 +21,14 @@ use RivetCore\Rmm\Http\ApiError;
 use RivetCore\Rmm\Job\JobService;
 use RivetCore\Rmm\Link\RmmLinker;
 use RivetCore\Rmm\Policy\EffectivePolicy;
+use RivetCore\Rmm\Crypto\Signer;
 use RivetCore\Rmm\Remote\RemoteProtocol;
 use RivetCore\Rmm\Remote\RemoteSettings;
 use RivetCore\Rmm\RmmEvent;
 use RivetCore\Rmm\RmmProtocol;
 use RivetCore\Rmm\Software\SoftwareService;
 use RivetCore\Rmm\Settings\RmmSettings;
+use RivetCore\Rmm\Support\ConfigSequence;
 use RivetCore\Rmm\Support\RmmEventPublisher;
 use RivetCore\Rmm\Support\Sql;
 use RivetCore\Rmm\Update\UpdateService;
@@ -47,11 +49,20 @@ final class CheckinService
     public const MAX_DISKS = RmmProtocol::CHECKIN_MAX_DISKS;
     public const MAX_CORES = RmmProtocol::CHECKIN_MAX_CORES;
     public const MAX_INVENTORY_BYTES = RmmProtocol::CHECKIN_MAX_INVENTORY_BYTES;
-    private const TIME_RE = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/';
+    private const TIME_RE = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/D';
     /** At load-shedding level 1 buffered samples older than this are acknowledged but not ingested. */
     private const SHED_STALE_SAMPLE_S = 900;
     /** Above this many bytes of work a check-in is processed inline even in queued mode (the job payload column is text). */
     public const MAX_QUEUED_PAYLOAD_BYTES = 60000;
+    /**
+     * CORE-API-2 (red team 2026-11-21): the plausible range of each device-reported number. A reading outside it is REJECTED (treated as missing, never clamped,
+     * so a faulty agent is not hidden behind a believable value): percentages 0 to 100, network rates up to 10 Tbit/s, disk operations up to 1e9 per second,
+     * a disk queue up to 1e6.
+     */
+    private const PCT_MAX = 100.0;
+    private const NET_BPS_MAX = 1.0e13;
+    private const IOPS_MAX = 1.0e9;
+    private const QUEUE_MAX = 1.0e6;
 
     public function __construct(
         private readonly Sql $sql,
@@ -191,9 +202,12 @@ final class CheckinService
             'next_check_in_s' => $interval,
             'jobs_pending' => $features['jobs'] ? $this->jobs->pendingCount((int) $dev['device_id']) : 0,
             'config' => $policy === null
-                ? ['checks' => $this->settings->signedChecks($this->settings->hasExtendedChecks() ? $this->capsOf($dev, $announce['caps']) : null, RmmChecks::deviceOs($dev)), 'collect_interval_s' => (int) $cfg['collect_interval_s']]
-                : ['checks' => $this->settings->signCheckList($policy['checks'], $this->capsOf($dev, $announce['caps']) ?? [], RmmChecks::deviceOs($dev)), 'collect_interval_s' => $policy['collect_interval_s']],
+                ? ['checks' => $this->settings->signedChecks($this->settings->hasExtendedChecks() ? $this->capsOf($dev, $announce['caps']) : null, RmmChecks::deviceOs($dev), (int) $dev['device_id']), 'collect_interval_s' => (int) $cfg['collect_interval_s']]
+                : ['checks' => $this->settings->signCheckList($policy['checks'], $this->capsOf($dev, $announce['caps']) ?? [], RmmChecks::deviceOs($dev), (int) $dev['device_id']), 'collect_interval_s' => $policy['collect_interval_s']],
         ];
+        if ($this->settings->signedConfig()) {
+            $out['config']['signed_config'] = $this->settings->signedConfigLevel();   // CORE-DS-16: from now on the agent refuses an unsigned check or an unsigned log configuration
+        }
         $this->reconcileDelivered($dev, $out['config']['checks'], $policy === null ? ($this->settings->hasExtendedChecks() ? $this->capsOf($dev, $announce['caps']) : null) : ($this->capsOf($dev, $announce['caps']) ?? []));
         if ($knowsPolicies) {
             // Additive, offered only to an agent that announced `policies`: every other response is byte-identical to before.
@@ -201,6 +215,10 @@ final class CheckinService
         }
         if ($features['updates']) {
             $out['update'] = $this->updates->manifestFor($policy !== null && $policy['ring'] !== null ? ['ring' => $policy['ring']] + $dev : $dev);
+            if (($rollover = $this->updates->releaseRollover()) !== null) {
+                $out['release_rollover'] = $rollover;   // CORE-DS-26: relayed while any agent may need it; the server cannot create one
+                $out['release_rollovers'] = $this->updates->releaseRollovers();   // R3-2: the chain, so an agent that missed one catches up
+            }
         }
         $out['server_time'] = $this->sql->isoNow();
         $out['signing_key_id'] = $this->settings->get()['signing_key_id'];
@@ -216,8 +234,19 @@ final class CheckinService
         if ($features['logs'] && $this->remote !== null && (int) ($cfg['shed_level'] ?? 0) === 0 && in_array(RemoteProtocol::CAP_LOGS, $this->capsOf($dev, $announce['caps']) ?? [], true)) {
             $logConfig = $this->remote->agentLogConfig((string) ($dev['os'] ?? 'windows'), $this->capsOf($dev, $announce['caps']));
             if ($logConfig !== null) {
-                $offered[] = RemoteProtocol::CAP_LOGS;
-                $out['config']['logs'] = $logConfig;
+                try {
+                    [$sec] = $this->settings->signingKey();
+                    if ($this->settings->signedConfigLevel() >= 2) {
+                        // contract version 2: the device and a monotonic revision are inside the signature, so the configuration cannot be replayed on another device or after a newer one
+                        $logConfig['device_id'] = (string) (int) $dev['device_id'];
+                        $logConfig['seq'] = (new ConfigSequence($this->sql))->seq('logs:' . (int) $dev['device_id'], $logConfig, max(1, $this->sql->time()));
+                    }
+                    $logConfig['signature'] = Signer::sign(Signer::logsConfigMessage($logConfig), $sec);   // CORE-DS-16: which logs are shipped is not an unsigned setting
+                    $offered[] = RemoteProtocol::CAP_LOGS;
+                    $out['config']['logs'] = $logConfig;
+                } catch (\Throwable) {
+                    // no usable signing key: an unsigned log configuration is never offered
+                }
             }
         }
         // Change monitoring, additive: only an agent that announced `change:monitor`, while the `change_monitor` sub-switch is on, below load shedding level 2 and with at
@@ -402,14 +431,14 @@ final class CheckinService
         if ($cleanInv !== null) {
             $dev = $this->devices->find($deviceId) ?? $dev;   // the inventory rewrote hostname, model, uptime ...; nothing else in this method changes the row
         }
-        if (is_array($w['software'] ?? null) && $features['inventory_software'] && $this->software !== null && $this->deviceState !== null) {
+        if (is_array($w['software'] ?? null) && ($dev['link_state'] ?? 'linked') === 'linked' && $features['inventory_software'] && $this->software !== null && $this->deviceState !== null) {
             if (!empty($w['shed'])) {
                 $this->deviceState->requestSoftwareResync($deviceId);   // load shedding: acknowledged, not ingested, so ask again later
             } else {
                 $this->software->apply($dev, $w['software']);
             }
         }
-        if (is_array($w['hypervisor'] ?? null) && ($features['hypervisor'] ?? false) && $this->hypervisorService !== null) {
+        if (is_array($w['hypervisor'] ?? null) && ($dev['link_state'] ?? 'linked') === 'linked' && ($features['hypervisor'] ?? false) && $this->hypervisorService !== null) {
             try {
                 $this->hypervisorService->apply($dev, $w['hypervisor']);
             } catch (\Throwable $e) {
@@ -469,10 +498,10 @@ final class CheckinService
         }
 
         // ---- health columns on the edition's RMM link ----
-        $health = ['cpu' => self::num($metrics['cpu_pct'] ?? null), 'mem' => self::num($metrics['mem_pct'] ?? null), 'disk' => null];
+        $health = ['cpu' => self::num($metrics['cpu_pct'] ?? null, 0.0, self::PCT_MAX), 'mem' => self::num($metrics['mem_pct'] ?? null, 0.0, self::PCT_MAX), 'disk' => null];
         $disks = is_array($metrics['disk'] ?? null) ? $metrics['disk'] : [];
         foreach ($disks as $dk) {
-            $u = is_array($dk) ? self::num($dk['used_pct'] ?? null) : null;
+            $u = is_array($dk) ? self::num($dk['used_pct'] ?? null, 0.0, self::PCT_MAX) : null;
             if ($u !== null && ($health['disk'] === null || $u > $health['disk'])) {
                 $health['disk'] = $u;
             }
@@ -507,7 +536,7 @@ final class CheckinService
         }
         $cpu = is_array($inv['cpu'] ?? null) ? $inv['cpu'] : [];
         $clean = [
-            'hostname' => $txt($inv['hostname'] ?? null, 200),
+            'hostname' => DeviceValidator::cleanHostname($inv['hostname'] ?? null, 200),   // IT-DS-19/42: no markup in a name a device chooses
             'os' => $txt($inv['os'] ?? null, 50),
             'os_version' => $txt($inv['os_version'] ?? null, 200),
             'manufacturer' => $txt($inv['manufacturer'] ?? null, 200),
@@ -590,13 +619,13 @@ final class CheckinService
             $out[] = ['asset_id' => $assetId, 'key' => $key, 'instance' => $inst, 'value' => $val, 'at' => $at, 'label' => $label];
         };
         if ($m !== null) {
-            $add('cpu.utilization', null, self::num($m['cpu_pct'] ?? null));
-            $add('memory.utilization', null, self::num($m['mem_pct'] ?? null));
+            $add('cpu.utilization', null, self::num($m['cpu_pct'] ?? null, 0.0, self::PCT_MAX));
+            $add('memory.utilization', null, self::num($m['mem_pct'] ?? null, 0.0, self::PCT_MAX));
             $disks = is_array($m['disk'] ?? null) ? array_slice($m['disk'], 0, self::MAX_DISKS) : [];
             foreach ($disks as $d) {
                 if (is_array($d) && is_string($d['mount'] ?? null) && $d['mount'] !== '') {
                     $mt = mb_substr($d['mount'], 0, 64);
-                    $add('disk.utilization', $mt, self::num($d['used_pct'] ?? null), $mt);
+                    $add('disk.utilization', $mt, self::num($d['used_pct'] ?? null, 0.0, self::PCT_MAX), $mt);
                     if ($extended) {
                         $add('disk.free_bytes', $mt, self::intOrNull($d['free_bytes'] ?? null), $mt);
                         $add('disk.total_bytes', $mt, self::intOrNull($d['total_bytes'] ?? null), $mt);
@@ -607,8 +636,8 @@ final class CheckinService
                 $this->extendedSamples($m, $add);
             }
             // The agent reports BITS per second; the metric registry stores bytes per second.
-            $rx = self::num($m['net_rx_bps'] ?? null);
-            $tx = self::num($m['net_tx_bps'] ?? null);
+            $rx = self::num($m['net_rx_bps'] ?? null, 0.0, self::NET_BPS_MAX);
+            $tx = self::num($m['net_tx_bps'] ?? null, 0.0, self::NET_BPS_MAX);
             $add('network.rx_bytes_per_s', 'total', $rx === null ? null : $rx / 8, 'All adapters');
             $add('network.tx_bytes_per_s', 'total', $tx === null ? null : $tx / 8, 'All adapters');
         }
@@ -651,15 +680,14 @@ final class CheckinService
         $cores = $m['cpu_core_pct'] ?? null;
         if (is_array($cores) && array_is_list($cores)) {
             foreach (array_slice($cores, 0, self::MAX_CORES) as $i => $v) {
-                $add('cpu.core.utilization', (string) $i, self::num($v), 'Core ' . $i);
+                $add('cpu.core.utilization', (string) $i, self::num($v, 0.0, self::PCT_MAX), 'Core ' . $i);
             }
         }
-        $add('disk.read_iops', 'total', self::num($m['disk_read_iops'] ?? null), 'All disks');
-        $add('disk.write_iops', 'total', self::num($m['disk_write_iops'] ?? null), 'All disks');
-        $add('disk.queue_length', 'total', self::num($m['disk_queue'] ?? null), 'All disks');
+        $add('disk.read_iops', 'total', self::num($m['disk_read_iops'] ?? null, 0.0, self::IOPS_MAX), 'All disks');
+        $add('disk.write_iops', 'total', self::num($m['disk_write_iops'] ?? null, 0.0, self::IOPS_MAX), 'All disks');
+        $add('disk.queue_length', 'total', self::num($m['disk_queue'] ?? null, 0.0, self::QUEUE_MAX), 'All disks');
         $add('network.errors', 'total', self::intOrNull($m['net_errors'] ?? null), 'All adapters');
-        $bat = self::num($m['battery_pct'] ?? null);
-        $add('battery.charge_percent', null, $bat !== null && $bat <= 100 ? $bat : null);   // a percentage: out of range is dropped, never clamped
+        $add('battery.charge_percent', null, self::num($m['battery_pct'] ?? null, 0.0, self::PCT_MAX));   // a percentage: out of range is dropped, never clamped
     }
 
     // ------------------------------------------------------------------ clock skew
@@ -786,10 +814,13 @@ final class CheckinService
                 }
                 continue;
             }
-            if (isset($seen[$key])) {
-                continue;   // one result per check per check-in
+            if (isset($seen[strtolower($key)])) {
+                continue;   // one result per check per check-in (CORE-DS-8: endpoint_agent_checks is case-insensitive, so 'Disk.C' and 'disk.c' are one check)
             }
-            $seen[$key] = 1;
+            if (RmmChecks::isServerKey($key)) {
+                continue;   // CORE-18: log.rule_*, change.rule_*, patch.* and hv.* are written by the server only; an agent report under them is dropped, never stored or evaluated
+            }
+            $seen[strtolower($key)] = 1;
             /** @var array<string,mixed> $c */
             $detail = DeviceValidator::cleanText($c['detail'] ?? '', 500) ?? '';
             $row = ['key' => $key, 'status' => $status, 'detail' => $detail, 'at' => $this->sql->utcNow()];
@@ -809,21 +840,29 @@ final class CheckinService
      */
     private static function cleanMetrics(array $m): array
     {
-        $o = ['cpu_pct' => self::num($m['cpu_pct'] ?? null), 'mem_pct' => self::num($m['mem_pct'] ?? null), 'disk' => [],
-            'net_rx_bps' => self::num($m['net_rx_bps'] ?? null), 'net_tx_bps' => self::num($m['net_tx_bps'] ?? null)];
+        $o = ['cpu_pct' => self::num($m['cpu_pct'] ?? null, 0.0, self::PCT_MAX), 'mem_pct' => self::num($m['mem_pct'] ?? null, 0.0, self::PCT_MAX), 'disk' => [],
+            'net_rx_bps' => self::num($m['net_rx_bps'] ?? null, 0.0, self::NET_BPS_MAX), 'net_tx_bps' => self::num($m['net_tx_bps'] ?? null, 0.0, self::NET_BPS_MAX)];
         $disks = is_array($m['disk'] ?? null) ? array_slice($m['disk'], 0, self::MAX_DISKS) : [];
         foreach ($disks as $d) {
             if (is_array($d) && is_string($d['mount'] ?? null)) {
-                $o['disk'][] = ['mount' => mb_substr($d['mount'], 0, 64), 'used_pct' => self::num($d['used_pct'] ?? null)];
+                $o['disk'][] = ['mount' => mb_substr($d['mount'], 0, 64), 'used_pct' => self::num($d['used_pct'] ?? null, 0.0, self::PCT_MAX)];
             }
         }
 
         return $o;
     }
 
-    private static function num(mixed $v): ?float
+    /**
+     * A device-reported number, or null when it is not a finite number or (CORE-API-2) lies outside [$min, $max]: rejected, never clamped.
+     */
+    private static function num(mixed $v, ?float $min = null, ?float $max = null): ?float
     {
-        return (is_int($v) || is_float($v)) && is_finite((float) $v) ? (float) $v : null;
+        if ((!is_int($v) && !is_float($v)) || !is_finite((float) $v)) {
+            return null;
+        }
+        $f = (float) $v;
+
+        return ($min !== null && $f < $min) || ($max !== null && $f > $max) ? null : $f;
     }
 
     private static function intOrNull(mixed $v): ?int

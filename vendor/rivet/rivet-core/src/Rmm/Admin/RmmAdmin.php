@@ -32,6 +32,8 @@ use RivetCore\Rmm\Update\UpdateService;
  * Every method authorizes the principal itself (ability `rmm.admin`, `rmm.binary.publish` or `rmm.token.manage`), works while the module
  * is switched off (turning it on is one of the operations) and returns an {@see \RivetCore\Rmm\Technician\ActionResult}. Nothing is
  * written when validation fails. Whenever a mirrored setting changes, the zero-database state file follows (RmmSettings does that).
+ * The `rmm.binary.publish` operations (binaries, releases, MSI templates, release signature and rollover) also refuse a caller limited to
+ * some clients (TEN-3): what they change reaches every client.
  *
  * @api
  */
@@ -153,7 +155,7 @@ final class RmmAdmin
      * `mesh_install_args`, `mesh_hide`, `mesh_hide_tools` (see {@see MeshAgentSettings}); they are validated first and nothing is written when any of them is invalid. `mesh_probe_pin`
      * (true) reads the server's certificate and returns a proposed pin in `pin_probe` WITHOUT saving it.
      *
-     * @param array<string,mixed> $in mesh_enabled, mesh_url, mesh_domain, mesh_account_template, mesh_policy, mesh_token_ttl_s, mesh_login_key, and the install settings above
+     * @param array<string,mixed> $in mesh_enabled, mesh_url, mesh_domain, mesh_account_template, mesh_policy, mesh_token_ttl_s, mesh_token_ttl_exact (optional, CORE-DS-39), mesh_login_key, and the install settings above
      * @return ActionResult data: `probe` (null when MeshCentral answered, otherwise the error text) when $test is set and a URL is saved
      */
     public function saveMesh(RmmPrincipal $by, array $in, bool $test = false): ActionResult
@@ -168,8 +170,11 @@ final class RmmAdmin
         }
         $domain = trim(is_scalar($in['mesh_domain'] ?? null) ? (string) $in['mesh_domain'] : '');
         $account = trim(is_scalar($in['mesh_account_template'] ?? null) ? (string) $in['mesh_account_template'] : RmmProtocol::MESH_DEFAULT_ACCOUNT_TEMPLATE);
-        if (preg_match('/^[A-Za-z0-9._{}-]{1,100}$/', $account) !== 1 || ($domain !== '' && preg_match('/^[A-Za-z0-9._-]{1,100}$/', $domain) !== 1)) {
+        if (preg_match('/^[A-Za-z0-9._{}-]{1,100}$/D', $account) !== 1 || ($domain !== '' && preg_match('/^[A-Za-z0-9._-]{1,100}$/D', $domain) !== 1)) {
             return ActionResult::fail(422, 'invalid', 'The MeshCentral domain and account name may only contain letters, digits and . _ -');
+        }
+        if (\RivetCore\Rmm\Mesh\MeshCookie::usesDisplayName($account)) {
+            return ActionResult::fail(422, 'invalid', 'The MeshCentral account name may not use {username}: it is the technician\'s editable display name, so a technician could rename themselves into another Mesh account. Use {user_id} (for example rivetit-{user_id}).');
         }
         $policy = $in['mesh_policy'] ?? 'unattended';
         $ttl = $in['mesh_token_ttl_s'] ?? RmmSettings::MESH_TOKEN_TTL_DEFAULT_S;
@@ -181,9 +186,12 @@ final class RmmAdmin
             'mesh_policy' => in_array($policy, ['unattended', 'attended', 'both'], true) ? $policy : 'unattended',
             'mesh_token_ttl_s' => is_numeric($ttl) ? max(RmmSettings::MESH_TOKEN_TTL_MIN_S, min(RmmSettings::MESH_TOKEN_TTL_MAX_S, (int) $ttl)) : RmmSettings::MESH_TOKEN_TTL_DEFAULT_S,
         ];
+        if (array_key_exists('mesh_token_ttl_exact', $in)) {
+            $vals['mesh_token_ttl_exact'] = !empty($in['mesh_token_ttl_exact']) ? 1 : 0;   // CORE-DS-39 (opt-in): honour the lifetime exactly, a 300 s one included
+        }
         $key = trim(is_scalar($in['mesh_login_key'] ?? null) ? (string) $in['mesh_login_key'] : '');
         if ($key !== '') {
-            if (preg_match('/^[0-9a-fA-F]{64,}$/', $key) !== 1) {
+            if (preg_match('/^[0-9a-fA-F]{64,}$/D', $key) !== 1) {
                 return ActionResult::fail(422, 'invalid', 'The login token key is the long hex string printed by "meshcentral --loginTokenKey".');
             }
             try {
@@ -194,9 +202,9 @@ final class RmmAdmin
         }
         $install = [];
         $warnings = [];
-        if ($vals['mesh_enabled'] === 1 && !str_contains($account, '{user_id}') && !str_contains($account, '{username}')) {
+        if ($vals['mesh_enabled'] === 1 && !str_contains($account, '{user_id}')) {
             // One shared Mesh account means every technician is the same Mesh user: Core's per-ability and per-client limits do not bind the Mesh session (CORE-12).
-            $warnings[] = 'The MeshCentral account name has no {user_id} or {username}, so every technician signs in to the same Mesh account. Use a per-technician account and give each Mesh account rights only to the device groups of the clients that technician may reach; Core cannot enforce that inside MeshCentral.';
+            $warnings[] = 'The MeshCentral account name has no {user_id}, so every technician signs in to the same Mesh account. Use a per-technician account and give each Mesh account rights only to the device groups of the clients that technician may reach; Core cannot enforce that inside MeshCentral.';
         }
         if ($this->meshSettings !== null) {
             $install = array_intersect_key($in, array_flip(['mesh_group_id', 'mesh_server_cert_pin', 'mesh_auto_map_overwrite', 'mesh_agent_ids', 'mesh_install_args', 'mesh_hide', 'mesh_hide_tools']));
@@ -271,16 +279,22 @@ final class RmmAdmin
      *
      * `$opts['os']` is `windows` (default; a PE executable) or `linux` (an ELF executable); the file must match it (1.0.0-rc.30).
      *
-     * @param array{activate?:bool,release_ring?:?string,rollout_pct?:int,notes?:string,os?:string} $opts
+     * @param array{activate?:bool,release_ring?:?string,rollout_pct?:int,notes?:string,os?:string,release_signature?:string} $opts `release_signature`: the offline release signature (CORE-DS-26)
      * @return ActionResult data: `binary` row on success
      */
     public function uploadBinary(RmmPrincipal $by, string $tmpPath, string $version, string $arch, array $opts = []): ActionResult
     {
-        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH)) !== null) {
+        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH) ?? $this->fleetWide($by)) !== null) {
             return $d;
         }
         $ring = (string) ($opts['release_ring'] ?? '');
         $opts['release_ring'] = in_array($ring, RmmProtocol::RINGS, true) ? $ring : null;
+        // CRR-11: a release signature that cannot be stored is refused BEFORE the binary is published (it could otherwise become current or reach a ring), and the refusal is audited
+        if (is_string($opts['release_signature'] ?? null) && $opts['release_signature'] !== '' && ($why = UpdateService::releaseSignatureProblem($opts['release_signature'])) !== null) {
+            $this->audit->record('Binary Upload Refused', "{$by->userName} tried to upload agent binary " . trim($version) . " ($arch) with a malformed release signature; nothing was published", 0, 0);
+
+            return ActionResult::fail(422, 'invalid', "Nothing was published: $why");
+        }
         try {
             $res = $this->binaries->publish($tmpPath, trim($version), $arch, $by->userId, $opts);
         } catch (\RuntimeException $e) {
@@ -290,6 +304,11 @@ final class RmmAdmin
             return ActionResult::fail(422, 'invalid', (string) ($res['error'] ?? 'The binary could not be published.'));
         }
         $b = $res['binary'];
+        if (is_string($opts['release_signature'] ?? null) && $opts['release_signature'] !== '' && ($why = $this->updates->setReleaseSignature((int) $b['binary_id'], $opts['release_signature'])) !== null) {
+            $this->audit->record('Binary Uploaded', "{$by->userName} uploaded agent binary {$b['version']} ({$b['arch']}); its release signature was not stored: $why", 0, 0);
+
+            return ActionResult::fail(422, 'invalid', "The binary was stored, but its release signature was not: $why");   // CORE-DS-26
+        }
         $this->audit->record('Binary Uploaded', "{$by->userName} uploaded agent binary {$b['version']} ({$b['arch']}, " . AgentOs::ofRow($b) . ", sha256 {$b['sha256']}, {$b['size_bytes']} bytes)"
             . ((int) $b['is_current'] === 1 ? ' and made it current' : '') . ($opts['release_ring'] !== null ? " and offered it to the {$opts['release_ring']} ring" : ''), 0, 0);
 
@@ -306,7 +325,7 @@ final class RmmAdmin
      */
     public function uploadMsiTemplate(RmmPrincipal $by, string $tmpPath, string $version, string $arch, array $opts = []): ActionResult
     {
-        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH)) !== null) {
+        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH) ?? $this->fleetWide($by)) !== null) {
             return $d;
         }
         try {
@@ -331,7 +350,7 @@ final class RmmAdmin
      */
     public function msiTemplateAction(RmmPrincipal $by, int $templateId, string $action): ActionResult
     {
-        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH)) !== null) {
+        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH) ?? $this->fleetWide($by)) !== null) {
             return $d;
         }
         $t = $this->sql->one('SELECT * FROM endpoint_agent_msi_templates WHERE template_id = ?', [$templateId]);
@@ -359,13 +378,45 @@ final class RmmAdmin
     }
 
     /**
+     * CORE-DS-26: attach the offline release signature to a stored binary (when it was uploaded without one).
+     */
+    public function setReleaseSignature(RmmPrincipal $by, int $binaryId, string $signatureB64): ActionResult
+    {
+        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH) ?? $this->fleetWide($by)) !== null) {
+            return $d;
+        }
+        if (($why = $this->updates->setReleaseSignature($binaryId, $signatureB64)) !== null) {
+            return ActionResult::fail(422, 'invalid', $why);
+        }
+        $this->audit->record('Release Signature Stored', "{$by->userName} stored the release signature of binary #$binaryId", 0, 0);
+
+        return ActionResult::ok('Stored.');
+    }
+
+    /**
+     * CORE-DS-26: store (or clear, with an empty string) the signed release-key rollover message relayed to agents.
+     */
+    public function setReleaseRollover(RmmPrincipal $by, string $json): ActionResult
+    {
+        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH) ?? $this->fleetWide($by)) !== null) {
+            return $d;
+        }
+        if (($why = $this->updates->setReleaseRollover($json)) !== null) {
+            return ActionResult::fail(422, 'invalid', $why);
+        }
+        $this->audit->record('Release Rollover Stored', "{$by->userName} " . ($json === '' ? 'cleared' : 'stored') . ' the release key rollover message', 0, 0);
+
+        return ActionResult::ok('Saved.');
+    }
+
+    /**
      * Change one stored binary.
      *
      * @param string $action make_current | deactivate | activate | offer_update (needs $ring and $pct)
      */
     public function binaryAction(RmmPrincipal $by, int $binaryId, string $action, string $ring = 'pilot', int $pct = 10): ActionResult
     {
-        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH)) !== null) {
+        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH) ?? $this->fleetWide($by)) !== null) {
             return $d;
         }
         $b = $this->sql->one('SELECT * FROM endpoint_agent_binaries WHERE binary_id = ?', [$binaryId]);
@@ -399,7 +450,7 @@ final class RmmAdmin
     /** Offer a package hosted elsewhere (a legacy manual release). */
     public function addExternalRelease(RmmPrincipal $by, string $version, string $url, string $sha256, string $minVersion, string $ring, int $pct, string $notes, string $os = AgentOs::WINDOWS): ActionResult
     {
-        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH)) !== null) {
+        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH) ?? $this->fleetWide($by)) !== null) {
             return $d;
         }
         $err = $this->updates->addRelease(trim($version), trim($url), trim($sha256), trim($minVersion) !== '' ? trim($minVersion) : '0.0.0', $ring, $pct, trim($notes), $by->userId, $os);
@@ -424,6 +475,17 @@ final class RmmAdmin
         if ($os !== null && AgentOs::normalize($os) === null) {
             return ActionResult::fail(422, 'invalid', 'The platform must be windows or linux.');
         }
+        // TEN-5: a caller limited to some clients clears the update state of a device of his own, never of another client's device or of every device.
+        $visible = $this->authz->visibleClientIds($by->userId);
+        if ($visible !== null) {
+            if ($deviceId === null) {
+                return ActionResult::fail(403, 'forbidden', 'Clearing every device reaches every client; ask an administrator whose access is not limited to some clients.');
+            }
+            $dev = $this->devices->find($deviceId);
+            if ($dev === null || !in_array((int) $dev['client_id'], $visible, true)) {
+                return ActionResult::fail(404, 'not_found', 'Device not found.');
+            }
+        }
         $n = $this->updates->clearUpdateFailures($deviceId, $version, $os === null ? null : AgentOs::normalize($os));
         $this->audit->record('Agent Update Failures Cleared', "{$by->userName} cleared update failures (device " . ($deviceId ?? 'all') . ', version ' . ($version ?? 'all') . ", $n changed)", 0, 0);
 
@@ -433,7 +495,7 @@ final class RmmAdmin
     /** Change the rollout percentage and the active flag of a release (0 pauses a rollout, inactive withdraws it). */
     public function updateRelease(RmmPrincipal $by, int $releaseId, int $pct, bool $active): ActionResult
     {
-        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH)) !== null) {
+        if (($d = $this->deny($by, RmmAbility::BINARY_PUBLISH) ?? $this->fleetWide($by)) !== null) {
             return $d;
         }
         if (!$this->binaries->updateRelease($releaseId, $pct, $active)) {
@@ -510,5 +572,16 @@ final class RmmAdmin
         $denied = $this->authz->check($by->userId, $ability, $clientId, $requireEnabled);
 
         return $denied === null ? null : ActionResult::fail(403, 'forbidden', $denied);
+    }
+
+    /**
+     * TEN-3 (red team 2026-11-21 NEW-2): agent binaries, releases, rings, MSI templates, release signatures and the release-key rollover reach every device and every
+     * installer of every client, so a caller whose access is limited to some clients may not change them, whatever abilities his role carries (the ability
+     * check alone asks for client 0, which is inside every scope). Same rule as {@see clearUpdateFailures()} with no device.
+     */
+    private function fleetWide(RmmPrincipal $by): ?ActionResult
+    {
+        return $this->authz->visibleClientIds($by->userId) === null ? null
+            : ActionResult::fail(403, 'forbidden', 'Agent binaries, releases and installer templates reach every client; ask an administrator whose access is not limited to some clients.');
     }
 }

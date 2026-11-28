@@ -8857,6 +8857,22 @@ if (version_compare(LATEST_DATABASE_VERSION, CURRENT_DATABASE_VERSION, '>')) {
         mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.142'");
     }
 
+    if ($rivetit_db_version() == '2.6.142') {
+        // DB 2.6.143: RivetCore 1.0.0-rc.61 -> 1.0.0-rc.79. Core migrations 0050 to 0055, all additive and idempotent (CREATE TABLE IF NOT EXISTS, guarded ADD COLUMN):
+        // 0050 rmm_client_remote_policy, 0051 rmm_console_settings/codes/sessions, 0052 verify_json on endpoint_agent_mesh_settings/agents, 0053 rmm_hardening_settings
+        // (+ its id=1 row), 0054 rmm_agent_release_sigs, 0055 repair of an interim 0053/0054 install (does nothing on a database that never ran the interim version).
+        // Every feature behind them is off by default. One MigrationRunner pass picks up all of them and anything else pending.
+        if (class_exists(\RivetCore\Migration\MigrationRunner::class)) {
+            (new \RivetCore\Migration\MigrationRunner(
+                new \RivetMSP\Core\Adapter\Database\MysqliDatabaseAdapter($mysqli),
+                \RivetCore\Migration\CoreMigrations::all(),
+                new \RivetCore\Support\SystemClock()
+            ))->run();
+        }
+
+        mysqli_query($mysqli, "UPDATE `settings` SET `config_current_database_version` = '2.6.143'");
+    }
+
 // Core migrations catch-up, on EVERY Update Database run (idempotent: MigrationRunner keeps its own state in rivet_core_migrations). The version steps above run Core's
 // migrations only when their number is reached, so a database that was moved to a newer edition number while the files on disk still had an older RivetCore (an update
 // that stopped half way) would otherwise never get the Core migrations the newer package brings (for example 0048/0049 with RivetCore rc.60).

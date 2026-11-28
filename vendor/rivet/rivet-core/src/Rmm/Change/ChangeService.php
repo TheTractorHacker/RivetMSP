@@ -35,7 +35,7 @@ use RivetCore\Rmm\Support\Sql;
  */
 final class ChangeService
 {
-    private const TIME_RE = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/';
+    private const TIME_RE = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/D';
     public const PRUNE_BATCH = 2000;
     public const PRUNE_RUN_CAP = 100000;
     /** The most change events published for one batch (a mass change must not become a webhook storm). */
@@ -78,6 +78,9 @@ final class ChangeService
         $version = $body['config_version'] ?? '';
         $version = is_string($version) && preg_match('/^[0-9a-f]{16}$/D', $version) === 1 ? $version : '';
         $status = self::cleanStatus($body['status'] ?? null);
+        if (($dev['link_state'] ?? 'linked') !== 'linked') {
+            return ['ok' => true, 'accepted' => 0, 'dropped' => count($changes), 'duplicates' => 0];   // CORE-19: only a linked device may fill the shared change store
+        }
         $deviceId = (int) $dev['device_id'];
         $os = (string) ($dev['os'] ?? 'windows');
         $known = $this->settings->knownWatches($os);

@@ -4,6 +4,8 @@ This file documents all notable changes made to ITFlow.
 
 ## [Unreleased]
 
+- **RivetCore 1.0.0-rc.61 -> 1.0.0-rc.79** (red-team and deep-scan hardening, agent fixes, Rivet Console, per-client remote session policy, Mesh node verify, inbound monitoring contracts). DB 2.6.143 runs Core migrations 0050-0055 (all additive and idempotent; every new feature is off by default). Shared UI assets re-installed (command_palette.js, webhook_wizard.js). Run Administration > Updates after deploying.
+
 ## [26.10.53] - 2026-11-15
 
 No database version change (DB stays 2.6.137). Update Database now also catches up pending RivetCore migrations (0048/0049) on every run.

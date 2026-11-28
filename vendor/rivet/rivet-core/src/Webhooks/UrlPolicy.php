@@ -82,6 +82,11 @@ final class UrlPolicy
             if (preg_match('/^[a-z0-9_]([a-z0-9_.-]*[a-z0-9_])?$/D', $host) !== 1) {
                 return null;
             }
+            // CORE-DS-75 (CORE-27): a host that is only numbers (2130706433, 127.1, 0x7f.1, 0177.0.0.1) is an IPv4 address in one of its spellings, not a DNS name: libcurl turns it
+            // into a dotted address before any lookup and would never consult the pin. A real name has a last label that is not a number.
+            if (preg_match('/^(?:0x[0-9a-f]*|[0-9]+)(?:\.(?:0x[0-9a-f]*|[0-9]+)){0,3}$/D', $host) === 1 || preg_match('/(?:^|\.)(?:0x[0-9a-f]*|[0-9]+)$/D', $host) === 1) {
+                return null;
+            }
             try {
                 $ips = ($this->resolver)($host);
             } catch (\Throwable) {
@@ -124,6 +129,31 @@ final class UrlPolicy
         return NetworkList::contains($this->allowedNetworks, $ip);
     }
 
+    /**
+     * CORE-DS-73: after a request, did curl really connect to one of the addresses that were vetted? The pin (CURLOPT_RESOLVE) is only a request; a spelling that curl normalises
+     * itself, or a proxy, would ignore it. `CURLINFO_PRIMARY_IP` says where the connection went: anything else means the response must be discarded.
+     *
+     * @param mixed $primaryIp the value of curl_getinfo($ch, CURLINFO_PRIMARY_IP)
+     * @param array{host:string,port:int,ips:list<string>} $target the vetted target
+     */
+    public static function connectedToVetted(mixed $primaryIp, array $target): bool
+    {
+        if (!is_string($primaryIp) || $primaryIp === '') {
+            return false;
+        }
+        $got = @inet_pton(trim($primaryIp, '[]'));
+        if ($got === false) {
+            return false;
+        }
+        foreach ($target['ips'] as $ip) {
+            if (@inet_pton($ip) === $got) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function isSafe(string $url, bool $allowHttp = true): bool
     {
         return $this->vet($url, $allowHttp) !== null;
@@ -155,12 +185,16 @@ final class UrlPolicy
         '0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
         '192.0.0.0/24', '192.0.2.0/24', '192.88.99.0/24', '192.168.0.0/16', '198.18.0.0/15',
         '198.51.100.0/24', '203.0.113.0/24', '224.0.0.0/4', '240.0.0.0/4',
+        '168.63.129.16/32',   // CORE-API-6: the Azure Wire Server (platform endpoint of every Azure VM), not a public destination
     ];
 
     /** Never reachable even when listed in allowedNetworks: this-network, loopback, link-local/metadata, multicast, reserved/broadcast. */
-    private const NEVER_ALLOWED_V4 = ['0.0.0.0/8', '127.0.0.0/8', '169.254.0.0/16', '224.0.0.0/4', '240.0.0.0/4'];
+    /** CORE-DS-73: the Alibaba (100.100.100.200) and Tailscale (100.100.100.100) service addresses live inside 100.64/10, which an administrator may list. CORE-API-6 (red team
+     * 2026-11-21): the Azure Wire Server 168.63.129.16 (health probes, DHCP, guest agent); it is in NON_PUBLIC_V4 too, because this list is only consulted for an address that is not public. */
+    private const NEVER_ALLOWED_V4 = ['0.0.0.0/8', '127.0.0.0/8', '169.254.0.0/16', '224.0.0.0/4', '240.0.0.0/4', '100.100.100.200/32', '100.100.100.100/32', '168.63.129.16/32'];
 
-    private const NEVER_ALLOWED_V6 = ['::/128', '::1/128', 'fe80::/10', 'ff00::/8'];
+    /** CORE-DS-73: includes the AWS IMDS IPv6 address, which lies inside fc00::/7. */
+    private const NEVER_ALLOWED_V6 = ['::/128', '::1/128', 'fe80::/10', 'ff00::/8', 'fd00:ec2::254/128'];
 
     /** IPv6 ranges that are never public (CIDR), including transition mechanisms that can tunnel to IPv4 (6to4, Teredo, local-use NAT64). */
     private const NON_PUBLIC_V6 = [
